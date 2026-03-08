@@ -564,20 +564,29 @@ export default function AnalysisPanel({
     }
   }
 
-  // Parsed HEXA JSON lives at result.data (oracle returns { data, rawText, parseError, ... })
-  // Safety net: if backend somehow returned the JSON as a string, parse it here
+  // oracle returns { data: <hexaObj|null>, rawText, parseError, stopReason, usage }
+  // index.js wraps it: res.json({ success: true, data: analysis })
+  // so: result = analysis = { data: hexaObj, rawText, parseError, ... }
   const hexaData = (() => {
+    // Primary path: result.data is the parsed HEXA object
     const d = result?.data ?? null;
-    if (!d) return null;
-    if (typeof d === 'string') {
+    if (d && typeof d === 'object') return d;
+
+    // Safety net A: backend sent data as JSON string (shouldn't happen, but guard anyway)
+    if (typeof d === 'string' && d.length > 0) {
       try {
         return JSON.parse(d.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim());
-      } catch { return null; }
+      } catch { /* fall through */ }
     }
-    return d;
+
+    // Safety net B: result itself is the HEXA object (no wrapper)
+    if (result && typeof result === 'object' && (result.master_prediction || result.parlay || result.games)) {
+      return result;
+    }
+
+    return null;
   })();
-  const parseError = result?.parseError ?? false;
-  const rawText    = result?.rawText ?? '';
+  const rawText = result?.rawText ?? '';
 
   return (
     <Box sx={{ bgcolor: C.bg, display: 'flex', flexDirection: 'column', gap: '16px', p: 2 }}>
@@ -635,8 +644,8 @@ export default function AnalysisPanel({
         <ErrorDisplay error={error} onRetry={handleAnalyze} t={t} />
       )}
 
-      {/* ── Parse error: show raw text (only when no structured data) ── */}
-      {!loading && !error && result && parseError && !hexaData && (
+      {/* ── Fallback raw text — only when data couldn't be parsed into an object ── */}
+      {!loading && !error && result && !hexaData && rawText && (
         <Box
           sx={{
             bgcolor: C.cardBg,
