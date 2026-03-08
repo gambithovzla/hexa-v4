@@ -90,10 +90,16 @@ function getTime(game) {
 }
 
 function getStatus(game) {
-  const s = game.status?.abstractGameState ?? '';
-  if (s === 'Live') return 'live';
-  if (s === 'Final') return 'final';
+  const abs      = game.status?.abstractGameState ?? '';
+  const detailed = game.status?.detailedState ?? '';
+  if (abs === 'Live'  || detailed === 'In Progress' || detailed === 'Warmup') return 'live';
+  if (abs === 'Final' || detailed === 'Final' || detailed === 'Game Over')    return 'final';
   return 'scheduled';
+}
+
+/** Returns true only for games that haven't started yet */
+function isSelectable(game) {
+  return getStatus(game) === 'scheduled';
 }
 
 // ── StatusBadge ───────────────────────────────────────────────────────────────
@@ -411,12 +417,11 @@ export default function GameSelector({
         if (cancelled) return;
         const list = json.success ? json.data : [];
         setGames(list);
-        // fullDay: auto-select all on load
+        // fullDay: auto-select only schedulable games on load
         if (mode === 'fullDay') {
-          const allIds = new Set(list.map(g => g.gamePk));
-          setSelectedIds(allIds);
-          const all = list;
-          onSelectMultiple?.(all);
+          const selectable = list.filter(isSelectable);
+          setSelectedIds(new Set(selectable.map(g => g.gamePk)));
+          onSelectMultiple?.(selectable);
         }
       })
       .catch(() => { if (!cancelled) setFetchErr(t.error); })
@@ -434,6 +439,7 @@ export default function GameSelector({
   }
 
   function handleCheckbox(game) {
+    if (!isSelectable(game)) return; // block finished/live games
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(game.gamePk)) {
@@ -449,9 +455,10 @@ export default function GameSelector({
   }
 
   function handleSelectAll() {
-    const next = new Set(games.map(g => g.gamePk));
-    setSelectedIds(next);
-    onSelectMultiple?.(games);
+    // In fullDay only select games that haven't started
+    const targets = mode === 'fullDay' ? games.filter(isSelectable) : games;
+    setSelectedIds(new Set(targets.map(g => g.gamePk)));
+    onSelectMultiple?.(targets);
   }
 
   function handleDeselectAll() {
@@ -460,7 +467,16 @@ export default function GameSelector({
   }
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  const isAllSelected = games.length > 0 && games.every(g => selectedIds.has(g.gamePk));
+  // In single/parlay modes, hide finished and live games entirely
+  const displayGames =
+    mode === 'single' || mode === 'parlay'
+      ? games.filter(isSelectable)
+      : games;
+
+  // "Select All" state only counts selectable games
+  const selectableGames = games.filter(isSelectable);
+  const isAllSelected   = selectableGames.length > 0 && selectableGames.every(g => selectedIds.has(g.gamePk));
+
   const canAnalyze =
     (mode === 'single'  && singleGame != null) ||
     (mode === 'parlay'  && selectedIds.size >= 2) ||
@@ -624,13 +640,15 @@ export default function GameSelector({
             gap: 2,
           }}
         >
-          {games.map(game => {
+          {displayGames.map(game => {
             const isSelected =
               mode === 'single'
                 ? singleGame?.gamePk === game.gamePk
                 : selectedIds.has(game.gamePk);
+            const finished = !isSelectable(game);
             const checkboxDisabled =
-              mode === 'parlay' && selectedIds.size >= 6 && !isSelected;
+              finished ||
+              (mode === 'parlay' && selectedIds.size >= 6 && !isSelected);
 
             return (
               <GameCard
