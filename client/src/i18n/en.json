@@ -79,5 +79,19 @@
     "low": "Low",
     "medium": "Medium",
     "high": "High"
+  },
+  "odds": {
+    "title": "Market Odds",
+    "moneyline": "Moneyline",
+    "runLine": "Run Line",
+    "overUnder": "Over/Under",
+    "bet": "Bet",
+    "profit": "Profit",
+    "total": "Total",
+    "betAmount": "Stake",
+    "calculator": "Bet Calculator",
+    "combined": "Parlay Odds",
+    "parlayOdds": "Parlay Odds",
+    "noOdds": "Odds unavailable"
   }
 }

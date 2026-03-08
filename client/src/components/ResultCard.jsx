@@ -7,6 +7,7 @@
  *   lang  — 'en' | 'es'
  */
 
+import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
@@ -51,6 +52,15 @@ const L = {
     parseError:       'The Oracle returned an unstructured response.',
     noData:           'No analysis data to display.',
     leg:              'Leg',
+    odds: {
+      title:      'Market Odds',
+      moneyline:  'ML',
+      runLine:    'RL',
+      overUnder:  'O/U',
+      betAmount:  'Stake',
+      parlayOdds: 'Parlay Odds',
+      combined:   'Combined',
+    },
   },
   es: {
     masterPick:       'Pick Principal',
@@ -70,6 +80,15 @@ const L = {
     parseError:       'El Oráculo devolvió una respuesta no estructurada.',
     noData:           'Sin datos de análisis.',
     leg:              'Pata',
+    odds: {
+      title:      'Momios del Mercado',
+      moneyline:  'ML',
+      runLine:    'Línea',
+      overUnder:  'M/M',
+      betAmount:  'Monto',
+      parlayOdds: 'Momios del Parlay',
+      combined:   'Combinado',
+    },
   },
 };
 
@@ -168,6 +187,303 @@ function AlertFlagBadge({ flag }) {
       }}
     >
       ⚠ {flag}
+    </Box>
+  );
+}
+
+// ── Odds helpers ─────────────────────────────────────────────────────────────
+
+function fmtAm(n, decimal = false) {
+  if (n == null) return '—';
+  if (decimal) {
+    const dec = n > 0 ? (n / 100) + 1 : (100 / Math.abs(n)) + 1;
+    return dec.toFixed(2);
+  }
+  return n > 0 ? `+${n}` : String(n);
+}
+
+function fmtSpread(n) {
+  if (n == null) return '?';
+  return n > 0 ? `+${n}` : String(n);
+}
+
+function calcPayout(stake, american) {
+  const s = parseFloat(stake) || 0;
+  const n = Number(american);
+  if (!s || !n || !isFinite(n)) return null;
+  const profit = n > 0 ? s * (n / 100) : s * (100 / Math.abs(n));
+  return { profit: profit.toFixed(2), total: (s + profit).toFixed(2) };
+}
+
+function decimalToAmerican(dec) {
+  if (!dec || dec <= 1) return null;
+  return dec >= 2 ? Math.round((dec - 1) * 100) : -Math.round(100 / (dec - 1));
+}
+
+/** Determines the most relevant American odds for a parlay leg by parsing leg.pick */
+function getLegOdds(leg, oddsObj) {
+  if (!oddsObj?.odds) return null;
+  const pick = String(leg?.pick ?? '').toLowerCase();
+  const { moneyline: ml, runLine: rl, overUnder: ou } = oddsObj.odds;
+
+  if (pick.includes('over'))  return ou.overPrice;
+  if (pick.includes('under')) return ou.underPrice;
+  if (pick.includes('1.5')) {
+    const parts    = String(leg?.game ?? '').split('@');
+    const homeAbbr = (parts[1] ?? '').trim().split(' ')[0].toLowerCase();
+    const awayAbbr = (parts[0] ?? '').trim().split(' ')[0].toLowerCase();
+    if (homeAbbr && pick.includes(homeAbbr)) return rl.home.price;
+    if (awayAbbr && pick.includes(awayAbbr)) return rl.away.price;
+    return rl.home.price;
+  }
+  // moneyline — determine direction from game string
+  const parts    = String(leg?.game ?? '').split('@');
+  const homeAbbr = (parts[1] ?? '').trim().split(' ')[0].toLowerCase();
+  const awayAbbr = (parts[0] ?? '').trim().split(' ')[0].toLowerCase();
+  if (awayAbbr && pick.includes(awayAbbr)) return ml.away;
+  return ml.home;
+}
+
+// ── OddsCell ──────────────────────────────────────────────────────────────────
+
+function OddsCell({ label, home, away }) {
+  return (
+    <Box sx={{ bgcolor: C.bg, borderRadius: '6px', p: '8px 6px', textAlign: 'center' }}>
+      <Typography
+        sx={{ fontFamily: LABEL, fontSize: '0.53rem', fontWeight: 700, color: C.textMuted,
+          textTransform: 'uppercase', letterSpacing: '0.05em', mb: '5px' }}
+      >
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.green, mb: '2px' }}>
+        H: {home}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.blue }}>
+        A: {away}
+      </Typography>
+    </Box>
+  );
+}
+
+// ── PayoutRow ─────────────────────────────────────────────────────────────────
+
+function PayoutRow({ label, stake, profit, total }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px', mb: '5px' }}>
+      <Typography sx={{ fontFamily: LABEL, fontSize: '0.58rem', fontWeight: 700, color: C.textMuted, minWidth: '82px', flexShrink: 0 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.textPrimary }}>${stake}</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>→</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700, color: C.green }}>+${profit}</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>→</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700, color: C.amber }}>${total}</Typography>
+    </Box>
+  );
+}
+
+// ── LegOddsLine ───────────────────────────────────────────────────────────────
+
+function LegOddsLine({ oddsObj }) {
+  if (!oddsObj?.odds) return null;
+  const { moneyline: ml, runLine: rl, overUnder: ou } = oddsObj.odds;
+  const am = n => (n == null ? '—' : n > 0 ? `+${n}` : String(n));
+  const sp = n => (n == null ? '?' : n > 0 ? `+${n}` : String(n));
+  return (
+    <Box sx={{ mt: '8px', pt: '8px', borderTop: `1px solid ${C.cardBorder}60` }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, lineHeight: 1.7 }}>
+        {`ML H:${am(ml.home)} A:${am(ml.away)}`}
+        {' · '}
+        {`RL ${sp(rl.home.spread)}${am(rl.home.price)} / ${sp(rl.away.spread)}${am(rl.away.price)}`}
+        {' · '}
+        {`O/U ${ou.total ?? '—'} O${am(ou.overPrice)} U${am(ou.underPrice)}`}
+      </Typography>
+    </Box>
+  );
+}
+
+// ── OddsPanel (single game) ───────────────────────────────────────────────────
+
+function OddsPanel({ odds, hexa, t }) {
+  const [decimal, setDecimal] = useState(() => {
+    try { return localStorage.getItem('hexaOddsFormat') === 'decimal'; } catch { return false; }
+  });
+  const [stake, setStake] = useState('10');
+
+  const toggleFmt = () => {
+    const next = !decimal;
+    setDecimal(next);
+    try { localStorage.setItem('hexaOddsFormat', next ? 'decimal' : 'american'); } catch {}
+  };
+
+  const { moneyline: ml, runLine: rl, overUnder: ou } = odds;
+  const f = (n) => fmtAm(n, decimal);
+
+  // Determine best-pick odds from bp.type
+  const bp = hexa?.best_pick;
+  let bpOdds = null;
+  if (bp) {
+    const tp = String(bp.type ?? '').toLowerCase();
+    if (tp.includes('over'))                                          bpOdds = ou.overPrice;
+    else if (tp.includes('under'))                                    bpOdds = ou.underPrice;
+    else if (tp.includes('run') || tp.includes('spread') || tp.includes('line')) bpOdds = rl.home.price;
+    else                                                              bpOdds = ml.home;
+  }
+
+  const mpPayout = calcPayout(stake, ml.home);
+  const bpPayout = bpOdds != null ? calcPayout(stake, bpOdds) : null;
+
+  return (
+    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '8px', p: '16px' }}>
+      {/* Header + format toggle */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
+        <SectionLabel>{t.odds.title}</SectionLabel>
+        <Box
+          component="button"
+          onClick={toggleFmt}
+          sx={{
+            px: '9px', py: '3px',
+            bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '4px',
+            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accent, cursor: 'pointer',
+          }}
+        >
+          {decimal ? 'US | ●DEC' : '●US | DEC'}
+        </Box>
+      </Box>
+
+      {/* 3-column odds table */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', mb: '14px' }}>
+        <OddsCell
+          label={t.odds.moneyline}
+          home={f(ml.home)}
+          away={f(ml.away)}
+        />
+        <OddsCell
+          label={t.odds.runLine}
+          home={rl.home.spread != null ? `${fmtSpread(rl.home.spread)} ${f(rl.home.price)}` : '—'}
+          away={rl.away.spread != null ? `${fmtSpread(rl.away.spread)} ${f(rl.away.price)}` : '—'}
+        />
+        <OddsCell
+          label={`${t.odds.overUnder} ${ou.total ?? '—'}`}
+          home={`O ${f(ou.overPrice)}`}
+          away={`U ${f(ou.underPrice)}`}
+        />
+      </Box>
+
+      {/* Bet calculator */}
+      <Box sx={{ borderTop: `1px solid ${C.cardBorder}`, pt: '12px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '10px' }}>
+          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
+            {t.odds.betAmount}
+          </Typography>
+          <Box
+            component="input"
+            type="number"
+            min="1"
+            value={stake}
+            onChange={e => setStake(e.target.value)}
+            sx={{
+              width: '72px', bgcolor: C.bg, border: `1px solid ${C.cardBorder}`,
+              borderRadius: '4px', color: C.textPrimary, fontFamily: MONO,
+              fontSize: '0.78rem', px: '8px', py: '4px', outline: 'none',
+              '&:focus': { borderColor: C.accent },
+            }}
+          />
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted }}>USD</Typography>
+        </Box>
+        {mpPayout && <PayoutRow label={t.masterPick} stake={stake} profit={mpPayout.profit} total={mpPayout.total} />}
+        {bpPayout && <PayoutRow label={t.bestPick}   stake={stake} profit={bpPayout.profit} total={bpPayout.total} />}
+      </Box>
+    </Box>
+  );
+}
+
+// ── ParlayOddsPanel ───────────────────────────────────────────────────────────
+
+function ParlayOddsPanel({ legOdds, legs, t }) {
+  const [decimal, setDecimal] = useState(() => {
+    try { return localStorage.getItem('hexaOddsFormat') === 'decimal'; } catch { return false; }
+  });
+  const [stake, setStake] = useState('10');
+
+  const toggleFmt = () => {
+    const next = !decimal;
+    setDecimal(next);
+    try { localStorage.setItem('hexaOddsFormat', next ? 'decimal' : 'american'); } catch {}
+  };
+
+  // Multiply decimal odds across all legs
+  let combinedDec = 1;
+  let validCount  = 0;
+  for (let i = 0; i < (legOdds?.length ?? 0); i++) {
+    const american = getLegOdds(legs?.[i], legOdds[i]);
+    if (american == null) continue;
+    const dec = american > 0 ? (american / 100) + 1 : (100 / Math.abs(american)) + 1;
+    combinedDec *= dec;
+    validCount++;
+  }
+
+  const combinedAmerican = validCount > 0 ? decimalToAmerican(combinedDec) : null;
+  if (combinedAmerican == null) return null;
+
+  const f      = (n) => fmtAm(n, decimal);
+  const payout = calcPayout(stake, combinedAmerican);
+
+  return (
+    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '8px', p: '16px' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
+        <SectionLabel>{t.odds.parlayOdds}</SectionLabel>
+        <Box
+          component="button"
+          onClick={toggleFmt}
+          sx={{
+            px: '9px', py: '3px',
+            bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '4px',
+            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accent, cursor: 'pointer',
+          }}
+        >
+          {decimal ? 'US | ●DEC' : '●US | DEC'}
+        </Box>
+      </Box>
+
+      {/* Combined odds display */}
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', mb: '12px' }}>
+        <Typography sx={{ fontFamily: LABEL, fontSize: '0.62rem', color: C.textMuted, flexShrink: 0 }}>
+          {t.odds.combined}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '1.05rem', fontWeight: 700, color: C.accent }}>
+          {f(combinedAmerican)}
+        </Typography>
+        {!decimal && (
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textMuted }}>
+            ({combinedDec.toFixed(2)}×)
+          </Typography>
+        )}
+      </Box>
+
+      {/* Calculator */}
+      <Box sx={{ borderTop: `1px solid ${C.cardBorder}`, pt: '12px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '10px' }}>
+          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
+            {t.odds.betAmount}
+          </Typography>
+          <Box
+            component="input"
+            type="number"
+            min="1"
+            value={stake}
+            onChange={e => setStake(e.target.value)}
+            sx={{
+              width: '72px', bgcolor: C.bg, border: `1px solid ${C.cardBorder}`,
+              borderRadius: '4px', color: C.textPrimary, fontFamily: MONO,
+              fontSize: '0.78rem', px: '8px', py: '4px', outline: 'none',
+              '&:focus': { borderColor: C.accent },
+            }}
+          />
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted }}>USD</Typography>
+        </Box>
+        {payout && <PayoutRow label={t.odds.parlayOdds} stake={stake} profit={payout.profit} total={payout.total} />}
+      </Box>
     </Box>
   );
 }
@@ -433,6 +749,9 @@ function SingleGameResult({ hexa, t }) {
           </Typography>
         </Box>
       )}
+
+      {/* ── Market Odds + Bet Calculator ── */}
+      {hexa.odds?.odds && <OddsPanel odds={hexa.odds.odds} hexa={hexa} t={t} />}
     </Box>
   );
 }
@@ -558,6 +877,9 @@ function ParlayResult({ hexa, t }) {
                 {leg.reasoning}
               </Typography>
             )}
+
+            {/* Per-leg odds summary line */}
+            <LegOddsLine oddsObj={hexa.legOdds?.[i]} />
           </Box>
         );
       })}
@@ -583,6 +905,11 @@ function ParlayResult({ hexa, t }) {
             {p.strategy_note}
           </Typography>
         </Box>
+      )}
+
+      {/* ── Parlay Odds + Combined Calculator ── */}
+      {hexa.legOdds?.some(Boolean) && (
+        <ParlayOddsPanel legOdds={hexa.legOdds} legs={p.legs} t={t} />
       )}
     </Box>
   );

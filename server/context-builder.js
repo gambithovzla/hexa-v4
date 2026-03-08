@@ -192,10 +192,11 @@ function offenseBlock(label, hittingData, teamName) {
 /**
  * Construye el contexto estructurado completo para un partido.
  *
- * @param {object} gameData — objeto normalizado devuelto por getTodayGames()
+ * @param {object}      gameData — objeto normalizado devuelto por getTodayGames()
+ * @param {object|null} oddsData — resultado de matchOddsToGame() (opcional)
  * @returns {Promise<string>} String listo para el prompt del Oracle
  */
-export async function buildContext(gameData) {
+export async function buildContext(gameData, oddsData = null) {
   const home = gameData.teams?.home;
   const away = gameData.teams?.away;
 
@@ -264,6 +265,20 @@ export async function buildContext(gameData) {
     blocks.push('No significant flags detected.');
   } else {
     flags.forEach(f => blocks.push(`⚑ ${f}`));
+  }
+
+  // Market odds (injected when The Odds API data is available)
+  if (oddsData?.odds) {
+    const { moneyline: ml, runLine: rl, overUnder: ou } = oddsData.odds;
+    const am  = (n) => (n == null ? 'N/A' : n > 0 ? `+${n}` : String(n));
+    const sp  = (n) => (n == null ? '?'   : n > 0 ? `+${n}` : String(n));
+    blocks.push('');
+    blocks.push(section('MARKET ODDS'));
+    blocks.push(
+      `ML Home ${am(ml.home)} Away ${am(ml.away)}` +
+      ` | RL Home ${sp(rl.home.spread)} ${am(rl.home.price)} Away ${sp(rl.away.spread)} ${am(rl.away.price)}` +
+      ` | O/U ${ou.total ?? 'N/A'} O${am(ou.overPrice)} U${am(ou.underPrice)}`
+    );
   }
 
   return blocks.join('\n');

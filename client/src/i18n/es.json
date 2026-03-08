@@ -79,5 +79,19 @@
     "low": "Baja",
     "medium": "Media",
     "high": "Alta"
+  },
+  "odds": {
+    "title": "Momios del Mercado",
+    "moneyline": "Moneyline",
+    "runLine": "Línea de Corridas",
+    "overUnder": "Más/Menos",
+    "bet": "Apostar",
+    "profit": "Ganancia",
+    "total": "Total",
+    "betAmount": "Monto",
+    "calculator": "Calculadora de Apuestas",
+    "combined": "Momios del Parlay",
+    "parlayOdds": "Momios del Parlay",
+    "noOdds": "Momios no disponibles"
   }
 }
