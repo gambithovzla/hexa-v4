@@ -48,6 +48,13 @@ const L = {
       balanced:     'Balanced',
       aggressive:   'Aggressive',
     },
+    modelSelect: {
+      label: 'Analysis Model',
+      fast:  '⚡ Fast (Haiku)',
+      deep:  '🧠 Deep (Sonnet)',
+      fastSub: '$0.01/análisis',
+      deepSub: '$0.10/análisis',
+    },
     webSearch:    'Web Intel',
     parlayLegs:   'Parlay Legs',
     runOracle:    'Run Oracle Analysis',
@@ -76,6 +83,13 @@ const L = {
       conservative: 'Conservador',
       balanced:     'Equilibrado',
       aggressive:   'Agresivo',
+    },
+    modelSelect: {
+      label: 'Modelo de Análisis',
+      fast:  '⚡ Fast (Haiku)',
+      deep:  '🧠 Deep (Sonnet)',
+      fastSub: '$0.01/análisis',
+      deepSub: '$0.10/análisis',
     },
     webSearch:    'Intel Web',
     parlayLegs:   'Patas del Parlay',
@@ -192,6 +206,53 @@ function RiskProfilePicker({ value, onChange, t }) {
               }}
             >
               {o.label}
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+}
+
+function ModelPicker({ value, onChange, t }) {
+  const options = [
+    { value: 'fast', label: t.modelSelect.fast, sub: t.modelSelect.fastSub },
+    { value: 'deep', label: t.modelSelect.deep, sub: t.modelSelect.deepSub },
+  ];
+
+  return (
+    <Box>
+      <SectionLabel>{t.modelSelect.label}</SectionLabel>
+      <Box sx={{ display: 'flex', gap: '6px' }}>
+        {options.map(o => {
+          const active = value === o.value;
+          return (
+            <Box
+              key={o.value}
+              component="button"
+              onClick={() => onChange(o.value)}
+              sx={{
+                flex: 1,
+                py: '7px',
+                px: '4px',
+                border: `1px solid ${active ? C.accent : C.cardBorder}`,
+                borderRadius: '7px',
+                bgcolor: active ? C.accentDim : 'transparent',
+                color: active ? C.accent : C.textMuted,
+                fontFamily: LABEL,
+                fontSize: '0.72rem',
+                fontWeight: active ? 700 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '2px',
+                '&:hover': { borderColor: active ? C.accent : '#2d3f55', color: active ? C.accent : C.textPrimary },
+              }}
+            >
+              <span>{o.label}</span>
+              <span style={{ fontSize: '0.6rem', opacity: 0.7, fontWeight: 400 }}>{o.sub}</span>
             </Box>
           );
         })}
@@ -415,6 +476,7 @@ export default function AnalysisPanel({
 
   const [betType,     setBetType]     = useState('all');
   const [riskProfile, setRiskProfile] = useState('balanced');
+  const [modelMode,   setModelMode]   = useState('fast');
   const [webSearch,   setWebSearch]   = useState(false);
   const [parlayLegs,  setParlayLegs]  = useState(2);
   const [result,      setResult]      = useState(null);
@@ -458,6 +520,7 @@ export default function AnalysisPanel({
           betType,
           riskProfile,
           webSearch,
+          model:       modelMode,
         };
       } else if (mode === 'parlay') {
         endpoint = '/api/analyze/parlay';
@@ -469,6 +532,7 @@ export default function AnalysisPanel({
           riskProfile,
           webSearch,
           parlayLegs,
+          model:       modelMode,
         };
       } else {
         // fullDay
@@ -480,6 +544,7 @@ export default function AnalysisPanel({
           betType,
           riskProfile,
           webSearch,
+          model:       modelMode,
         };
       }
 
@@ -539,6 +604,9 @@ export default function AnalysisPanel({
           <BetTypeSelect value={betType} onChange={setBetType} t={t} />
           <RiskProfilePicker value={riskProfile} onChange={setRiskProfile} t={t} />
         </Box>
+
+        {/* Model picker */}
+        <ModelPicker value={modelMode} onChange={setModelMode} t={t} />
 
         {/* Parlay legs slider (only in parlay mode) */}
         {mode === 'parlay' && selectedGames.length >= 2 && (

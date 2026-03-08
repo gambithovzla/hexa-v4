@@ -21,8 +21,10 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const MODEL      = 'claude-sonnet-4-20250514';
-const MAX_TOKENS = 3000;
+const MODELS = {
+  fast: { id: 'claude-haiku-4-5-20251001',  maxTokens: 1500 },
+  deep: { id: 'claude-sonnet-4-20250514',   maxTokens: 3000 },
+};
 
 // ---------------------------------------------------------------------------
 // System prompt H.E.X.A. V4
@@ -194,6 +196,7 @@ function parseResponse(raw) {
  * @param {boolean}  [params.webSearch]     — incluir tool web_search (def. false)
  * @param {string[]} [params.games]         — lista de matchups para fullDay/parlay
  * @param {number}   [params.legs]          — número de patas del parlay
+ * @param {string}   [params.model]         — "fast" (Haiku) | "deep" (Sonnet)  (def. "fast")
  *
  * @returns {Promise<{
  *   data:       object|null,
@@ -214,15 +217,18 @@ export async function analyzeGame(params) {
     webSearch    = false,
     games        = [],
     legs,
+    model        = 'fast',
   } = params;
+
+  const { id: modelId, maxTokens } = MODELS[model] ?? MODELS.fast;
 
   const userMessage = buildUserMessage({
     matchup, betType, context, riskProfile, mode, lang, games, legs,
   });
 
   const requestBody = {
-    model:      MODEL,
-    max_tokens: MAX_TOKENS,
+    model:      modelId,
+    max_tokens: maxTokens,
     system:     SYSTEM_PROMPT,
     messages:   [{ role: 'user', content: userMessage }],
   };
@@ -269,6 +275,7 @@ export async function analyzeParlay(contexts, language = 'en', opts = {}) {
     betType:     opts.betType,
     riskProfile: opts.riskProfile ?? 'medium',
     webSearch:   opts.webSearch   ?? false,
+    model:       opts.model       ?? 'fast',
   });
 }
 
@@ -290,5 +297,6 @@ export async function analyzeFullDay(contexts, date = '', language = 'en', opts 
     betType:     opts.betType,
     riskProfile: opts.riskProfile ?? 'medium',
     webSearch:   opts.webSearch   ?? false,
+    model:       opts.model       ?? 'fast',
   });
 }

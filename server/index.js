@@ -54,6 +54,7 @@ app.post('/api/analyze/game', async (req, res) => {
       betType,
       riskProfile = 'medium',
       webSearch   = false,
+      model       = 'fast',
     } = req.body;
     const date    = req.body.date || new Date().toISOString().split('T')[0];
     const resolvedLang = lang ?? language;
@@ -62,7 +63,7 @@ app.post('/api/analyze/game', async (req, res) => {
     if (!gameData) return res.status(404).json({ success: false, error: `Partido ${gameId} no encontrado` });
     const context  = await buildContext(gameData);
     const matchup  = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
-    const analysis = await analyzeGame({ matchup, betType, context, riskProfile, mode: 'single', lang: resolvedLang, webSearch });
+    const analysis = await analyzeGame({ matchup, betType, context, riskProfile, mode: 'single', lang: resolvedLang, webSearch, model });
     res.json({ success: true, data: analysis });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -80,6 +81,7 @@ app.post('/api/analyze/parlay', async (req, res) => {
       riskProfile = 'medium',
       webSearch   = false,
       parlayLegs,
+      model       = 'fast',
     } = req.body;
     const date = req.body.date || new Date().toISOString().split('T')[0];
     const resolvedLang = lang ?? language;
@@ -91,7 +93,7 @@ app.post('/api/analyze/parlay', async (req, res) => {
         return buildContext(gameData);
       })
     );
-    const analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs });
+    const analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs, model });
     res.json({ success: true, data: analysis });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -108,12 +110,13 @@ app.post('/api/analyze/full-day', async (req, res) => {
       betType,
       riskProfile = 'medium',
       webSearch   = false,
+      model       = 'fast',
     } = req.body;
     const resolvedLang = lang ?? language;
     const resolvedDate = date || new Date().toISOString().split('T')[0];
     const games = await getTodayGames(resolvedDate);
     const contexts = await Promise.all(games.map(g => buildContext(g)));
-    const analysis = await analyzeFullDay(contexts, resolvedDate, resolvedLang, { betType, riskProfile, webSearch });
+    const analysis = await analyzeFullDay(contexts, resolvedDate, resolvedLang, { betType, riskProfile, webSearch, model });
     res.json({ success: true, data: analysis });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
