@@ -65,7 +65,7 @@ const L = {
       fullDay: 'Loading today\'s games…',
     },
     readyHint:    'Configure your options and run the Oracle.',
-    parseError:   'The Oracle returned an unstructured response. Raw output:',
+    parseError:   'Analysis could not be processed. Please retry.',
   },
   es: {
     betType: {
@@ -99,7 +99,7 @@ const L = {
       fullDay: 'Cargando los juegos de hoy…',
     },
     readyHint:    'Configura las opciones y ejecuta el Oráculo.',
-    parseError:   'El Oráculo devolvió una respuesta no estructurada. Respuesta:',
+    parseError:   'No se pudo procesar el análisis. Por favor, reintenta.',
   },
 };
 
@@ -565,32 +565,53 @@ export default function AnalysisPanel({
     }
   }
 
-  // Backend now returns flat: { success, data: hexaObj|null, parseError, rawText }
-  // result = that full json object
-  const hexaData = (() => {
-    // Primary: result.data (the HEXA object from backend)
-    const responseData = result?.data ?? result?.analysis?.data ?? null;
+  // ── extractHexaData: tries every possible path to find a valid HEXA object ─
+  function extractHexaData(response) {
+    const isHexa = (obj) =>
+      obj && typeof obj === 'object' &&
+      (obj.master_prediction || obj.parlay || obj.games);
 
-    if (responseData && typeof responseData === 'object' &&
-        (responseData.master_prediction || responseData.parlay || responseData.games)) {
-      return responseData;
-    }
-
-    // Safety net: data came as string (shouldn't happen after server-side cleanJsonResponse)
-    if (typeof responseData === 'string' && responseData.length > 0) {
+    const tryParse = (str) => {
       try {
-        const cleaned = responseData.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const firstBrace = cleaned.indexOf('{');
-        const lastBrace  = cleaned.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) {
-          return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+        let cleaned = str.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const first = cleaned.indexOf('{');
+        const last  = cleaned.lastIndexOf('}');
+        if (first !== -1 && last > first) {
+          const parsed = JSON.parse(cleaned.substring(first, last + 1));
+          if (isHexa(parsed)) return parsed;
         }
       } catch { /* fall through */ }
+      return null;
+    };
+
+    // Walk all candidate paths
+    const candidates = [
+      response?.data,
+      response?.analysis?.data,
+      response?.analysis,
+      response,
+    ];
+
+    for (const c of candidates) {
+      if (!c) continue;
+      if (isHexa(c))               return c;
+      if (typeof c === 'string') {
+        const parsed = tryParse(c);
+        if (parsed)                return parsed;
+      }
+    }
+
+    // Last resort: rawText field
+    const raw = response?.rawText ?? response?.analysis?.rawText;
+    if (raw && typeof raw === 'string') {
+      const parsed = tryParse(raw);
+      if (parsed) return parsed;
     }
 
     return null;
-  })();
-  const rawText = result?.rawText ?? '';
+  }
+
+  const hexaData = extractHexaData(result);
 
   return (
     <Box sx={{ bgcolor: C.bg, display: 'flex', flexDirection: 'column', gap: '16px', p: 2 }}>
@@ -648,38 +669,9 @@ export default function AnalysisPanel({
         <ErrorDisplay error={error} onRetry={handleAnalyze} t={t} />
       )}
 
-      {/* ── Fallback raw text — only when data couldn't be parsed into an object ── */}
-      {!loading && !error && result && !hexaData && rawText && (
-        <Box
-          sx={{
-            bgcolor: C.cardBg,
-            border: `1px solid ${C.cardBorder}`,
-            borderRadius: '10px',
-            p: '20px',
-          }}
-        >
-          <Typography
-            sx={{
-              fontFamily: LABEL,
-              fontSize: '0.75rem',
-              color: C.amber,
-              mb: '10px',
-            }}
-          >
-            {t.parseError}
-          </Typography>
-          <Typography
-            sx={{
-              fontFamily: MONO,
-              fontSize: '0.7rem',
-              color: C.textMuted,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {rawText}
-          </Typography>
-        </Box>
+      {/* ── Parse-error fallback — friendly message, never raw JSON ── */}
+      {!loading && !error && result && !hexaData && (
+        <ErrorDisplay error={t.parseError} onRetry={handleAnalyze} t={t} />
       )}
 
       {/* ── Result ── */}
