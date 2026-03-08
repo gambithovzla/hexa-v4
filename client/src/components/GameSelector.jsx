@@ -82,6 +82,10 @@ function getPitcher(side) {
   return side?.probablePitcher?.fullName ?? null;
 }
 
+function getTeamId(side) {
+  return side?.team?.id ?? side?.id ?? null;
+}
+
 function getTime(game) {
   if (!game.gameDate) return '—';
   return new Date(game.gameDate).toLocaleTimeString([], {
@@ -131,6 +135,21 @@ function getStatus(game) {
 /** Returns true only for games that haven't started yet */
 function isSelectable(game) {
   return getStatus(game) === 'scheduled';
+}
+
+// ── TeamLogo ──────────────────────────────────────────────────────────────────
+function TeamLogo({ teamId, abbr }) {
+  const [failed, setFailed] = useState(false);
+  if (!teamId || failed) return null;
+  return (
+    <Box
+      component="img"
+      src={`https://www.mlb.com/team-logos/${teamId}.svg`}
+      alt={abbr}
+      onError={() => setFailed(true)}
+      sx={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0 }}
+    />
+  );
 }
 
 // ── StatusBadge ───────────────────────────────────────────────────────────────
@@ -186,12 +205,14 @@ function StatusBadge({ status, t }) {
 
 // ── GameCard ──────────────────────────────────────────────────────────────────
 function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t }) {
-  const away   = getAbbr(game.teams?.away);
-  const home   = getAbbr(game.teams?.home);
-  const awayP  = getPitcher(game.teams?.away) ?? t.tbd;
-  const homeP  = getPitcher(game.teams?.home) ?? t.tbd;
-  const time   = getTime(game);
-  const status = getStatus(game);
+  const away    = getAbbr(game.teams?.away);
+  const home    = getAbbr(game.teams?.home);
+  const awayId  = getTeamId(game.teams?.away);
+  const homeId  = getTeamId(game.teams?.home);
+  const awayP   = getPitcher(game.teams?.away) ?? t.tbd;
+  const homeP   = getPitcher(game.teams?.home) ?? t.tbd;
+  const time    = getTime(game);
+  const status  = getStatus(game);
 
   // Games that have started/ended cannot be selected at all
   const blocked = status !== 'scheduled';
@@ -218,33 +239,14 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         opacity: status === 'final' ? 0.5 : 1,
         transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.12s, opacity 0.15s',
         boxShadow,
-        position: 'relative',
         '&:hover': blocked ? {} : {
           borderColor: isSelected ? C.selectedBorder : '#2d3f55',
           transform: 'translateY(-2px)',
         },
       }}
     >
-      {/* Checkbox */}
-      {showCheckbox && (
-        <Box sx={{ position: 'absolute', top: 6, right: 6 }}>
-          <Checkbox
-            checked={isSelected}
-            disabled={blocked || checkboxDisabled}
-            onClick={e => e.stopPropagation()}
-            onChange={(blocked || checkboxDisabled) ? undefined : onClick}
-            size="small"
-            sx={{
-              p: '3px',
-              color: C.cardBorder,
-              '&.Mui-checked': { color: C.accent },
-            }}
-          />
-        </Box>
-      )}
-
-      {/* Status + time */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '10px' }}>
+      {/* Header row: [STATUS BADGE] [TIME]  ·····  [CHECKBOX] */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '12px' }}>
         <StatusBadge status={status} t={t} />
         <Typography
           sx={{
@@ -252,35 +254,55 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
             fontSize: '0.68rem',
             color: C.textMuted,
             flexShrink: 0,
-            ml: 1,
           }}
         >
           {time}
         </Typography>
+        {showCheckbox && (
+          <Box sx={{ ml: 'auto' }}>
+            <Checkbox
+              checked={isSelected}
+              disabled={blocked || checkboxDisabled}
+              onClick={e => e.stopPropagation()}
+              onChange={(blocked || checkboxDisabled) ? undefined : onClick}
+              size="small"
+              sx={{
+                p: '3px',
+                color: C.cardBorder,
+                '&.Mui-checked': { color: C.accent },
+              }}
+            />
+          </Box>
+        )}
       </Box>
 
-      {/* Matchup abbreviations */}
+      {/* Matchup: [AWAY LOGO] [AWAY ABR]  vs  [HOME ABR] [HOME LOGO] */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '10px',
+          gap: '8px',
           mb: '12px',
         }}
       >
-        <Typography
-          sx={{
-            fontFamily: MONO,
-            fontSize: '1.4rem',
-            fontWeight: 700,
-            color: C.textPrimary,
-            letterSpacing: '-0.02em',
-            lineHeight: 1,
-          }}
-        >
-          {away}
-        </Typography>
+        {/* Away team */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <TeamLogo teamId={awayId} abbr={away} />
+          <Typography
+            sx={{
+              fontFamily: MONO,
+              fontSize: '1.2rem',
+              fontWeight: 700,
+              color: C.textPrimary,
+              letterSpacing: '-0.02em',
+              lineHeight: 1,
+            }}
+          >
+            {away}
+          </Typography>
+        </Box>
+
         <Typography
           sx={{
             fontFamily: LABEL,
@@ -292,18 +314,23 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         >
           {t.vs}
         </Typography>
-        <Typography
-          sx={{
-            fontFamily: MONO,
-            fontSize: '1.4rem',
-            fontWeight: 700,
-            color: C.textPrimary,
-            letterSpacing: '-0.02em',
-            lineHeight: 1,
-          }}
-        >
-          {home}
-        </Typography>
+
+        {/* Home team */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <Typography
+            sx={{
+              fontFamily: MONO,
+              fontSize: '1.2rem',
+              fontWeight: 700,
+              color: C.textPrimary,
+              letterSpacing: '-0.02em',
+              lineHeight: 1,
+            }}
+          >
+            {home}
+          </Typography>
+          <TeamLogo teamId={homeId} abbr={home} />
+        </Box>
       </Box>
 
       {/* Pitchers */}
