@@ -547,7 +547,8 @@ export default function AnalysisPanel({
       const json = await res.json();
 
       if (json.success) {
-        setResult(json.data);
+        // Store the full flattened response: { data: hexaObj|null, parseError, rawText }
+        setResult(json);
         onSave?.({
           type:   mode === 'fullDay' ? 'fullday' : mode,
           games:  selectedGames,
@@ -564,24 +565,27 @@ export default function AnalysisPanel({
     }
   }
 
-  // oracle returns { data: <hexaObj|null>, rawText, parseError, stopReason, usage }
-  // index.js wraps it: res.json({ success: true, data: analysis })
-  // so: result = analysis = { data: hexaObj, rawText, parseError, ... }
+  // Backend now returns flat: { success, data: hexaObj|null, parseError, rawText }
+  // result = that full json object
   const hexaData = (() => {
-    // Primary path: result.data is the parsed HEXA object
-    const d = result?.data ?? null;
-    if (d && typeof d === 'object') return d;
+    // Primary: result.data (the HEXA object from backend)
+    const responseData = result?.data ?? result?.analysis?.data ?? null;
 
-    // Safety net A: backend sent data as JSON string (shouldn't happen, but guard anyway)
-    if (typeof d === 'string' && d.length > 0) {
-      try {
-        return JSON.parse(d.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim());
-      } catch { /* fall through */ }
+    if (responseData && typeof responseData === 'object' &&
+        (responseData.master_prediction || responseData.parlay || responseData.games)) {
+      return responseData;
     }
 
-    // Safety net B: result itself is the HEXA object (no wrapper)
-    if (result && typeof result === 'object' && (result.master_prediction || result.parlay || result.games)) {
-      return result;
+    // Safety net: data came as string (shouldn't happen after server-side cleanJsonResponse)
+    if (typeof responseData === 'string' && responseData.length > 0) {
+      try {
+        const cleaned = responseData.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const firstBrace = cleaned.indexOf('{');
+        const lastBrace  = cleaned.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+        }
+      } catch { /* fall through */ }
     }
 
     return null;

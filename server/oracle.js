@@ -68,7 +68,8 @@ For SINGLE GAME:
 For PARLAY:
 {"parlay":{"legs":[{"game":"str","pick":"str","confidence":"0-1","reasoning":"str"}],"combined_confidence":"0-1","risk_level":"string","strategy_note":"string"}}
 For FULL DAY:
-{"games":[{"matchup":"str","master_prediction":{...},"oracle_report":"str","hexa_hunch":"str","alert_flags":[],"best_pick":{...},"model_risk":"str"}],"day_summary":"str"}`;
+{"games":[{"matchup":"str","master_prediction":{...},"oracle_report":"str","hexa_hunch":"str","alert_flags":[],"best_pick":{...},"model_risk":"str"}],"day_summary":"str"}
+CRITICAL: Output raw JSON only. Never wrap in markdown code fences or backticks.`;
 
 // ---------------------------------------------------------------------------
 // Construcción del mensaje de usuario según el modo
@@ -141,13 +142,25 @@ function extractRawText(response) {
 }
 
 /**
- * Elimina markdown fences (```json … ```) del texto.
+ * Limpieza agresiva antes de intentar parsear.
+ * Quita markdown fences, backticks sueltos y extrae el bloque {...}.
  */
-function stripMarkdownFences(text) {
-  return text
-    .replace(/```json\s*/gi, '')
-    .replace(/```\s*/g, '')
+function cleanJsonResponse(text) {
+  if (!text) return text;
+  let cleaned = text
+    .replace(/```json/gi, '')
+    .replace(/```JSON/gi, '')
+    .replace(/```/g, '')
     .trim();
+  // Remove any remaining surrounding backticks
+  cleaned = cleaned.replace(/^`+|`+$/g, '').trim();
+  // Extract from first { to last }
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace  = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+  return cleaned;
 }
 
 /**
@@ -164,15 +177,13 @@ function stripMarkdownFences(text) {
 function parseResponse(raw) {
   if (!raw || raw.trim() === '') {
     console.log('[oracle] parseResponse: empty raw text');
-    return { data: null, parseError: true, errorReason: 'empty_response', rawText: raw };
+    return { data: null, parseError: true, errorReason: 'empty_response' };
   }
 
   console.log('[oracle] RAW (first 300):', JSON.stringify(raw.slice(0, 300)));
 
-  const cleaned = raw
-    .replace(/```json\s*/gi, '')
-    .replace(/```\s*/gi, '')
-    .trim();
+  // Aggressive cleaning first
+  const cleaned = cleanJsonResponse(raw);
 
   console.log('[oracle] CLEANED (first 300):', JSON.stringify(cleaned.slice(0, 300)));
 
@@ -185,7 +196,7 @@ function parseResponse(raw) {
     return obj;
   }
 
-  // 1. Direct parse if text looks like JSON
+  // 1. Direct parse
   if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
     try {
       const parsed = sanitize(JSON.parse(cleaned));
@@ -197,7 +208,7 @@ function parseResponse(raw) {
     }
   }
 
-  // 2. Regex extraction — grab largest {...} block
+  // 2. Regex extraction — grab largest {...} block from the cleaned string
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (match) {
     try {
@@ -206,7 +217,7 @@ function parseResponse(raw) {
       return { data: parsed, parseError: false };
     } catch (err) {
       console.log('[oracle] regex parse failed:', err.message);
-      return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err.message, rawText: raw };
+      return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err.message };
     }
   }
 

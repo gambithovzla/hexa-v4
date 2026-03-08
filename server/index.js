@@ -64,7 +64,7 @@ app.post('/api/analyze/game', async (req, res) => {
     const context  = await buildContext(gameData);
     const matchup  = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
     const analysis = await analyzeGame({ matchup, betType, context, riskProfile, mode: 'single', lang: resolvedLang, webSearch, model });
-    res.json({ success: true, data: analysis });
+    res.json({ success: true, data: analysis.data, parseError: analysis.parseError, rawText: analysis.rawText });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -94,7 +94,7 @@ app.post('/api/analyze/parlay', async (req, res) => {
       })
     );
     const analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs, model });
-    res.json({ success: true, data: analysis });
+    res.json({ success: true, data: analysis.data, parseError: analysis.parseError, rawText: analysis.rawText });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -117,7 +117,7 @@ app.post('/api/analyze/full-day', async (req, res) => {
     const games = await getTodayGames(resolvedDate);
     const contexts = await Promise.all(games.map(g => buildContext(g)));
     const analysis = await analyzeFullDay(contexts, resolvedDate, resolvedLang, { betType, riskProfile, webSearch, model });
-    res.json({ success: true, data: analysis });
+    res.json({ success: true, data: analysis.data, parseError: analysis.parseError, rawText: analysis.rawText });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
