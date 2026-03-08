@@ -3,18 +3,19 @@ import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:             '#0a0e17',
-  cardBg:         '#111827',
-  cardBorder:     '#1e293b',
-  selectedBorder: '#f59e0b',
-  accent:         '#f59e0b',
-  accentDim:      '#f59e0b22',
-  accentLine:     '#f59e0b44',
-  textPrimary:    '#f1f5f9',
-  textMuted:      '#94a3b8',
-  liveGreen:      '#22c55e',
-  finalRed:       '#ef4444',
-  scheduledGray:  '#64748b',
+  bg:              '#0a0e17',
+  cardBg:          '#111827',
+  cardBorder:      '#1e293b',
+  selectedBorder:  '#f59e0b',
+  accent:          '#f59e0b',
+  accentDim:       '#f59e0b22',
+  accentLine:      '#f59e0b44',
+  textPrimary:     '#f1f5f9',
+  textMuted:       '#94a3b8',
+  scheduledGreen:  '#22c55e',
+  liveOrange:      '#f97316',
+  finalRed:        '#ef4444',
+  scheduledGray:   '#64748b',
 };
 
 const MONO  = '"JetBrains Mono", "Fira Code", "Courier New", monospace';
@@ -89,11 +90,41 @@ function getTime(game) {
   });
 }
 
+/**
+ * Hybrid status detection: trusts the MLB API first, then falls back to
+ * wall-clock time when the API lags (e.g. double-headers, delayed games).
+ *
+ * Returns: 'scheduled' | 'live' | 'final'
+ */
 function getStatus(game) {
+  // 1. Trust explicit API fields
   const abs      = game.status?.abstractGameState ?? '';
   const detailed = game.status?.detailedState ?? '';
-  if (abs === 'Live'  || detailed === 'In Progress' || detailed === 'Warmup') return 'live';
-  if (abs === 'Final' || detailed === 'Final' || detailed === 'Game Over')    return 'final';
+  const coded    = game.status?.codedGameState  ?? '';
+
+  if (
+    abs === 'Live' ||
+    detailed === 'In Progress' || detailed === 'Warmup' || detailed === 'Manager Challenge' ||
+    coded === 'I'
+  ) return 'live';
+
+  if (
+    abs === 'Final' ||
+    detailed === 'Final' || detailed === 'Game Over' ||
+    detailed === 'Completed Early' || detailed === 'Postponed' ||
+    coded === 'F' || coded === 'O'
+  ) return 'final';
+
+  // 2. Time-based fallback for when the API still says 'Preview'/'Scheduled'
+  //    but the game has clearly started or ended by the clock
+  if (game.gameDate) {
+    const gameMs  = new Date(game.gameDate).getTime();
+    const nowMs   = Date.now();
+    const elapsed = nowMs - gameMs;          // negative = future
+    if (elapsed >= 4 * 60 * 60 * 1000) return 'final';  // 4 h+ past start → over
+    if (elapsed >= 0)                  return 'live';    // past start, < 4 h → in progress
+  }
+
   return 'scheduled';
 }
 
@@ -105,9 +136,9 @@ function isSelectable(game) {
 // ── StatusBadge ───────────────────────────────────────────────────────────────
 function StatusBadge({ status, t }) {
   const map = {
-    live:      { label: t.live,      color: C.liveGreen,     pulse: true },
-    final:     { label: t.final,     color: C.finalRed,      pulse: false },
-    scheduled: { label: t.scheduled, color: C.scheduledGray, pulse: false },
+    scheduled: { label: t.scheduled, color: C.scheduledGreen, pulse: false },
+    live:      { label: t.live,      color: C.liveOrange,     pulse: true  },
+    final:     { label: t.final,     color: C.finalRed,       pulse: false },
   };
   const { label, color, pulse } = map[status] ?? map.scheduled;
 
@@ -155,30 +186,40 @@ function StatusBadge({ status, t }) {
 
 // ── GameCard ──────────────────────────────────────────────────────────────────
 function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t }) {
-  const away    = getAbbr(game.teams?.away);
-  const home    = getAbbr(game.teams?.home);
-  const awayP   = getPitcher(game.teams?.away) ?? t.tbd;
-  const homeP   = getPitcher(game.teams?.home) ?? t.tbd;
-  const time    = getTime(game);
-  const status  = getStatus(game);
-  const dimmed  = checkboxDisabled && !isSelected;
+  const away   = getAbbr(game.teams?.away);
+  const home   = getAbbr(game.teams?.home);
+  const awayP  = getPitcher(game.teams?.away) ?? t.tbd;
+  const homeP  = getPitcher(game.teams?.home) ?? t.tbd;
+  const time   = getTime(game);
+  const status = getStatus(game);
+
+  // Games that have started/ended cannot be selected at all
+  const blocked = status !== 'scheduled';
+
+  const borderColor = isSelected   ? C.selectedBorder
+    : status === 'live'            ? C.liveOrange
+    : C.cardBorder;
+
+  const boxShadow = isSelected
+    ? `0 0 0 1px ${C.selectedBorder}50, 0 4px 24px ${C.selectedBorder}18`
+    : status === 'live'
+      ? `0 0 0 1px ${C.liveOrange}30`
+      : 'none';
 
   return (
     <Box
-      onClick={dimmed ? undefined : onClick}
+      onClick={blocked ? undefined : onClick}
       sx={{
         bgcolor: C.cardBg,
-        border: `1.5px solid ${isSelected ? C.selectedBorder : C.cardBorder}`,
+        border: `1.5px solid ${borderColor}`,
         borderRadius: '10px',
         p: '14px',
-        cursor: dimmed ? 'not-allowed' : 'pointer',
-        opacity: dimmed ? 0.45 : 1,
+        cursor: blocked ? 'not-allowed' : 'pointer',
+        opacity: status === 'final' ? 0.5 : 1,
         transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.12s, opacity 0.15s',
-        boxShadow: isSelected
-          ? `0 0 0 1px ${C.selectedBorder}50, 0 4px 24px ${C.selectedBorder}18`
-          : 'none',
+        boxShadow,
         position: 'relative',
-        '&:hover': dimmed ? {} : {
+        '&:hover': blocked ? {} : {
           borderColor: isSelected ? C.selectedBorder : '#2d3f55',
           transform: 'translateY(-2px)',
         },
@@ -189,9 +230,9 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         <Box sx={{ position: 'absolute', top: 6, right: 6 }}>
           <Checkbox
             checked={isSelected}
-            disabled={dimmed}
+            disabled={blocked || checkboxDisabled}
             onClick={e => e.stopPropagation()}
-            onChange={dimmed ? undefined : onClick}
+            onChange={(blocked || checkboxDisabled) ? undefined : onClick}
             size="small"
             sx={{
               p: '3px',
@@ -416,6 +457,15 @@ export default function GameSelector({
       .then(json => {
         if (cancelled) return;
         const list = json.success ? json.data : [];
+        // Debug: log the full MLB API game object so we can inspect all status fields
+        if (list.length > 0) {
+          console.log('[GameSelector] Sample game object (status fields):', {
+            gamePk:        list[0].gamePk,
+            gameDate:      list[0].gameDate,
+            status:        list[0].status,
+            computedStatus: getStatus(list[0]),
+          });
+        }
         setGames(list);
         // fullDay: auto-select only schedulable games on load
         if (mode === 'fullDay') {
@@ -432,6 +482,7 @@ export default function GameSelector({
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleSingleClick(game) {
+    if (!isSelectable(game)) return; // block live/final games
     const next = singleGame?.gamePk === game.gamePk ? null : game;
     setSingleGame(next);
     onSelectGame?.(next);
@@ -467,11 +518,15 @@ export default function GameSelector({
   }
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  // In single/parlay modes, hide finished and live games entirely
-  const displayGames =
-    mode === 'single' || mode === 'parlay'
+  // In single/parlay modes, hide finished and live games entirely.
+  // In fullDay, show all but sort: scheduled first → live → final.
+  const STATUS_SORT = { scheduled: 0, live: 1, final: 2 };
+  const displayGames = (() => {
+    const base = (mode === 'single' || mode === 'parlay')
       ? games.filter(isSelectable)
-      : games;
+      : [...games].sort((a, b) => STATUS_SORT[getStatus(a)] - STATUS_SORT[getStatus(b)]);
+    return base;
+  })();
 
   // "Select All" state only counts selectable games
   const selectableGames = games.filter(isSelectable);
@@ -645,10 +700,9 @@ export default function GameSelector({
               mode === 'single'
                 ? singleGame?.gamePk === game.gamePk
                 : selectedIds.has(game.gamePk);
-            const finished = !isSelectable(game);
-            const checkboxDisabled =
-              finished ||
-              (mode === 'parlay' && selectedIds.size >= 6 && !isSelected);
+            // GameCard handles live/final blocking internally via getStatus()
+            // checkboxDisabled here is only for the parlay 6-game cap
+            const checkboxDisabled = mode === 'parlay' && selectedIds.size >= 6 && !isSelected;
 
             return (
               <GameCard
