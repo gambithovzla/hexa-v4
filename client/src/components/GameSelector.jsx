@@ -86,6 +86,13 @@ function getTeamId(side) {
   return side?.team?.id ?? side?.id ?? null;
 }
 
+function getScore(game) {
+  const away = game.linescore?.teams?.away?.runs;
+  const home = game.linescore?.teams?.home?.runs;
+  if (away == null || home == null) return null;
+  return { away, home };
+}
+
 function getTime(game) {
   if (!game.gameDate) return '—';
   return new Date(game.gameDate).toLocaleTimeString([], {
@@ -213,6 +220,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
   const homeP   = getPitcher(game.teams?.home) ?? t.tbd;
   const time    = getTime(game);
   const status  = getStatus(game);
+  const score   = getScore(game);
 
   // Games that have started/ended cannot be selected at all
   const blocked = status !== 'scheduled';
@@ -303,17 +311,39 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
           </Typography>
         </Box>
 
-        <Typography
-          sx={{
-            fontFamily: LABEL,
-            fontSize: '0.65rem',
-            color: C.textMuted,
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          {t.vs}
-        </Typography>
+        {(status === 'live' || status === 'final') && score != null ? (
+          <Typography
+            sx={{
+              fontFamily: MONO,
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              color: status === 'live' ? C.liveOrange : C.textPrimary,
+              flexShrink: 0,
+              letterSpacing: '0.04em',
+              ...(status === 'live' ? {
+                '@keyframes scorePulse': {
+                  '0%, 100%': { opacity: 1 },
+                  '50%': { opacity: 0.45 },
+                },
+                animation: 'scorePulse 2s ease-in-out infinite',
+              } : {}),
+            }}
+          >
+            {score.away} – {score.home}
+          </Typography>
+        ) : (
+          <Typography
+            sx={{
+              fontFamily: LABEL,
+              fontSize: '0.65rem',
+              color: C.textMuted,
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            {t.vs}
+          </Typography>
+        )}
 
         {/* Home team */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -545,15 +575,12 @@ export default function GameSelector({
   }
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  // In single/parlay modes, hide finished and live games entirely.
-  // In fullDay, show all but sort: scheduled first → live → final.
+  // single/fullDay: show all games sorted scheduled → live → final.
+  // parlay: only selectable (scheduled) games.
   const STATUS_SORT = { scheduled: 0, live: 1, final: 2 };
-  const displayGames = (() => {
-    const base = (mode === 'single' || mode === 'parlay')
-      ? games.filter(isSelectable)
-      : [...games].sort((a, b) => STATUS_SORT[getStatus(a)] - STATUS_SORT[getStatus(b)]);
-    return base;
-  })();
+  const displayGames = mode === 'parlay'
+    ? games.filter(isSelectable)
+    : [...games].sort((a, b) => STATUS_SORT[getStatus(a)] - STATUS_SORT[getStatus(b)]);
 
   // "Select All" state only counts selectable games
   const selectableGames = games.filter(isSelectable);
