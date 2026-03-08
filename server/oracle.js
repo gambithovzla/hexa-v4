@@ -22,7 +22,7 @@ const anthropic = new Anthropic({
 });
 
 const MODEL      = 'claude-sonnet-4-20250514';
-const MAX_TOKENS = 4000;
+const MAX_TOKENS = 3000;
 
 // ---------------------------------------------------------------------------
 // System prompt H.E.X.A. V4
@@ -160,13 +160,17 @@ function stripMarkdownFences(text) {
  * @returns {{ data: object|null, parseError: boolean }}
  */
 function parseResponse(raw) {
+  if (!raw || raw.trim() === '') {
+    return { data: null, parseError: true, errorReason: 'empty_response', rawText: raw };
+  }
+
   const cleaned = stripMarkdownFences(raw);
 
   if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
     try {
       return { data: JSON.parse(cleaned), parseError: false };
-    } catch {
-      return { data: null, parseError: true };
+    } catch (err) {
+      return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err.message, rawText: raw };
     }
   }
 
