@@ -1,0 +1,172 @@
+/**
+ * App.jsx — H.E.X.A. V4 root component.
+ *
+ * State ownership:
+ *   lang        — shared with all components so Claude responds in the right language
+ *   activeTab   — controls which tab panel is visible
+ *   singleGame  — last game selected in the Single tab
+ *   parlayGames — games selected in the Parlay tab
+ *   fullDayGames — games loaded for the Full Day tab
+ *
+ * History:
+ *   App owns one useHistory() instance solely for addPick (write side).
+ *   HistoryPanel owns its own instance for reading/mutation — it remounts
+ *   on each tab visit so it always reads the latest localStorage snapshot.
+ */
+
+import { useState } from 'react';
+import { ThemeProvider, createTheme, CssBaseline, Box, Typography } from '@mui/material';
+import { theme as themeConfig } from './styles/theme';
+import Header        from './components/Header';
+import GameSelector  from './components/GameSelector';
+import AnalysisPanel from './components/AnalysisPanel';
+import HistoryPanel  from './components/HistoryPanel';
+import useHistory    from './hooks/useHistory';
+
+const muiTheme = createTheme(themeConfig);
+
+const MONO = '"JetBrains Mono", "Fira Code", monospace';
+
+// Two-column layout used on game / parlay / fullday tabs
+const TAB_LAYOUT = {
+  display:             'grid',
+  gridTemplateColumns: { xs: '1fr', md: '380px 1fr' },
+  gap:                 3,
+  alignItems:          'start',
+};
+
+// ── Footer ────────────────────────────────────────────────────────────────────
+
+function AppFooter() {
+  return (
+    <Box
+      component="footer"
+      sx={{
+        mt:         6,
+        py:         '14px',
+        px:         3,
+        borderTop:  '1px solid #1e293b',
+        textAlign:  'center',
+      }}
+    >
+      <Typography
+        sx={{
+          fontFamily: MONO,
+          fontSize:   '11px',
+          color:      '#475569',
+          userSelect: 'none',
+        }}
+      >
+        Powered by Claude AI&nbsp;·&nbsp;H.E.X.A. Hybrid Expert X-Analysis
+      </Typography>
+    </Box>
+  );
+}
+
+// ── Root ──────────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [lang,         setLang]         = useState('en');
+  const [activeTab,    setActiveTab]    = useState('game');
+  const [singleGame,   setSingleGame]   = useState(null);
+  const [parlayGames,  setParlayGames]  = useState([]);
+  const [fullDayGames, setFullDayGames] = useState([]);
+
+  // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
+  // HistoryPanel reads history via its own hook instance (remounts each visit).
+  const { addPick } = useHistory();
+
+  return (
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <Box
+        sx={{
+          minHeight:       '100vh',
+          bgcolor:         '#0a0e17',
+          display:         'flex',
+          flexDirection:   'column',
+        }}
+      >
+        {/* ── Sticky header + tab bar ── */}
+        <Header
+          lang={lang}
+          onLangToggle={setLang}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+
+        {/* ── Main content ── */}
+        <Box
+          component="main"
+          sx={{
+            flex:      1,
+            px:        { xs: 2, sm: 3 },
+            py:        3,
+            maxWidth:  1440,
+            mx:        'auto',
+            width:     '100%',
+          }}
+        >
+          {/* Single game */}
+          {activeTab === 'game' && (
+            <Box sx={TAB_LAYOUT}>
+              <GameSelector
+                mode="single"
+                onSelectGame={setSingleGame}
+                language={lang}
+              />
+              <AnalysisPanel
+                mode="single"
+                selectedGames={singleGame ? [singleGame] : []}
+                lang={lang}
+                onSave={addPick}
+              />
+            </Box>
+          )}
+
+          {/* Full day */}
+          {activeTab === 'fullday' && (
+            <Box sx={TAB_LAYOUT}>
+              <GameSelector
+                mode="fullDay"
+                onSelectMultiple={setFullDayGames}
+                language={lang}
+              />
+              <AnalysisPanel
+                mode="fullDay"
+                selectedGames={fullDayGames}
+                lang={lang}
+                onSave={addPick}
+              />
+            </Box>
+          )}
+
+          {/* Parlay */}
+          {activeTab === 'parlay' && (
+            <Box sx={TAB_LAYOUT}>
+              <GameSelector
+                mode="parlay"
+                onSelectMultiple={setParlayGames}
+                language={lang}
+              />
+              <AnalysisPanel
+                mode="parlay"
+                selectedGames={parlayGames}
+                lang={lang}
+                onSave={addPick}
+              />
+            </Box>
+          )}
+
+          {/* History — remounts on each visit so it re-reads localStorage */}
+          {activeTab === 'history' && (
+            <HistoryPanel lang={lang} />
+          )}
+        </Box>
+
+        {/* ── Footer ── */}
+        <AppFooter />
+      </Box>
+    </ThemeProvider>
+  );
+}

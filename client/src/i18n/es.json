@@ -1,0 +1,83 @@
+{
+  "app": {
+    "title": "Hexa Oráculo",
+    "subtitle": "Plataforma de Inteligencia MLB"
+  },
+  "nav": {
+    "game": "Análisis de Juego",
+    "parlay": "Constructor de Parlay",
+    "fullday": "Vista Completa del Día",
+    "history": "Historial"
+  },
+  "gameSelector": {
+    "title": "Seleccionar Juego",
+    "date": "Fecha",
+    "noGames": "No hay juegos programados para esta fecha.",
+    "analyze": "Analizar Juego",
+    "analyzing": "Analizando…",
+    "selectHint": "Selecciona un juego primero"
+  },
+  "analysis": {
+    "title": "Análisis del Oráculo",
+    "home": "Ventaja Local",
+    "away": "Ventaja Visitante",
+    "matchups": "Duelos Clave",
+    "bets": "Recomendaciones de Apuestas",
+    "risks": "Alertas de Riesgo",
+    "empty": "Selecciona un juego y haz clic en Analizar para ver el análisis."
+  },
+  "parlay": {
+    "title": "Constructor de Parlay",
+    "selectGames": "Selecciona juegos para tu parlay",
+    "selected": "seleccionados",
+    "analyze": "Analizar Parlay",
+    "analyzing": "Analizando…",
+    "min": "Selecciona al menos 2 juegos.",
+    "grade": "Calificación del Parlay",
+    "confidence": "Confianza General",
+    "legs": "Patas",
+    "correlation": "Correlaciones",
+    "risks": "Alertas de Riesgo"
+  },
+  "fullday": {
+    "title": "Análisis de Todos los Juegos del Día",
+    "analyze": "Analizar Pizarra Completa",
+    "analyzing": "Analizando…",
+    "grade": "Calificación",
+    "topPicks": "Mejores Picks",
+    "avoid": "Juegos a Evitar",
+    "narratives": "Narrativas Clave"
+  },
+  "history": {
+    "title": "Historial de Picks",
+    "subtitle": "Registra tus picks del Oráculo y resultados",
+    "empty": "Sin picks aún. Ejecuta un análisis para empezar a registrar tu récord.",
+    "totalPicks": "Picks Totales",
+    "wins": "Victorias",
+    "losses": "Derrotas",
+    "pending": "Pendientes",
+    "winRate": "Tasa de Acierto",
+    "markWin": "Ganó",
+    "markLoss": "Perdió",
+    "clearHistory": "Borrar Historial",
+    "confirmClear": "¿Confirmar? Clic de nuevo",
+    "mode": {
+      "single": "Individual",
+      "parlay": "Parlay",
+      "fullDay": "Día Completo",
+      "fullday": "Día Completo"
+    },
+    "result": {
+      "win": "GANÓ",
+      "loss": "PERDIÓ",
+      "pending": "PENDIENTE"
+    },
+    "noPickExtracted": "—",
+    "confidence": "Confianza"
+  },
+  "confidence": {
+    "low": "Baja",
+    "medium": "Media",
+    "high": "Alta"
+  }
+}

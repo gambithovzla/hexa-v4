@@ -1,0 +1,83 @@
+{
+  "app": {
+    "title": "Hexa Oracle",
+    "subtitle": "MLB Intelligence Platform"
+  },
+  "nav": {
+    "game": "Game Analysis",
+    "parlay": "Parlay Builder",
+    "fullday": "Full Day View",
+    "history": "History"
+  },
+  "gameSelector": {
+    "title": "Select a Game",
+    "date": "Date",
+    "noGames": "No games scheduled for this date.",
+    "analyze": "Analyze Game",
+    "analyzing": "Analyzing…",
+    "selectHint": "Select a game first"
+  },
+  "analysis": {
+    "title": "Oracle Analysis",
+    "home": "Home Edge",
+    "away": "Away Edge",
+    "matchups": "Key Matchups",
+    "bets": "Bet Recommendations",
+    "risks": "Risk Flags",
+    "empty": "Select a game and click Analyze to see the Oracle's analysis."
+  },
+  "parlay": {
+    "title": "Parlay Builder",
+    "selectGames": "Select games for your parlay",
+    "selected": "selected",
+    "analyze": "Analyze Parlay",
+    "analyzing": "Analyzing…",
+    "min": "Select at least 2 games.",
+    "grade": "Parlay Grade",
+    "confidence": "Overall Confidence",
+    "legs": "Legs",
+    "correlation": "Correlation Insights",
+    "risks": "Risk Flags"
+  },
+  "fullday": {
+    "title": "Full Day Slate Analysis",
+    "analyze": "Analyze Today's Slate",
+    "analyzing": "Analyzing…",
+    "grade": "Slate Grade",
+    "topPicks": "Top Picks",
+    "avoid": "Games to Avoid",
+    "narratives": "Key Narratives"
+  },
+  "history": {
+    "title": "Pick History",
+    "subtitle": "Track your Oracle picks and results",
+    "empty": "No picks yet. Run an analysis to start tracking your record.",
+    "totalPicks": "Total Picks",
+    "wins": "Wins",
+    "losses": "Losses",
+    "pending": "Pending",
+    "winRate": "Win Rate",
+    "markWin": "Win",
+    "markLoss": "Loss",
+    "clearHistory": "Clear History",
+    "confirmClear": "Confirm? Click again",
+    "mode": {
+      "single": "Single",
+      "parlay": "Parlay",
+      "fullDay": "Full Day",
+      "fullday": "Full Day"
+    },
+    "result": {
+      "win": "WIN",
+      "loss": "LOSS",
+      "pending": "PENDING"
+    },
+    "noPickExtracted": "—",
+    "confidence": "Confidence"
+  },
+  "confidence": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High"
+  }
+}
