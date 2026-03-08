@@ -50,10 +50,8 @@ const L = {
     },
     modelSelect: {
       label: 'Analysis Model',
-      fast:  '⚡ Fast (Haiku)',
-      deep:  '🧠 Deep (Sonnet)',
-      fastSub: '$0.01/análisis',
-      deepSub: '$0.10/análisis',
+      fast:  '⚡ Fast',
+      deep:  '🧠 Deep',
     },
     webSearch:    'Web Intel',
     parlayLegs:   'Parlay Legs',
@@ -86,10 +84,8 @@ const L = {
     },
     modelSelect: {
       label: 'Modelo de Análisis',
-      fast:  '⚡ Fast (Haiku)',
-      deep:  '🧠 Deep (Sonnet)',
-      fastSub: '$0.01/análisis',
-      deepSub: '$0.10/análisis',
+      fast:  '⚡ Fast',
+      deep:  '🧠 Deep',
     },
     webSearch:    'Intel Web',
     parlayLegs:   'Patas del Parlay',
@@ -216,8 +212,8 @@ function RiskProfilePicker({ value, onChange, t }) {
 
 function ModelPicker({ value, onChange, t }) {
   const options = [
-    { value: 'fast', label: t.modelSelect.fast, sub: t.modelSelect.fastSub },
-    { value: 'deep', label: t.modelSelect.deep, sub: t.modelSelect.deepSub },
+    { value: 'fast', label: t.modelSelect.fast },
+    { value: 'deep', label: t.modelSelect.deep },
   ];
 
   return (
@@ -244,15 +240,10 @@ function ModelPicker({ value, onChange, t }) {
                 fontWeight: active ? 700 : 400,
                 cursor: 'pointer',
                 transition: 'all 0.15s',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '2px',
                 '&:hover': { borderColor: active ? C.accent : '#2d3f55', color: active ? C.accent : C.textPrimary },
               }}
             >
-              <span>{o.label}</span>
-              <span style={{ fontSize: '0.6rem', opacity: 0.7, fontWeight: 400 }}>{o.sub}</span>
+              {o.label}
             </Box>
           );
         })}
