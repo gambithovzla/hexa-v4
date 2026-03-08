@@ -625,8 +625,8 @@ export default function AnalysisPanel({
         <ErrorDisplay error={error} onRetry={handleAnalyze} t={t} />
       )}
 
-      {/* ── Parse error: show raw text ── */}
-      {!loading && !error && result && parseError && (
+      {/* ── Parse error: show raw text (only when no structured data) ── */}
+      {!loading && !error && result && parseError && !hexaData && (
         <Box
           sx={{
             bgcolor: C.cardBg,
@@ -660,7 +660,7 @@ export default function AnalysisPanel({
       )}
 
       {/* ── Result ── */}
-      {!loading && !error && hexaData && !parseError && (
+      {!loading && !error && hexaData && (
         <ResultCard data={hexaData} lang={lang} />
       )}
 

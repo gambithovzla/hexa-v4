@@ -145,8 +145,8 @@ function extractRawText(response) {
  */
 function stripMarkdownFences(text) {
   return text
-    .replace(/^```(?:json)?\s*/im, '')
-    .replace(/\s*```\s*$/im, '')
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
     .trim();
 }
 
@@ -168,14 +168,36 @@ function parseResponse(raw) {
 
   const cleaned = stripMarkdownFences(raw);
 
+  // Helper: strip probability_model.note if present
+  function sanitize(obj) {
+    if (obj?.probability_model?.note !== undefined) {
+      // eslint-disable-next-line no-unused-vars
+      const { note: _note, ...rest } = obj.probability_model;
+      return { ...obj, probability_model: rest };
+    }
+    return obj;
+  }
+
+  // 1. Direct parse if text looks like JSON
   if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
     try {
-      return { data: JSON.parse(cleaned), parseError: false };
+      return { data: sanitize(JSON.parse(cleaned)), parseError: false };
+    } catch {
+      // fall through to regex extraction
+    }
+  }
+
+  // 2. Regex extraction — grab first {...} block spanning the whole text
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return { data: sanitize(JSON.parse(match[0])), parseError: false };
     } catch (err) {
       return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err.message, rawText: raw };
     }
   }
 
+  // 3. Raw text fallback (prose response — not an error)
   return { data: null, parseError: false };
 }
 
