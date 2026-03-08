@@ -539,25 +539,38 @@ export default function AnalysisPanel({
         };
       }
 
-      const res  = await fetch(endpoint, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      });
-      const json = await res.json();
+      // Auto-retry once after 2 s on any failure (network error or success:false)
+      const doFetch = () =>
+        fetch(endpoint, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        }).then(r => r.json());
 
-      if (json.success) {
-        // Store the full flattened response: { data: hexaObj|null, parseError, rawText }
-        setResult(json);
-        onSave?.({
-          type:   mode === 'fullDay' ? 'fullday' : mode,
-          games:  selectedGames,
-          result: json.data,
-          date:   new Date().toISOString(),
-        });
-      } else {
-        setError(json.error ?? 'Unknown error');
+      let json;
+      try {
+        json = await doFetch();
+        if (!json.success) throw new Error(json.error ?? 'Server error');
+      } catch {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          json = await doFetch();
+          if (!json.success) throw new Error(json.error ?? 'Server error');
+        } catch (e2) {
+          setError(e2.message ?? 'Network error');
+          setLoading(false);
+          return;
+        }
       }
+
+      // Success path
+      setResult(json);
+      onSave?.({
+        type:   mode === 'fullDay' ? 'fullday' : mode,
+        games:  selectedGames,
+        result: json.data,
+        date:   new Date().toISOString(),
+      });
     } catch (e) {
       setError(e.message ?? 'Network error');
     } finally {

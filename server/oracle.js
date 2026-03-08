@@ -89,7 +89,9 @@ CRITICAL: Output raw JSON only. Never wrap in markdown code fences or backticks.
  * @returns {string}
  */
 function buildUserMessage({ matchup, betType, context, riskProfile, mode, lang, games = [], legs }) {
-  const langTag = lang && lang !== 'en' ? `\n\nRespond in: ${lang}` : '';
+  const langTag = lang === 'es'
+    ? '\n\nIMPORTANT: Responde TODO el contenido de texto en español. Todos los campos: oracle_report, hexa_hunch, alert_flags, descripciones de picks, todo en español.'
+    : '';
 
   switch (mode) {
     case 'single':
@@ -274,10 +276,15 @@ export async function analyzeGame(params) {
     matchup, betType, context, riskProfile, mode, lang, games, legs,
   });
 
+  // Append a hard Spanish instruction to the system prompt when lang === 'es'
+  const systemPrompt = lang === 'es'
+    ? SYSTEM_PROMPT + '\n\nIMPORTANT: Respond ALL text content in Spanish (español). All fields: oracle_report, hexa_hunch, alert_flags, pick descriptions, strategy_note, day_summary — everything in Spanish. JSON keys remain in English.'
+    : SYSTEM_PROMPT;
+
   const requestBody = {
     model:      modelId,
     max_tokens: maxTokens,
-    system:     SYSTEM_PROMPT,
+    system:     systemPrompt,
     messages:   [{ role: 'user', content: userMessage }],
   };
 
