@@ -565,7 +565,17 @@ export default function AnalysisPanel({
   }
 
   // Parsed HEXA JSON lives at result.data (oracle returns { data, rawText, parseError, ... })
-  const hexaData   = result?.data ?? null;
+  // Safety net: if backend somehow returned the JSON as a string, parse it here
+  const hexaData = (() => {
+    const d = result?.data ?? null;
+    if (!d) return null;
+    if (typeof d === 'string') {
+      try {
+        return JSON.parse(d.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim());
+      } catch { return null; }
+    }
+    return d;
+  })();
   const parseError = result?.parseError ?? false;
   const rawText    = result?.rawText ?? '';
 

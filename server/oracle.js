@@ -163,16 +163,23 @@ function stripMarkdownFences(text) {
  */
 function parseResponse(raw) {
   if (!raw || raw.trim() === '') {
+    console.log('[oracle] parseResponse: empty raw text');
     return { data: null, parseError: true, errorReason: 'empty_response', rawText: raw };
   }
 
-  const cleaned = stripMarkdownFences(raw);
+  console.log('[oracle] RAW (first 300):', JSON.stringify(raw.slice(0, 300)));
+
+  const cleaned = raw
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/gi, '')
+    .trim();
+
+  console.log('[oracle] CLEANED (first 300):', JSON.stringify(cleaned.slice(0, 300)));
 
   // Helper: strip probability_model.note if present
   function sanitize(obj) {
     if (obj?.probability_model?.note !== undefined) {
-      // eslint-disable-next-line no-unused-vars
-      const { note: _note, ...rest } = obj.probability_model;
+      const { note: _note, ...rest } = obj.probability_model; // eslint-disable-line no-unused-vars
       return { ...obj, probability_model: rest };
     }
     return obj;
@@ -181,23 +188,30 @@ function parseResponse(raw) {
   // 1. Direct parse if text looks like JSON
   if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
     try {
-      return { data: sanitize(JSON.parse(cleaned)), parseError: false };
-    } catch {
+      const parsed = sanitize(JSON.parse(cleaned));
+      console.log('[oracle] parse OK (direct)');
+      return { data: parsed, parseError: false };
+    } catch (e) {
+      console.log('[oracle] direct parse failed:', e.message);
       // fall through to regex extraction
     }
   }
 
-  // 2. Regex extraction — grab first {...} block spanning the whole text
+  // 2. Regex extraction — grab largest {...} block
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (match) {
     try {
-      return { data: sanitize(JSON.parse(match[0])), parseError: false };
+      const parsed = sanitize(JSON.parse(match[0]));
+      console.log('[oracle] parse OK (regex)');
+      return { data: parsed, parseError: false };
     } catch (err) {
+      console.log('[oracle] regex parse failed:', err.message);
       return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err.message, rawText: raw };
     }
   }
 
   // 3. Raw text fallback (prose response — not an error)
+  console.log('[oracle] no JSON found, returning prose');
   return { data: null, parseError: false };
 }
 
