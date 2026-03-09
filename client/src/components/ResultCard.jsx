@@ -222,41 +222,53 @@ function decimalToAmerican(dec) {
   return dec >= 2 ? Math.round((dec - 1) * 100) : -Math.round(100 / (dec - 1));
 }
 
-/** Determines the most relevant American odds for a parlay leg by parsing leg.pick */
+/** Returns true only for real American odds: integer >= +100 or <= -100 */
+function isValidOdds(n) {
+  return n != null && isFinite(n) && Number.isInteger(Number(n)) && (n >= 100 || n <= -100);
+}
+
+/** Sanitizes an odds value — returns null if it's not a valid American odds number */
+function sanitizeOdds(n) {
+  const num = Number(n);
+  return isValidOdds(num) ? num : null;
+}
+
+/**
+ * Determines the most relevant American odds for a parlay leg from The Odds API data only.
+ * Never reads from leg.odds or any Claude-generated field.
+ * Returns null if no valid real odds found — caller will use estimated default.
+ */
 function getLegOdds(leg, oddsObj) {
   if (!oddsObj?.odds) return null;
   const pick = String(leg?.pick ?? '').toLowerCase();
   const { moneyline: ml, runLine: rl, overUnder: ou } = oddsObj.odds;
 
-  if (pick.includes('over'))  return ou?.overPrice ?? null;
-  if (pick.includes('under')) return ou?.underPrice ?? null;
-  if (pick.includes('1.5') || pick.includes('run line')) {
+  let raw = null;
+  if (pick.includes('over'))  raw = ou?.overPrice;
+  else if (pick.includes('under')) raw = ou?.underPrice;
+  else if (pick.includes('1.5') || pick.includes('run line')) {
     const parts    = String(leg?.game ?? '').split('@');
     const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
     const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
-    if (homeAbbr && pick.includes(homeAbbr)) return rl?.home?.price ?? null;
-    if (awayAbbr && pick.includes(awayAbbr)) return rl?.away?.price ?? null;
-    return rl?.home?.price ?? null;
+    if (homeAbbr && pick.includes(homeAbbr)) raw = rl?.home?.price;
+    else if (awayAbbr && pick.includes(awayAbbr)) raw = rl?.away?.price;
+    else raw = rl?.home?.price;
+  } else {
+    // moneyline — determine direction from game string
+    const parts    = String(leg?.game ?? '').split('@');
+    const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
+    const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
+    raw = (awayAbbr && pick.includes(awayAbbr)) ? ml?.away : ml?.home;
   }
-  // moneyline — determine direction from game string
-  const parts    = String(leg?.game ?? '').split('@');
-  const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
-  const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
-  if (awayAbbr && pick.includes(awayAbbr)) return ml?.away ?? null;
-  return ml?.home ?? null;
+  return sanitizeOdds(raw);
 }
 
-// Player prop keywords for pick-type detection
-const PROP_KW = ['strikeout', ' ks', 'hits', ' hr ', 'home run', 'total bases', 'rbi', 'stolen base', 'walks', 'innings pitched', 'earned run', 'pitch', 'batter', 'bases'];
+// Industry-standard estimated odds when no real API data is available
+const ESTIMATED_ODDS = -110;
 
-/** Returns an estimated default American odds value based on the leg's pick type */
-function getEstimatedOdds(leg) {
-  const pick = String(leg?.pick ?? '').toLowerCase();
-  if (PROP_KW.some(kw => pick.includes(kw))) return -115;
-  if (pick.includes('1.5') || pick.includes('run line')) {
-    return pick.includes('+1.5') ? 140 : -165;
-  }
-  return -110; // ML or game O/U
+/** Returns -110 as the standard estimated default (used when Odds API has no data) */
+function getEstimatedOdds() {
+  return ESTIMATED_ODDS;
 }
 
 // ── OddsCell ──────────────────────────────────────────────────────────────────
@@ -304,54 +316,18 @@ function PayoutRow({ label, stake, profit, total }) {
  * Detects pick type and highlights only the relevant momio.
  */
 function LegOddsLine({ leg, oddsObj, t }) {
-  const pick = String(leg?.pick ?? '').toLowerCase();
   const isEs = t?.leg === 'Pata';
 
-  // Detect pick type
-  const isOver    = /\bover\b/.test(pick);
-  const isUnder   = /\bunder\b/.test(pick);
-  const isProp    = PROP_KW.some(kw => pick.includes(kw));
-  const isGameOU  = (isOver || isUnder) && !isProp;
-  const isRunLine = (pick.includes('1.5') || pick.includes('run line')) && !isProp;
-  // isML = everything else
-
-  // Try to get real odds from the API
-  let realOdds = null;
-  if (oddsObj?.odds) {
-    const { moneyline: ml, runLine: rl, overUnder: ou } = oddsObj.odds;
-    if (isGameOU && isOver)    realOdds = ou?.overPrice ?? null;
-    else if (isGameOU && isUnder) realOdds = ou?.underPrice ?? null;
-    else if (isRunLine) {
-      const parts    = String(leg?.game ?? '').split('@');
-      const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
-      const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
-      if (homeAbbr && pick.includes(homeAbbr)) realOdds = rl?.home?.price ?? null;
-      else if (awayAbbr && pick.includes(awayAbbr)) realOdds = rl?.away?.price ?? null;
-      else realOdds = rl?.home?.price ?? null;
-    } else {
-      // moneyline
-      const parts    = String(leg?.game ?? '').split('@');
-      const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
-      const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
-      if (awayAbbr && pick.includes(awayAbbr)) realOdds = ml?.away ?? null;
-      else realOdds = ml?.home ?? null;
-    }
-  }
-
-  // Estimated fallback based on pick type
+  // Only use Odds API data via getLegOdds (validated, never Claude's response fields)
+  const realOdds    = getLegOdds(leg, oddsObj);
   const isEstimated = realOdds == null;
-  const displayOdds = realOdds ?? getEstimatedOdds(leg);
+  const displayOdds = realOdds ?? ESTIMATED_ODDS;
 
   const amFmt = (n) => n == null ? '—' : n > 0 ? `+${n}` : String(n);
 
-  let label;
-  if (isProp && isEstimated) {
-    label = 'Prop · est.';
-  } else if (isEstimated) {
-    label = isEs ? 'Momio est.' : 'Est. odds';
-  } else {
-    label = isEs ? 'Momio' : 'Odds';
-  }
+  const label = isEstimated
+    ? (isEs ? 'Momio est.' : 'Est. odds')
+    : (isEs ? 'Momio'      : 'Odds');
 
   return (
     <Box sx={{ mt: '8px', pt: '6px', borderTop: `1px solid ${C.cardBorder}60`, display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -485,7 +461,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
   for (let i = 0; i < totalLegs; i++) {
     let american = getLegOdds(legs[i], legOdds?.[i]);
     if (american == null) {
-      american = getEstimatedOdds(legs[i]);
+      american = getEstimatedOdds();
       estimatedCount++;
     }
     // American → decimal conversion
