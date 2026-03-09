@@ -60,6 +60,7 @@ const L = {
       betAmount:  'Stake',
       parlayOdds: 'Parlay Odds',
       combined:   'Combined',
+      estimated:  '* Estimated odds — real lines available in regular season',
     },
   },
   es: {
@@ -88,6 +89,7 @@ const L = {
       betAmount:  'Monto',
       parlayOdds: 'Momios del Parlay',
       combined:   'Combinado',
+      estimated:  '* Momios estimados — líneas reales disponibles en temporada regular',
     },
   },
 };
@@ -284,20 +286,59 @@ function PayoutRow({ label, stake, profit, total }) {
 
 // ── LegOddsLine ───────────────────────────────────────────────────────────────
 
-function LegOddsLine({ oddsObj }) {
-  if (!oddsObj?.odds) return null;
-  const { moneyline: ml, runLine: rl, overUnder: ou } = oddsObj.odds;
+function LegOddsLine({ leg, oddsObj }) {
+  const pick      = String(leg?.pick ?? '').toLowerCase();
+  const isOver    = pick.includes('over');
+  const isUnder   = pick.includes('under');
+  const isRunLine = pick.includes('1.5') || (pick.includes('run') && pick.includes('line'));
+  const isML      = !isOver && !isUnder && !isRunLine;
+
+  // Fall back to -110 defaults when The Odds API has no data (Spring Training, etc.)
+  const estimated = !oddsObj?.odds;
+  const ml = oddsObj?.odds?.moneyline ?? { home: -110, away: -110 };
+  const rl = oddsObj?.odds?.runLine   ?? { home: { spread: -1.5, price: -110 }, away: { spread: +1.5, price: -110 } };
+  const ou = oddsObj?.odds?.overUnder ?? { total: null, overPrice: -110, underPrice: -110 };
+
   const am = n => (n == null ? '—' : n > 0 ? `+${n}` : String(n));
   const sp = n => (n == null ? '?' : n > 0 ? `+${n}` : String(n));
+
+  // Inline segment: highlighted when it's the relevant market
+  const Seg = ({ active, children }) => (
+    <Box component="span" sx={{ fontWeight: active ? 700 : 400, color: active ? C.accent : 'inherit' }}>
+      {children}
+    </Box>
+  );
+  const Sep = () => (
+    <Box component="span" sx={{ mx: '4px', opacity: 0.35 }}>|</Box>
+  );
+
   return (
     <Box sx={{ mt: '8px', pt: '8px', borderTop: `1px solid ${C.cardBorder}60` }}>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, lineHeight: 1.7 }}>
-        {`ML H:${am(ml.home)} A:${am(ml.away)}`}
-        {' · '}
-        {`RL ${sp(rl.home.spread)}${am(rl.home.price)} / ${sp(rl.away.spread)}${am(rl.away.price)}`}
-        {' · '}
-        {`O/U ${ou.total ?? '—'} O${am(ou.overPrice)} U${am(ou.underPrice)}`}
-      </Typography>
+      <Box
+        component="div"
+        sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px' }}
+      >
+        <Box component="span" sx={{ fontFamily: LABEL, fontSize: '0.51rem', fontWeight: 700, textTransform: 'uppercase', mr: '2px' }}>ML:</Box>
+        <Seg active={isML}>{am(ml.home)}/{am(ml.away)}</Seg>
+
+        <Sep />
+
+        <Box component="span" sx={{ fontFamily: LABEL, fontSize: '0.51rem', fontWeight: 700, textTransform: 'uppercase', mr: '2px' }}>RL:</Box>
+        <Seg active={isRunLine}>{sp(rl.home.spread)}{am(rl.home.price)}/{sp(rl.away.spread)}{am(rl.away.price)}</Seg>
+
+        <Sep />
+
+        <Box component="span" sx={{ fontFamily: LABEL, fontSize: '0.51rem', fontWeight: 700, textTransform: 'uppercase', mr: '2px' }}>
+          O/U {ou.total ?? '—'}:
+        </Box>
+        <Seg active={isOver}>O{am(ou.overPrice)}</Seg>
+        <Box component="span" sx={{ opacity: 0.4 }}>/</Box>
+        <Seg active={isUnder}>U{am(ou.underPrice)}</Seg>
+
+        {estimated && (
+          <Box component="span" sx={{ ml: '6px', opacity: 0.45, fontStyle: 'italic', fontSize: '0.5rem' }}>*est.</Box>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -412,20 +453,28 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
     try { localStorage.setItem('hexaOddsFormat', next ? 'decimal' : 'american'); } catch {}
   };
 
-  // Multiply decimal odds across all legs
-  let combinedDec = 1;
-  let validCount  = 0;
-  for (let i = 0; i < (legOdds?.length ?? 0); i++) {
-    const american = getLegOdds(legs?.[i], legOdds[i]);
-    if (american == null) continue;
+  // Correct parlay math: convert each leg to decimal, multiply, convert back.
+  // If a leg has no real odds (Spring Training, props, etc.) → use -110 as default.
+  const DEFAULT_ODDS = -110; // 1.909 decimal
+  let combinedDec    = 1;
+  let estimatedCount = 0;
+  const totalLegs    = legs?.length ?? 0;
+
+  for (let i = 0; i < totalLegs; i++) {
+    let american = getLegOdds(legs[i], legOdds?.[i]);
+    if (american == null) {
+      american = DEFAULT_ODDS;
+      estimatedCount++;
+    }
+    // American → decimal conversion
     const dec = american > 0 ? (american / 100) + 1 : (100 / Math.abs(american)) + 1;
     combinedDec *= dec;
-    validCount++;
   }
 
-  const combinedAmerican = validCount > 0 ? decimalToAmerican(combinedDec) : null;
+  const combinedAmerican = totalLegs > 0 ? decimalToAmerican(combinedDec) : null;
   if (combinedAmerican == null) return null;
 
+  const hasEstimated = estimatedCount > 0;
   const f      = (n) => fmtAm(n, decimal);
   const payout = calcPayout(stake, combinedAmerican);
 
@@ -447,7 +496,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
       </Box>
 
       {/* Combined odds display */}
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', mb: '12px' }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', mb: hasEstimated ? '6px' : '12px' }}>
         <Typography sx={{ fontFamily: LABEL, fontSize: '0.62rem', color: C.textMuted, flexShrink: 0 }}>
           {t.odds.combined}
         </Typography>
@@ -460,6 +509,13 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
           </Typography>
         )}
       </Box>
+
+      {/* Estimated odds notice */}
+      {hasEstimated && (
+        <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', color: C.textMuted, fontStyle: 'italic', opacity: 0.7, mb: '12px' }}>
+          {t.odds.estimated}
+        </Typography>
+      )}
 
       {/* Calculator */}
       <Box sx={{ borderTop: `1px solid ${C.cardBorder}`, pt: '12px' }}>
@@ -879,7 +935,7 @@ function ParlayResult({ hexa, t }) {
             )}
 
             {/* Per-leg odds summary line */}
-            <LegOddsLine oddsObj={hexa.legOdds?.[i]} />
+            <LegOddsLine leg={leg} oddsObj={hexa.legOdds?.[i]} />
           </Box>
         );
       })}
@@ -908,8 +964,8 @@ function ParlayResult({ hexa, t }) {
       )}
 
       {/* ── Parlay Odds + Combined Calculator ── */}
-      {hexa.legOdds?.some(Boolean) && (
-        <ParlayOddsPanel legOdds={hexa.legOdds} legs={p.legs} t={t} />
+      {p.legs?.length > 0 && (
+        <ParlayOddsPanel legOdds={hexa.legOdds ?? []} legs={p.legs} t={t} />
       )}
     </Box>
   );
