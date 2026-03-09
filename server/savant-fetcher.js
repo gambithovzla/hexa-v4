@@ -5,8 +5,10 @@
  * Cache TTL is 6 hours. All CSV parsing is done without external dependencies.
  *
  * Exports:
- *   getBatterStatcast(playerName)  — xwOBA, xBA, xSLG, EV, Barrel%, HardHit%, percentiles
- *   getPitcherStatcast(playerName) — xwOBA_against, xBA_against, Whiff%, arsenal run values
+ *   getBatterStatcast(playerName)  — xwOBA, xBA, xSLG, EV, Barrel%, HardHit%, rolling wOBA,
+ *                                    sprint speed, batted ball profile, percentiles
+ *   getPitcherStatcast(playerName) — xwOBA_against, xBA_against, Whiff%, arsenal run values,
+ *                                    rolling wOBA against, pitch tempo, batted ball profile
  *   refreshCache()                 — force re-fetch of all leaderboards
  *   getCacheStatus()               — { lastUpdated, recordCounts }
  */
@@ -19,22 +21,34 @@ const HEADERS = {
 };
 
 const ENDPOINTS = {
-  xStatsBatter:   'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=q&csv=true',
-  xStatsPitcher:  'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2025&position=&team=&min=q&csv=true',
-  exitVelocity:   'https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=2025&min=q&csv=true',
-  pitchArsenal:   'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=2025&min=q&csv=true',
-  percentiles:    'https://baseballsavant.mlb.com/leaderboard/percentile-rankings?type=batter&year=2025&csv=true',
+  xStatsBatter:     'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=q&csv=true',
+  xStatsPitcher:    'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2025&position=&team=&min=q&csv=true',
+  exitVelocity:     'https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=2025&min=q&csv=true',
+  pitchArsenal:     'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=2025&min=q&csv=true',
+  percentiles:      'https://baseballsavant.mlb.com/leaderboard/percentile-rankings?type=batter&year=2025&csv=true',
+  rollingBatter:    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=30&year=2025&min=10&csv=true',
+  rollingPitcher:   'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=30&year=2025&min=10&csv=true',
+  pitchTempo:       'https://baseballsavant.mlb.com/leaderboard/pitch-tempo?year=2025&type=pitcher&csv=true',
+  sprintSpeed:      'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
+  battedBallBatter: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
+  battedBallPitcher:'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
 };
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
 
 let _cache = {
-  xStatsBatter:  null,
-  xStatsPitcher: null,
-  exitVelocity:  null,
-  pitchArsenal:  null,
-  percentiles:   null,
-  lastUpdated:   0,
+  xStatsBatter:     null,
+  xStatsPitcher:    null,
+  exitVelocity:     null,
+  pitchArsenal:     null,
+  percentiles:      null,
+  rollingBatter:    null,
+  rollingPitcher:   null,
+  pitchTempo:       null,
+  sprintSpeed:      null,
+  battedBallBatter: null,
+  battedBallPitcher:null,
+  lastUpdated:      0,
 };
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
@@ -96,15 +110,34 @@ async function fetchCSV(url) {
 
 async function loadAll() {
   console.log('[savant] Fetching all leaderboards…');
-  const [xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles] = await Promise.all([
+  const [
+    xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles,
+    rollingBatter, rollingPitcher, pitchTempo, sprintSpeed, battedBallBatter, battedBallPitcher,
+  ] = await Promise.all([
     fetchCSV(ENDPOINTS.xStatsBatter),
     fetchCSV(ENDPOINTS.xStatsPitcher),
     fetchCSV(ENDPOINTS.exitVelocity),
     fetchCSV(ENDPOINTS.pitchArsenal),
     fetchCSV(ENDPOINTS.percentiles),
+    fetchCSV(ENDPOINTS.rollingBatter),
+    fetchCSV(ENDPOINTS.rollingPitcher),
+    fetchCSV(ENDPOINTS.pitchTempo),
+    fetchCSV(ENDPOINTS.sprintSpeed),
+    fetchCSV(ENDPOINTS.battedBallBatter),
+    fetchCSV(ENDPOINTS.battedBallPitcher),
   ]);
-  _cache = { xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles, lastUpdated: Date.now() };
-  console.log(`[savant] Cache refreshed — batters: ${xStatsBatter.length}, pitchers: ${xStatsPitcher.length}, EV: ${exitVelocity.length}, arsenal: ${pitchArsenal.length}, pct: ${percentiles.length}`);
+  _cache = {
+    xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles,
+    rollingBatter, rollingPitcher, pitchTempo, sprintSpeed, battedBallBatter, battedBallPitcher,
+    lastUpdated: Date.now(),
+  };
+  console.log(
+    `[savant] Cache refreshed — batters: ${xStatsBatter.length}, pitchers: ${xStatsPitcher.length}, ` +
+    `EV: ${exitVelocity.length}, arsenal: ${pitchArsenal.length}, pct: ${percentiles.length}, ` +
+    `rollingB: ${rollingBatter.length}, rollingP: ${rollingPitcher.length}, ` +
+    `tempo: ${pitchTempo.length}, sprint: ${sprintSpeed.length}, ` +
+    `bbBatter: ${battedBallBatter.length}, bbPitcher: ${battedBallPitcher.length}`
+  );
 }
 
 async function ensureCache() {
@@ -181,11 +214,14 @@ function findPlayer(rows, playerName, nameKey = 'last_name, first_name') {
 export async function getBatterStatcast(playerName) {
   await ensureCache();
 
-  const xs  = findPlayer(_cache.xStatsBatter,  playerName);
-  const ev  = findPlayer(_cache.exitVelocity,   playerName);
-  const pct = findPlayer(_cache.percentiles,    playerName);
+  const xs  = findPlayer(_cache.xStatsBatter,     playerName);
+  const ev  = findPlayer(_cache.exitVelocity,      playerName);
+  const pct = findPlayer(_cache.percentiles,       playerName);
+  const rb  = findPlayer(_cache.rollingBatter,     playerName);
+  const ss  = findPlayer(_cache.sprintSpeed,       playerName);
+  const bb  = findPlayer(_cache.battedBallBatter,  playerName);
 
-  if (!xs && !ev && !pct) return null;
+  if (!xs && !ev && !pct && !rb && !ss && !bb) return null;
 
   return {
     player_name: xs?.['last_name, first_name'] ?? ev?.['last_name, first_name'] ?? playerName,
@@ -196,14 +232,23 @@ export async function getBatterStatcast(playerName) {
     xISO:     parseFloat(xs?.xISO    ?? xs?.['xiso']    ?? '') || null,
     wOBA:     parseFloat(xs?.wOBA    ?? xs?.['woba']    ?? '') || null,
     // Exit velocity / barrels
-    avg_exit_velocity:    parseFloat(ev?.avg_hit_speed  ?? ev?.['avg_exit_velocity'] ?? '') || null,
-    max_exit_velocity:    parseFloat(ev?.max_hit_speed  ?? ev?.['max_exit_velocity'] ?? '') || null,
-    barrel_batted_rate:   parseFloat(ev?.brl_percent    ?? ev?.['barrel_batted_rate'] ?? ev?.brl_pa ?? '') || null,
-    hard_hit_percent:     parseFloat(ev?.['hard_hit_percent'] ?? ev?.anglesweetspotpercent ?? '') || null,
-    // Percentile rankings (all numeric keys starting with "p_" or similar)
+    avg_exit_velocity:  parseFloat(ev?.avg_hit_speed ?? ev?.['avg_exit_velocity'] ?? '') || null,
+    max_exit_velocity:  parseFloat(ev?.max_hit_speed ?? ev?.['max_exit_velocity'] ?? '') || null,
+    barrel_batted_rate: parseFloat(ev?.brl_percent   ?? ev?.['barrel_batted_rate'] ?? ev?.brl_pa ?? '') || null,
+    hard_hit_percent:   parseFloat(ev?.['hard_hit_percent'] ?? ev?.anglesweetspotpercent ?? '') || null,
+    // Rolling wOBA (last 30 days)
+    rolling_woba_30d: parseFloat(rb?.woba ?? rb?.['xwoba'] ?? rb?.['rolling_woba'] ?? '') || null,
+    // Sprint speed (ft/sec)
+    sprint_speed: parseFloat(ss?.sprint_speed ?? ss?.['hp_to_1b'] ?? '') || null,
+    // Batted ball profile
+    gb_pct:   parseFloat(bb?.gb_percent ?? bb?.gb ?? '') || null,
+    fb_pct:   parseFloat(bb?.fb_percent ?? bb?.fb ?? '') || null,
+    ld_pct:   parseFloat(bb?.ld_percent ?? bb?.ld ?? '') || null,
+    iffb_pct: parseFloat(bb?.iffb_percent ?? bb?.iffb ?? '') || null,
+    // Percentile rankings
     percentiles: pct ? extractPercentiles(pct) : null,
     // Source rows for transparency
-    _sources: { xStats: !!xs, exitVelocity: !!ev, percentiles: !!pct },
+    _sources: { xStats: !!xs, exitVelocity: !!ev, percentiles: !!pct, rolling: !!rb, sprintSpeed: !!ss, battedBall: !!bb },
   };
 }
 
@@ -216,32 +261,48 @@ export async function getBatterStatcast(playerName) {
 export async function getPitcherStatcast(playerName) {
   await ensureCache();
 
-  const xs  = findPlayer(_cache.xStatsPitcher, playerName);
-  const pa  = findPlayer(_cache.pitchArsenal,  playerName);
+  const xs  = findPlayer(_cache.xStatsPitcher,   playerName);
+  const pa  = findPlayer(_cache.pitchArsenal,     playerName);
+  const rp  = findPlayer(_cache.rollingPitcher,   playerName);
+  const pt  = findPlayer(_cache.pitchTempo,       playerName);
+  const bb  = findPlayer(_cache.battedBallPitcher,playerName);
 
-  if (!xs && !pa) return null;
+  if (!xs && !pa && !rp && !pt && !bb) return null;
 
   return {
     player_name: xs?.['last_name, first_name'] ?? pa?.['last_name, first_name'] ?? playerName,
     // Expected stats (against)
-    xwOBA_against: parseFloat(xs?.xwOBA  ?? xs?.['xwoba']  ?? '') || null,
-    xBA_against:   parseFloat(xs?.xBA    ?? xs?.['xba']    ?? '') || null,
-    xSLG_against:  parseFloat(xs?.xSLG   ?? xs?.['xslg']   ?? '') || null,
-    wOBA_against:  parseFloat(xs?.wOBA   ?? xs?.['woba']   ?? '') || null,
+    xwOBA_against: parseFloat(xs?.xwOBA ?? xs?.['xwoba'] ?? '') || null,
+    xBA_against:   parseFloat(xs?.xBA   ?? xs?.['xba']   ?? '') || null,
+    xSLG_against:  parseFloat(xs?.xSLG  ?? xs?.['xslg']  ?? '') || null,
+    wOBA_against:  parseFloat(xs?.wOBA  ?? xs?.['woba']  ?? '') || null,
     // Plate discipline
     whiff_percent: parseFloat(xs?.['whiff_percent'] ?? xs?.['swstr_percent'] ?? '') || null,
     k_percent:     parseFloat(xs?.['k_percent']     ?? xs?.['strikeout_percent'] ?? '') || null,
     bb_percent:    parseFloat(xs?.['bb_percent']    ?? xs?.['walk_percent'] ?? '') || null,
     // Pitch arsenal
     arsenal: pa ? extractArsenal(pa) : null,
-    _sources: { xStats: !!xs, pitchArsenal: !!pa },
+    // Run value — best single-pitch run value from arsenal row
+    run_value_per_pitch: pa ? bestPitchRunValue(pa) : null,
+    // Rolling wOBA against (last 30 days)
+    rolling_woba_against_30d: parseFloat(rp?.woba ?? rp?.['xwoba'] ?? rp?.['rolling_woba'] ?? '') || null,
+    // Pitch tempo (avg seconds between pitches)
+    pitch_tempo_seconds: parseFloat(
+      pt?.avg_seconds ?? pt?.['seconds_between_pitches'] ?? pt?.['avg_time'] ?? pt?.tempo ?? ''
+    ) || null,
+    // Batted ball profile (against)
+    gb_pct: parseFloat(bb?.gb_percent ?? bb?.gb ?? '') || null,
+    fb_pct: parseFloat(bb?.fb_percent ?? bb?.fb ?? '') || null,
+    ld_pct: parseFloat(bb?.ld_percent ?? bb?.ld ?? '') || null,
+    _sources: { xStats: !!xs, pitchArsenal: !!pa, rolling: !!rp, pitchTempo: !!pt, battedBall: !!bb },
   };
 }
 
-/** Forces a full cache refresh regardless of TTL */
+/** Forces a full cache refresh regardless of TTL. Returns getCacheStatus() after refresh. */
 export async function refreshCache() {
   _cache.lastUpdated = 0;
   await loadAll();
+  return getCacheStatus();
 }
 
 /** Returns cache metadata without triggering a fetch */
@@ -250,11 +311,17 @@ export function getCacheStatus() {
     lastUpdated: _cache.lastUpdated ? new Date(_cache.lastUpdated).toISOString() : null,
     age_minutes: _cache.lastUpdated ? Math.round((Date.now() - _cache.lastUpdated) / 60000) : null,
     recordCounts: {
-      xStatsBatter:  _cache.xStatsBatter?.length  ?? 0,
-      xStatsPitcher: _cache.xStatsPitcher?.length  ?? 0,
-      exitVelocity:  _cache.exitVelocity?.length   ?? 0,
-      pitchArsenal:  _cache.pitchArsenal?.length   ?? 0,
-      percentiles:   _cache.percentiles?.length    ?? 0,
+      xStatsBatter:     _cache.xStatsBatter?.length     ?? 0,
+      xStatsPitcher:    _cache.xStatsPitcher?.length    ?? 0,
+      exitVelocity:     _cache.exitVelocity?.length     ?? 0,
+      pitchArsenal:     _cache.pitchArsenal?.length     ?? 0,
+      percentiles:      _cache.percentiles?.length      ?? 0,
+      rollingBatter:    _cache.rollingBatter?.length    ?? 0,
+      rollingPitcher:   _cache.rollingPitcher?.length   ?? 0,
+      pitchTempo:       _cache.pitchTempo?.length       ?? 0,
+      sprintSpeed:      _cache.sprintSpeed?.length      ?? 0,
+      battedBallBatter: _cache.battedBallBatter?.length ?? 0,
+      battedBallPitcher:_cache.battedBallPitcher?.length?? 0,
     },
   };
 }
@@ -271,6 +338,28 @@ function extractPercentiles(row) {
     }
   }
   return Object.keys(out).length ? out : null;
+}
+
+/**
+ * Returns the single best (most negative = run-saving) run_value_per_100 found across
+ * all pitch-type-prefixed columns in a pitch-arsenal-stats row.
+ */
+function bestPitchRunValue(row) {
+  const PITCH_PREFIXES = ['ff_', 'si_', 'fc_', 'sl_', 'cu_', 'ch_', 'fs_', 'kn_', 'sv_', 'cs_'];
+  let best = null;
+  for (const [k, v] of Object.entries(row)) {
+    const lk = k.toLowerCase();
+    if (!PITCH_PREFIXES.some(p => lk.startsWith(p))) continue;
+    if (!lk.includes('run_value')) continue;
+    const num = parseFloat(v);
+    if (!isNaN(num) && (best === null || num < best)) best = num;
+  }
+  // Fallback: top-level run_value_per_100 column
+  if (best === null) {
+    const top = parseFloat(row['run_value_per_100'] ?? row['run_value'] ?? '');
+    if (!isNaN(top)) best = top;
+  }
+  return best;
 }
 
 /** Extracts pitch arsenal run values from a pitch-arsenal-stats row */
