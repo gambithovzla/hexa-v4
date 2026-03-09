@@ -190,4 +190,29 @@ app.post('/api/savant/refresh', async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Hexa-v4 server running on http://localhost:${PORT}`);
+
+  // ── Statcast cache warm-up (non-blocking) ──────────────────────────────
+  console.log('[H.E.X.A.] Warming up Statcast cache...');
+  refreshCache()
+    .then(status => {
+      const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
+      console.log(`[H.E.X.A.] Statcast cache ready: ${total} records loaded`);
+    })
+    .catch(err => {
+      console.warn('[H.E.X.A.] Statcast warm-up failed (will retry on first request):', err.message);
+    });
+
+  // ── Auto-refresh every 6 hours ─────────────────────────────────────────
+  const SIX_HOURS = 6 * 60 * 60 * 1000;
+  setInterval(() => {
+    console.log('[H.E.X.A.] Refreshing Statcast cache (scheduled)...');
+    refreshCache()
+      .then(status => {
+        const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
+        console.log(`[H.E.X.A.] Statcast cache refreshed: ${total} records`);
+      })
+      .catch(err => {
+        console.warn('[H.E.X.A.] Scheduled Statcast refresh failed:', err.message);
+      });
+  }, SIX_HOURS).unref(); // .unref() so the interval doesn't keep the process alive if everything else exits
 });
