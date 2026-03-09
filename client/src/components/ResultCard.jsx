@@ -228,22 +228,35 @@ function getLegOdds(leg, oddsObj) {
   const pick = String(leg?.pick ?? '').toLowerCase();
   const { moneyline: ml, runLine: rl, overUnder: ou } = oddsObj.odds;
 
-  if (pick.includes('over'))  return ou.overPrice;
-  if (pick.includes('under')) return ou.underPrice;
-  if (pick.includes('1.5')) {
+  if (pick.includes('over'))  return ou?.overPrice ?? null;
+  if (pick.includes('under')) return ou?.underPrice ?? null;
+  if (pick.includes('1.5') || pick.includes('run line')) {
     const parts    = String(leg?.game ?? '').split('@');
-    const homeAbbr = (parts[1] ?? '').trim().split(' ')[0].toLowerCase();
-    const awayAbbr = (parts[0] ?? '').trim().split(' ')[0].toLowerCase();
-    if (homeAbbr && pick.includes(homeAbbr)) return rl.home.price;
-    if (awayAbbr && pick.includes(awayAbbr)) return rl.away.price;
-    return rl.home.price;
+    const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
+    const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
+    if (homeAbbr && pick.includes(homeAbbr)) return rl?.home?.price ?? null;
+    if (awayAbbr && pick.includes(awayAbbr)) return rl?.away?.price ?? null;
+    return rl?.home?.price ?? null;
   }
   // moneyline — determine direction from game string
   const parts    = String(leg?.game ?? '').split('@');
-  const homeAbbr = (parts[1] ?? '').trim().split(' ')[0].toLowerCase();
-  const awayAbbr = (parts[0] ?? '').trim().split(' ')[0].toLowerCase();
-  if (awayAbbr && pick.includes(awayAbbr)) return ml.away;
-  return ml.home;
+  const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
+  const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
+  if (awayAbbr && pick.includes(awayAbbr)) return ml?.away ?? null;
+  return ml?.home ?? null;
+}
+
+// Player prop keywords for pick-type detection
+const PROP_KW = ['strikeout', ' ks', 'hits', ' hr ', 'home run', 'total bases', 'rbi', 'stolen base', 'walks', 'innings pitched', 'earned run', 'pitch', 'batter', 'bases'];
+
+/** Returns an estimated default American odds value based on the leg's pick type */
+function getEstimatedOdds(leg) {
+  const pick = String(leg?.pick ?? '').toLowerCase();
+  if (PROP_KW.some(kw => pick.includes(kw))) return -115;
+  if (pick.includes('1.5') || pick.includes('run line')) {
+    return pick.includes('+1.5') ? 140 : -165;
+  }
+  return -110; // ML or game O/U
 }
 
 // ── OddsCell ──────────────────────────────────────────────────────────────────
@@ -286,59 +299,69 @@ function PayoutRow({ label, stake, profit, total }) {
 
 // ── LegOddsLine ───────────────────────────────────────────────────────────────
 
-function LegOddsLine({ leg, oddsObj }) {
-  const pick      = String(leg?.pick ?? '').toLowerCase();
-  const isOver    = pick.includes('over');
-  const isUnder   = pick.includes('under');
-  const isRunLine = pick.includes('1.5') || (pick.includes('run') && pick.includes('line'));
-  const isML      = !isOver && !isUnder && !isRunLine;
+/**
+ * Shows a single clean odds line per parlay leg.
+ * Detects pick type and highlights only the relevant momio.
+ */
+function LegOddsLine({ leg, oddsObj, t }) {
+  const pick = String(leg?.pick ?? '').toLowerCase();
+  const isEs = t?.leg === 'Pata';
 
-  // Fall back to -110 defaults when The Odds API has no data (Spring Training, etc.)
-  const estimated = !oddsObj?.odds;
-  const ml = oddsObj?.odds?.moneyline ?? { home: -110, away: -110 };
-  const rl = oddsObj?.odds?.runLine   ?? { home: { spread: -1.5, price: -110 }, away: { spread: +1.5, price: -110 } };
-  const ou = oddsObj?.odds?.overUnder ?? { total: null, overPrice: -110, underPrice: -110 };
+  // Detect pick type
+  const isOver    = /\bover\b/.test(pick);
+  const isUnder   = /\bunder\b/.test(pick);
+  const isProp    = PROP_KW.some(kw => pick.includes(kw));
+  const isGameOU  = (isOver || isUnder) && !isProp;
+  const isRunLine = (pick.includes('1.5') || pick.includes('run line')) && !isProp;
+  // isML = everything else
 
-  const am = n => (n == null ? '—' : n > 0 ? `+${n}` : String(n));
-  const sp = n => (n == null ? '?' : n > 0 ? `+${n}` : String(n));
+  // Try to get real odds from the API
+  let realOdds = null;
+  if (oddsObj?.odds) {
+    const { moneyline: ml, runLine: rl, overUnder: ou } = oddsObj.odds;
+    if (isGameOU && isOver)    realOdds = ou?.overPrice ?? null;
+    else if (isGameOU && isUnder) realOdds = ou?.underPrice ?? null;
+    else if (isRunLine) {
+      const parts    = String(leg?.game ?? '').split('@');
+      const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
+      const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
+      if (homeAbbr && pick.includes(homeAbbr)) realOdds = rl?.home?.price ?? null;
+      else if (awayAbbr && pick.includes(awayAbbr)) realOdds = rl?.away?.price ?? null;
+      else realOdds = rl?.home?.price ?? null;
+    } else {
+      // moneyline
+      const parts    = String(leg?.game ?? '').split('@');
+      const homeAbbr = (parts[1] ?? '').trim().split(/\s+/)[0].toLowerCase();
+      const awayAbbr = (parts[0] ?? '').trim().split(/\s+/)[0].toLowerCase();
+      if (awayAbbr && pick.includes(awayAbbr)) realOdds = ml?.away ?? null;
+      else realOdds = ml?.home ?? null;
+    }
+  }
 
-  // Inline segment: highlighted when it's the relevant market
-  const Seg = ({ active, children }) => (
-    <Box component="span" sx={{ fontWeight: active ? 700 : 400, color: active ? C.accent : 'inherit' }}>
-      {children}
-    </Box>
-  );
-  const Sep = () => (
-    <Box component="span" sx={{ mx: '4px', opacity: 0.35 }}>|</Box>
-  );
+  // Estimated fallback based on pick type
+  const isEstimated = realOdds == null;
+  const displayOdds = realOdds ?? getEstimatedOdds(leg);
+
+  const amFmt = (n) => n == null ? '—' : n > 0 ? `+${n}` : String(n);
+
+  let label;
+  if (isProp && isEstimated) {
+    label = 'Prop · est.';
+  } else if (isEstimated) {
+    label = isEs ? 'Momio est.' : 'Est. odds';
+  } else {
+    label = isEs ? 'Momio' : 'Odds';
+  }
 
   return (
-    <Box sx={{ mt: '8px', pt: '8px', borderTop: `1px solid ${C.cardBorder}60` }}>
-      <Box
-        component="div"
-        sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px' }}
-      >
-        <Box component="span" sx={{ fontFamily: LABEL, fontSize: '0.51rem', fontWeight: 700, textTransform: 'uppercase', mr: '2px' }}>ML:</Box>
-        <Seg active={isML}>{am(ml.home)}/{am(ml.away)}</Seg>
-
-        <Sep />
-
-        <Box component="span" sx={{ fontFamily: LABEL, fontSize: '0.51rem', fontWeight: 700, textTransform: 'uppercase', mr: '2px' }}>RL:</Box>
-        <Seg active={isRunLine}>{sp(rl.home.spread)}{am(rl.home.price)}/{sp(rl.away.spread)}{am(rl.away.price)}</Seg>
-
-        <Sep />
-
-        <Box component="span" sx={{ fontFamily: LABEL, fontSize: '0.51rem', fontWeight: 700, textTransform: 'uppercase', mr: '2px' }}>
-          O/U {ou.total ?? '—'}:
-        </Box>
-        <Seg active={isOver}>O{am(ou.overPrice)}</Seg>
-        <Box component="span" sx={{ opacity: 0.4 }}>/</Box>
-        <Seg active={isUnder}>U{am(ou.underPrice)}</Seg>
-
-        {estimated && (
-          <Box component="span" sx={{ ml: '6px', opacity: 0.45, fontStyle: 'italic', fontSize: '0.5rem' }}>*est.</Box>
-        )}
-      </Box>
+    <Box sx={{ mt: '8px', pt: '6px', borderTop: `1px solid ${C.cardBorder}60`, display: 'flex', alignItems: 'center', gap: '5px' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, lineHeight: 1 }}>📊</Typography>
+      <Typography sx={{ fontFamily: LABEL, fontSize: '0.58rem', color: C.textMuted, flexShrink: 0 }}>
+        {label}:
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.accent }}>
+        {amFmt(displayOdds)}
+      </Typography>
     </Box>
   );
 }
@@ -454,8 +477,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
   };
 
   // Correct parlay math: convert each leg to decimal, multiply, convert back.
-  // If a leg has no real odds (Spring Training, props, etc.) → use -110 as default.
-  const DEFAULT_ODDS = -110; // 1.909 decimal
+  // If a leg has no real odds (Spring Training, props, etc.) → use pick-type-aware default.
   let combinedDec    = 1;
   let estimatedCount = 0;
   const totalLegs    = legs?.length ?? 0;
@@ -463,7 +485,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
   for (let i = 0; i < totalLegs; i++) {
     let american = getLegOdds(legs[i], legOdds?.[i]);
     if (american == null) {
-      american = DEFAULT_ODDS;
+      american = getEstimatedOdds(legs[i]);
       estimatedCount++;
     }
     // American → decimal conversion
@@ -501,13 +523,14 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
           {t.odds.combined}
         </Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '1.05rem', fontWeight: 700, color: C.accent }}>
-          {f(combinedAmerican)}
+          {decimal ? `${combinedDec.toFixed(2)}×` : fmtAm(combinedAmerican, false)}
         </Typography>
-        {!decimal && (
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textMuted }}>
-            ({combinedDec.toFixed(2)}×)
-          </Typography>
-        )}
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textMuted }}>
+          {decimal
+            ? `(${fmtAm(combinedAmerican, false)})`
+            : `(${combinedDec.toFixed(2)}×)`
+          }
+        </Typography>
       </Box>
 
       {/* Estimated odds notice */}
@@ -935,7 +958,7 @@ function ParlayResult({ hexa, t }) {
             )}
 
             {/* Per-leg odds summary line */}
-            <LegOddsLine leg={leg} oddsObj={hexa.legOdds?.[i]} />
+            <LegOddsLine leg={leg} oddsObj={hexa.legOdds?.[i]} t={t} />
           </Box>
         );
       })}
