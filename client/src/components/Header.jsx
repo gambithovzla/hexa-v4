@@ -9,6 +9,7 @@
  *   onTabChange — (tab) => void
  */
 
+import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import LanguageToggle from './LanguageToggle';
 
@@ -37,6 +38,119 @@ const TABS = [
   { value: 'parlay',  en: 'Parlay',          es: 'Parlay'           },
   { value: 'history', en: 'History',         es: 'Historial'        },
 ];
+
+// ── Statcast badge ────────────────────────────────────────────────────────────
+
+const MONO_FONT = '"JetBrains Mono", "Fira Code", monospace';
+
+function StatcastBadge({ lang }) {
+  const [status, setStatus]   = useState(null);   // null = loading/failed
+  const [hovered, setHovered] = useState(false);
+  const [spinning, setSpinning] = useState(false);
+
+  const isEs = lang === 'es';
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/api/savant/status');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) setStatus(json.data);
+    } catch {
+      // silent fail
+    }
+  }
+
+  async function handleRefresh(e) {
+    e.stopPropagation();
+    if (spinning) return;
+    setSpinning(true);
+    try {
+      const res = await fetch('/api/savant/refresh', { method: 'POST' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setStatus(json.data);
+      }
+    } catch {
+      // silent fail
+    } finally {
+      setSpinning(false);
+    }
+  }
+
+  useEffect(() => { fetchStatus(); }, []);
+
+  if (!status) return null;
+
+  const total = status.recordCounts
+    ? Object.values(status.recordCounts).reduce((a, b) => a + b, 0)
+    : 0;
+
+  const hasData = total > 0;
+
+  // Format time HH:MM from ISO string
+  let timeStr = '';
+  if (status.lastUpdated) {
+    try {
+      const d = new Date(status.lastUpdated);
+      timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch { /* ignore */ }
+  }
+
+  const dot   = hasData ? '🟢' : '🔴';
+  const label = hasData
+    ? (isEs ? `Statcast: ${total} registros${timeStr ? ` · ${timeStr}` : ''}` : `Statcast: ${total} records${timeStr ? ` · ${timeStr}` : ''}`)
+    : (isEs ? 'Statcast: Sin datos' : 'Statcast: No data');
+
+  return (
+    <Box
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      sx={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
+    >
+      <Typography
+        sx={{
+          fontFamily:    MONO_FONT,
+          fontSize:      '0.55rem',
+          color:         hasData ? '#64748b' : '#ef444480',
+          letterSpacing: '0.02em',
+          userSelect:    'none',
+          whiteSpace:    'nowrap',
+        }}
+      >
+        {dot} {label}
+      </Typography>
+
+      {/* Refresh button — visible only on hover */}
+      <Box
+        component="button"
+        onClick={handleRefresh}
+        sx={{
+          display:    'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width:      '18px',
+          height:     '18px',
+          p:          0,
+          border:     'none',
+          bgcolor:    'transparent',
+          color:      C.textMuted,
+          cursor:     spinning ? 'default' : 'pointer',
+          opacity:    hovered ? 0.7 : 0,
+          transition: 'opacity 0.15s',
+          fontSize:   '0.7rem',
+          lineHeight: 1,
+          '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
+          ...(spinning && { animation: 'spin 0.8s linear infinite' }),
+          '&:hover': { opacity: hovered ? 1 : 0 },
+        }}
+        title={isEs ? 'Actualizar Statcast' : 'Refresh Statcast'}
+      >
+        🔄
+      </Box>
+    </Box>
+  );
+}
 
 // ── Tab button ────────────────────────────────────────────────────────────────
 
@@ -139,6 +253,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             {SUBTITLE[lang] ?? SUBTITLE.en}
           </Typography>
         </Box>
+
+        {/* Statcast status badge */}
+        <StatcastBadge lang={lang} />
 
         {/* Language toggle */}
         <LanguageToggle lang={lang} onToggle={onLangToggle} />

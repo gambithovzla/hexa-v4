@@ -5,6 +5,7 @@ import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay, analyzeFullDay } from './oracle.js';
 import { getGameOdds, matchOddsToGame } from './odds-api.js';
+import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 
 dotenv.config();
 
@@ -163,6 +164,25 @@ app.post('/api/analyze/full-day', async (req, res) => {
     );
     const analysis = await analyzeFullDay(contexts, resolvedDate, resolvedLang, { betType, riskProfile, webSearch, model });
     res.json({ success: true, data: analysis.data, parseError: analysis.parseError, rawText: analysis.rawText });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/savant/status
+app.get('/api/savant/status', (_req, res) => {
+  try {
+    res.json({ success: true, data: getCacheStatus() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/savant/refresh
+app.post('/api/savant/refresh', async (_req, res) => {
+  try {
+    await refreshCache();
+    res.json({ success: true, data: getCacheStatus() });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
