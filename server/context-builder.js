@@ -8,7 +8,7 @@
  */
 
 import { getPitcherStats, getTeamHittingStats } from './mlb-api.js';
-import { getBatterStatcast, getPitcherStatcast, getCacheStatus } from './savant-fetcher.js';
+import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 
 // ---------------------------------------------------------------------------
 // Umbrales para flags situacionales
@@ -283,28 +283,54 @@ export async function buildContext(gameData, oddsData = null) {
   let awayPitcherSavant = null;
   let savantCacheStatus = null;
   let savantBatters     = { home: [], away: [] };
+  let parkFactorData    = null;
+  let catcherFraming    = { home: null, away: null };
+  let oaaOutfielders    = []; // [{ player, side:'Home'|'Away', oaa }]
 
   try {
-    const savantFetches = [
-      homePitcher?.fullName ? getPitcherStatcast(homePitcher.fullName) : Promise.resolve(null),
-      awayPitcher?.fullName ? getPitcherStatcast(awayPitcher.fullName) : Promise.resolve(null),
-    ];
-
-    // If lineup data is present, add top-3 batters per team
+    // Resolve lineup arrays once (used for batters, catchers, and outfielders)
     const homeLineup = gameData.teams?.home?.lineup ?? gameData.lineups?.home ?? null;
     const awayLineup = gameData.teams?.away?.lineup ?? gameData.lineups?.away ?? null;
 
     const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
     const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
 
-    const batterFetches = [
+    // Helper: find a player by position field in a lineup array
+    function findByPos(lineup, pos) {
+      if (!Array.isArray(lineup)) return null;
+      return lineup.find(p => typeof p === 'object' && (p.position === pos || p.pos === pos)) ?? null;
+    }
+
+    const homeCatcher = findByPos(homeLineup, 'C');
+    const awayCatcher = findByPos(awayLineup, 'C');
+
+    // Collect outfielders from both teams with side tag
+    const OF_POSITIONS = ['CF', 'LF', 'RF'];
+    const allOFPlayers = [
+      ...OF_POSITIONS.map(pos => { const p = findByPos(homeLineup, pos); return p ? { player: p, pos, side: 'Home' } : null; }),
+      ...OF_POSITIONS.map(pos => { const p = findByPos(awayLineup, pos); return p ? { player: p, pos, side: 'Away' } : null; }),
+    ].filter(Boolean);
+
+    // Fire all savant fetches in one parallel batch
+    const savantFetches     = [
+      homePitcher?.fullName ? getPitcherStatcast(homePitcher.fullName) : Promise.resolve(null),
+      awayPitcher?.fullName ? getPitcherStatcast(awayPitcher.fullName) : Promise.resolve(null),
+    ];
+    const batterFetches     = [
       ...homeBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
       ...awayBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
     ];
+    const referenceFetches  = [
+      getParkFactor(homeName),
+      getCatcherFraming(homeCatcher?.fullName ?? homeCatcher?.name ?? ''),
+      getCatcherFraming(awayCatcher?.fullName ?? awayCatcher?.name ?? ''),
+      ...allOFPlayers.map(({ player }) => getFieldingOAA(player.fullName ?? player.name ?? '')),
+    ];
 
-    const [pitcherResults, batterResults] = await Promise.all([
+    const [pitcherResults, batterResults, referenceResults] = await Promise.all([
       Promise.allSettled(savantFetches),
       Promise.allSettled(batterFetches),
+      Promise.allSettled(referenceFetches),
     ]);
 
     homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
@@ -317,6 +343,15 @@ export async function buildContext(gameData, oddsData = null) {
       const savant = r.status === 'fulfilled' ? r.value : null;
       if (idx < homeBatters.length) savantBatters.home.push({ name, savant });
       else                           savantBatters.away.push({ name, savant });
+    });
+
+    // Unpack reference results [park, homeCatcher, awayCatcher, ...oaa]
+    parkFactorData         = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
+    catcherFraming.home    = referenceResults[1].status === 'fulfilled' ? referenceResults[1].value : null;
+    catcherFraming.away    = referenceResults[2].status === 'fulfilled' ? referenceResults[2].value : null;
+    allOFPlayers.forEach(({ player, pos, side }, idx) => {
+      const oaa = referenceResults[3 + idx].status === 'fulfilled' ? referenceResults[3 + idx].value : null;
+      if (oaa) oaaOutfielders.push({ name: player.fullName ?? player.name, pos, side, oaa });
     });
 
     savantCacheStatus = getCacheStatus();
@@ -386,6 +421,56 @@ export async function buildContext(gameData, oddsData = null) {
     }
     blocks.push('');
   }
+
+  // ── Park Factor ──────────────────────────────────────────────────────────
+  try {
+    blocks.push(section('PARK FACTOR (Baseball Savant)'));
+    if (parkFactorData) {
+      blocks.push(`Venue: ${parkFactorData.venue_name ?? gameData.venue?.name ?? 'N/A'}`);
+      blocks.push(
+        `Overall: ${parkFactorData.park_factor_overall ?? 'N/A'}` +
+        ` | HR: ${parkFactorData.park_factor_HR ?? 'N/A'}` +
+        ` | Hits: ${parkFactorData.park_factor_H ?? 'N/A'}` +
+        ` | Runs: ${parkFactorData.park_factor_R ?? 'N/A'}`
+      );
+    } else {
+      blocks.push('Park factor data unavailable');
+    }
+    blocks.push('');
+  } catch (_) { /* skip silently */ }
+
+  // ── Catcher Framing ──────────────────────────────────────────────────────
+  try {
+    if (catcherFraming.home || catcherFraming.away) {
+      blocks.push(section('CATCHER FRAMING'));
+      const fmtCatcher = (label, data) => {
+        if (!data) return null;
+        return (
+          `${label} C (${data.player_name}): framing_runs=${data.framing_runs ?? 'N/A'}` +
+          `, extra_strikes/game=${data.extra_strikes_per_game ?? 'N/A'}`
+        );
+      };
+      const homeLine = fmtCatcher('Home', catcherFraming.home);
+      const awayLine = fmtCatcher('Away', catcherFraming.away);
+      if (homeLine) blocks.push(homeLine);
+      if (awayLine) blocks.push(awayLine);
+      blocks.push('');
+    }
+  } catch (_) { /* skip silently */ }
+
+  // ── Outfield Defense OAA ─────────────────────────────────────────────────
+  try {
+    if (oaaOutfielders.length > 0) {
+      blocks.push(section('OUTFIELD DEFENSE (OAA)'));
+      oaaOutfielders.forEach(({ name, pos, side, oaa }) => {
+        blocks.push(
+          `${side} ${pos} ${name}: OAA=${oaa.outs_above_average ?? 'N/A'}` +
+          `, runs_prevented=${oaa.fielding_runs_prevented ?? 'N/A'}`
+        );
+      });
+      blocks.push('');
+    }
+  } catch (_) { /* skip silently */ }
 
   // Savant cache status (informational, not for Claude reasoning)
   if (savantCacheStatus) {
