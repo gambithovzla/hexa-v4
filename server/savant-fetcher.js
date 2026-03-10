@@ -6,9 +6,12 @@
  *
  * Exports:
  *   getBatterStatcast(playerName)  — xwOBA, xBA, xSLG, EV, Barrel%, HardHit%, rolling wOBA,
- *                                    sprint speed, batted ball profile, percentiles
+ *                                    sprint speed, batted ball profile, year-to-year Δ, percentiles
  *   getPitcherStatcast(playerName) — xwOBA_against, xBA_against, Whiff%, arsenal run values,
- *                                    rolling wOBA against, pitch tempo, batted ball profile
+ *                                    rolling wOBA against, pitch tempo, batted ball profile, year-to-year Δ
+ *   getParkFactor(teamName)        — park factor overall/R/HR/H + venue name
+ *   getCatcherFraming(catcherName) — framing_runs, strike_rate_added, extra_strikes_per_game
+ *   getFieldingOAA(playerName)     — outs_above_average, fielding_runs_prevented, position
  *   refreshCache()                 — force re-fetch of all leaderboards
  *   getCacheStatus()               — { lastUpdated, recordCounts }
  */
@@ -21,34 +24,44 @@ const HEADERS = {
 };
 
 const ENDPOINTS = {
-  xStatsBatter:     'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=q&csv=true',
-  xStatsPitcher:    'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2025&position=&team=&min=q&csv=true',
-  exitVelocity:     'https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=2025&min=q&csv=true',
-  pitchArsenal:     'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=2025&min=q&csv=true',
-  percentiles:      'https://baseballsavant.mlb.com/leaderboard/percentile-rankings?type=batter&year=2025&csv=true',
-  rollingBatter:    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=30&year=2025&min=10&csv=true',
-  rollingPitcher:   'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=30&year=2025&min=10&csv=true',
-  pitchTempo:       'https://baseballsavant.mlb.com/leaderboard/pitch-tempo?year=2025&type=pitcher&csv=true',
-  sprintSpeed:      'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
-  battedBallBatter: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
-  battedBallPitcher:'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
+  xStatsBatter:      'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=q&csv=true',
+  xStatsPitcher:     'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2025&position=&team=&min=q&csv=true',
+  exitVelocity:      'https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=2025&min=q&csv=true',
+  pitchArsenal:      'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=2025&min=q&csv=true',
+  percentiles:       'https://baseballsavant.mlb.com/leaderboard/percentile-rankings?type=batter&year=2025&csv=true',
+  rollingBatter:     'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=30&year=2025&min=10&csv=true',
+  rollingPitcher:    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=30&year=2025&min=10&csv=true',
+  pitchTempo:        'https://baseballsavant.mlb.com/leaderboard/pitch-tempo?year=2025&type=pitcher&csv=true',
+  sprintSpeed:       'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
+  battedBallBatter:  'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
+  battedBallPitcher: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
+  parkFactors:       'https://baseballsavant.mlb.com/leaderboard/park-factors?type=month&batSide=&pitchHand=&leagueId=&min=1&csv=true',
+  catcherFraming:    'https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=2025&team=&min=q&csv=true',
+  fieldingOAA:       'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=2025&team=&csv=true',
+  yearToYearBatter:  'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Batter&type=xwoba&year=2025&csv=true',
+  yearToYearPitcher: 'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Pitcher&type=xwoba&year=2025&csv=true',
 };
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
 
 let _cache = {
-  xStatsBatter:     null,
-  xStatsPitcher:    null,
-  exitVelocity:     null,
-  pitchArsenal:     null,
-  percentiles:      null,
-  rollingBatter:    null,
-  rollingPitcher:   null,
-  pitchTempo:       null,
-  sprintSpeed:      null,
-  battedBallBatter: null,
-  battedBallPitcher:null,
-  lastUpdated:      0,
+  xStatsBatter:      null,
+  xStatsPitcher:     null,
+  exitVelocity:      null,
+  pitchArsenal:      null,
+  percentiles:       null,
+  rollingBatter:     null,
+  rollingPitcher:    null,
+  pitchTempo:        null,
+  sprintSpeed:       null,
+  battedBallBatter:  null,
+  battedBallPitcher: null,
+  parkFactors:       null,
+  catcherFraming:    null,
+  fieldingOAA:       null,
+  yearToYearBatter:  null,
+  yearToYearPitcher: null,
+  lastUpdated:       0,
 };
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
@@ -113,6 +126,7 @@ async function loadAll() {
   const [
     xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles,
     rollingBatter, rollingPitcher, pitchTempo, sprintSpeed, battedBallBatter, battedBallPitcher,
+    parkFactors, catcherFraming, fieldingOAA, yearToYearBatter, yearToYearPitcher,
   ] = await Promise.all([
     fetchCSV(ENDPOINTS.xStatsBatter),
     fetchCSV(ENDPOINTS.xStatsPitcher),
@@ -125,10 +139,16 @@ async function loadAll() {
     fetchCSV(ENDPOINTS.sprintSpeed),
     fetchCSV(ENDPOINTS.battedBallBatter),
     fetchCSV(ENDPOINTS.battedBallPitcher),
+    fetchCSV(ENDPOINTS.parkFactors),
+    fetchCSV(ENDPOINTS.catcherFraming),
+    fetchCSV(ENDPOINTS.fieldingOAA),
+    fetchCSV(ENDPOINTS.yearToYearBatter),
+    fetchCSV(ENDPOINTS.yearToYearPitcher),
   ]);
   _cache = {
     xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles,
     rollingBatter, rollingPitcher, pitchTempo, sprintSpeed, battedBallBatter, battedBallPitcher,
+    parkFactors, catcherFraming, fieldingOAA, yearToYearBatter, yearToYearPitcher,
     lastUpdated: Date.now(),
   };
   console.log(
@@ -136,7 +156,9 @@ async function loadAll() {
     `EV: ${exitVelocity.length}, arsenal: ${pitchArsenal.length}, pct: ${percentiles.length}, ` +
     `rollingB: ${rollingBatter.length}, rollingP: ${rollingPitcher.length}, ` +
     `tempo: ${pitchTempo.length}, sprint: ${sprintSpeed.length}, ` +
-    `bbBatter: ${battedBallBatter.length}, bbPitcher: ${battedBallPitcher.length}`
+    `bbBatter: ${battedBallBatter.length}, bbPitcher: ${battedBallPitcher.length}, ` +
+    `parks: ${parkFactors.length}, framing: ${catcherFraming.length}, ` +
+    `oaa: ${fieldingOAA.length}, y2yB: ${yearToYearBatter.length}, y2yP: ${yearToYearPitcher.length}`
   );
 }
 
@@ -220,8 +242,9 @@ export async function getBatterStatcast(playerName) {
   const rb  = findPlayer(_cache.rollingBatter,     playerName);
   const ss  = findPlayer(_cache.sprintSpeed,       playerName);
   const bb  = findPlayer(_cache.battedBallBatter,  playerName);
+  const y2y = findPlayer(_cache.yearToYearBatter,  playerName);
 
-  if (!xs && !ev && !pct && !rb && !ss && !bb) return null;
+  if (!xs && !ev && !pct && !rb && !ss && !bb && !y2y) return null;
 
   return {
     player_name: xs?.['last_name, first_name'] ?? ev?.['last_name, first_name'] ?? playerName,
@@ -245,10 +268,12 @@ export async function getBatterStatcast(playerName) {
     fb_pct:   parseFloat(bb?.fb_percent ?? bb?.fb ?? '') || null,
     ld_pct:   parseFloat(bb?.ld_percent ?? bb?.ld ?? '') || null,
     iffb_pct: parseFloat(bb?.iffb_percent ?? bb?.iffb ?? '') || null,
+    // Year-over-year xwOBA change (positive = improving)
+    year_to_year_xwoba_change: calcYearToYearDiff(y2y),
     // Percentile rankings
     percentiles: pct ? extractPercentiles(pct) : null,
     // Source rows for transparency
-    _sources: { xStats: !!xs, exitVelocity: !!ev, percentiles: !!pct, rolling: !!rb, sprintSpeed: !!ss, battedBall: !!bb },
+    _sources: { xStats: !!xs, exitVelocity: !!ev, percentiles: !!pct, rolling: !!rb, sprintSpeed: !!ss, battedBall: !!bb, yearToYear: !!y2y },
   };
 }
 
@@ -261,13 +286,14 @@ export async function getBatterStatcast(playerName) {
 export async function getPitcherStatcast(playerName) {
   await ensureCache();
 
-  const xs  = findPlayer(_cache.xStatsPitcher,   playerName);
-  const pa  = findPlayer(_cache.pitchArsenal,     playerName);
-  const rp  = findPlayer(_cache.rollingPitcher,   playerName);
-  const pt  = findPlayer(_cache.pitchTempo,       playerName);
-  const bb  = findPlayer(_cache.battedBallPitcher,playerName);
+  const xs  = findPlayer(_cache.xStatsPitcher,    playerName);
+  const pa  = findPlayer(_cache.pitchArsenal,      playerName);
+  const rp  = findPlayer(_cache.rollingPitcher,    playerName);
+  const pt  = findPlayer(_cache.pitchTempo,        playerName);
+  const bb  = findPlayer(_cache.battedBallPitcher, playerName);
+  const y2y = findPlayer(_cache.yearToYearPitcher, playerName);
 
-  if (!xs && !pa && !rp && !pt && !bb) return null;
+  if (!xs && !pa && !rp && !pt && !bb && !y2y) return null;
 
   return {
     player_name: xs?.['last_name, first_name'] ?? pa?.['last_name, first_name'] ?? playerName,
@@ -294,7 +320,71 @@ export async function getPitcherStatcast(playerName) {
     gb_pct: parseFloat(bb?.gb_percent ?? bb?.gb ?? '') || null,
     fb_pct: parseFloat(bb?.fb_percent ?? bb?.fb ?? '') || null,
     ld_pct: parseFloat(bb?.ld_percent ?? bb?.ld ?? '') || null,
-    _sources: { xStats: !!xs, pitchArsenal: !!pa, rolling: !!rp, pitchTempo: !!pt, battedBall: !!bb },
+    // Year-over-year xwOBA against change (positive = improving for pitcher = opponents hitting better)
+    year_to_year_xwoba_against_change: calcYearToYearDiff(y2y),
+    _sources: { xStats: !!xs, pitchArsenal: !!pa, rolling: !!rp, pitchTempo: !!pt, battedBall: !!bb, yearToYear: !!y2y },
+  };
+}
+
+/**
+ * Returns park factor data for a team.
+ * Match by team abbreviation (e.g. "NYY") or full city/nickname (e.g. "Yankees").
+ */
+export async function getParkFactor(teamName) {
+  await ensureCache();
+  if (!_cache.parkFactors?.length || !teamName) return null;
+
+  const q = norm(teamName);
+  const row = _cache.parkFactors.find(r => {
+    const abbr  = norm(r['team_abbrev'] ?? r['team'] ?? r['abbreviation'] ?? '');
+    const full  = norm(r['team_full']   ?? r['name']  ?? r['team_name']   ?? '');
+    const venue = norm(r['venue_name']  ?? r['park']  ?? '');
+    return abbr === q || full.includes(q) || q.includes(abbr) || venue.includes(q);
+  }) ?? null;
+
+  if (!row) return null;
+
+  return {
+    team:                 row['team_abbrev']    ?? row['team']         ?? teamName,
+    venue_name:           row['venue_name']     ?? row['park']         ?? null,
+    park_factor_overall:  parseFloat(row['park_factor']    ?? row['pf']    ?? row['factor'] ?? '') || null,
+    park_factor_R:        parseFloat(row['park_factor_r']  ?? row['pfr']   ?? row['r']      ?? '') || null,
+    park_factor_HR:       parseFloat(row['park_factor_hr'] ?? row['pfhr']  ?? row['hr']     ?? '') || null,
+    park_factor_H:        parseFloat(row['park_factor_h']  ?? row['pfh']   ?? row['h']      ?? '') || null,
+  };
+}
+
+/**
+ * Returns catcher framing metrics for a catcher.
+ */
+export async function getCatcherFraming(catcherName) {
+  await ensureCache();
+
+  const row = findPlayer(_cache.catcherFraming, catcherName);
+  if (!row) return null;
+
+  return {
+    player_name:           row['last_name, first_name'] ?? catcherName,
+    framing_runs:          parseFloat(row['framing_runs']         ?? row['runs_extra_strikes'] ?? row['run_value'] ?? '') || null,
+    strike_rate_added:     parseFloat(row['strike_rate_added']    ?? row['strike_rate']        ?? '') || null,
+    extra_strikes_per_game:parseFloat(row['extra_strikes_per_game'] ?? row['strikes_gained_per_game'] ?? row['strikes_per_game'] ?? '') || null,
+  };
+}
+
+/**
+ * Returns Outs Above Average (OAA) fielding data for a player.
+ */
+export async function getFieldingOAA(playerName) {
+  await ensureCache();
+
+  const row = findPlayer(_cache.fieldingOAA, playerName);
+  if (!row) return null;
+
+  return {
+    player_name:              row['last_name, first_name'] ?? playerName,
+    outs_above_average:       parseFloat(row['outs_above_average']      ?? row['oaa']                    ?? '') || null,
+    fielding_runs_prevented:  parseFloat(row['fielding_runs_prevented'] ?? row['runs_prevented']         ?? row['fielding_run_value'] ?? '') || null,
+    position:                 row['primary_pos_formatted'] ?? row['position'] ?? row['pos'] ?? null,
   };
 }
 
@@ -311,22 +401,46 @@ export function getCacheStatus() {
     lastUpdated: _cache.lastUpdated ? new Date(_cache.lastUpdated).toISOString() : null,
     age_minutes: _cache.lastUpdated ? Math.round((Date.now() - _cache.lastUpdated) / 60000) : null,
     recordCounts: {
-      xStatsBatter:     _cache.xStatsBatter?.length     ?? 0,
-      xStatsPitcher:    _cache.xStatsPitcher?.length    ?? 0,
-      exitVelocity:     _cache.exitVelocity?.length     ?? 0,
-      pitchArsenal:     _cache.pitchArsenal?.length     ?? 0,
-      percentiles:      _cache.percentiles?.length      ?? 0,
-      rollingBatter:    _cache.rollingBatter?.length    ?? 0,
-      rollingPitcher:   _cache.rollingPitcher?.length   ?? 0,
-      pitchTempo:       _cache.pitchTempo?.length       ?? 0,
-      sprintSpeed:      _cache.sprintSpeed?.length      ?? 0,
-      battedBallBatter: _cache.battedBallBatter?.length ?? 0,
-      battedBallPitcher:_cache.battedBallPitcher?.length?? 0,
+      xStatsBatter:      _cache.xStatsBatter?.length      ?? 0,
+      xStatsPitcher:     _cache.xStatsPitcher?.length     ?? 0,
+      exitVelocity:      _cache.exitVelocity?.length      ?? 0,
+      pitchArsenal:      _cache.pitchArsenal?.length      ?? 0,
+      percentiles:       _cache.percentiles?.length       ?? 0,
+      rollingBatter:     _cache.rollingBatter?.length     ?? 0,
+      rollingPitcher:    _cache.rollingPitcher?.length    ?? 0,
+      pitchTempo:        _cache.pitchTempo?.length        ?? 0,
+      sprintSpeed:       _cache.sprintSpeed?.length       ?? 0,
+      battedBallBatter:  _cache.battedBallBatter?.length  ?? 0,
+      battedBallPitcher: _cache.battedBallPitcher?.length ?? 0,
+      parkFactors:       _cache.parkFactors?.length       ?? 0,
+      catcherFraming:    _cache.catcherFraming?.length    ?? 0,
+      fieldingOAA:       _cache.fieldingOAA?.length       ?? 0,
+      yearToYearBatter:  _cache.yearToYearBatter?.length  ?? 0,
+      yearToYearPitcher: _cache.yearToYearPitcher?.length ?? 0,
     },
   };
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Computes year-over-year xwOBA change from a year-to-year leaderboard row.
+ * Returns current_year − previous_year (positive = improving).
+ * Tries several column name patterns Savant has used historically.
+ */
+function calcYearToYearDiff(row) {
+  if (!row) return null;
+  // Pattern 1: explicit diff column
+  const diff = parseFloat(
+    row['diff'] ?? row['xwoba_diff'] ?? row['change'] ?? row['delta'] ?? ''
+  );
+  if (!isNaN(diff)) return Math.round(diff * 1000) / 1000;
+  // Pattern 2: current vs prior year columns
+  const cur  = parseFloat(row['xwoba']      ?? row['xwoba_cur']  ?? row['year1_xwoba'] ?? '');
+  const prev = parseFloat(row['prev_xwoba'] ?? row['xwoba_prev'] ?? row['year2_xwoba'] ?? '');
+  if (!isNaN(cur) && !isNaN(prev)) return Math.round((cur - prev) * 1000) / 1000;
+  return null;
+}
 
 /** Extracts percentile rankings from a percentile-rankings row */
 function extractPercentiles(row) {

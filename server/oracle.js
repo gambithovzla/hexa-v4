@@ -72,6 +72,25 @@ When the context includes STATCAST sections, you MUST use this data as PRIMARY e
 - Weak pitcher (xwOBA_against > .360) vs hot lineup (avg xwOBA > .360) → STRONG OVER signal, increase confidence +15%
 - Pitcher Whiff% > 32% + opposing lineup avg xwOBA < .310 → Strikeout prop OVER is high-value pick
 - If Savant data is null or _sources is empty → flag as "LIMITED STATCAST DATA" and rely on traditional metrics only. Do NOT fabricate Statcast values.
+### PARK FACTORS — How to use:
+- park_factor_overall > 105 → Hitter-friendly park, adjust OVER +3-5% confidence
+- park_factor_overall < 95 → Pitcher-friendly park, adjust UNDER +3-5% confidence
+- park_factor_HR > 110 → HR-friendly, boost home run props
+- Always note park factor in oracle_report when it significantly deviates from 100
+### SPRINT SPEED & STOLEN BASE PROPS:
+- sprint_speed > 28 ft/sec → Elite speed, favor stolen base props
+- sprint_speed > 27 ft/sec → Above average speed
+- sprint_speed < 25 ft/sec → Below average, avoid SB props
+### BATTED BALL PROFILE CROSSING RULES:
+- Pitcher gb_pct > 52% vs batter fb_pct > 45% → Groundball pitcher neutralizes power hitter
+- Pitcher fb_pct > 45% vs batter barrel_pct > 10% → Dangerous matchup for pitcher, favor OVER
+- Pitcher ld_pct > 23% → Allowing hard line drives, hittable
+### ROLLING WINDOW (30-day form):
+- rolling_woba_30d deviates > .040 from season xwOBA → flag as HOT or COLD streak
+- Prioritize rolling_woba_30d over season xwOBA when gap is significant
+### YEAR TO YEAR CHANGES:
+- year_to_year_xwoba_change > +.030 → Legitimate breakout, weight current season higher
+- year_to_year_xwoba_change < -.030 → Regression risk, apply skepticism to props
 ### SPRING TRAINING CAVEAT:
 - If savant_cache_status shows 0 records or data is null, explicitly note "Statcast 2025 data not yet available (Spring Training)" in the Oracle Report section.
 - Once regular season starts (after March 27, 2025), Statcast data should populate automatically.
