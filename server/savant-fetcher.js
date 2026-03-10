@@ -35,7 +35,8 @@ const ENDPOINTS = {
   sprintSpeed:       'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
   battedBallBatter:  'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
   battedBallPitcher: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
-  parkFactors:       'https://baseballsavant.mlb.com/leaderboard/park-factors?type=month&batSide=&pitchHand=&leagueId=&min=1&csv=true',
+  parkFactors:         'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=&min=1&csv=true',
+  parkFactorsFallback: 'https://baseballsavant.mlb.com/statcast_search/csv?type=park_factors&year=2025',
   catcherFraming:    'https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=2025&team=&min=q&csv=true',
   fieldingOAA:       'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=2025&team=&csv=true',
   yearToYearBatter:  'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Batter&type=xwoba&year=2025&csv=true',
@@ -121,44 +122,63 @@ async function fetchCSV(url) {
   return parseCSV(text);
 }
 
+/** Tries each URL in order; returns the first successful result, throws after all fail. */
+async function fetchCSVWithFallback(urls, name = '') {
+  let lastErr;
+  for (const url of urls) {
+    try {
+      return await fetchCSV(url);
+    } catch (err) {
+      console.warn(`[savant] ${name ? name + ': ' : ''}${url} — ${err.message}; trying next URL…`);
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 async function loadAll() {
   console.log('[savant] Fetching all leaderboards…');
-  const [
-    xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles,
-    rollingBatter, rollingPitcher, pitchTempo, sprintSpeed, battedBallBatter, battedBallPitcher,
-    parkFactors, catcherFraming, fieldingOAA, yearToYearBatter, yearToYearPitcher,
-  ] = await Promise.all([
-    fetchCSV(ENDPOINTS.xStatsBatter),
-    fetchCSV(ENDPOINTS.xStatsPitcher),
-    fetchCSV(ENDPOINTS.exitVelocity),
-    fetchCSV(ENDPOINTS.pitchArsenal),
-    fetchCSV(ENDPOINTS.percentiles),
-    fetchCSV(ENDPOINTS.rollingBatter),
-    fetchCSV(ENDPOINTS.rollingPitcher),
-    fetchCSV(ENDPOINTS.pitchTempo),
-    fetchCSV(ENDPOINTS.sprintSpeed),
-    fetchCSV(ENDPOINTS.battedBallBatter),
-    fetchCSV(ENDPOINTS.battedBallPitcher),
-    fetchCSV(ENDPOINTS.parkFactors),
-    fetchCSV(ENDPOINTS.catcherFraming),
-    fetchCSV(ENDPOINTS.fieldingOAA),
-    fetchCSV(ENDPOINTS.yearToYearBatter),
-    fetchCSV(ENDPOINTS.yearToYearPitcher),
-  ]);
-  _cache = {
-    xStatsBatter, xStatsPitcher, exitVelocity, pitchArsenal, percentiles,
-    rollingBatter, rollingPitcher, pitchTempo, sprintSpeed, battedBallBatter, battedBallPitcher,
-    parkFactors, catcherFraming, fieldingOAA, yearToYearBatter, yearToYearPitcher,
-    lastUpdated: Date.now(),
-  };
+
+  const KEYS = [
+    'xStatsBatter', 'xStatsPitcher', 'exitVelocity', 'pitchArsenal', 'percentiles',
+    'rollingBatter', 'rollingPitcher', 'pitchTempo', 'sprintSpeed',
+    'battedBallBatter', 'battedBallPitcher',
+    'parkFactors', 'catcherFraming', 'fieldingOAA',
+    'yearToYearBatter', 'yearToYearPitcher',
+  ];
+
+  const fetches = KEYS.map(key =>
+    key === 'parkFactors'
+      ? fetchCSVWithFallback([ENDPOINTS.parkFactors, ENDPOINTS.parkFactorsFallback], 'parkFactors')
+      : fetchCSV(ENDPOINTS[key])
+  );
+
+  const results = await Promise.allSettled(fetches);
+
+  const newCache = { lastUpdated: Date.now() };
+  results.forEach((r, idx) => {
+    const key = KEYS[idx];
+    if (r.status === 'fulfilled') {
+      newCache[key] = r.value;
+    } else {
+      const msg = r.reason?.message ?? String(r.reason);
+      const tag = msg.includes('404') ? '404' : 'error';
+      console.warn(`[savant] WARNING: ${key} returned ${tag} — skipping`);
+      newCache[key] = [];
+    }
+  });
+
+  _cache = newCache;
+
+  const c = newCache;
   console.log(
-    `[savant] Cache refreshed — batters: ${xStatsBatter.length}, pitchers: ${xStatsPitcher.length}, ` +
-    `EV: ${exitVelocity.length}, arsenal: ${pitchArsenal.length}, pct: ${percentiles.length}, ` +
-    `rollingB: ${rollingBatter.length}, rollingP: ${rollingPitcher.length}, ` +
-    `tempo: ${pitchTempo.length}, sprint: ${sprintSpeed.length}, ` +
-    `bbBatter: ${battedBallBatter.length}, bbPitcher: ${battedBallPitcher.length}, ` +
-    `parks: ${parkFactors.length}, framing: ${catcherFraming.length}, ` +
-    `oaa: ${fieldingOAA.length}, y2yB: ${yearToYearBatter.length}, y2yP: ${yearToYearPitcher.length}`
+    `[savant] Cache refreshed — batters: ${c.xStatsBatter.length}, pitchers: ${c.xStatsPitcher.length}, ` +
+    `EV: ${c.exitVelocity.length}, arsenal: ${c.pitchArsenal.length}, pct: ${c.percentiles.length}, ` +
+    `rollingB: ${c.rollingBatter.length}, rollingP: ${c.rollingPitcher.length}, ` +
+    `tempo: ${c.pitchTempo.length}, sprint: ${c.sprintSpeed.length}, ` +
+    `bbBatter: ${c.battedBallBatter.length}, bbPitcher: ${c.battedBallPitcher.length}, ` +
+    `parks: ${c.parkFactors.length}, framing: ${c.catcherFraming.length}, ` +
+    `oaa: ${c.fieldingOAA.length}, y2yB: ${c.yearToYearBatter.length}, y2yP: ${c.yearToYearPitcher.length}`
   );
 }
 
