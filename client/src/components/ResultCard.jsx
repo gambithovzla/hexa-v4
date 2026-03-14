@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
+import { useAuth } from '../store/authStore';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -550,6 +551,139 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
   );
 }
 
+// ── AgregarABanca button + inline form ───────────────────────────────────────
+
+function AgregarABanca({ matchup, pick, odds }) {
+  const { isAuthenticated, token } = useAuth();
+  const [open,    setOpen]    = useState(false);
+  const [stake,   setStake]   = useState('');
+  const [busy,    setBusy]    = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [err,     setErr]     = useState('');
+
+  if (!isAuthenticated) return null;
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const s = Number(stake);
+    if (!s || s <= 0) { setErr('Ingresa un monto válido'); return; }
+    setBusy(true);
+    setErr('');
+    try {
+      const res = await fetch('/api/bankroll/bet', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ matchup, pick, odds, stake: s, source: 'hexa' }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Error al registrar');
+      setSuccess(true);
+      setOpen(false);
+      setStake('');
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputSx = {
+    background:   '#0a0e17',
+    border:       '1px solid #1e293b',
+    borderRadius: '4px',
+    color:        '#f1f5f9',
+    fontFamily:   '"JetBrains Mono", monospace',
+    fontSize:     '0.82rem',
+    padding:      '6px 10px',
+    outline:      'none',
+    colorScheme:  'dark',
+    width:        '90px',
+  };
+
+  return (
+    <Box sx={{ mt: '12px' }}>
+      {success ? (
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px', px: '12px', py: '6px', bgcolor: '#22c55e15', border: '1px solid #22c55e44', borderRadius: '4px' }}>
+          <Typography sx={{ fontFamily: LABEL, fontSize: '0.72rem', fontWeight: 700, color: '#22c55e' }}>
+            ✓ Apuesta registrada en tu banca
+          </Typography>
+        </Box>
+      ) : !open ? (
+        <Box
+          component="button"
+          onClick={() => setOpen(true)}
+          sx={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
+            px: '12px', py: '5px',
+            bgcolor: 'transparent',
+            border: '1px solid #3b82f666',
+            borderRadius: '4px',
+            color: '#3b82f6',
+            fontFamily: LABEL,
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            '&:hover': { bgcolor: '#3b82f610', borderColor: '#3b82f6' },
+          }}
+        >
+          + AGREGAR A BANCA
+        </Box>
+      ) : (
+        <Box
+          component="form"
+          onSubmit={handleSubmit}
+          sx={{
+            display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px',
+            bgcolor: '#0a0e17', border: '1px solid #1e293b', borderRadius: '6px',
+            p: '10px 12px',
+          }}
+        >
+          <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: '#94a3b8', flexShrink: 0 }}>
+            Stake:
+          </Typography>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="10.00"
+            autoFocus
+            value={stake}
+            onChange={e => setStake(e.target.value)}
+            style={inputSx}
+          />
+          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', color: '#475569', flexShrink: 0 }}>
+            Pick: <span style={{ color: '#94a3b8' }}>{pick}</span>
+          </Typography>
+          <Typography sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.65rem', color: '#94a3b8', flexShrink: 0 }}>
+            {odds > 0 ? `+${odds}` : odds}
+          </Typography>
+          {err && <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: '#ef4444', width: '100%' }}>{err}</Typography>}
+          <Box sx={{ display: 'flex', gap: '6px', ml: 'auto', flexShrink: 0 }}>
+            <Box
+              component="button"
+              type="button"
+              onClick={() => { setOpen(false); setErr(''); setStake(''); }}
+              sx={{ px: '10px', py: '4px', bgcolor: 'transparent', border: '1px solid #1e293b', borderRadius: '4px', color: '#64748b', fontFamily: LABEL, fontSize: '0.68rem', cursor: 'pointer' }}
+            >
+              Cancelar
+            </Box>
+            <Box
+              component="button"
+              type="submit"
+              disabled={busy}
+              sx={{ px: '12px', py: '4px', bgcolor: '#3b82f6', border: 'none', borderRadius: '4px', color: '#fff', fontFamily: LABEL, fontSize: '0.68rem', fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+            >
+              {busy ? '…' : 'Registrar'}
+            </Box>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // ── SINGLE GAME ───────────────────────────────────────────────────────────────
 
 function ProbabilityBar({ homeWins, awayWins, t }) {
@@ -678,6 +812,13 @@ function SingleGameResult({ hexa, t }) {
             {confidence}%
           </Typography>
         </Box>
+
+        {/* ── AGREGAR A BANCA ── */}
+        <AgregarABanca
+          matchup={hexa.matchup ?? hexa.odds?.game ?? ''}
+          pick={mp.pick ?? ''}
+          odds={hexa.odds?.odds?.moneyline?.home ?? null}
+        />
       </Box>
 
       {/* ── Oracle Report ── */}

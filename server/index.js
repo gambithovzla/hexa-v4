@@ -9,7 +9,7 @@ import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay, analyzeFullDay } from './oracle.js';
 import { getGameOdds, matchOddsToGame } from './odds-api.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
-import authRouter from './auth.js';
+import authRouter, { bankrollRouter } from './auth.js';
 import { verifyToken } from './middleware/auth-middleware.js';
 
 dotenv.config();
@@ -24,7 +24,8 @@ app.use(cors());
 app.use(express.json());
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth', authRouter);
+app.use('/api/auth',      authRouter);
+app.use('/api/bankroll',  bankrollRouter);
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
 
