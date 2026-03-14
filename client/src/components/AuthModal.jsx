@@ -181,7 +181,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
       sx={{
         position:       'fixed',
         inset:          0,
-        zIndex:         2000,
+        zIndex:         9999,
         display:        'flex',
         alignItems:     'center',
         justifyContent: 'center',
@@ -199,11 +199,12 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
           overflowY:    'auto',
           flexShrink:   0,
           my:           'auto',
+          position:     'relative',
+          zIndex:       10000,
           bgcolor:      C.cardBg,
           border:       `1px solid ${C.cardBorder}`,
           borderRadius: '14px',
           p:            '28px',
-          position:     'relative',
           boxShadow:    `0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px ${C.cardBorder}`,
         }}
       >
