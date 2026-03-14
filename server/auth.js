@@ -172,6 +172,26 @@ router.get('/me', verifyToken, (req, res) => {
 
 export default router;
 
+// ── Admin seed ────────────────────────────────────────────────────────────────
+
+export async function seedAdminUser() {
+  const users = readUsers();
+  if (users.find(u => u.email === 'admin@hexa.com')) return;
+  const passwordHash = await bcrypt.hash('hexa2025admin', 10);
+  users.push({
+    id:              randomUUID(),
+    email:           'admin@hexa.com',
+    passwordHash,
+    createdAt:       new Date().toISOString(),
+    credits:         999999,
+    initialBankroll: null,
+    currentBankroll: null,
+    bets:            [],
+  });
+  writeUsers(users);
+  console.log('[H.E.X.A.] Admin account seeded');
+}
+
 // ── Bankroll Router (mounted at /api/bankroll) ────────────────────────────────
 
 export const bankrollRouter = Router();
