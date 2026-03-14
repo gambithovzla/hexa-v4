@@ -424,50 +424,6 @@ function EmptyState({ mode, canAnalyze, t }) {
   );
 }
 
-// ── Auth gate banner ──────────────────────────────────────────────────────────
-
-function AuthGateBanner({ lang, onOpenAuth }) {
-  const isEs = lang === 'es';
-  return (
-    <Box
-      sx={{
-        bgcolor:      '#f59e0b10',
-        border:       `1px solid #f59e0b44`,
-        borderRadius: '10px',
-        p:            '16px 20px',
-        display:      'flex',
-        flexDirection: 'column',
-        alignItems:   'center',
-        gap:          '10px',
-        textAlign:    'center',
-      }}
-    >
-      <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.amber, fontWeight: 600 }}>
-        {isEs ? '🔒 Inicia sesión para analizar' : '🔒 Sign in to run analysis'}
-      </Typography>
-      <Box
-        component="button"
-        onClick={onOpenAuth}
-        sx={{
-          px:           '20px',
-          py:           '8px',
-          border:       `1px solid ${C.accent}`,
-          borderRadius: '7px',
-          background:   `linear-gradient(135deg, ${C.accent} 0%, #d97706 100%)`,
-          color:        '#0a0e17',
-          fontFamily:   LABEL,
-          fontSize:     '0.78rem',
-          fontWeight:   700,
-          cursor:       'pointer',
-          '&:hover':    { transform: 'translateY(-1px)', boxShadow: `0 4px 20px ${C.accent}44` },
-          transition:   'all 0.2s',
-        }}
-      >
-        {isEs ? 'Iniciar sesión' : 'Sign In'}
-      </Box>
-    </Box>
-  );
-}
 
 function NoCreditsMessage({ lang }) {
   const isEs = lang === 'es';
@@ -769,10 +725,8 @@ export default function AnalysisPanel({
         {/* Web search toggle */}
         <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
 
-        {/* Auth gate — shown in place of run button when not authenticated */}
-        {!isAuthenticated ? (
-          <AuthGateBanner lang={lang} onOpenAuth={() => setAuthModalOpen(true)} />
-        ) : (user?.credits ?? 0) < 1 ? (
+        {/* Run button — always visible; auth check happens inside handleAnalyze */}
+        {(user?.credits ?? 0) < 1 && isAuthenticated ? (
           <NoCreditsMessage lang={lang} />
         ) : (
           <RunButton canAnalyze={canAnalyze} loading={loading} onClick={handleAnalyze} t={t} />
