@@ -12,6 +12,8 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import LanguageToggle from './LanguageToggle';
+import AuthModal from './AuthModal';
+import { useAuth } from '../store/authStore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -152,6 +154,100 @@ function StatcastBadge({ lang }) {
   );
 }
 
+// ── Auth button / user pill ───────────────────────────────────────────────────
+
+function AuthButton({ lang }) {
+  const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const [modalOpen, setModalOpen] = useState(false);
+  const isEs = lang === 'es';
+
+  if (isLoading) return null;
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Box
+          component="button"
+          onClick={() => setModalOpen(true)}
+          sx={{
+            px:           '12px',
+            py:           '5px',
+            border:       `1px solid ${C.accent}`,
+            borderRadius: '6px',
+            bgcolor:      C.accentFade,
+            color:        C.accent,
+            fontFamily:   LABEL,
+            fontSize:     '0.72rem',
+            fontWeight:   700,
+            cursor:       'pointer',
+            whiteSpace:   'nowrap',
+            flexShrink:   0,
+            transition:   'all 0.15s',
+            '&:hover':    { bgcolor: `${C.accent}20` },
+          }}
+        >
+          {isEs ? 'Iniciar sesión' : 'Sign In'}
+        </Box>
+        <AuthModal open={modalOpen} onClose={() => setModalOpen(false)} lang={lang} />
+      </>
+    );
+  }
+
+  // Authenticated — show email (truncated) + credits + logout
+  const shortEmail = user?.email
+    ? (user.email.length > 18 ? user.email.slice(0, 16) + '…' : user.email)
+    : '—';
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+      {/* User pill */}
+      <Box
+        sx={{
+          display:      'flex',
+          alignItems:   'center',
+          gap:          '6px',
+          px:           '10px',
+          py:           '4px',
+          border:       `1px solid ${C.border}`,
+          borderRadius: '6px',
+          bgcolor:      '#0f172a',
+        }}
+      >
+        <Typography sx={{ fontFamily: MONO_FONT, fontSize: '0.6rem', color: C.textMuted, userSelect: 'none' }}>
+          {shortEmail}
+        </Typography>
+        <Box sx={{ width: '1px', height: '10px', bgcolor: C.border }} />
+        <Typography sx={{ fontFamily: MONO_FONT, fontSize: '0.6rem', color: C.accent, fontWeight: 700, userSelect: 'none' }}>
+          {user?.credits ?? 0} {isEs ? 'créd.' : 'cr.'}
+        </Typography>
+      </Box>
+
+      {/* Logout button */}
+      <Box
+        component="button"
+        onClick={logout}
+        title={isEs ? 'Cerrar sesión' : 'Sign out'}
+        sx={{
+          display:        'inline-flex',
+          alignItems:     'center',
+          justifyContent: 'center',
+          width:          '24px',
+          height:         '24px',
+          border:         'none',
+          bgcolor:        'transparent',
+          color:          C.textMuted,
+          cursor:         'pointer',
+          fontSize:       '0.8rem',
+          borderRadius:   '4px',
+          '&:hover':      { color: C.textPrimary, bgcolor: '#1e293b' },
+        }}
+      >
+        ⏏
+      </Box>
+    </Box>
+  );
+}
+
 // ── Tab button ────────────────────────────────────────────────────────────────
 
 function TabButton({ tab, active, lang, onClick }) {
@@ -256,6 +352,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Statcast status badge */}
         <StatcastBadge lang={lang} />
+
+        {/* Auth button / user pill */}
+        <AuthButton lang={lang} />
 
         {/* Language toggle */}
         <LanguageToggle lang={lang} onToggle={onLangToggle} />

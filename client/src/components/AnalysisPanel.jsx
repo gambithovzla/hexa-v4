@@ -12,6 +12,8 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, Switch, Slider } from '@mui/material';
 import ResultCard from './ResultCard';
+import AuthModal from './AuthModal';
+import { useAuth } from '../store/authStore';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -422,6 +424,70 @@ function EmptyState({ mode, canAnalyze, t }) {
   );
 }
 
+// ── Auth gate banner ──────────────────────────────────────────────────────────
+
+function AuthGateBanner({ lang, onOpenAuth }) {
+  const isEs = lang === 'es';
+  return (
+    <Box
+      sx={{
+        bgcolor:      '#f59e0b10',
+        border:       `1px solid #f59e0b44`,
+        borderRadius: '10px',
+        p:            '16px 20px',
+        display:      'flex',
+        flexDirection: 'column',
+        alignItems:   'center',
+        gap:          '10px',
+        textAlign:    'center',
+      }}
+    >
+      <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.amber, fontWeight: 600 }}>
+        {isEs ? '🔒 Inicia sesión para analizar' : '🔒 Sign in to run analysis'}
+      </Typography>
+      <Box
+        component="button"
+        onClick={onOpenAuth}
+        sx={{
+          px:           '20px',
+          py:           '8px',
+          border:       `1px solid ${C.accent}`,
+          borderRadius: '7px',
+          background:   `linear-gradient(135deg, ${C.accent} 0%, #d97706 100%)`,
+          color:        '#0a0e17',
+          fontFamily:   LABEL,
+          fontSize:     '0.78rem',
+          fontWeight:   700,
+          cursor:       'pointer',
+          '&:hover':    { transform: 'translateY(-1px)', boxShadow: `0 4px 20px ${C.accent}44` },
+          transition:   'all 0.2s',
+        }}
+      >
+        {isEs ? 'Iniciar sesión' : 'Sign In'}
+      </Box>
+    </Box>
+  );
+}
+
+function NoCreditsMessage({ lang }) {
+  const isEs = lang === 'es';
+  return (
+    <Box
+      sx={{
+        bgcolor:      '#ef444410',
+        border:       `1px solid #ef444444`,
+        borderRadius: '10px',
+        p:            '14px 20px',
+        textAlign:    'center',
+      }}
+    >
+      <Typography sx={{ fontFamily: LABEL, fontSize: '0.85rem', color: C.red, fontWeight: 600 }}>
+        {isEs ? 'Sin créditos — próximamente recarga' : 'No credits remaining — top-up coming soon'}
+      </Typography>
+    </Box>
+  );
+}
+
 // ── Run button ────────────────────────────────────────────────────────────────
 
 function RunButton({ canAnalyze, loading, onClick, t }) {
@@ -464,6 +530,7 @@ export default function AnalysisPanel({
   onSave,
 }) {
   const t = L[lang] ?? L.en;
+  const { isAuthenticated, token, user, updateCredits } = useAuth();
 
   const [betType,     setBetType]     = useState('all');
   const [riskProfile, setRiskProfile] = useState('balanced');
@@ -473,6 +540,7 @@ export default function AnalysisPanel({
   const [result,      setResult]      = useState(null);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   // Sync parlay legs with actual selection count
   useEffect(() => {
@@ -494,6 +562,20 @@ export default function AnalysisPanel({
 
   async function handleAnalyze() {
     if (!canAnalyze) return;
+
+    // Auth gate
+    if (!isAuthenticated) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    // Credits gate
+    if ((user?.credits ?? 0) < 1) {
+      // show no-credits via error state using a sentinel
+      setError('__no_credits__');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
@@ -543,15 +625,27 @@ export default function AnalysisPanel({
       const doFetch = () =>
         fetch(endpoint, {
           method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body:    JSON.stringify(body),
         }).then(r => r.json());
 
       let json;
       try {
         json = await doFetch();
-        if (!json.success) throw new Error(json.error ?? 'Server error');
-      } catch {
+        if (!json.success) {
+          // Map 'No credits remaining' to sentinel so UI shows the right message
+          if (json.error === 'No credits remaining') {
+            setError('__no_credits__');
+            setLoading(false);
+            return;
+          }
+          throw new Error(json.error ?? 'Server error');
+        }
+      } catch (e) {
+        if (e.message === '__no_credits__') { setError('__no_credits__'); setLoading(false); return; }
         await new Promise(r => setTimeout(r, 2000));
         try {
           json = await doFetch();
@@ -561,6 +655,11 @@ export default function AnalysisPanel({
           setLoading(false);
           return;
         }
+      }
+
+      // Update credit count in auth store if returned
+      if (typeof json.credits === 'number') {
+        updateCredits(json.credits);
       }
 
       // Success path
@@ -670,15 +769,29 @@ export default function AnalysisPanel({
         {/* Web search toggle */}
         <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
 
-        {/* Run button */}
-        <RunButton canAnalyze={canAnalyze} loading={loading} onClick={handleAnalyze} t={t} />
+        {/* Auth gate — shown in place of run button when not authenticated */}
+        {!isAuthenticated ? (
+          <AuthGateBanner lang={lang} onOpenAuth={() => setAuthModalOpen(true)} />
+        ) : (user?.credits ?? 0) < 1 ? (
+          <NoCreditsMessage lang={lang} />
+        ) : (
+          <RunButton canAnalyze={canAnalyze} loading={loading} onClick={handleAnalyze} t={t} />
+        )}
       </Box>
+
+      {/* ── Auth modal ── */}
+      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} lang={lang} />
 
       {/* ── Loading ── */}
       {loading && <OracleSpinner t={t} />}
 
+      {/* ── No credits error ── */}
+      {!loading && error === '__no_credits__' && (
+        <NoCreditsMessage lang={lang} />
+      )}
+
       {/* ── Error ── */}
-      {!loading && error && (
+      {!loading && error && error !== '__no_credits__' && (
         <ErrorDisplay error={error} onRetry={handleAnalyze} t={t} />
       )}
 
