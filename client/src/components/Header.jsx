@@ -282,31 +282,29 @@ function TabButton({ tab, active, lang, onClick }) {
         alignItems:    'center',
         px:            '22px',
         py:            '12px',
-        background:    active ? 'rgba(0,102,255,0.06)' : 'transparent',
+        background:    active
+          ? 'linear-gradient(180deg, #0066FF 0%, #0044CC 100%)'
+          : 'transparent',
         border:        'none',
-        borderBottom:  active
-          ? '2px solid transparent'
-          : '2px solid transparent',
-        // Gradient underline via background-image trick
-        backgroundImage: active
-          ? 'linear-gradient(#04080F, #04080F), linear-gradient(to right, #0066FF, #00D4FF)'
-          : 'none',
-        backgroundOrigin: 'border-box',
-        backgroundClip:   active ? 'padding-box, border-box' : 'unset',
-        borderBottomStyle: 'solid',
-        borderBottomWidth: '2px',
-        color:         active ? C.accentSec : C.textMuted,
+        borderBottom:  active ? 'none' : `2px solid #1A2540`,
+        color:         active ? '#ffffff' : C.textMuted,
         fontFamily:    BARLOW,
         fontSize:      '0.82rem',
         fontWeight:    700,
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
         cursor:        'pointer',
-        transition:    'color 0.15s, background 0.15s',
+        transition:    'all 0.15s',
         flexShrink:    0,
+        boxShadow:     active
+          ? '0 4px 12px rgba(0,102,255,0.4)'
+          : 'inset 0 -2px 4px rgba(0,0,0,0.25)',
+        borderRadius:  active ? '2px 2px 0 0' : '0',
         '&:hover': {
-          color:      active ? C.accentSec : C.textPrimary,
-          background: active ? 'rgba(0,102,255,0.06)' : 'rgba(255,255,255,0.02)',
+          color:      active ? '#ffffff' : C.textPrimary,
+          background: active
+            ? 'linear-gradient(180deg, #0066FF 0%, #0044CC 100%)'
+            : 'rgba(255,255,255,0.03)',
         },
       }}
     >
@@ -325,14 +323,19 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         position:   'sticky',
         top:        0,
         zIndex:     1000,
-        bgcolor:    C.bg,
-        // Gradient border bottom: blue → cyan
-        borderBottom: '1px solid transparent',
-        backgroundImage:  'linear-gradient(#04080F, #04080F), linear-gradient(to right, #0066FF, #00D4FF)',
-        backgroundOrigin: 'border-box',
-        backgroundClip:   'padding-box, border-box',
+        background: 'radial-gradient(ellipse at 50% 0%, #0D1528 0%, #04080F 70%)',
         backdropFilter:      'blur(12px)',
         WebkitBackdropFilter:'blur(12px)',
+        // Gradient border bottom via pseudo-element
+        '&::after': {
+          content:    '""',
+          position:   'absolute',
+          bottom:     0,
+          left:       0,
+          right:      0,
+          height:     '2px',
+          background: 'linear-gradient(90deg, transparent 0%, #0066FF 30%, #00D4FF 70%, transparent 100%)',
+        },
       }}
     >
       {/* ── Top row: logo + subtitle + controls (target: ~44px of the 72px) ── */}
@@ -364,6 +367,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
                 backgroundClip:       'text',
                 userSelect:    'none',
                 textTransform: 'uppercase',
+                filter:        'drop-shadow(0 0 20px rgba(255,255,255,0.15))',
               }}
             >
               H.E.X.A.

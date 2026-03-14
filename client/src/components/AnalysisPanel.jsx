@@ -123,6 +123,18 @@ function SectionLabel({ children }) {
         textTransform: 'uppercase',
         letterSpacing: '0.12em',
         mb:            '8px',
+        display:       'flex',
+        alignItems:    'center',
+        gap:           '6px',
+        '&::before': {
+          content:      '""',
+          display:      'inline-block',
+          width:        '6px',
+          height:       '6px',
+          borderRadius: '50%',
+          bgcolor:      C.accent,
+          flexShrink:   0,
+        },
       }}
     >
       {children}
@@ -174,6 +186,12 @@ function BetTypeSelect({ value, onChange, t }) {
   );
 }
 
+const RISK_CFG = {
+  conservative: { color: '#00E676', glow: 'rgba(0,230,118,0.35)',  dim: 'rgba(0,230,118,0.08)'  },
+  balanced:     { color: '#0066FF', glow: 'rgba(0,102,255,0.35)',  dim: 'rgba(0,102,255,0.08)'  },
+  aggressive:   { color: '#FF9800', glow: 'rgba(255,152,0,0.35)', dim: 'rgba(255,152,0,0.08)' },
+};
+
 function RiskProfilePicker({ value, onChange, t }) {
   const options = [
     { value: 'conservative', label: t.riskProfile.conservative },
@@ -187,6 +205,7 @@ function RiskProfilePicker({ value, onChange, t }) {
       <Box sx={{ display: 'flex', gap: '6px' }}>
         {options.map(o => {
           const active = value === o.value;
+          const cfg    = RISK_CFG[o.value];
           return (
             <Box
               key={o.value}
@@ -196,10 +215,10 @@ function RiskProfilePicker({ value, onChange, t }) {
                 flex:          1,
                 py:            '7px',
                 px:            '4px',
-                border:        `1px solid ${active ? C.accent : C.cardBorder}`,
+                border:        `1px solid ${active ? cfg.color + '80' : C.cardBorder}`,
                 borderRadius:  '2px',
-                bgcolor:       active ? C.accentDim : 'transparent',
-                color:         active ? C.accentSec : C.textMuted,
+                bgcolor:       active ? cfg.dim : 'transparent',
+                color:         active ? cfg.color : C.textMuted,
                 fontFamily:    BARLOW,
                 fontSize:      '0.75rem',
                 fontWeight:    700,
@@ -207,7 +226,12 @@ function RiskProfilePicker({ value, onChange, t }) {
                 textTransform: 'uppercase',
                 cursor:        'pointer',
                 transition:    'all 0.15s',
-                '&:hover':     { borderColor: active ? C.accent : C.accent + '60', color: active ? C.accentSec : C.textPrimary },
+                boxShadow:     active ? `0 0 12px ${cfg.glow}` : 'none',
+                '&:hover':     {
+                  borderColor: cfg.color + '60',
+                  color:       active ? cfg.color : C.textPrimary,
+                  boxShadow:   `0 0 8px ${cfg.glow}`,
+                },
               }}
             >
               {o.label}
@@ -218,6 +242,21 @@ function RiskProfilePicker({ value, onChange, t }) {
     </Box>
   );
 }
+
+const MODEL_CFG = {
+  fast: {
+    gradient: 'linear-gradient(135deg, #0066FF 0%, #00D4FF 100%)',
+    glow:     'rgba(0,212,255,0.35)',
+    dim:      'rgba(0,102,255,0.08)',
+    color:    '#00D4FF',
+  },
+  deep: {
+    gradient: 'linear-gradient(135deg, #6B21A8 0%, #9333EA 100%)',
+    glow:     'rgba(147,51,234,0.4)',
+    dim:      'rgba(107,33,168,0.12)',
+    color:    '#C084FC',
+  },
+};
 
 function ModelPicker({ value, onChange, t }) {
   const options = [
@@ -231,6 +270,7 @@ function ModelPicker({ value, onChange, t }) {
       <Box sx={{ display: 'flex', gap: '6px' }}>
         {options.map(o => {
           const active = value === o.value;
+          const cfg    = MODEL_CFG[o.value];
           return (
             <Box
               key={o.value}
@@ -240,10 +280,10 @@ function ModelPicker({ value, onChange, t }) {
                 flex:          1,
                 py:            '7px',
                 px:            '4px',
-                border:        `1px solid ${active ? C.accent : C.cardBorder}`,
+                border:        `1px solid ${active ? cfg.color + '70' : C.cardBorder}`,
                 borderRadius:  '2px',
-                bgcolor:       active ? C.accentDim : 'transparent',
-                color:         active ? C.accentSec : C.textMuted,
+                background:    active ? cfg.gradient : 'transparent',
+                color:         active ? '#ffffff' : C.textMuted,
                 fontFamily:    BARLOW,
                 fontSize:      '0.75rem',
                 fontWeight:    700,
@@ -251,7 +291,13 @@ function ModelPicker({ value, onChange, t }) {
                 textTransform: 'uppercase',
                 cursor:        'pointer',
                 transition:    'all 0.15s',
-                '&:hover':     { borderColor: active ? C.accent : C.accent + '60', color: active ? C.accentSec : C.textPrimary },
+                boxShadow:     active ? `0 0 16px ${cfg.glow}, inset 0 1px 0 rgba(255,255,255,0.1)` : 'none',
+                textShadow:    active ? `0 0 12px ${cfg.color}` : 'none',
+                '&:hover':     {
+                  borderColor: cfg.color + '60',
+                  color:       active ? '#ffffff' : C.textPrimary,
+                  boxShadow:   `0 0 10px ${cfg.glow}`,
+                },
               }}
             >
               {o.label}
@@ -466,24 +512,31 @@ function RunButton({ canAnalyze, loading, onClick, t }) {
       sx={{
         width:         '100%',
         py:            '14px',
-        border:        `1px solid ${active ? C.accent : C.cardBorder}`,
+        border:        `1px solid ${active ? C.accentSec + '80' : C.cardBorder}`,
         borderRadius:  '2px',
         background:    active
           ? `linear-gradient(135deg, ${C.accent} 0%, ${C.accentSec} 100%)`
           : C.cardBg,
         color:         active ? '#ffffff' : C.textMuted,
         fontFamily:    BARLOW,
-        fontSize:      '0.95rem',
+        fontSize:      '15px',
         fontWeight:    800,
         cursor:        active ? 'pointer' : 'not-allowed',
-        letterSpacing: '0.14em',
+        letterSpacing: '0.1em',
         textTransform: 'uppercase',
         transition:    'all 0.2s',
-        boxShadow:     active ? '0 0 0 0 rgba(0,102,255,0)' : 'none',
-        '&:hover':     active
+        boxShadow:     active
+          ? '0 0 30px rgba(0,102,255,0.5), 0 4px 15px rgba(0,0,0,0.3)'
+          : 'none',
+        '@keyframes runButtonPulse': {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(0,102,255,0)' },
+          '50%':      { boxShadow: '0 0 14px rgba(0,102,255,0.18)' },
+        },
+        animation: !active ? 'runButtonPulse 3s ease-in-out infinite' : 'none',
+        '&:hover':  active
           ? {
-              transform: 'translateY(-1px)',
-              boxShadow: '0 4px 24px rgba(0,102,255,0.45), 0 0 40px rgba(0,212,255,0.15)',
+              transform: 'scale(1.01) translateY(-1px)',
+              boxShadow: '0 0 50px rgba(0,102,255,0.65), 0 0 25px rgba(0,212,255,0.3), 0 6px 20px rgba(0,0,0,0.35)',
             }
           : {},
       }}
@@ -703,13 +756,15 @@ export default function AnalysisPanel({
       {/* ── Controls card ── */}
       <Box
         sx={{
-          bgcolor: C.cardBg,
-          border: `1px solid ${C.cardBorder}`,
+          bgcolor:      C.cardBg,
+          border:       `1px solid ${C.cardBorder}`,
+          borderLeft:   `1px solid ${C.cardBorder}`,
           borderRadius: '2px',
-          p: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '18px',
+          p:            '20px',
+          display:      'flex',
+          flexDirection:'column',
+          gap:          '18px',
+          boxShadow:    'inset 3px 0 12px rgba(0,102,255,0.12), inset 0 0 40px rgba(0,102,255,0.02)',
         }}
       >
         {/* Bet type + Risk profile side by side on wide screens */}

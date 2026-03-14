@@ -24,6 +24,21 @@ const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
 const MONO   = '"JetBrains Mono", "Fira Code", "Courier New", monospace';
 const LABEL  = '"DM Sans", system-ui, sans-serif';
 
+// ── MLB Team Colors ───────────────────────────────────────────────────────────
+const MLB_COLORS = {
+  NYY: '#003087', BOS: '#BD3039', LAD: '#005A9C', SF:  '#FD5A1E',
+  HOU: '#EB6E1F', ATL: '#CE1141', NYM: '#002D72', CHC: '#0E3386',
+  STL: '#C41E3A', PHI: '#E81828', MIA: '#00A3E0', WSH: '#AB0003',
+  BAL: '#DF4601', TOR: '#134A8E', TB:  '#092C5C', MIN: '#002B5C',
+  CLE: '#E31937', CWS: '#27251F', DET: '#0C2340', KC:  '#004687',
+  TEX: '#003278', OAK: '#003831', SEA: '#0C2C56', LAA: '#BA0021',
+  ARI: '#A71930', COL: '#333366', SD:  '#2F241D', MIL: '#FFC52F',
+  CIN: '#C6011F', PIT: '#FDB827',
+};
+
+// SVG noise texture overlay (data URI)
+const NOISE_BG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E")`;
+
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
   en: {
@@ -148,7 +163,7 @@ function isSelectable(game) {
 }
 
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
-function TeamLogo({ teamId, abbr }) {
+function TeamLogo({ teamId, abbr, color }) {
   const [failed, setFailed] = useState(false);
   if (!teamId || failed) return null;
   return (
@@ -157,7 +172,11 @@ function TeamLogo({ teamId, abbr }) {
       src={`https://www.mlb.com/team-logos/${teamId}.svg`}
       alt={abbr}
       onError={() => setFailed(true)}
-      sx={{ width: 42, height: 42, objectFit: 'contain', flexShrink: 0 }}
+      sx={{
+        width: 52, height: 52, objectFit: 'contain', flexShrink: 0,
+        filter: color ? `drop-shadow(0 0 8px ${color}90)` : 'none',
+        transition: 'filter 0.2s',
+      }}
     />
   );
 }
@@ -229,66 +248,85 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
   // Games that have started/ended cannot be selected at all
   const blocked = status !== 'scheduled';
 
+  // Team colors for gradients and logo glows
+  const awayColor = MLB_COLORS[away] ?? '#1A3060';
+  const homeColor = MLB_COLORS[home] ?? '#1A3060';
+
   const leftBorderColor = isSelected
-    ? C.selectedBorder
+    ? C.accentSec
     : status === 'live'
       ? C.liveOrange
       : 'transparent';
 
+  const leftBorderWidth = isSelected ? '4px' : '3px';
+
   const boxShadow = isSelected
-    ? `0 0 16px rgba(0,102,255,0.18)`
+    ? `0 0 20px rgba(0,212,255,0.22), 0 0 40px rgba(0,102,255,0.1), inset 0 0 20px rgba(0,102,255,0.04)`
     : status === 'live'
       ? `0 0 8px rgba(255,152,0,0.15)`
       : 'none';
+
+  // 15% opacity = 26 in hex (38/255)
+  const cardBackground = `${NOISE_BG}, linear-gradient(135deg, ${awayColor}26 0%, ${C.cardBg} 40%, ${C.cardBg} 60%, ${homeColor}26 100%)`;
 
   return (
     <Box
       onClick={blocked ? undefined : onClick}
       sx={{
-        bgcolor:      C.cardBg,
-        border:       `1px solid ${C.cardBorder}`,
-        borderLeft:   `3px solid ${leftBorderColor}`,
+        position:     'relative',
+        background:   cardBackground,
+        border:       `1px solid ${isSelected ? C.accentSec + '50' : C.cardBorder}`,
+        borderLeft:   `${leftBorderWidth} solid ${leftBorderColor}`,
         borderRadius: '2px',
         p:            '14px',
         cursor:       blocked ? 'not-allowed' : 'pointer',
         opacity:      status === 'final' ? 0.5 : 1,
-        transition:   'border-color 0.15s, box-shadow 0.15s, transform 0.12s, opacity 0.15s',
+        transition:   'border-color 0.15s, box-shadow 0.2s, transform 0.15s, opacity 0.15s',
         boxShadow,
+        transform:    isSelected ? 'scale(1.01)' : 'none',
         '&:hover': blocked ? {} : {
-          borderLeftColor: isSelected ? C.selectedBorder : C.accent,
-          transform:       'translateY(-1px)',
-          boxShadow:       isSelected ? boxShadow : '0 4px 16px rgba(0,102,255,0.1)',
+          transform:  isSelected ? 'scale(1.01)' : 'translateY(-2px) scale(1.005)',
+          boxShadow:  isSelected
+            ? `0 0 24px rgba(0,212,255,0.3), 0 0 50px rgba(0,102,255,0.15)`
+            : `0 6px 24px rgba(0,102,255,0.18), 0 0 0 1px ${awayColor}50`,
+          borderColor: isSelected ? C.accentSec + '70' : awayColor + '60',
         },
       }}
     >
-      {/* Header row: [STATUS BADGE] [TIME]  ·····  [CHECKBOX] */}
+      {/* Header row: [STATUS BADGE]  ────  [TIME PILL] [CHECKBOX] */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '12px' }}>
         <StatusBadge status={status} t={t} />
-        <Typography
+        <Box sx={{ flex: 1 }} />
+        <Box
+          component="span"
           sx={{
-            fontFamily: MONO,
-            fontSize: '0.68rem',
-            color: C.textMuted,
-            flexShrink: 0,
+            px:           '8px',
+            py:           '2px',
+            borderRadius: '100px',
+            bgcolor:      'rgba(255,255,255,0.04)',
+            border:       `1px solid ${C.cardBorder}`,
+            fontFamily:   MONO,
+            fontSize:     '0.64rem',
+            color:        C.textMuted,
+            letterSpacing:'0.04em',
+            flexShrink:   0,
           }}
         >
           {time}
-        </Typography>
+        </Box>
         {showCheckbox && (
-          <Box sx={{ ml: 'auto' }}>
-            <Checkbox
-              checked={isSelected}
-              disabled={blocked || checkboxDisabled}
-              onClick={e => e.stopPropagation()}
-              onChange={(blocked || checkboxDisabled) ? undefined : onClick}
-              size="small"
-              sx={{
-                p: '3px',
-                color: C.cardBorder,
-                '&.Mui-checked': { color: C.accent },
-              }}
-            />
-          </Box>
+          <Checkbox
+            checked={isSelected}
+            disabled={blocked || checkboxDisabled}
+            onClick={e => e.stopPropagation()}
+            onChange={(blocked || checkboxDisabled) ? undefined : onClick}
+            size="small"
+            sx={{
+              p: '3px',
+              color: C.cardBorder,
+              '&.Mui-checked': { color: C.accent },
+            }}
+          />
         )}
       </Box>
 
@@ -304,7 +342,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
       >
         {/* Away team */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <TeamLogo teamId={awayId} abbr={away} />
+          <TeamLogo teamId={awayId} abbr={away} color={awayColor} />
           <Typography
             sx={{
               fontFamily: MONO,
@@ -367,7 +405,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
           >
             {home}
           </Typography>
-          <TeamLogo teamId={homeId} abbr={home} />
+          <TeamLogo teamId={homeId} abbr={home} color={homeColor} />
         </Box>
       </Box>
 
@@ -399,8 +437,8 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
             sx={{
               fontFamily: MONO,
               fontSize: '0.68rem',
-              color: awayP === t.tbd ? C.textMuted : C.textPrimary,
-              fontStyle: awayP === t.tbd ? 'italic' : 'normal',
+              color: C.textMuted,
+              fontStyle: 'italic',
             }}
           >
             {awayP}
@@ -428,8 +466,8 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
             sx={{
               fontFamily: MONO,
               fontSize: '0.68rem',
-              color: homeP === t.tbd ? C.textMuted : C.textPrimary,
-              fontStyle: homeP === t.tbd ? 'italic' : 'normal',
+              color: C.textMuted,
+              fontStyle: 'italic',
             }}
           >
             {homeP}
@@ -448,25 +486,36 @@ function AnalyzeButton({ canAnalyze, analyzing, onClick, t }) {
       component="button"
       onClick={active ? onClick : undefined}
       sx={{
-        width: '100%',
-        py: '11px',
-        px: 2,
-        mt: 3,
-        border: `1px solid ${active ? C.accent : C.cardBorder}`,
-        borderRadius: '2px',
-        background: active
+        width:         '100%',
+        py:            '13px',
+        px:            2,
+        mt:            3,
+        border:        `1px solid ${active ? C.accentSec + '80' : C.cardBorder}`,
+        borderRadius:  '2px',
+        background:    active
           ? `linear-gradient(135deg, ${C.accent} 0%, ${C.accentSec} 100%)`
           : C.cardBg,
-        color: active ? '#fff' : C.textMuted,
+        color:         active ? '#fff' : C.textMuted,
         fontFamily:    BARLOW,
-        fontSize:      '0.9rem',
+        fontSize:      '15px',
         fontWeight:    700,
-        letterSpacing: '0.08em',
+        letterSpacing: '0.1em',
         textTransform: 'uppercase',
-        cursor: active ? 'pointer' : 'not-allowed',
-        transition: 'all 0.2s',
+        cursor:        active ? 'pointer' : 'not-allowed',
+        transition:    'all 0.2s',
+        boxShadow:     active
+          ? '0 0 30px rgba(0,102,255,0.5), 0 4px 15px rgba(0,0,0,0.3)'
+          : 'none',
+        '@keyframes analyzeButtonPulse': {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(0,102,255,0)' },
+          '50%':      { boxShadow: '0 0 14px rgba(0,102,255,0.18)' },
+        },
+        animation: !active ? 'analyzeButtonPulse 3s ease-in-out infinite' : 'none',
         '&:hover': active
-          ? { transform: 'translateY(-1px)', boxShadow: `0 4px 20px rgba(0,102,255,0.35)` }
+          ? {
+              transform: 'scale(1.01) translateY(-1px)',
+              boxShadow: '0 0 40px rgba(0,102,255,0.65), 0 0 20px rgba(0,212,255,0.25), 0 6px 20px rgba(0,0,0,0.35)',
+            }
           : {},
       }}
     >
