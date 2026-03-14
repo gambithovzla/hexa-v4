@@ -12,25 +12,30 @@ import { Box, Typography } from '@mui/material';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:          '#0a0e17',
-  cardBg:      '#111827',
-  cardBorder:  '#1e293b',
-  accent:      '#f59e0b',
-  accentDim:   '#f59e0b0f',
-  accentLine:  '#f59e0b33',
-  textPrimary: '#f1f5f9',
-  textMuted:   '#94a3b8',
-  green:       '#22c55e',
-  greenDim:    '#22c55e15',
-  red:         '#ef4444',
-  redDim:      '#ef444415',
-  blue:        '#3b82f6',
-  blueDim:     '#3b82f615',
-  amber:       '#f59e0b',
+  bg:          '#04080F',
+  bgSec:       '#080D1A',
+  cardBg:      '#0D1424',
+  cardBgLight: '#111C30',
+  cardBorder:  '#1A2540',
+  accent:      '#0066FF',
+  accentSec:   '#00D4FF',
+  accentDim:   'rgba(0,102,255,0.08)',
+  accentLine:  'rgba(0,102,255,0.25)',
+  textPrimary: '#E8EDF5',
+  textMuted:   '#5A7090',
+  green:       '#00E676',
+  greenDim:    'rgba(0,230,118,0.08)',
+  red:         '#FF3D57',
+  redDim:      'rgba(255,61,87,0.08)',
+  blue:        '#0066FF',
+  blueDim:     'rgba(0,102,255,0.08)',
+  amber:       '#FFB800',
+  gold:        '#FFB800',
 };
 
-const MONO  = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL = '"Outfit", "Inter", system-ui, sans-serif';
+const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
+const MONO   = '"JetBrains Mono", "Fira Code", monospace';
+const LABEL  = '"DM Sans", system-ui, sans-serif';
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
@@ -97,17 +102,19 @@ const L = {
 // ── Shared sub-components ────────────────────────────────────────────────────
 
 function ConfidenceBar({ value }) {
-  const num   = Math.min(100, Math.max(0, Number(value) || 0));
-  const color = num >= 75 ? C.green : num >= 50 ? C.amber : C.red;
+  const num      = Math.min(100, Math.max(0, Number(value) || 0));
+  const glowColor = num >= 75 ? C.green : num >= 50 ? C.amber : C.red;
+  // Always use blue-to-cyan gradient for the fill; glow color changes by confidence level
   return (
-    <Box sx={{ height: 6, bgcolor: `${color}22`, borderRadius: 4, overflow: 'hidden' }}>
+    <Box sx={{ height: 6, bgcolor: C.cardBorder, borderRadius: '2px', overflow: 'hidden' }}>
       <Box
         sx={{
-          height: '100%',
-          width: `${num}%`,
-          bgcolor: color,
-          borderRadius: 4,
+          height:          '100%',
+          width:           `${num}%`,
+          background:      `linear-gradient(90deg, ${C.accent} 0%, ${C.accentSec} 100%)`,
+          borderRadius:    '2px',
           transformOrigin: 'left center',
+          boxShadow:       `0 0 8px ${glowColor}80`,
           '@keyframes confGrow': {
             from: { transform: 'scaleX(0)' },
             to:   { transform: 'scaleX(1)' },
@@ -132,19 +139,19 @@ function RiskBadge({ risk, t }) {
     <Box
       component="span"
       sx={{
-        display: 'inline-block',
-        px: '8px',
-        py: '2px',
-        borderRadius: '4px',
-        bgcolor: `${cfg.color}18`,
-        border: `1px solid ${cfg.color}44`,
-        fontFamily: LABEL,
-        fontSize: '0.6rem',
-        fontWeight: 700,
-        color: cfg.color,
-        letterSpacing: '0.08em',
+        display:       'inline-block',
+        px:            '8px',
+        py:            '2px',
+        borderRadius:  '2px',
+        bgcolor:       `${cfg.color}18`,
+        border:        `1px solid ${cfg.color}44`,
+        fontFamily:    BARLOW,
+        fontSize:      '0.62rem',
+        fontWeight:    700,
+        color:         cfg.color,
+        letterSpacing: '0.1em',
         textTransform: 'uppercase',
-        flexShrink: 0,
+        flexShrink:    0,
       }}
     >
       {cfg.label}
@@ -156,13 +163,13 @@ function SectionLabel({ children }) {
   return (
     <Typography
       sx={{
-        fontFamily: LABEL,
-        fontSize: '0.58rem',
-        fontWeight: 700,
-        color: C.textMuted,
+        fontFamily:    BARLOW,
+        fontSize:      '0.7rem',
+        fontWeight:    700,
+        color:         C.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: '0.09em',
-        mb: '6px',
+        letterSpacing: '0.12em',
+        mb:            '6px',
       }}
     >
       {children}
@@ -174,18 +181,18 @@ function AlertFlagBadge({ flag }) {
   return (
     <Box
       sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        px: '8px',
-        py: '3px',
-        bgcolor: C.redDim,
-        border: `1px solid ${C.red}44`,
-        borderRadius: '4px',
-        fontFamily: MONO,
-        fontSize: '0.62rem',
-        color: C.red,
-        lineHeight: 1.4,
+        display:      'inline-flex',
+        alignItems:   'center',
+        gap:          '4px',
+        px:           '8px',
+        py:           '3px',
+        bgcolor:      C.redDim,
+        border:       `1px solid rgba(255,61,87,0.3)`,
+        borderRadius: '2px',
+        fontFamily:   MONO,
+        fontSize:     '0.62rem',
+        color:        C.red,
+        lineHeight:   1.4,
       }}
     >
       ⚠ {flag}
@@ -275,7 +282,7 @@ function getEstimatedOdds() {
 
 function OddsCell({ label, home, away }) {
   return (
-    <Box sx={{ bgcolor: C.bg, borderRadius: '6px', p: '8px 6px', textAlign: 'center' }}>
+    <Box sx={{ bgcolor: C.bgSec, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '8px 6px', textAlign: 'center' }}>
       <Typography
         sx={{ fontFamily: LABEL, fontSize: '0.53rem', fontWeight: 700, color: C.textMuted,
           textTransform: 'uppercase', letterSpacing: '0.05em', mb: '5px' }}
@@ -374,7 +381,7 @@ function OddsPanel({ odds, hexa, t }) {
   const bpPayout = bpOdds != null ? calcPayout(stake, bpOdds) : null;
 
   return (
-    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '8px', p: '16px' }}>
+    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '16px' }}>
       {/* Header + format toggle */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
         <SectionLabel>{t.odds.title}</SectionLabel>
@@ -383,8 +390,8 @@ function OddsPanel({ odds, hexa, t }) {
           onClick={toggleFmt}
           sx={{
             px: '9px', py: '3px',
-            bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '4px',
-            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accent, cursor: 'pointer',
+            bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px',
+            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accentSec, cursor: 'pointer',
           }}
         >
           {decimal ? 'US | ●DEC' : '●US | DEC'}
@@ -477,7 +484,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
   const payout = calcPayout(stake, combinedAmerican);
 
   return (
-    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '8px', p: '16px' }}>
+    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '16px' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
         <SectionLabel>{t.odds.parlayOdds}</SectionLabel>
         <Box
@@ -485,8 +492,8 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
           onClick={toggleFmt}
           sx={{
             px: '9px', py: '3px',
-            bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '4px',
-            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accent, cursor: 'pointer',
+            bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px',
+            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accentSec, cursor: 'pointer',
           }}
         >
           {decimal ? 'US | ●DEC' : '●US | DEC'}
@@ -603,21 +610,22 @@ function SingleGameResult({ hexa, t }) {
       {/* ── Master Pick ── */}
       <Box
         sx={{
-          border: `1.5px solid ${C.accent}`,
-          borderRadius: '10px',
-          background: `linear-gradient(135deg, ${C.accentDim} 0%, ${C.cardBg} 60%)`,
-          p: '20px',
+          border:       `1px solid ${C.cardBorder}`,
+          borderLeft:   `4px solid ${C.accent}`,
+          borderRadius: '2px',
+          background:   `linear-gradient(135deg, rgba(0,102,255,0.07) 0%, ${C.cardBgLight} 60%)`,
+          p:            '20px',
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              color: C.accent,
+              fontFamily:    BARLOW,
+              fontSize:      '0.72rem',
+              fontWeight:    700,
+              color:         C.accentSec,
               textTransform: 'uppercase',
-              letterSpacing: '0.12em',
+              letterSpacing: '0.14em',
             }}
           >
             ◆ {t.masterPick}
@@ -702,13 +710,13 @@ function SingleGameResult({ hexa, t }) {
         >
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.6rem',
-              fontWeight: 700,
-              color: C.accent,
+              fontFamily:    BARLOW,
+              fontSize:      '0.65rem',
+              fontWeight:    700,
+              color:         C.accentSec,
               textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              mb: '6px',
+              letterSpacing: '0.12em',
+              mb:            '6px',
             }}
           >
             🧠 {t.hexaHunch}
@@ -768,15 +776,17 @@ function SingleGameResult({ hexa, t }) {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '8px' }}>
             <Box
               sx={{
-                px: '8px',
-                py: '3px',
-                bgcolor: C.blueDim,
-                border: `1px solid ${C.blue}44`,
-                borderRadius: '4px',
-                fontFamily: LABEL,
-                fontSize: '0.65rem',
-                fontWeight: 700,
-                color: C.blue,
+                px:           '8px',
+                py:           '3px',
+                bgcolor:      C.blueDim,
+                border:       `1px solid ${C.blue}44`,
+                borderRadius: '2px',
+                fontFamily:   BARLOW,
+                fontSize:     '0.68rem',
+                fontWeight:   700,
+                color:        C.accentSec,
+                letterSpacing:'0.06em',
+                textTransform:'uppercase',
               }}
             >
               {bp.type}
@@ -825,21 +835,22 @@ function ParlayResult({ hexa, t }) {
       {/* ── Header ── */}
       <Box
         sx={{
-          border: `1.5px solid ${C.accent}`,
-          borderRadius: '10px',
-          background: `linear-gradient(135deg, ${C.accentDim} 0%, ${C.cardBg} 60%)`,
-          p: '20px',
+          border:       `1px solid ${C.cardBorder}`,
+          borderLeft:   `4px solid ${C.accent}`,
+          borderRadius: '2px',
+          background:   `linear-gradient(135deg, rgba(0,102,255,0.07) 0%, ${C.cardBgLight} 60%)`,
+          p:            '20px',
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '14px' }}>
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              color: C.accent,
+              fontFamily:    BARLOW,
+              fontSize:      '0.72rem',
+              fontWeight:    700,
+              color:         C.accentSec,
               textTransform: 'uppercase',
-              letterSpacing: '0.12em',
+              letterSpacing: '0.14em',
             }}
           >
             ◆ {t.combinedConf}
@@ -878,11 +889,11 @@ function ParlayResult({ hexa, t }) {
           <Box
             key={i}
             sx={{
-              bgcolor: C.cardBg,
-              border: `1px solid ${C.cardBorder}`,
-              borderLeft: `3px solid ${C.accent}`,
-              borderRadius: '0 8px 8px 0',
-              p: '14px 16px',
+              bgcolor:      C.cardBg,
+              border:       `1px solid ${C.cardBorder}`,
+              borderLeft:   `3px solid ${C.accent}`,
+              borderRadius: '0 2px 2px 0',
+              p:            '14px 16px',
             }}
           >
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '6px' }}>
@@ -1004,11 +1015,11 @@ function FullDayGameRow({ game, t }) {
       {mp.pick && (
         <Box
           sx={{
-            bgcolor: C.accentDim,
-            border: `1px solid ${C.accentLine}`,
-            borderRadius: '6px',
-            p: '10px 12px',
-            mb: '10px',
+            bgcolor:      C.accentDim,
+            border:       `1px solid ${C.accentLine}`,
+            borderRadius: '2px',
+            p:            '10px 12px',
+            mb:           '10px',
           }}
         >
           <Typography
@@ -1080,20 +1091,21 @@ function FullDayResult({ hexa, t }) {
       {hexa.day_summary && (
         <Box
           sx={{
-            border: `1.5px solid ${C.accent}`,
-            borderRadius: '10px',
-            background: `linear-gradient(135deg, ${C.accentDim} 0%, ${C.cardBg} 60%)`,
-            p: '20px',
+            border:       `1px solid ${C.cardBorder}`,
+            borderLeft:   `4px solid ${C.accent}`,
+            borderRadius: '2px',
+            background:   `linear-gradient(135deg, rgba(0,102,255,0.07) 0%, ${C.cardBgLight} 60%)`,
+            p:            '20px',
           }}
         >
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              color: C.accent,
+              fontFamily:    BARLOW,
+              fontSize:      '0.72rem',
+              fontWeight:    700,
+              color:         C.accentSec,
               textTransform: 'uppercase',
-              letterSpacing: '0.12em',
+              letterSpacing: '0.14em',
               mb: '10px',
             }}
           >

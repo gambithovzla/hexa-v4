@@ -17,21 +17,26 @@ import { useAuth } from '../store/authStore';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:          '#0a0e17',
-  cardBg:      '#111827',
-  cardBorder:  '#1e293b',
-  accent:      '#f59e0b',
-  accentDim:   '#f59e0b12',
-  textPrimary: '#f1f5f9',
-  textMuted:   '#94a3b8',
-  green:       '#22c55e',
-  red:         '#ef4444',
-  amber:       '#f59e0b',
-  blue:        '#3b82f6',
+  bg:          '#04080F',
+  bgSec:       '#080D1A',
+  cardBg:      '#0D1424',
+  cardBorder:  '#1A2540',
+  accent:      '#0066FF',
+  accentSec:   '#00D4FF',
+  accentDim:   'rgba(0,102,255,0.08)',
+  accentLine:  'rgba(0,102,255,0.25)',
+  textPrimary: '#E8EDF5',
+  textMuted:   '#5A7090',
+  green:       '#00E676',
+  red:         '#FF3D57',
+  amber:       '#FFB800',
+  blue:        '#0066FF',
+  overlay:     'rgba(4,8,15,0.85)',
 };
 
-const MONO  = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL = '"Outfit", "Inter", system-ui, sans-serif';
+const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
+const MONO   = '"JetBrains Mono", "Fira Code", monospace';
+const LABEL  = '"DM Sans", system-ui, sans-serif';
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
@@ -111,13 +116,13 @@ function SectionLabel({ children }) {
   return (
     <Typography
       sx={{
-        fontFamily: LABEL,
-        fontSize: '0.58rem',
-        fontWeight: 700,
-        color: C.textMuted,
+        fontFamily:    BARLOW,
+        fontSize:      '0.7rem',
+        fontWeight:    700,
+        color:         C.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: '0.09em',
-        mb: '8px',
+        letterSpacing: '0.12em',
+        mb:            '8px',
       }}
     >
       {children}
@@ -143,22 +148,22 @@ function BetTypeSelect({ value, onChange, t }) {
         value={value}
         onChange={e => onChange(e.target.value)}
         style={{
-          width: '100%',
-          background: C.cardBorder,
-          border: `1px solid ${C.cardBorder}`,
-          borderRadius: '7px',
-          color: C.textPrimary,
-          fontFamily: LABEL,
-          fontSize: '0.8rem',
-          padding: '8px 10px',
-          cursor: 'pointer',
-          outline: 'none',
-          colorScheme: 'dark',
-          appearance: 'none',
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2394a3b8' d='M6 8L0 0h12z'/%3E%3C/svg%3E")`,
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'right 10px center',
-          paddingRight: '28px',
+          width:             '100%',
+          background:        C.bgSec,
+          border:            `1px solid ${C.cardBorder}`,
+          borderRadius:      '2px',
+          color:             C.textPrimary,
+          fontFamily:        LABEL,
+          fontSize:          '0.8rem',
+          padding:           '8px 10px',
+          cursor:            'pointer',
+          outline:           'none',
+          colorScheme:       'dark',
+          appearance:        'none',
+          backgroundImage:   `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%235A7090' d='M6 8L0 0h12z'/%3E%3C/svg%3E")`,
+          backgroundRepeat:  'no-repeat',
+          backgroundPosition:'right 10px center',
+          paddingRight:      '28px',
         }}
       >
         {options.map(o => (
@@ -188,19 +193,21 @@ function RiskProfilePicker({ value, onChange, t }) {
               component="button"
               onClick={() => onChange(o.value)}
               sx={{
-                flex: 1,
-                py: '7px',
-                px: '4px',
-                border: `1px solid ${active ? C.accent : C.cardBorder}`,
-                borderRadius: '7px',
-                bgcolor: active ? C.accentDim : 'transparent',
-                color: active ? C.accent : C.textMuted,
-                fontFamily: LABEL,
-                fontSize: '0.72rem',
-                fontWeight: active ? 700 : 400,
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                '&:hover': { borderColor: active ? C.accent : '#2d3f55', color: active ? C.accent : C.textPrimary },
+                flex:          1,
+                py:            '7px',
+                px:            '4px',
+                border:        `1px solid ${active ? C.accent : C.cardBorder}`,
+                borderRadius:  '2px',
+                bgcolor:       active ? C.accentDim : 'transparent',
+                color:         active ? C.accentSec : C.textMuted,
+                fontFamily:    BARLOW,
+                fontSize:      '0.75rem',
+                fontWeight:    700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                cursor:        'pointer',
+                transition:    'all 0.15s',
+                '&:hover':     { borderColor: active ? C.accent : C.accent + '60', color: active ? C.accentSec : C.textPrimary },
               }}
             >
               {o.label}
@@ -230,19 +237,21 @@ function ModelPicker({ value, onChange, t }) {
               component="button"
               onClick={() => onChange(o.value)}
               sx={{
-                flex: 1,
-                py: '7px',
-                px: '4px',
-                border: `1px solid ${active ? C.accent : C.cardBorder}`,
-                borderRadius: '7px',
-                bgcolor: active ? C.accentDim : 'transparent',
-                color: active ? C.accent : C.textMuted,
-                fontFamily: LABEL,
-                fontSize: '0.72rem',
-                fontWeight: active ? 700 : 400,
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                '&:hover': { borderColor: active ? C.accent : '#2d3f55', color: active ? C.accent : C.textPrimary },
+                flex:          1,
+                py:            '7px',
+                px:            '4px',
+                border:        `1px solid ${active ? C.accent : C.cardBorder}`,
+                borderRadius:  '2px',
+                bgcolor:       active ? C.accentDim : 'transparent',
+                color:         active ? C.accentSec : C.textMuted,
+                fontFamily:    BARLOW,
+                fontSize:      '0.75rem',
+                fontWeight:    700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                cursor:        'pointer',
+                transition:    'all 0.15s',
+                '&:hover':     { borderColor: active ? C.accent : C.accent + '60', color: active ? C.accentSec : C.textPrimary },
               }}
             >
               {o.label}
@@ -317,7 +326,7 @@ function OracleSpinner({ t }) {
           height: 52,
           borderRadius: '50%',
           border: `3px solid ${C.cardBorder}`,
-          borderTopColor: C.accent,
+          borderTopColor: C.accentSec,
           '@keyframes oracleSpin': { to: { transform: 'rotate(360deg)' } },
           animation: 'oracleSpin 0.75s linear infinite',
         }}
@@ -353,9 +362,9 @@ function ErrorDisplay({ error, onRetry, t }) {
   return (
     <Box
       sx={{
-        bgcolor: '#ef444410',
-        border: `1px solid ${C.red}44`,
-        borderRadius: '10px',
+        bgcolor: 'rgba(255,61,87,0.06)',
+        border: `1px solid rgba(255,61,87,0.28)`,
+        borderRadius: '2px',
         p: '20px',
         display: 'flex',
         flexDirection: 'column',
@@ -376,15 +385,17 @@ function ErrorDisplay({ error, onRetry, t }) {
         sx={{
           px: '20px',
           py: '8px',
-          border: `1px solid ${C.red}`,
-          borderRadius: '7px',
-          bgcolor: 'transparent',
-          color: C.red,
-          fontFamily: LABEL,
-          fontSize: '0.78rem',
-          fontWeight: 600,
-          cursor: 'pointer',
-          '&:hover': { bgcolor: `${C.red}15` },
+          border:        `1px solid ${C.red}`,
+          borderRadius:  '2px',
+          bgcolor:       'transparent',
+          color:         C.red,
+          fontFamily:    BARLOW,
+          fontSize:      '0.8rem',
+          fontWeight:    700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          cursor:        'pointer',
+          '&:hover':     { bgcolor: 'rgba(255,61,87,0.1)' },
         }}
       >
         {t.retry}
@@ -430,9 +441,9 @@ function NoCreditsMessage({ lang }) {
   return (
     <Box
       sx={{
-        bgcolor:      '#ef444410',
-        border:       `1px solid #ef444444`,
-        borderRadius: '10px',
+        bgcolor:      'rgba(255,61,87,0.06)',
+        border:       `1px solid rgba(255,61,87,0.28)`,
+        borderRadius: '2px',
         p:            '14px 20px',
         textAlign:    'center',
       }}
@@ -453,22 +464,27 @@ function RunButton({ canAnalyze, loading, onClick, t }) {
       component="button"
       onClick={active ? onClick : undefined}
       sx={{
-        width: '100%',
-        py: '12px',
-        border: `1px solid ${active ? C.accent : C.cardBorder}`,
-        borderRadius: '8px',
-        background: active
-          ? `linear-gradient(135deg, ${C.accent} 0%, #d97706 100%)`
+        width:         '100%',
+        py:            '14px',
+        border:        `1px solid ${active ? C.accent : C.cardBorder}`,
+        borderRadius:  '2px',
+        background:    active
+          ? `linear-gradient(135deg, ${C.accent} 0%, ${C.accentSec} 100%)`
           : C.cardBg,
-        color: active ? '#0a0e17' : C.textMuted,
-        fontFamily: LABEL,
-        fontSize: '0.875rem',
-        fontWeight: 700,
-        cursor: active ? 'pointer' : 'not-allowed',
-        letterSpacing: '0.02em',
-        transition: 'all 0.2s',
-        '&:hover': active
-          ? { transform: 'translateY(-1px)', boxShadow: `0 4px 20px ${C.accent}44` }
+        color:         active ? '#ffffff' : C.textMuted,
+        fontFamily:    BARLOW,
+        fontSize:      '0.95rem',
+        fontWeight:    800,
+        cursor:        active ? 'pointer' : 'not-allowed',
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+        transition:    'all 0.2s',
+        boxShadow:     active ? '0 0 0 0 rgba(0,102,255,0)' : 'none',
+        '&:hover':     active
+          ? {
+              transform: 'translateY(-1px)',
+              boxShadow: '0 4px 24px rgba(0,102,255,0.45), 0 0 40px rgba(0,212,255,0.15)',
+            }
           : {},
       }}
     >
@@ -689,7 +705,7 @@ export default function AnalysisPanel({
         sx={{
           bgcolor: C.cardBg,
           border: `1px solid ${C.cardBorder}`,
-          borderRadius: '10px',
+          borderRadius: '2px',
           p: '20px',
           display: 'flex',
           flexDirection: 'column',

@@ -3,23 +3,26 @@ import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:              '#0a0e17',
-  cardBg:          '#111827',
-  cardBorder:      '#1e293b',
-  selectedBorder:  '#f59e0b',
-  accent:          '#f59e0b',
-  accentDim:       '#f59e0b22',
-  accentLine:      '#f59e0b44',
-  textPrimary:     '#f1f5f9',
-  textMuted:       '#94a3b8',
-  scheduledGreen:  '#22c55e',
-  liveOrange:      '#f97316',
-  finalRed:        '#ef4444',
-  scheduledGray:   '#64748b',
+  bg:             '#04080F',
+  bgSec:          '#080D1A',
+  cardBg:         '#0D1424',
+  cardBorder:     '#1A2540',
+  selectedBorder: '#0066FF',
+  accent:         '#0066FF',
+  accentSec:      '#00D4FF',
+  accentDim:      'rgba(0,102,255,0.08)',
+  accentLine:     'rgba(0,102,255,0.25)',
+  textPrimary:    '#E8EDF5',
+  textMuted:      '#5A7090',
+  scheduledGreen: '#00E676',
+  liveOrange:     '#FF9800',
+  finalRed:       '#FF3D57',
+  scheduledGray:  '#5A7090',
 };
 
-const MONO  = '"JetBrains Mono", "Fira Code", "Courier New", monospace';
-const LABEL = '"Outfit", "Inter", system-ui, sans-serif';
+const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
+const MONO   = '"JetBrains Mono", "Fira Code", "Courier New", monospace';
+const LABEL  = '"DM Sans", system-ui, sans-serif';
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
@@ -154,7 +157,7 @@ function TeamLogo({ teamId, abbr }) {
       src={`https://www.mlb.com/team-logos/${teamId}.svg`}
       alt={abbr}
       onError={() => setFailed(true)}
-      sx={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0 }}
+      sx={{ width: 42, height: 42, objectFit: 'contain', flexShrink: 0 }}
     />
   );
 }
@@ -172,21 +175,22 @@ function StatusBadge({ status, t }) {
     <Box
       component="span"
       sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '5px',
-        px: '7px',
-        py: '2px',
-        borderRadius: '4px',
-        bgcolor: `${color}1a`,
-        border: `1px solid ${color}44`,
-        fontFamily: LABEL,
-        fontSize: '0.6rem',
-        fontWeight: 700,
+        display:       'inline-flex',
+        alignItems:    'center',
+        gap:           '5px',
+        px:            '7px',
+        py:            '2px',
+        borderRadius:  '2px',
+        // SCHEDULED: outlined (transparent bg), others: subtle fill
+        bgcolor:       status === 'scheduled' ? 'transparent' : `${color}18`,
+        border:        `1px solid ${color}${status === 'scheduled' ? '88' : '44'}`,
+        fontFamily:    BARLOW,
+        fontSize:      '0.62rem',
+        fontWeight:    700,
         color,
-        letterSpacing: '0.08em',
+        letterSpacing: '0.1em',
         textTransform: 'uppercase',
-        flexShrink: 0,
+        flexShrink:    0,
       }}
     >
       {pulse && (
@@ -225,31 +229,35 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
   // Games that have started/ended cannot be selected at all
   const blocked = status !== 'scheduled';
 
-  const borderColor = isSelected   ? C.selectedBorder
-    : status === 'live'            ? C.liveOrange
-    : C.cardBorder;
+  const leftBorderColor = isSelected
+    ? C.selectedBorder
+    : status === 'live'
+      ? C.liveOrange
+      : 'transparent';
 
   const boxShadow = isSelected
-    ? `0 0 0 1px ${C.selectedBorder}50, 0 4px 24px ${C.selectedBorder}18`
+    ? `0 0 16px rgba(0,102,255,0.18)`
     : status === 'live'
-      ? `0 0 0 1px ${C.liveOrange}30`
+      ? `0 0 8px rgba(255,152,0,0.15)`
       : 'none';
 
   return (
     <Box
       onClick={blocked ? undefined : onClick}
       sx={{
-        bgcolor: C.cardBg,
-        border: `1.5px solid ${borderColor}`,
-        borderRadius: '10px',
-        p: '14px',
-        cursor: blocked ? 'not-allowed' : 'pointer',
-        opacity: status === 'final' ? 0.5 : 1,
-        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.12s, opacity 0.15s',
+        bgcolor:      C.cardBg,
+        border:       `1px solid ${C.cardBorder}`,
+        borderLeft:   `3px solid ${leftBorderColor}`,
+        borderRadius: '2px',
+        p:            '14px',
+        cursor:       blocked ? 'not-allowed' : 'pointer',
+        opacity:      status === 'final' ? 0.5 : 1,
+        transition:   'border-color 0.15s, box-shadow 0.15s, transform 0.12s, opacity 0.15s',
         boxShadow,
         '&:hover': blocked ? {} : {
-          borderColor: isSelected ? C.selectedBorder : '#2d3f55',
-          transform: 'translateY(-2px)',
+          borderLeftColor: isSelected ? C.selectedBorder : C.accent,
+          transform:       'translateY(-1px)',
+          boxShadow:       isSelected ? boxShadow : '0 4px 16px rgba(0,102,255,0.1)',
         },
       }}
     >
@@ -375,13 +383,13 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.58rem',
-              color: C.textMuted,
-              fontWeight: 700,
-              mb: '3px',
+              fontFamily:    BARLOW,
+              fontSize:      '0.6rem',
+              color:         C.textMuted,
+              fontWeight:    700,
+              mb:            '3px',
               textTransform: 'uppercase',
-              letterSpacing: '0.07em',
+              letterSpacing: '0.1em',
             }}
           >
             {t.awaySP}
@@ -404,13 +412,13 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         <Box sx={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.58rem',
-              color: C.textMuted,
-              fontWeight: 700,
-              mb: '3px',
+              fontFamily:    BARLOW,
+              fontSize:      '0.6rem',
+              color:         C.textMuted,
+              fontWeight:    700,
+              mb:            '3px',
               textTransform: 'uppercase',
-              letterSpacing: '0.07em',
+              letterSpacing: '0.1em',
             }}
           >
             {t.homeSP}
@@ -445,18 +453,20 @@ function AnalyzeButton({ canAnalyze, analyzing, onClick, t }) {
         px: 2,
         mt: 3,
         border: `1px solid ${active ? C.accent : C.cardBorder}`,
-        borderRadius: '8px',
+        borderRadius: '2px',
         background: active
-          ? `linear-gradient(135deg, ${C.accent} 0%, #d97706 100%)`
+          ? `linear-gradient(135deg, ${C.accent} 0%, ${C.accentSec} 100%)`
           : C.cardBg,
-        color: active ? '#0a0e17' : C.textMuted,
-        fontFamily: LABEL,
-        fontSize: '0.875rem',
-        fontWeight: 700,
+        color: active ? '#fff' : C.textMuted,
+        fontFamily:    BARLOW,
+        fontSize:      '0.9rem',
+        fontWeight:    700,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
         cursor: active ? 'pointer' : 'not-allowed',
         transition: 'all 0.2s',
         '&:hover': active
-          ? { transform: 'translateY(-1px)', boxShadow: `0 4px 16px ${C.accent}44` }
+          ? { transform: 'translateY(-1px)', boxShadow: `0 4px 20px rgba(0,102,255,0.35)` }
           : {},
       }}
     >
@@ -593,7 +603,7 @@ export default function GameSelector({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <Box sx={{ bgcolor: C.bg, p: 2 }}>
+    <Box sx={{ bgcolor: C.bg, p: 2, minHeight: '100%' }}>
 
       {/* ── Header: title + date picker ── */}
       <Box
@@ -607,11 +617,13 @@ export default function GameSelector({
       >
         <Typography
           sx={{
-            fontFamily: LABEL,
-            fontSize: '1rem',
-            fontWeight: 700,
-            color: C.textPrimary,
-            flexShrink: 0,
+            fontFamily:    BARLOW,
+            fontSize:      '1.1rem',
+            fontWeight:    800,
+            color:         C.textPrimary,
+            flexShrink:    0,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
           }}
         >
           {t.title}
@@ -624,7 +636,7 @@ export default function GameSelector({
           style={{
             background: C.cardBg,
             border: `1px solid ${C.cardBorder}`,
-            borderRadius: '6px',
+            borderRadius: '2px',
             color: C.textPrimary,
             fontFamily: MONO,
             fontSize: '0.72rem',
@@ -686,7 +698,7 @@ export default function GameSelector({
             sx={{
               bgcolor: selectedIds.size >= 2 ? C.accentDim : C.cardBg,
               border: `1px solid ${selectedIds.size >= 2 ? C.accentLine : C.cardBorder}`,
-              borderRadius: '6px',
+              borderRadius: '2px',
               px: 1.5,
               py: '3px',
               fontFamily: MONO,
@@ -716,7 +728,7 @@ export default function GameSelector({
               key={i}
               variant="rectangular"
               height={165}
-              sx={{ borderRadius: '10px', bgcolor: C.cardBg, transform: 'none' }}
+              sx={{ borderRadius: '2px', bgcolor: C.cardBg, transform: 'none' }}
             />
           ))}
         </Box>
