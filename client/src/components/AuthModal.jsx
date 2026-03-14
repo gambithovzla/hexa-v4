@@ -179,21 +179,26 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     <Box
       onClick={handleBackdropClick}
       sx={{
-        position:   'fixed',
-        inset:      0,
-        zIndex:     2000,
-        display:    'flex',
-        alignItems: 'center',
+        position:       'fixed',
+        inset:          0,
+        zIndex:         2000,
+        display:        'flex',
+        alignItems:     'center',
         justifyContent: 'center',
-        bgcolor:    C.overlay,
+        bgcolor:        C.overlay,
         backdropFilter: 'blur(4px)',
-        p:          '16px',
+        overflowY:      'auto',
+        p:              '16px',
       }}
     >
       <Box
         sx={{
           width:        '100%',
           maxWidth:     '400px',
+          maxHeight:    '90vh',
+          overflowY:    'auto',
+          flexShrink:   0,
+          my:           'auto',
           bgcolor:      C.cardBg,
           border:       `1px solid ${C.cardBorder}`,
           borderRadius: '14px',
