@@ -6,6 +6,13 @@
  *   POST /api/auth/login    — validate credentials, return JWT
  *   GET  /api/auth/me       — return current user (protected)
  *
+ * Bankroll routes (mounted at /api/bankroll):
+ *   GET    /api/bankroll            — get bankroll data
+ *   POST   /api/bankroll/setup      — initialize bankroll
+ *   POST   /api/bankroll/bet        — add a bet
+ *   PATCH  /api/bankroll/bet/:betId — update bet result
+ *   DELETE /api/bankroll/bet/:betId — remove a bet
+ *
  * Users are stored in server/users.db.json as a flat JSON array.
  * New users start with 10 free credits.
  */
@@ -54,7 +61,26 @@ function safeUser(user) {
   return rest;
 }
 
-// ── Router ────────────────────────────────────────────────────────────────────
+// ── Bankroll helpers ──────────────────────────────────────────────────────────
+
+function calcPotentialWin(stake, odds) {
+  const s = Number(stake);
+  const o = Number(odds);
+  if (!s || !o || !isFinite(o)) return 0;
+  return o > 0
+    ? parseFloat((s * (o / 100)).toFixed(2))
+    : parseFloat((s * (100 / Math.abs(o))).toFixed(2));
+}
+
+function getBankrollData(user) {
+  return {
+    initialBankroll:  user.initialBankroll  ?? null,
+    currentBankroll:  user.currentBankroll  ?? null,
+    bets:             user.bets             ?? [],
+  };
+}
+
+// ── Auth Router ───────────────────────────────────────────────────────────────
 
 const router = Router();
 
@@ -80,11 +106,14 @@ router.post('/register', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const newUser = {
-      id:           randomUUID(),
-      email:        email.toLowerCase().trim(),
+      id:              randomUUID(),
+      email:           email.toLowerCase().trim(),
       passwordHash,
-      createdAt:    new Date().toISOString(),
-      credits:      10,
+      createdAt:       new Date().toISOString(),
+      credits:         10,
+      initialBankroll: null,
+      currentBankroll: null,
+      bets:            [],
     };
 
     users.push(newUser);
@@ -142,3 +171,163 @@ router.get('/me', verifyToken, (req, res) => {
 });
 
 export default router;
+
+// ── Bankroll Router (mounted at /api/bankroll) ────────────────────────────────
+
+export const bankrollRouter = Router();
+
+// GET /api/bankroll
+bankrollRouter.get('/', verifyToken, (req, res) => {
+  try {
+    const users = readUsers();
+    const user  = users.find(u => u.id === req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({ success: true, data: getBankrollData(user) });
+  } catch (err) {
+    console.error('[bankroll] GET error:', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/bankroll/setup
+bankrollRouter.post('/setup', verifyToken, (req, res) => {
+  try {
+    const { initialBankroll } = req.body ?? {};
+    const amount = Number(initialBankroll);
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'initialBankroll must be a positive number' });
+    }
+
+    const users = readUsers();
+    const idx   = users.findIndex(u => u.id === req.user.id);
+    if (idx === -1) return res.status(404).json({ error: 'User not found' });
+
+    if (users[idx].initialBankroll !== null && users[idx].initialBankroll !== undefined) {
+      return res.status(409).json({ error: 'Bankroll already initialized' });
+    }
+
+    users[idx].initialBankroll = amount;
+    users[idx].currentBankroll = amount;
+    users[idx].bets            = users[idx].bets ?? [];
+    writeUsers(users);
+
+    return res.json({ success: true, data: getBankrollData(users[idx]) });
+  } catch (err) {
+    console.error('[bankroll] setup error:', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/bankroll/bet
+bankrollRouter.post('/bet', verifyToken, (req, res) => {
+  try {
+    const { matchup, pick, odds, stake, source = 'manual', notes = '' } = req.body ?? {};
+
+    if (!matchup || !pick || odds == null || !stake) {
+      return res.status(400).json({ error: 'matchup, pick, odds, and stake are required' });
+    }
+    if (Number(stake) <= 0) {
+      return res.status(400).json({ error: 'stake must be positive' });
+    }
+
+    const users = readUsers();
+    const idx   = users.findIndex(u => u.id === req.user.id);
+    if (idx === -1) return res.status(404).json({ error: 'User not found' });
+
+    const potentialWin = calcPotentialWin(stake, odds);
+
+    const bet = {
+      id:           `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date:         new Date().toISOString(),
+      matchup:      String(matchup),
+      pick:         String(pick),
+      odds:         Number(odds),
+      stake:        Number(stake),
+      potentialWin,
+      result:       'pending',
+      source:       source === 'hexa' ? 'hexa' : 'manual',
+      notes:        String(notes ?? ''),
+    };
+
+    users[idx].bets = users[idx].bets ?? [];
+    users[idx].bets.push(bet);
+    writeUsers(users);
+
+    return res.json({ success: true, data: getBankrollData(users[idx]) });
+  } catch (err) {
+    console.error('[bankroll] add bet error:', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/bankroll/bet/:betId
+bankrollRouter.patch('/bet/:betId', verifyToken, (req, res) => {
+  try {
+    const { betId }  = req.params;
+    const { result } = req.body ?? {};
+
+    if (!['pending', 'won', 'lost'].includes(result)) {
+      return res.status(400).json({ error: 'result must be pending, won, or lost' });
+    }
+
+    const users = readUsers();
+    const idx   = users.findIndex(u => u.id === req.user.id);
+    if (idx === -1) return res.status(404).json({ error: 'User not found' });
+
+    const bets   = users[idx].bets ?? [];
+    const betIdx = bets.findIndex(b => b.id === betId);
+    if (betIdx === -1) return res.status(404).json({ error: 'Bet not found' });
+
+    const bet         = bets[betIdx];
+    const prevResult  = bet.result;
+    let bankroll      = users[idx].currentBankroll ?? users[idx].initialBankroll ?? 0;
+
+    // Reverse previous effect
+    if (prevResult === 'won')  bankroll -= bet.potentialWin;
+    if (prevResult === 'lost') bankroll += bet.stake;
+
+    // Apply new effect
+    if (result === 'won')  bankroll += bet.potentialWin;
+    if (result === 'lost') bankroll -= bet.stake;
+
+    bets[betIdx].result       = result;
+    users[idx].bets           = bets;
+    users[idx].currentBankroll = parseFloat(bankroll.toFixed(2));
+    writeUsers(users);
+
+    return res.json({ success: true, data: getBankrollData(users[idx]) });
+  } catch (err) {
+    console.error('[bankroll] update bet error:', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/bankroll/bet/:betId
+bankrollRouter.delete('/bet/:betId', verifyToken, (req, res) => {
+  try {
+    const { betId } = req.params;
+
+    const users = readUsers();
+    const idx   = users.findIndex(u => u.id === req.user.id);
+    if (idx === -1) return res.status(404).json({ error: 'User not found' });
+
+    const bets   = users[idx].bets ?? [];
+    const bet    = bets.find(b => b.id === betId);
+    if (!bet) return res.status(404).json({ error: 'Bet not found' });
+
+    // Reverse the bet's effect on bankroll before deleting
+    let bankroll = users[idx].currentBankroll ?? users[idx].initialBankroll ?? 0;
+    if (bet.result === 'won')  bankroll -= bet.potentialWin;
+    if (bet.result === 'lost') bankroll += bet.stake;
+
+    users[idx].bets            = bets.filter(b => b.id !== betId);
+    users[idx].currentBankroll = parseFloat(bankroll.toFixed(2));
+    writeUsers(users);
+
+    return res.json({ success: true, data: getBankrollData(users[idx]) });
+  } catch (err) {
+    console.error('[bankroll] delete bet error:', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
