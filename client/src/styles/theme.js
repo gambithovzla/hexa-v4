@@ -1,88 +1,96 @@
 /**
  * MUI theme configuration for Hexa Oracle
- * Dark baseball-inspired palette
+ * Premium Sports Intelligence Platform palette
  */
 
 export const theme = {
   palette: {
     mode: 'dark',
     primary: {
-      main: '#0A84FF',      // Electric blue
-      light: '#5AC8FA',
-      dark: '#0060CC',
+      main:  '#0066FF',
+      light: '#00D4FF',
+      dark:  '#0050CC',
     },
     secondary: {
-      main: '#FF375F',      // MLB red accent
-      light: '#FF6B8A',
-      dark: '#CC002E',
+      main:  '#00D4FF',
+      light: '#66E5FF',
+      dark:  '#00A0C0',
     },
     success: {
-      main: '#34C759',
+      main: '#00E676',
     },
     warning: {
-      main: '#FF9F0A',
+      main: '#FF9800',
     },
     error: {
-      main: '#FF3B30',
+      main: '#FF3D57',
     },
     background: {
-      default: '#0D0D0D',
-      paper: '#1A1A2E',
+      default: '#04080F',
+      paper:   '#0D1424',
     },
     text: {
-      primary: '#F5F5F7',
-      secondary: '#A1A1AA',
+      primary:   '#E8EDF5',
+      secondary: '#5A7090',
     },
-    divider: 'rgba(255,255,255,0.08)',
+    divider: 'rgba(26,37,64,0.8)',
   },
   typography: {
-    fontFamily: '"Inter", "SF Pro Display", system-ui, sans-serif',
-    h6: { fontWeight: 700 },
+    fontFamily: '"DM Sans", system-ui, sans-serif',
+    h6:        { fontWeight: 700, fontFamily: '"Barlow Condensed", system-ui, sans-serif' },
     subtitle1: { fontWeight: 600 },
   },
   shape: {
-    borderRadius: 10,
+    borderRadius: 2,
   },
   components: {
     MuiCard: {
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          border: '1px solid rgba(255,255,255,0.08)',
+          border:          '1px solid #1A2540',
+          borderRadius:    2,
         },
       },
     },
     MuiAppBar: {
       styleOverrides: {
         root: {
-          background: 'linear-gradient(135deg, #0D0D0D 0%, #1A1A2E 100%)',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          background:   '#04080F',
+          borderBottom: '1px solid #1A2540',
         },
       },
     },
     MuiButton: {
       styleOverrides: {
         root: {
-          textTransform: 'none',
-          fontWeight: 600,
-          borderRadius: 8,
+          textTransform: 'uppercase',
+          fontWeight:    700,
+          borderRadius:  2,
+          fontFamily:    '"Barlow Condensed", system-ui, sans-serif',
+          letterSpacing: '0.06em',
         },
         containedPrimary: {
-          background: 'linear-gradient(135deg, #0A84FF 0%, #0060CC 100%)',
+          background: 'linear-gradient(135deg, #0066FF 0%, #00D4FF 100%)',
           '&:hover': {
-            background: 'linear-gradient(135deg, #5AC8FA 0%, #0A84FF 100%)',
+            background: 'linear-gradient(135deg, #0050CC 0%, #0066FF 100%)',
           },
         },
       },
     },
     MuiChip: {
       styleOverrides: {
-        root: { fontWeight: 600 },
+        root: { fontWeight: 700, borderRadius: 2 },
       },
     },
     MuiTab: {
       styleOverrides: {
-        root: { textTransform: 'none' },
+        root: {
+          textTransform: 'uppercase',
+          fontFamily:    '"Barlow Condensed", system-ui, sans-serif',
+          fontWeight:    700,
+          letterSpacing: '0.06em',
+        },
       },
     },
   },

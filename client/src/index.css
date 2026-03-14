@@ -1,0 +1,53 @@
+/* ── H.E.X.A. V4 — Global Styles ─────────────────────────────────────────── */
+
+/* CSS custom properties */
+:root {
+  --bg-primary:   #04080F;
+  --bg-secondary: #080D1A;
+  --bg-card:      #0D1424;
+  --border:       #1A2540;
+  --accent:       #0066FF;
+  --accent-2:     #00D4FF;
+  --text-primary: #E8EDF5;
+  --text-muted:   #5A7090;
+  --success:      #00E676;
+  --warning:      #FF9800;
+  --danger:       #FF3D57;
+  --gold:         #FFB800;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin:      0;
+  padding:     0;
+  background:  #04080F;
+  color:       #E8EDF5;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle graph-paper grid background */
+body {
+  background-image:
+    linear-gradient(rgba(0, 102, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 102, 255, 0.018) 1px, transparent 1px);
+  background-size:     40px 40px;
+  background-position: 0 0;
+  min-height: 100vh;
+}
+
+/* Thin dark scrollbars — webkit */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #080D1A; }
+::-webkit-scrollbar-thumb { background: #1A2540; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 102, 255, 0.35); }
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1A2540 #080D1A;
+}

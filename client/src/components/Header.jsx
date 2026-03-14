@@ -17,15 +17,20 @@ import { useAuth } from '../store/authStore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MONO  = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL = '"Outfit", "Inter", system-ui, sans-serif';
+const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
+const DM     = '"DM Sans", system-ui, sans-serif';
+const MONO   = '"JetBrains Mono", "Fira Code", monospace';
 
 const C = {
-  bg:         '#0a0e17',
-  border:     '#1e293b',
-  accent:     '#f59e0b',
-  accentFade: '#f59e0b09',
-  textMuted:  '#94a3b8',
+  bg:         '#04080F',
+  bgSec:      '#080D1A',
+  border:     '#1A2540',
+  accent:     '#0066FF',
+  accentSec:  '#00D4FF',
+  accentFade: 'rgba(0,102,255,0.06)',
+  textPrimary:'#E8EDF5',
+  textMuted:  '#5A7090',
+  gold:       '#FFB800',
 };
 
 const SUBTITLE = {
@@ -33,7 +38,6 @@ const SUBTITLE = {
   es: 'El Oráculo MLB',
 };
 
-// Tab order: Single Game → Full Day → Parlay → History
 const TABS = [
   { value: 'game',    en: 'Single Game',    es: 'Juego Individual' },
   { value: 'fullday', en: 'Full Day',        es: 'Día Completo'     },
@@ -43,10 +47,8 @@ const TABS = [
 
 // ── Statcast badge ────────────────────────────────────────────────────────────
 
-const MONO_FONT = '"JetBrains Mono", "Fira Code", monospace';
-
 function StatcastBadge({ lang }) {
-  const [status, setStatus]   = useState(null);   // null = loading/failed
+  const [status, setStatus]   = useState(null);
   const [hovered, setHovered] = useState(false);
   const [spinning, setSpinning] = useState(false);
 
@@ -90,7 +92,6 @@ function StatcastBadge({ lang }) {
 
   const hasData = total > 0;
 
-  // Format time HH:MM from ISO string
   let timeStr = '';
   if (status.lastUpdated) {
     try {
@@ -99,49 +100,66 @@ function StatcastBadge({ lang }) {
     } catch { /* ignore */ }
   }
 
-  const dot   = hasData ? '🟢' : '🔴';
-  const label = hasData
-    ? (isEs ? `Statcast: ${total} registros${timeStr ? ` · ${timeStr}` : ''}` : `Statcast: ${total} records${timeStr ? ` · ${timeStr}` : ''}`)
-    : (isEs ? 'Statcast: Sin datos' : 'Statcast: No data');
+  const dotColor = hasData ? '#00E676' : '#FF3D57';
+  const statusLabel = hasData
+    ? (isEs ? 'STATCAST EN VIVO' : 'STATCAST LIVE')
+    : (isEs ? 'STATCAST OFFLINE' : 'STATCAST OFFLINE');
 
   return (
     <Box
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      sx={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
+      sx={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}
     >
+      {/* Dot indicator */}
+      <Box
+        sx={{
+          width:        6,
+          height:       6,
+          borderRadius: '50%',
+          bgcolor:      dotColor,
+          flexShrink:   0,
+          ...(hasData && {
+            '@keyframes statLive': {
+              '0%, 100%': { opacity: 1, boxShadow: `0 0 0 0 ${dotColor}80` },
+              '50%':      { opacity: 0.8, boxShadow: `0 0 0 4px transparent` },
+            },
+            animation: 'statLive 2s ease-in-out infinite',
+          }),
+        }}
+      />
       <Typography
         sx={{
-          fontFamily:    MONO_FONT,
-          fontSize:      '0.55rem',
-          color:         hasData ? '#64748b' : '#ef444480',
-          letterSpacing: '0.02em',
+          fontFamily:    MONO,
+          fontSize:      '0.52rem',
+          color:         hasData ? '#5A7090' : '#FF3D5780',
+          letterSpacing: '0.08em',
           userSelect:    'none',
           whiteSpace:    'nowrap',
         }}
       >
-        {dot} {label}
+        {statusLabel}{hasData && timeStr ? ` · ${timeStr}` : ''}
       </Typography>
 
-      {/* Refresh button — visible only on hover */}
+      {/* Refresh button */}
       <Box
         component="button"
         onClick={handleRefresh}
         sx={{
-          display:    'inline-flex',
-          alignItems: 'center',
+          display:        'inline-flex',
+          alignItems:     'center',
           justifyContent: 'center',
-          width:      '18px',
-          height:     '18px',
-          p:          0,
-          border:     'none',
-          bgcolor:    'transparent',
-          color:      C.textMuted,
-          cursor:     spinning ? 'default' : 'pointer',
-          opacity:    hovered ? 0.7 : 0,
-          transition: 'opacity 0.15s',
-          fontSize:   '0.7rem',
-          lineHeight: 1,
+          width:          '18px',
+          height:         '18px',
+          p:              0,
+          border:         'none',
+          bgcolor:        'transparent',
+          color:          C.textMuted,
+          cursor:         spinning ? 'default' : 'pointer',
+          opacity:        hovered ? 0.7 : 0,
+          transition:     'opacity 0.15s',
+          fontSize:       '0.7rem',
+          lineHeight:     1,
           '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
           ...(spinning && { animation: 'spin 0.8s linear infinite' }),
           '&:hover': { opacity: hovered ? 1 : 0 },
@@ -170,20 +188,22 @@ function AuthButton({ lang }) {
           component="button"
           onClick={() => setModalOpen(true)}
           sx={{
-            px:           '12px',
-            py:           '5px',
-            border:       `1px solid ${C.accent}`,
-            borderRadius: '6px',
-            bgcolor:      C.accentFade,
-            color:        C.accent,
-            fontFamily:   LABEL,
-            fontSize:     '0.72rem',
-            fontWeight:   700,
-            cursor:       'pointer',
-            whiteSpace:   'nowrap',
-            flexShrink:   0,
-            transition:   'all 0.15s',
-            '&:hover':    { bgcolor: `${C.accent}20` },
+            px:            '14px',
+            py:            '5px',
+            border:        `1px solid ${C.accent}`,
+            borderRadius:  '2px',
+            bgcolor:       C.accentFade,
+            color:         C.accent,
+            fontFamily:    BARLOW,
+            fontSize:      '0.75rem',
+            fontWeight:    700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            cursor:        'pointer',
+            whiteSpace:    'nowrap',
+            flexShrink:    0,
+            transition:    'all 0.15s',
+            '&:hover':     { bgcolor: 'rgba(0,102,255,0.12)', color: C.accentSec },
           }}
         >
           {isEs ? 'Iniciar sesión' : 'Sign In'}
@@ -193,7 +213,6 @@ function AuthButton({ lang }) {
     );
   }
 
-  // Authenticated — show email (truncated) + credits + logout
   const shortEmail = user?.email
     ? (user.email.length > 18 ? user.email.slice(0, 16) + '…' : user.email)
     : '—';
@@ -209,15 +228,15 @@ function AuthButton({ lang }) {
           px:           '10px',
           py:           '4px',
           border:       `1px solid ${C.border}`,
-          borderRadius: '6px',
-          bgcolor:      '#0f172a',
+          borderRadius: '2px',
+          bgcolor:      '#080D1A',
         }}
       >
-        <Typography sx={{ fontFamily: MONO_FONT, fontSize: '0.6rem', color: C.textMuted, userSelect: 'none' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, userSelect: 'none' }}>
           {shortEmail}
         </Typography>
         <Box sx={{ width: '1px', height: '10px', bgcolor: C.border }} />
-        <Typography sx={{ fontFamily: MONO_FONT, fontSize: '0.6rem', color: C.accent, fontWeight: 700, userSelect: 'none' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.accent, fontWeight: 700, userSelect: 'none' }}>
           {user?.credits ?? 0} {isEs ? 'créd.' : 'cr.'}
         </Typography>
       </Box>
@@ -238,8 +257,8 @@ function AuthButton({ lang }) {
           color:          C.textMuted,
           cursor:         'pointer',
           fontSize:       '0.8rem',
-          borderRadius:   '4px',
-          '&:hover':      { color: C.textPrimary, bgcolor: '#1e293b' },
+          borderRadius:   '2px',
+          '&:hover':      { color: C.textPrimary, bgcolor: C.border },
         }}
       >
         ⏏
@@ -261,22 +280,33 @@ function TabButton({ tab, active, lang, onClick }) {
         position:      'relative',
         display:       'inline-flex',
         alignItems:    'center',
-        px:            '20px',
-        py:            '11px',
-        background:    active ? 'rgba(245, 158, 11, 0.07)' : 'transparent',
+        px:            '22px',
+        py:            '12px',
+        background:    active ? 'rgba(0,102,255,0.06)' : 'transparent',
         border:        'none',
-        borderBottom:  active ? `2px solid ${C.accent}` : '2px solid transparent',
-        color:         active ? C.accent : C.textMuted,
-        fontFamily:    LABEL,
-        fontSize:      '0.8rem',
-        fontWeight:    active ? 700 : 500,
-        letterSpacing: '0.01em',
+        borderBottom:  active
+          ? '2px solid transparent'
+          : '2px solid transparent',
+        // Gradient underline via background-image trick
+        backgroundImage: active
+          ? 'linear-gradient(#04080F, #04080F), linear-gradient(to right, #0066FF, #00D4FF)'
+          : 'none',
+        backgroundOrigin: 'border-box',
+        backgroundClip:   active ? 'padding-box, border-box' : 'unset',
+        borderBottomStyle: 'solid',
+        borderBottomWidth: '2px',
+        color:         active ? C.accentSec : C.textMuted,
+        fontFamily:    BARLOW,
+        fontSize:      '0.82rem',
+        fontWeight:    700,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
         cursor:        'pointer',
-        transition:    'color 0.15s, background 0.15s, border-color 0.15s',
+        transition:    'color 0.15s, background 0.15s',
         flexShrink:    0,
         '&:hover': {
-          color:      active ? C.accent : '#cbd5e1',
-          background: active ? 'rgba(245, 158, 11, 0.07)' : 'rgba(255,255,255,0.03)',
+          color:      active ? C.accentSec : C.textPrimary,
+          background: active ? 'rgba(0,102,255,0.06)' : 'rgba(255,255,255,0.02)',
         },
       }}
     >
@@ -292,58 +322,85 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
     <Box
       component="header"
       sx={{
-        position:     'sticky',
-        top:          0,
-        zIndex:       1000,
-        background:   `linear-gradient(180deg, ${C.accentFade} 0%, ${C.bg} 100%)`,
-        borderBottom: `1px solid ${C.border}`,
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        // Compensate for transparent gradient — keep bg fully opaque
-        bgcolor:      C.bg,
+        position:   'sticky',
+        top:        0,
+        zIndex:     1000,
+        bgcolor:    C.bg,
+        // Gradient border bottom: blue → cyan
+        borderBottom: '1px solid transparent',
+        backgroundImage:  'linear-gradient(#04080F, #04080F), linear-gradient(to right, #0066FF, #00D4FF)',
+        backgroundOrigin: 'border-box',
+        backgroundClip:   'padding-box, border-box',
+        backdropFilter:      'blur(12px)',
+        WebkitBackdropFilter:'blur(12px)',
       }}
     >
-      {/* ── Top row: logo + subtitle + language toggle ── */}
+      {/* ── Top row: logo + subtitle + controls (target: ~44px of the 72px) ── */}
       <Box
         sx={{
-          display:        'flex',
-          alignItems:     'center',
-          px:             { xs: '16px', sm: '24px' },
-          pt:             '14px',
-          pb:             '8px',
-          gap:            '12px',
+          display:    'flex',
+          alignItems: 'center',
+          px:         { xs: '16px', sm: '24px' },
+          pt:         '16px',
+          pb:         '8px',
+          gap:        '14px',
+          minHeight:  '44px',
         }}
       >
         {/* Logo block */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            <Typography
+              component="span"
+              sx={{
+                fontFamily:    BARLOW,
+                fontSize:      { xs: '22px', sm: '28px' },
+                fontWeight:    800,
+                lineHeight:    1,
+                letterSpacing: '0.15em',
+                background:    'linear-gradient(135deg, #E8EDF5 0%, #A0B8D0 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor:  'transparent',
+                backgroundClip:       'text',
+                userSelect:    'none',
+                textTransform: 'uppercase',
+              }}
+            >
+              H.E.X.A.
+            </Typography>
+            {/* V4 superscript badge */}
+            <Box
+              component="span"
+              sx={{
+                fontFamily:    BARLOW,
+                fontSize:      '0.62rem',
+                fontWeight:    700,
+                color:         '#fff',
+                bgcolor:       C.accent,
+                px:            '4px',
+                py:            '1px',
+                borderRadius:  '2px',
+                letterSpacing: '0.04em',
+                lineHeight:    1,
+                verticalAlign: 'super',
+                userSelect:    'none',
+              }}
+            >
+              V4
+            </Box>
+          </Box>
           <Typography
             component="span"
             sx={{
-              fontFamily: MONO,
-              fontSize:   { xs: '18px', sm: '24px' },
-              fontWeight: 700,
-              lineHeight: 1.1,
-              background: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor:  'transparent',
-              backgroundClip:       'text',
-              display:    'block',
-              userSelect: 'none',
-            }}
-          >
-            ◆ H.E.X.A. V4
-          </Typography>
-          <Typography
-            component="span"
-            sx={{
-              fontFamily:    LABEL,
-              fontSize:      '11px',
-              fontWeight:    500,
+              fontFamily:    BARLOW,
+              fontSize:      '0.62rem',
+              fontWeight:    600,
               color:         C.textMuted,
               textTransform: 'uppercase',
-              letterSpacing: '0.14em',
+              letterSpacing: '0.3em',
               display:       'block',
               mt:            '2px',
+              userSelect:    'none',
             }}
           >
             {SUBTITLE[lang] ?? SUBTITLE.en}
@@ -360,14 +417,13 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         <LanguageToggle lang={lang} onToggle={onLangToggle} />
       </Box>
 
-      {/* ── Tab bar ── */}
+      {/* ── Tab bar (~28px of the 72px) ── */}
       <Box
         sx={{
           display:    'flex',
           alignItems: 'stretch',
           px:         { xs: '4px', sm: '12px' },
           overflowX:  'auto',
-          // Hide scrollbar but keep scrollable on small screens
           scrollbarWidth: 'none',
           '&::-webkit-scrollbar': { display: 'none' },
         }}
