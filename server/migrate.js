@@ -1,0 +1,64 @@
+/**
+ * migrate.js — Create H.E.X.A. V4 tables if they don't already exist.
+ *
+ * Call runMigrations() once on server startup before accepting requests.
+ * All statements are idempotent (IF NOT EXISTS) so they are safe to run
+ * on every deploy.
+ */
+
+import pool from './db.js';
+
+export async function runMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── users ─────────────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id            TEXT        PRIMARY KEY,
+        email         TEXT        UNIQUE NOT NULL,
+        password_hash TEXT        NOT NULL,
+        credits       INTEGER     DEFAULT 10,
+        created_at    TIMESTAMP   DEFAULT NOW()
+      )
+    `);
+
+    // ── bankroll ──────────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bankroll (
+        user_id           TEXT          PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        initial_bankroll  DECIMAL(12,2),
+        current_bankroll  DECIMAL(12,2),
+        updated_at        TIMESTAMP     DEFAULT NOW()
+      )
+    `);
+
+    // ── bets ──────────────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bets (
+        id             TEXT          PRIMARY KEY,
+        user_id        TEXT          REFERENCES users(id) ON DELETE CASCADE,
+        date           TIMESTAMP     DEFAULT NOW(),
+        matchup        TEXT          NOT NULL,
+        pick           TEXT          NOT NULL,
+        odds           INTEGER       NOT NULL,
+        stake          DECIMAL(12,2) NOT NULL,
+        potential_win  DECIMAL(12,2) NOT NULL,
+        result         TEXT          DEFAULT 'pending',
+        source         TEXT          DEFAULT 'manual',
+        notes          TEXT,
+        created_at     TIMESTAMP     DEFAULT NOW()
+      )
+    `);
+
+    await client.query('COMMIT');
+    console.log('[H.E.X.A.] Database migrations applied successfully');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[H.E.X.A.] Migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

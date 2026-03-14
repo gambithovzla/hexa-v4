@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { getTodayGames, getTeams } from './mlb-api.js';
@@ -11,11 +10,12 @@ import { getGameOdds, matchOddsToGame } from './odds-api.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken } from './middleware/auth-middleware.js';
+import { runMigrations } from './migrate.js';
+import pool from './db.js';
 
 dotenv.config();
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH   = path.join(__dirname, 'users.db.json');
+const __dirname = path.dirname(fileURLToPath(import.meta.url)); // eslint-disable-line no-unused-vars
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,37 +29,33 @@ app.use('/api/bankroll',  bankrollRouter);
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
 
-function readUsers() {
-  if (!existsSync(DB_PATH)) return [];
-  try { return JSON.parse(readFileSync(DB_PATH, 'utf8')); } catch { return []; }
-}
-
-function writeUsers(users) {
-  writeFileSync(DB_PATH, JSON.stringify(users, null, 2), 'utf8');
-}
-
 /**
  * deductCredits(req, res, cost)
- * Reads the user from DB, checks credits, deducts `cost`, saves.
- * Returns the updated user or responds with 403 if insufficient credits.
+ * Looks up the user in PostgreSQL, checks credits, deducts `cost` atomically.
+ * Admin account bypasses deduction entirely.
+ * Returns the updated user row, or null after sending an error response.
  */
-function deductCredits(req, res, cost) {
-  const users = readUsers();
-  const idx   = users.findIndex(u => u.id === req.user.id);
-  if (idx === -1) {
+async function deductCredits(req, res, cost) {
+  const { rows } = await pool.query(
+    'SELECT id, email, credits FROM users WHERE id = $1',
+    [req.user.id]
+  );
+  const user = rows[0];
+  if (!user) {
     res.status(401).json({ error: 'Unauthorized' });
     return null;
   }
-  const user = users[idx];
   // Admin account bypasses credit deduction
   if (user.email === 'admin@hexa.com') return user;
   if (user.credits < cost) {
     res.status(403).json({ error: 'No credits remaining' });
     return null;
   }
-  users[idx] = { ...user, credits: user.credits - cost };
-  writeUsers(users);
-  return users[idx];
+  const updated = await pool.query(
+    'UPDATE users SET credits = credits - $1 WHERE id = $2 RETURNING id, email, credits',
+    [cost, user.id]
+  );
+  return updated.rows[0];
 }
 
 // GET /api/games?date=YYYY-MM-DD
@@ -128,7 +124,7 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
       matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     } catch { /* odds are optional */ }
 
-    const updatedUser = deductCredits(req, res, 1);
+    const updatedUser = await deductCredits(req, res, 1);
     if (!updatedUser) return;
 
     const context  = await buildContext(gameData, matchedOdds);
@@ -169,7 +165,7 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
       return matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     });
 
-    const updatedUser = deductCredits(req, res, 2);
+    const updatedUser = await deductCredits(req, res, 2);
     if (!updatedUser) return;
 
     const contexts = await Promise.all(
@@ -209,7 +205,7 @@ app.post('/api/analyze/full-day', verifyToken, async (req, res) => {
     let allOdds = [];
     try { allOdds = await getGameOdds(); } catch { /* optional */ }
 
-    const updatedUser = deductCredits(req, res, 3);
+    const updatedUser = await deductCredits(req, res, 3);
     if (!updatedUser) return;
 
     const contexts = await Promise.all(
@@ -244,32 +240,40 @@ app.post('/api/savant/refresh', async (_req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Hexa-v4 server running on http://localhost:${PORT}`);
-  seedAdminUser().catch(err => console.error('[H.E.X.A.] Admin seed failed:', err.message));
+// ── Startup: run migrations → seed admin → start server ───────────────────────
+runMigrations()
+  .then(() => seedAdminUser())
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Hexa-v4 server running on http://localhost:${PORT}`);
 
-  // ── Statcast cache warm-up (non-blocking) ──────────────────────────────
-  console.log('[H.E.X.A.] Warming up Statcast cache...');
-  refreshCache()
-    .then(status => {
-      const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
-      console.log(`[H.E.X.A.] Statcast cache ready: ${total} records loaded`);
-    })
-    .catch(err => {
-      console.warn('[H.E.X.A.] Statcast warm-up failed (will retry on first request):', err.message);
+      // ── Statcast cache warm-up (non-blocking) ────────────────────────────
+      console.log('[H.E.X.A.] Warming up Statcast cache...');
+      refreshCache()
+        .then(status => {
+          const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
+          console.log(`[H.E.X.A.] Statcast cache ready: ${total} records loaded`);
+        })
+        .catch(err => {
+          console.warn('[H.E.X.A.] Statcast warm-up failed (will retry on first request):', err.message);
+        });
+
+      // ── Auto-refresh every 6 hours ───────────────────────────────────────
+      const SIX_HOURS = 6 * 60 * 60 * 1000;
+      setInterval(() => {
+        console.log('[H.E.X.A.] Refreshing Statcast cache (scheduled)...');
+        refreshCache()
+          .then(status => {
+            const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
+            console.log(`[H.E.X.A.] Statcast cache refreshed: ${total} records`);
+          })
+          .catch(err => {
+            console.warn('[H.E.X.A.] Scheduled Statcast refresh failed:', err.message);
+          });
+      }, SIX_HOURS).unref();
     });
-
-  // ── Auto-refresh every 6 hours ─────────────────────────────────────────
-  const SIX_HOURS = 6 * 60 * 60 * 1000;
-  setInterval(() => {
-    console.log('[H.E.X.A.] Refreshing Statcast cache (scheduled)...');
-    refreshCache()
-      .then(status => {
-        const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
-        console.log(`[H.E.X.A.] Statcast cache refreshed: ${total} records`);
-      })
-      .catch(err => {
-        console.warn('[H.E.X.A.] Scheduled Statcast refresh failed:', err.message);
-      });
-  }, SIX_HOURS).unref(); // .unref() so the interval doesn't keep the process alive if everything else exits
-});
+  })
+  .catch(err => {
+    console.error('[H.E.X.A.] Startup failed:', err.message);
+    process.exit(1);
+  });

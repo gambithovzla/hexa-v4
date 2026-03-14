@@ -13,38 +13,18 @@
  *   PATCH  /api/bankroll/bet/:betId — update bet result
  *   DELETE /api/bankroll/bet/:betId — remove a bet
  *
- * Users are stored in server/users.db.json as a flat JSON array.
- * New users start with 10 free credits.
+ * Storage: PostgreSQL via pool from db.js.
+ * All queries use parameterized statements ($1, $2, …) — no string interpolation.
  */
 
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import path from 'path';
 import { randomUUID } from 'crypto';
+import pool from './db.js';
 import { verifyToken } from './middleware/auth-middleware.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH   = path.join(__dirname, 'users.db.json');
-
-// ── DB helpers ────────────────────────────────────────────────────────────────
-
-function readUsers() {
-  if (!existsSync(DB_PATH)) return [];
-  try {
-    return JSON.parse(readFileSync(DB_PATH, 'utf8'));
-  } catch {
-    return [];
-  }
-}
-
-function writeUsers(users) {
-  writeFileSync(DB_PATH, JSON.stringify(users, null, 2), 'utf8');
-}
-
-// ── Token helper ──────────────────────────────────────────────────────────────
+// ── Token helpers ──────────────────────────────────────────────────────────────
 
 function signToken(user) {
   const secret = process.env.JWT_SECRET;
@@ -56,12 +36,17 @@ function signToken(user) {
   );
 }
 
-function safeUser(user) {
-  const { passwordHash, ...rest } = user; // eslint-disable-line no-unused-vars
-  return rest;
+/** Strip password_hash before sending to client */
+function safeUser(row) {
+  return {
+    id:        row.id,
+    email:     row.email,
+    credits:   Number(row.credits),
+    createdAt: row.created_at,
+  };
 }
 
-// ── Bankroll helpers ──────────────────────────────────────────────────────────
+// ── Bankroll helpers ───────────────────────────────────────────────────────────
 
 function calcPotentialWin(stake, odds) {
   const s = Number(stake);
@@ -72,15 +57,42 @@ function calcPotentialWin(stake, odds) {
     : parseFloat((s * (100 / Math.abs(o))).toFixed(2));
 }
 
-function getBankrollData(user) {
+/**
+ * Load bankroll + bets for a user and return the standard shape.
+ * Returns { initialBankroll, currentBankroll, bets }.
+ */
+async function getBankrollData(userId) {
+  const brRes = await pool.query(
+    'SELECT initial_bankroll, current_bankroll FROM bankroll WHERE user_id = $1',
+    [userId]
+  );
+  const br = brRes.rows[0] ?? null;
+
+  const betsRes = await pool.query(
+    `SELECT id, date, matchup, pick, odds, stake, potential_win, result, source, notes
+     FROM bets WHERE user_id = $1 ORDER BY created_at ASC`,
+    [userId]
+  );
+
   return {
-    initialBankroll:  user.initialBankroll  ?? null,
-    currentBankroll:  user.currentBankroll  ?? null,
-    bets:             user.bets             ?? [],
+    initialBankroll: br ? parseFloat(br.initial_bankroll) : null,
+    currentBankroll: br ? parseFloat(br.current_bankroll) : null,
+    bets: betsRes.rows.map(b => ({
+      id:           b.id,
+      date:         b.date,
+      matchup:      b.matchup,
+      pick:         b.pick,
+      odds:         Number(b.odds),
+      stake:        parseFloat(b.stake),
+      potentialWin: parseFloat(b.potential_win),
+      result:       b.result,
+      source:       b.source,
+      notes:        b.notes ?? '',
+    })),
   };
 }
 
-// ── Auth Router ───────────────────────────────────────────────────────────────
+// ── Auth Router ────────────────────────────────────────────────────────────────
 
 const router = Router();
 
@@ -99,27 +111,28 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    const users = readUsers();
-    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [normalizedEmail]
+    );
+    if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const newUser = {
-      id:              randomUUID(),
-      email:           email.toLowerCase().trim(),
-      passwordHash,
-      createdAt:       new Date().toISOString(),
-      credits:         10,
-      initialBankroll: null,
-      currentBankroll: null,
-      bets:            [],
-    };
+    const id = randomUUID();
 
-    users.push(newUser);
-    writeUsers(users);
+    const { rows } = await pool.query(
+      `INSERT INTO users (id, email, password_hash, credits)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, credits, created_at`,
+      [id, normalizedEmail, passwordHash, 10]
+    );
 
-    const token = signToken(newUser);
+    const newUser = rows[0];
+    const token   = signToken(newUser);
     return res.status(201).json({ token, user: safeUser(newUser) });
   } catch (err) {
     console.error('[auth] register error:', err.message);
@@ -136,13 +149,16 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const users = readUsers();
-    const user  = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const { rows } = await pool.query(
+      'SELECT id, email, password_hash, credits, created_at FROM users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    );
+    const user = rows[0];
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -155,15 +171,17 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me  — protected
-router.get('/me', verifyToken, (req, res) => {
+// GET /api/auth/me — protected
+router.get('/me', verifyToken, async (req, res) => {
   try {
-    const users = readUsers();
-    const user  = users.find(u => u.id === req.user.id);
-    if (!user) {
+    const { rows } = await pool.query(
+      'SELECT id, email, credits, created_at FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    if (!rows[0]) {
       return res.status(404).json({ error: 'User not found' });
     }
-    return res.json({ user: safeUser(user) });
+    return res.json({ user: safeUser(rows[0]) });
   } catch (err) {
     console.error('[auth] me error:', err.message);
     return res.status(500).json({ error: 'Server error' });
@@ -172,37 +190,33 @@ router.get('/me', verifyToken, (req, res) => {
 
 export default router;
 
-// ── Admin seed ────────────────────────────────────────────────────────────────
+// ── Admin seed ─────────────────────────────────────────────────────────────────
 
 export async function seedAdminUser() {
-  const users = readUsers();
-  if (users.find(u => u.email === 'admin@hexa.com')) return;
+  const { rows } = await pool.query(
+    'SELECT id FROM users WHERE email = $1',
+    ['admin@hexa.com']
+  );
+  if (rows.length > 0) return;
+
   const passwordHash = await bcrypt.hash('hexa2025admin', 10);
-  users.push({
-    id:              randomUUID(),
-    email:           'admin@hexa.com',
-    passwordHash,
-    createdAt:       new Date().toISOString(),
-    credits:         999999,
-    initialBankroll: null,
-    currentBankroll: null,
-    bets:            [],
-  });
-  writeUsers(users);
+  await pool.query(
+    `INSERT INTO users (id, email, password_hash, credits)
+     VALUES ($1, $2, $3, $4)`,
+    [randomUUID(), 'admin@hexa.com', passwordHash, 999999]
+  );
   console.log('[H.E.X.A.] Admin account seeded');
 }
 
-// ── Bankroll Router (mounted at /api/bankroll) ────────────────────────────────
+// ── Bankroll Router (mounted at /api/bankroll) ─────────────────────────────────
 
 export const bankrollRouter = Router();
 
 // GET /api/bankroll
-bankrollRouter.get('/', verifyToken, (req, res) => {
+bankrollRouter.get('/', verifyToken, async (req, res) => {
   try {
-    const users = readUsers();
-    const user  = users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ success: true, data: getBankrollData(user) });
+    const data = await getBankrollData(req.user.id);
+    return res.json({ success: true, data });
   } catch (err) {
     console.error('[bankroll] GET error:', err.message);
     return res.status(500).json({ error: 'Server error' });
@@ -210,7 +224,7 @@ bankrollRouter.get('/', verifyToken, (req, res) => {
 });
 
 // POST /api/bankroll/setup
-bankrollRouter.post('/setup', verifyToken, (req, res) => {
+bankrollRouter.post('/setup', verifyToken, async (req, res) => {
   try {
     const { initialBankroll } = req.body ?? {};
     const amount = Number(initialBankroll);
@@ -219,20 +233,23 @@ bankrollRouter.post('/setup', verifyToken, (req, res) => {
       return res.status(400).json({ error: 'initialBankroll must be a positive number' });
     }
 
-    const users = readUsers();
-    const idx   = users.findIndex(u => u.id === req.user.id);
-    if (idx === -1) return res.status(404).json({ error: 'User not found' });
-
-    if (users[idx].initialBankroll !== null && users[idx].initialBankroll !== undefined) {
+    // Check if already initialized
+    const existing = await pool.query(
+      'SELECT user_id FROM bankroll WHERE user_id = $1',
+      [req.user.id]
+    );
+    if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Bankroll already initialized' });
     }
 
-    users[idx].initialBankroll = amount;
-    users[idx].currentBankroll = amount;
-    users[idx].bets            = users[idx].bets ?? [];
-    writeUsers(users);
+    await pool.query(
+      `INSERT INTO bankroll (user_id, initial_bankroll, current_bankroll)
+       VALUES ($1, $2, $2)`,
+      [req.user.id, amount]
+    );
 
-    return res.json({ success: true, data: getBankrollData(users[idx]) });
+    const data = await getBankrollData(req.user.id);
+    return res.json({ success: true, data });
   } catch (err) {
     console.error('[bankroll] setup error:', err.message);
     return res.status(500).json({ error: 'Server error' });
@@ -240,7 +257,7 @@ bankrollRouter.post('/setup', verifyToken, (req, res) => {
 });
 
 // POST /api/bankroll/bet
-bankrollRouter.post('/bet', verifyToken, (req, res) => {
+bankrollRouter.post('/bet', verifyToken, async (req, res) => {
   try {
     const { matchup, pick, odds, stake, source = 'manual', notes = '' } = req.body ?? {};
 
@@ -251,30 +268,27 @@ bankrollRouter.post('/bet', verifyToken, (req, res) => {
       return res.status(400).json({ error: 'stake must be positive' });
     }
 
-    const users = readUsers();
-    const idx   = users.findIndex(u => u.id === req.user.id);
-    if (idx === -1) return res.status(404).json({ error: 'User not found' });
-
     const potentialWin = calcPotentialWin(stake, odds);
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    const bet = {
-      id:           `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      date:         new Date().toISOString(),
-      matchup:      String(matchup),
-      pick:         String(pick),
-      odds:         Number(odds),
-      stake:        Number(stake),
-      potentialWin,
-      result:       'pending',
-      source:       source === 'hexa' ? 'hexa' : 'manual',
-      notes:        String(notes ?? ''),
-    };
+    await pool.query(
+      `INSERT INTO bets (id, user_id, matchup, pick, odds, stake, potential_win, result, source, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9)`,
+      [
+        id,
+        req.user.id,
+        String(matchup),
+        String(pick),
+        Number(odds),
+        Number(stake),
+        potentialWin,
+        source === 'hexa' ? 'hexa' : 'manual',
+        String(notes ?? ''),
+      ]
+    );
 
-    users[idx].bets = users[idx].bets ?? [];
-    users[idx].bets.push(bet);
-    writeUsers(users);
-
-    return res.json({ success: true, data: getBankrollData(users[idx]) });
+    const data = await getBankrollData(req.user.id);
+    return res.json({ success: true, data });
   } catch (err) {
     console.error('[bankroll] add bet error:', err.message);
     return res.status(500).json({ error: 'Server error' });
@@ -282,7 +296,7 @@ bankrollRouter.post('/bet', verifyToken, (req, res) => {
 });
 
 // PATCH /api/bankroll/bet/:betId
-bankrollRouter.patch('/bet/:betId', verifyToken, (req, res) => {
+bankrollRouter.patch('/bet/:betId', verifyToken, async (req, res) => {
   try {
     const { betId }  = req.params;
     const { result } = req.body ?? {};
@@ -291,32 +305,41 @@ bankrollRouter.patch('/bet/:betId', verifyToken, (req, res) => {
       return res.status(400).json({ error: 'result must be pending, won, or lost' });
     }
 
-    const users = readUsers();
-    const idx   = users.findIndex(u => u.id === req.user.id);
-    if (idx === -1) return res.status(404).json({ error: 'User not found' });
+    // Load the bet (must belong to this user)
+    const betRes = await pool.query(
+      'SELECT id, odds, stake, potential_win, result FROM bets WHERE id = $1 AND user_id = $2',
+      [betId, req.user.id]
+    );
+    if (!betRes.rows[0]) {
+      return res.status(404).json({ error: 'Bet not found' });
+    }
+    const bet = betRes.rows[0];
 
-    const bets   = users[idx].bets ?? [];
-    const betIdx = bets.findIndex(b => b.id === betId);
-    if (betIdx === -1) return res.status(404).json({ error: 'Bet not found' });
-
-    const bet         = bets[betIdx];
-    const prevResult  = bet.result;
-    let bankroll      = users[idx].currentBankroll ?? users[idx].initialBankroll ?? 0;
+    // Load current bankroll to adjust
+    const brRes = await pool.query(
+      'SELECT current_bankroll FROM bankroll WHERE user_id = $1',
+      [req.user.id]
+    );
+    let bankroll = brRes.rows[0] ? parseFloat(brRes.rows[0].current_bankroll) : 0;
 
     // Reverse previous effect
-    if (prevResult === 'won')  bankroll -= bet.potentialWin;
-    if (prevResult === 'lost') bankroll += bet.stake;
+    if (bet.result === 'won')  bankroll -= parseFloat(bet.potential_win);
+    if (bet.result === 'lost') bankroll += parseFloat(bet.stake);
 
     // Apply new effect
-    if (result === 'won')  bankroll += bet.potentialWin;
-    if (result === 'lost') bankroll -= bet.stake;
+    if (result === 'won')  bankroll += parseFloat(bet.potential_win);
+    if (result === 'lost') bankroll -= parseFloat(bet.stake);
 
-    bets[betIdx].result       = result;
-    users[idx].bets           = bets;
-    users[idx].currentBankroll = parseFloat(bankroll.toFixed(2));
-    writeUsers(users);
+    bankroll = parseFloat(bankroll.toFixed(2));
 
-    return res.json({ success: true, data: getBankrollData(users[idx]) });
+    await pool.query('UPDATE bets SET result = $1 WHERE id = $2', [result, betId]);
+    await pool.query(
+      'UPDATE bankroll SET current_bankroll = $1, updated_at = NOW() WHERE user_id = $2',
+      [bankroll, req.user.id]
+    );
+
+    const data = await getBankrollData(req.user.id);
+    return res.json({ success: true, data });
   } catch (err) {
     console.error('[bankroll] update bet error:', err.message);
     return res.status(500).json({ error: 'Server error' });
@@ -324,28 +347,38 @@ bankrollRouter.patch('/bet/:betId', verifyToken, (req, res) => {
 });
 
 // DELETE /api/bankroll/bet/:betId
-bankrollRouter.delete('/bet/:betId', verifyToken, (req, res) => {
+bankrollRouter.delete('/bet/:betId', verifyToken, async (req, res) => {
   try {
     const { betId } = req.params;
 
-    const users = readUsers();
-    const idx   = users.findIndex(u => u.id === req.user.id);
-    if (idx === -1) return res.status(404).json({ error: 'User not found' });
-
-    const bets   = users[idx].bets ?? [];
-    const bet    = bets.find(b => b.id === betId);
-    if (!bet) return res.status(404).json({ error: 'Bet not found' });
+    const betRes = await pool.query(
+      'SELECT id, stake, potential_win, result FROM bets WHERE id = $1 AND user_id = $2',
+      [betId, req.user.id]
+    );
+    if (!betRes.rows[0]) {
+      return res.status(404).json({ error: 'Bet not found' });
+    }
+    const bet = betRes.rows[0];
 
     // Reverse the bet's effect on bankroll before deleting
-    let bankroll = users[idx].currentBankroll ?? users[idx].initialBankroll ?? 0;
-    if (bet.result === 'won')  bankroll -= bet.potentialWin;
-    if (bet.result === 'lost') bankroll += bet.stake;
+    const brRes = await pool.query(
+      'SELECT current_bankroll FROM bankroll WHERE user_id = $1',
+      [req.user.id]
+    );
+    let bankroll = brRes.rows[0] ? parseFloat(brRes.rows[0].current_bankroll) : 0;
 
-    users[idx].bets            = bets.filter(b => b.id !== betId);
-    users[idx].currentBankroll = parseFloat(bankroll.toFixed(2));
-    writeUsers(users);
+    if (bet.result === 'won')  bankroll -= parseFloat(bet.potential_win);
+    if (bet.result === 'lost') bankroll += parseFloat(bet.stake);
+    bankroll = parseFloat(bankroll.toFixed(2));
 
-    return res.json({ success: true, data: getBankrollData(users[idx]) });
+    await pool.query('DELETE FROM bets WHERE id = $1', [betId]);
+    await pool.query(
+      'UPDATE bankroll SET current_bankroll = $1, updated_at = NOW() WHERE user_id = $2',
+      [bankroll, req.user.id]
+    );
+
+    const data = await getBankrollData(req.user.id);
+    return res.json({ success: true, data });
   } catch (err) {
     console.error('[bankroll] delete bet error:', err.message);
     return res.status(500).json({ error: 'Server error' });
