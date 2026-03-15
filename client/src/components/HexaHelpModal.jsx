@@ -128,7 +128,7 @@ function TabModes({ lang }) {
     {
       icon: '🧠',
       title: 'SINGLE DEEP',
-      cost: isEs ? '3 créditos' : '3 credits',
+      cost: isEs ? '2 créditos' : '2 credits',
       description: isEs
         ? 'Análisis profundo con razonamiento detallado. Examina matchups de pitchers, tendencias ofensivas, bullpen, factores de estadio y más. ~30 segundos.'
         : 'Deep analysis with detailed reasoning. Examines pitcher matchups, offensive trends, bullpen, park factors and more. ~30 seconds.',
@@ -136,7 +136,7 @@ function TabModes({ lang }) {
     {
       icon: '📅',
       title: 'FULL DAY FAST',
-      cost: isEs ? '5 créditos' : '5 credits',
+      cost: isEs ? '8 créditos' : '8 credits',
       description: isEs
         ? 'Analiza todos los partidos del día de una sola vez. Incluye pick recomendado por juego y el mejor parlay del día.'
         : 'Analyzes all games of the day at once. Includes a recommended pick per game and the best parlay of the day.',
@@ -150,12 +150,28 @@ function TabModes({ lang }) {
         : 'The most complete analysis available. Deep analysis of every game. For the professional bettor who demands maximum information.',
     },
     {
+      icon: '🃏',
+      title: 'PARLAY FAST',
+      cost: isEs ? '4 créditos' : '4 credits',
+      description: isEs
+        ? 'Análisis rápido de parlay con varios partidos seleccionados. Genera la combinación óptima de picks.'
+        : 'Fast parlay analysis across selected games. Generates the optimal pick combination.',
+    },
+    {
+      icon: '🃏',
+      title: 'PARLAY DEEP',
+      cost: isEs ? '8 créditos' : '8 credits',
+      description: isEs
+        ? 'Análisis profundo de parlay. Razonamiento detallado para cada pierna del parlay con máxima precisión.'
+        : 'Deep parlay analysis. Detailed reasoning for each parlay leg with maximum precision.',
+    },
+    {
       icon: '🌐',
       title: 'WEB INTEL',
-      cost: isEs ? '+3 créditos' : '+3 credits',
+      cost: isEs ? '+3 créditos (Solo Single)' : '+3 credits (Single only)',
       description: isEs
-        ? 'Añade búsqueda en tiempo real: lesiones confirmadas, clima, noticias de último momento y alineaciones del día. Siempre activo = siempre actualizado.'
-        : 'Adds real-time search: confirmed injuries, weather, breaking news and daily lineups. Always on = always updated.',
+        ? 'Añade búsqueda en tiempo real: lesiones confirmadas, clima, noticias de último momento y alineaciones del día. Solo disponible en modo Single Game.'
+        : 'Adds real-time search: confirmed injuries, weather, breaking news and daily lineups. Only available in Single Game mode.',
     },
   ];
 
@@ -169,10 +185,10 @@ function TabModes({ lang }) {
 function TabCredits({ lang }) {
   const isEs = lang === 'es';
   const plans = [
-    { plan: isEs ? 'Free'    : 'Free',    credits: isEs ? '10 al registrarse' : '10 on signup', price: isEs ? 'Gratis' : 'Free'       },
-    { plan: 'Starter',                    credits: '20',                                         price: '$4.99',          highlight: true },
-    { plan: 'MVP',                         credits: isEs ? '60/mes' : '60/mo',                   price: '$9.99/mo'                        },
-    { plan: 'Add-on',                      credits: '15',                                         price: '$2.99'                           },
+    { plan: isEs ? 'Free'    : 'Free',    credits: isEs ? '5 al registrarse' : '5 on signup',  price: isEs ? 'Gratis' : 'Free'        },
+    { plan: 'Starter',                    credits: '30',                                         price: '$7.99',          highlight: true },
+    { plan: 'MVP',                         credits: isEs ? '80/mes' : '80/mo',                   price: '$19.99/mo'                       },
+    { plan: 'Add-on',                      credits: '18',                                         price: '$4.99'                           },
   ];
 
   return (
@@ -208,13 +224,13 @@ function TabCredits({ lang }) {
       {/* Example */}
       <Box sx={{ p: '14px 16px', bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderLeft: `3px solid ${C.accent}`, borderRadius: '2px' }}>
         <Typography sx={{ fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: 800, color: C.accentSec, textTransform: 'uppercase', letterSpacing: '0.08em', mb: '8px' }}>
-          {isEs ? 'Ejemplo: Con 20 créditos puedes hacer:' : 'Example: With 20 credits you can run:'}
+          {isEs ? 'Ejemplo: Con 30 créditos (Starter) puedes hacer:' : 'Example: With 30 credits (Starter) you can run:'}
         </Typography>
         {[
-          isEs ? '20 análisis Single Fast, ó' : '20 Single Fast analyses, or',
-          isEs ? '6 análisis Single Deep, ó' : '6 Single Deep analyses, or',
-          isEs ? '4 análisis Full Day Fast, ó' : '4 Full Day Fast analyses, or',
-          isEs ? '1 análisis Full Day Deep + 5 Single Fast' : '1 Full Day Deep + 5 Single Fast',
+          isEs ? '30 análisis Single Fast, ó' : '30 Single Fast analyses, or',
+          isEs ? '15 análisis Single Deep, ó' : '15 Single Deep analyses, or',
+          isEs ? '3 Full Day Fast + 6 Single Fast, ó' : '3 Full Day Fast + 6 Single Fast, or',
+          isEs ? '2 Full Day Deep' : '2 Full Day Deep',
         ].map((line, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
             <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: C.accent, flexShrink: 0 }} />
