@@ -14,6 +14,7 @@ import { Box, Typography } from '@mui/material';
 import LanguageToggle from './LanguageToggle';
 import AuthModal from './AuthModal';
 import HexaHelpModal from './HexaHelpModal';
+import PricingModal from './PricingModal';
 import { useAuth } from '../store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -179,7 +180,8 @@ function StatcastBadge({ lang }) {
 
 function AuthButton({ lang }) {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen]       = useState(false);
+  const [showPricing, setShowPricing]   = useState(false);
   const isEs = lang === 'es';
 
   if (isLoading) return null;
@@ -221,6 +223,7 @@ function AuthButton({ lang }) {
     : '—';
 
   return (
+    <>
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
       {/* User pill */}
       <Box
@@ -242,6 +245,33 @@ function AuthButton({ lang }) {
         <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.accent, fontWeight: 700, userSelect: 'none' }}>
           {user?.credits ?? 0} {isEs ? 'créd.' : 'cr.'}
         </Typography>
+      </Box>
+
+      {/* Credits / pricing button */}
+      <Box
+        component="button"
+        onClick={() => setShowPricing(true)}
+        title={isEs ? 'Comprar créditos' : 'Buy credits'}
+        sx={{
+          px:            '10px',
+          py:            '4px',
+          border:        `1px solid rgba(79,195,247,0.35)`,
+          borderRadius:  '2px',
+          bgcolor:       'rgba(79,195,247,0.06)',
+          color:         '#4fc3f7',
+          fontFamily:    BARLOW,
+          fontSize:      '0.72rem',
+          fontWeight:    700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          cursor:        'pointer',
+          flexShrink:    0,
+          whiteSpace:    'nowrap',
+          transition:    'all 0.15s',
+          '&:hover':     { bgcolor: 'rgba(79,195,247,0.12)', borderColor: '#4fc3f7' },
+        }}
+      >
+        ⚡ {isEs ? 'Créditos' : 'Credits'}
       </Box>
 
       {/* Logout button */}
@@ -267,6 +297,8 @@ function AuthButton({ lang }) {
         ⏏
       </Box>
     </Box>
+    {showPricing && <PricingModal onClose={() => setShowPricing(false)} lang={lang} />}
+    </>
   );
 }
 

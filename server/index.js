@@ -12,6 +12,7 @@ import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import pool from './db.js';
+import lemonRouter from './lemon.js';
 
 dotenv.config();
 
@@ -21,11 +22,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
+app.use('/api/lemon/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth',      authRouter);
 app.use('/api/bankroll',  bankrollRouter);
+app.use('/api/lemon',     lemonRouter);
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
 
