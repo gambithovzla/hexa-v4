@@ -14,6 +14,38 @@ const CACHE_TTL_MS  = 5 * 60 * 1000; // 5 minutes
 let _cache = { data: null, ts: 0 };
 
 // ---------------------------------------------------------------------------
+// Spring Training detection + mock odds
+// ---------------------------------------------------------------------------
+
+function isSpringTraining(date = new Date()) {
+  const m = date.getMonth() + 1; // 1-indexed
+  const d = date.getDate();
+  const y = date.getFullYear();
+  // Spring Training: March 1 – March 26 any year
+  return (m === 3 && d >= 1 && d <= 26);
+}
+
+function getMockOddsForGame(homeTeam, awayTeam) {
+  return {
+    homeTeam,
+    awayTeam,
+    odds: {
+      moneyline: { home: -110, away: -110 },
+      runLine: {
+        home: { spread: -1.5, price: 120 },
+        away: { spread:  1.5, price: -140 },
+      },
+      overUnder: {
+        total:      8.5,
+        overPrice:  -110,
+        underPrice: -110,
+      },
+    },
+    source: 'estimated_spring_training',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // getGameOdds
 // ---------------------------------------------------------------------------
 
@@ -25,9 +57,17 @@ let _cache = { data: null, ts: 0 };
  */
 export async function getGameOdds() {
   const apiKey = process.env.ODDS_API_KEY;
-  if (!apiKey) return [];
+
+  console.log('[odds-api] API key present:', apiKey ? `${apiKey.substring(0, 8)}...` : 'MISSING');
+  console.log('[odds-api] Spring Training:', isSpringTraining());
+
+  if (!apiKey) {
+    console.warn('[odds-api] ODDS_API_KEY not set — skipping fetch');
+    return [];
+  }
 
   if (_cache.data && Date.now() - _cache.ts < CACHE_TTL_MS) {
+    console.log('[odds-api] Returning cached data:', _cache.data.length, 'events');
     return _cache.data;
   }
 
@@ -36,14 +76,27 @@ export async function getGameOdds() {
       `${ODDS_API_BASE}/sports/baseball_mlb/odds/?` +
       `apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&oddsFormat=american&dateFormat=iso`;
 
+    console.log('[odds-api] Fetching URL:', url.replace(apiKey, `${apiKey.substring(0, 8)}...`));
+
     const res = await fetch(url);
+    console.log('[odds-api] Response status:', res.status, res.statusText);
+
     if (!res.ok) {
-      console.warn(`[odds-api] API returned ${res.status} — using cached data`);
+      const body = await res.text().catch(() => '');
+      console.warn(`[odds-api] API error ${res.status} — body: ${body.substring(0, 200)}`);
+      console.warn('[odds-api] Note: The Odds API does not list Spring Training games. Returning cached data.');
       return _cache.data ?? [];
     }
 
     const raw  = await res.json();
-    const data = raw.map(normalizeEvent).filter(Boolean);
+    console.log('[odds-api] Raw events returned:', Array.isArray(raw) ? raw.length : 'not an array', typeof raw === 'string' ? raw.substring(0, 200) : '');
+
+    if (Array.isArray(raw) && raw.length === 0) {
+      console.warn('[odds-api] 0 events returned — likely Spring Training (no MLB regular season games listed)');
+    }
+
+    const data = (Array.isArray(raw) ? raw : []).map(normalizeEvent).filter(Boolean);
+    console.log('[odds-api] Normalized events:', data.length);
     _cache = { data, ts: Date.now() };
     return data;
   } catch (err) {
@@ -150,23 +203,33 @@ function normalizeEvent(event) {
  * @returns {object|null}
  */
 export function matchOddsToGame(oddsData, homeTeamName, awayTeamName) {
-  if (!oddsData?.length || !homeTeamName || !awayTeamName) return null;
+  if (!homeTeamName || !awayTeamName) return null;
 
-  const words = (s) =>
-    String(s).toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().split(/\s+/).filter(w => w.length > 2);
+  if (oddsData?.length) {
+    const words = (s) =>
+      String(s).toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().split(/\s+/).filter(w => w.length > 2);
 
-  const overlap = (a, b) => {
-    const wb = new Set(words(b));
-    return words(a).filter(w => wb.has(w)).length;
-  };
+    const overlap = (a, b) => {
+      const wb = new Set(words(b));
+      return words(a).filter(w => wb.has(w)).length;
+    };
 
-  let best = null, bestScore = -1;
-  for (const event of oddsData) {
-    const score = overlap(homeTeamName, event.homeTeam) + overlap(awayTeamName, event.awayTeam);
-    if (score > bestScore) { bestScore = score; best = event; }
+    let best = null, bestScore = -1;
+    for (const event of oddsData) {
+      const score = overlap(homeTeamName, event.homeTeam) + overlap(awayTeamName, event.awayTeam);
+      if (score > bestScore) { bestScore = score; best = event; }
+    }
+
+    if (bestScore > 0) return best;
   }
 
-  return bestScore > 0 ? best : null;
+  // Fallback: return estimated mock odds during Spring Training
+  if (isSpringTraining()) {
+    console.log(`[odds-api] No real odds found for ${awayTeamName} @ ${homeTeamName} — using Spring Training estimated lines`);
+    return getMockOddsForGame(homeTeamName, awayTeamName);
+  }
+
+  return null;
 }
 
 /**

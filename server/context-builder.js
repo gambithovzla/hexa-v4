@@ -11,6 +11,74 @@ import { getPitcherStats, getTeamHittingStats } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 
 // ---------------------------------------------------------------------------
+// Historical MLB context (static reference data for Spring Training + early season)
+// ---------------------------------------------------------------------------
+
+const HISTORICAL_MLB_CONTEXT = {
+  park_factors_2025: {
+    // Hitter-friendly parks
+    COL: { overall: 112, hr: 123, description: 'Coors Field - extreme hitter park, high altitude' },
+    CIN: { overall: 105, hr: 108, description: 'Great American Ball Park - hitter friendly' },
+    TEX: { overall: 104, hr: 106, description: 'Globe Life Field - hitter friendly dome' },
+    // Pitcher-friendly parks
+    SF:  { overall: 94,  hr: 88,  description: 'Oracle Park - extreme pitcher park, marine layer' },
+    NYM: { overall: 95,  hr: 92,  description: 'Citi Field - pitcher friendly' },
+    OAK: { overall: 96,  hr: 94,  description: 'Oakland Coliseum - pitcher friendly' },
+    MIA: { overall: 95,  hr: 91,  description: 'LoanDepot Park - pitcher friendly dome' },
+    // Neutral / slight hitter
+    LAD: { overall: 100, hr: 100, description: 'Dodger Stadium - neutral' },
+    NYY: { overall: 101, hr: 103, description: 'Yankee Stadium - slight hitter friendly' },
+  },
+  team_tendencies_historical: {
+    LAD: { home_win_pct_5yr: 0.587, notes: 'Elite pitching depth, strong home record' },
+    HOU: { home_win_pct_5yr: 0.574, notes: 'Strong home record, Minute Maid Park advantage' },
+    NYY: { home_win_pct_5yr: 0.561, notes: 'Yankee Stadium short porch favors lefty power' },
+    ATL: { home_win_pct_5yr: 0.558, notes: 'Truist Park hitter friendly, strong home crowd' },
+    OAK: { road_win_pct_5yr: 0.421, notes: 'Historically weak road team' },
+    MIA: { road_win_pct_5yr: 0.428, notes: 'Weak road performance historically' },
+    COL: { road_win_pct_5yr: 0.419, notes: 'Extreme home/road split due to altitude' },
+  },
+  pitcher_archetypes: {
+    power_pitcher:   { k9_min: 10, whiff_min: 30, notes: 'High K upside, favor K props' },
+    contact_pitcher: { k9_max: 7,  gb_min: 50,   notes: 'Groundball focused, favor UNDER' },
+    flyball_pitcher: { fb_min: 40, hr9_risk: 'high', notes: 'HR risk, favor OVER in hitter parks' },
+  },
+  spring_training_adjustments: {
+    note: 'Spring Training stats unreliable. Use career trends and historical park factors.',
+    confidence_reduction: 25,
+    recommended_picks: 'single_game_moneyline_favorites_only',
+  },
+};
+
+function buildHistoricalContextBlock() {
+  const pf = HISTORICAL_MLB_CONTEXT.park_factors_2025;
+  const tt = HISTORICAL_MLB_CONTEXT.team_tendencies_historical;
+  const st = HISTORICAL_MLB_CONTEXT.spring_training_adjustments;
+
+  const pfLines = Object.entries(pf).map(([abbr, d]) =>
+    `  ${abbr}: overall=${d.overall} HR=${d.hr} — ${d.description}`
+  );
+  const ttLines = Object.entries(tt).map(([abbr, d]) => {
+    const pct = d.home_win_pct_5yr ?? d.road_win_pct_5yr;
+    const side = d.home_win_pct_5yr ? 'home' : 'road';
+    return `  ${abbr}: ${side}_win_pct_5yr=${pct} — ${d.notes}`;
+  });
+
+  return [
+    '=== HISTORICAL MLB REFERENCE DATA ===',
+    '--- PARK FACTORS (2025 estimates) ---',
+    ...pfLines,
+    '--- TEAM TENDENCIES (5-year historical) ---',
+    ...ttLines,
+    '--- SPRING TRAINING / EARLY SEASON NOTE ---',
+    `  ${st.note}`,
+    `  Confidence reduction: ${st.confidence_reduction}%`,
+    `  Recommended: ${st.recommended_picks}`,
+    '=== END HISTORICAL DATA ===',
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Umbrales para flags situacionales
 // ---------------------------------------------------------------------------
 
@@ -500,12 +568,19 @@ export async function buildContext(gameData, oddsData = null) {
     const sp  = (n) => (n == null ? '?'   : n > 0 ? `+${n}` : String(n));
     blocks.push('');
     blocks.push(section('MARKET ODDS'));
+    if (oddsData.source === 'estimated_spring_training') {
+      blocks.push('⚠ ESTIMATED LINES (Spring Training — no real market available)');
+    }
     blocks.push(
       `ML Home ${am(ml.home)} Away ${am(ml.away)}` +
       ` | RL Home ${sp(rl.home.spread)} ${am(rl.home.price)} Away ${sp(rl.away.spread)} ${am(rl.away.price)}` +
       ` | O/U ${ou.total ?? 'N/A'} O${am(ou.overPrice)} U${am(ou.underPrice)}`
     );
   }
+
+  // Historical MLB reference data (always appended — park factors + team tendencies)
+  blocks.push('');
+  blocks.push(buildHistoricalContextBlock());
 
   return blocks.join('\n');
 }
