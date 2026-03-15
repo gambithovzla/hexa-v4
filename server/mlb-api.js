@@ -15,6 +15,11 @@ const SEASON = new Date().getFullYear();
 // Seasons to try in order — current year may have no data early in calendar year
 const SEASON_FALLBACK = SEASON >= 2026 ? [SEASON, 2025, 2024] : [SEASON, SEASON - 1];
 
+// Up to 6 seasons for historical trend analysis (most recent first)
+const HISTORICAL_SEASONS = SEASON >= 2026
+  ? [SEASON, 2025, 2024, 2023, 2022, 2021]
+  : [SEASON, SEASON - 1, SEASON - 2, SEASON - 3, SEASON - 4, SEASON - 5];
+
 // ---------------------------------------------------------------------------
 // Utilidades internas
 // ---------------------------------------------------------------------------
@@ -60,11 +65,35 @@ function normalizeProbablePitcher(raw) {
 }
 
 /**
+ * Normalises a lineup player array from the hydrated lineups field.
+ */
+function normalizeLineup(players) {
+  if (!Array.isArray(players) || players.length === 0) return [];
+  return players
+    .map(p => ({
+      id:           p.id           ?? p.person?.id        ?? null,
+      fullName:     p.fullName     ?? p.person?.fullName  ?? p.name ?? null,
+      position:     p.position?.abbreviation ?? p.pos     ?? null,
+      battingOrder: p.battingOrder ?? null,
+    }))
+    .sort((a, b) => (a.battingOrder ?? 999) - (b.battingOrder ?? 999));
+}
+
+/**
  * Normaliza un juego crudo del endpoint /schedule en un objeto limpio.
  */
 function normalizeGame(game) {
   const home = game.teams?.home ?? {};
   const away = game.teams?.away ?? {};
+
+  // Lineup extraction — hydrate=lineups populates game.lineups
+  const rawLineups  = game.lineups ?? null;
+  const homeLineup  = normalizeLineup(rawLineups?.homePlayers ?? rawLineups?.home ?? []);
+  const awayLineup  = normalizeLineup(rawLineups?.awayPlayers ?? rawLineups?.away ?? []);
+
+  let lineupStatus = 'unavailable';
+  if (homeLineup.length > 0 || awayLineup.length > 0) lineupStatus = 'confirmed';
+  else if (home.probablePitcher || away.probablePitcher)  lineupStatus = 'probable';
 
   return {
     gamePk: game.gamePk,
@@ -108,6 +137,8 @@ function normalizeGame(game) {
     seriesDescription: game.seriesDescription ?? null,
     gamesInSeries: game.gamesInSeries ?? null,
     seriesGameNumber: game.seriesGameNumber ?? null,
+    lineupStatus,
+    lineups: { home: homeLineup, away: awayLineup },
   };
 }
 
@@ -214,7 +245,7 @@ export async function getTodayGames(date) {
     `${MLB_BASE}/schedule` +
     `?date=${targetDate}` +
     `&sportId=1` +
-    `&hydrate=team,linescore,probablePitcher`;
+    `&hydrate=team,linescore,probablePitcher,lineups`;
 
   try {
     const data = await fetchJSON(url);
@@ -306,6 +337,105 @@ export async function getTeamHittingStats(teamId) {
 
   console.warn(`[MLB API] No hitting stats found for team ${teamId} in seasons: ${SEASON_FALLBACK.join(', ')}`);
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Historical stats — collects up to 5 past seasons for trend analysis
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches pitcher stats for HISTORICAL_SEASONS in parallel.
+ * Returns { pitcherId, season, stats, historical: [{season, era, whip, k9, bb9, hr9},...] }
+ */
+export async function getPitcherHistoricalStats(pitcherId) {
+  if (!pitcherId) return null;
+
+  const seasonResults = await Promise.allSettled(
+    HISTORICAL_SEASONS.map(season =>
+      fetchJSON(`${MLB_BASE}/people/${pitcherId}/stats?stats=season&season=${season}&group=pitching`)
+        .then(data => {
+          const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
+          if (splits.length === 0) return null;
+          return { season, stats: normalizePitcherStats(data) };
+        })
+    )
+  );
+
+  const seasons = seasonResults
+    .filter(r => r.status === 'fulfilled' && r.value !== null)
+    .map(r => r.value);
+
+  if (seasons.length === 0) return null;
+
+  const histLog = seasons.map(s => `${s.season}(ERA:${s.stats.era})`).join(', ');
+  console.log(`[MLB API] Pitcher ${pitcherId} historical: ${histLog}`);
+
+  const current = seasons[0];
+  const historical = seasons.slice(1).map(({ season, stats: s }) => {
+    const ip  = parseFloat(s.inningsPitched ?? 0);
+    const hr9 = s.homeRuns != null && ip > 0 ? ((s.homeRuns / ip) * 9).toFixed(2) : null;
+    return { season, era: s.era, whip: s.whip, k9: s.strikeoutsPer9Inn, bb9: s.walksPer9Inn, hr9 };
+  });
+
+  return { pitcherId, season: current.season, stats: current.stats, historical };
+}
+
+/**
+ * Fetches team hitting stats for HISTORICAL_SEASONS in parallel.
+ * Returns { teamId, season, stats, historical: [{season, avg, ops, hr, runs},...] }
+ */
+export async function getTeamHittingHistoricalStats(teamId) {
+  if (!teamId) return null;
+
+  const seasonResults = await Promise.allSettled(
+    HISTORICAL_SEASONS.map(season =>
+      fetchJSON(`${MLB_BASE}/teams/${teamId}/stats?stats=season&season=${season}&group=hitting`)
+        .then(data => {
+          const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
+          if (splits.length === 0) return null;
+          return { season, stats: normalizeHittingStats(data) };
+        })
+    )
+  );
+
+  const seasons = seasonResults
+    .filter(r => r.status === 'fulfilled' && r.value !== null)
+    .map(r => r.value);
+
+  if (seasons.length === 0) return null;
+
+  const histLog = seasons.map(s => `${s.season}(AVG:${s.stats.avg})`).join(', ');
+  console.log(`[MLB API] Team ${teamId} historical: ${histLog}`);
+
+  const current = seasons[0];
+  const historical = seasons.slice(1).map(({ season, stats: s }) => ({
+    season, avg: s.avg, ops: s.ops, hr: s.homeRuns, runs: s.runs,
+  }));
+
+  return { teamId, season: current.season, stats: current.stats, historical };
+}
+
+/**
+ * Returns the player's current team from the MLB people endpoint.
+ * Used to verify that a pitcher is actually on the scheduled team.
+ */
+export async function getCurrentTeam(playerId) {
+  if (!playerId) return null;
+  try {
+    const data = await fetchJSON(`${MLB_BASE}/people/${playerId}?hydrate=currentTeam`);
+    const person = data.people?.[0];
+    if (!person) return null;
+    return {
+      playerId,
+      fullName:         person.fullName,
+      currentTeamId:    person.currentTeam?.id           ?? null,
+      currentTeamName:  person.currentTeam?.name         ?? null,
+      currentTeamAbbr:  person.currentTeam?.abbreviation ?? null,
+    };
+  } catch (err) {
+    console.warn(`[MLB API] getCurrentTeam(${playerId}) failed: ${err.message}`);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

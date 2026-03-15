@@ -75,6 +75,17 @@ const L = {
     },
     readyHint:    'Configure your options and run the Oracle.',
     parseError:   'Analysis could not be processed. Please retry.',
+    lineupDialog: {
+      title:    '⚠️ Unconfirmed Lineups',
+      body:     (n, total) => `${n} of ${total} game${total > 1 ? 's' : ''} have unconfirmed lineups. Analysis will be based on probable starters and team tendencies.`,
+      continue: 'Continue Anyway',
+      cancel:   'Cancel',
+    },
+    lineupBadge: {
+      confirmed:   '✓ LINEUP',
+      probable:    '~ PROBABLE',
+      unavailable: '? NO LINEUP',
+    },
   },
   es: {
     betType: {
@@ -109,6 +120,17 @@ const L = {
     },
     readyHint:    'Configura las opciones y ejecuta el Oráculo.',
     parseError:   'No se pudo procesar el análisis. Por favor, reintenta.',
+    lineupDialog: {
+      title:    '⚠️ Alineación no confirmada',
+      body:     (n, total) => `${n} de ${total} partido${total > 1 ? 's' : ''} no tiene${total > 1 ? 'n' : ''} alineación confirmada. El análisis se basará en lanzadores probables y tendencias del equipo.`,
+      continue: 'Continuar de todas formas',
+      cancel:   'Cancelar',
+    },
+    lineupBadge: {
+      confirmed:   '✓ LINEUP',
+      probable:    '~ PROBABLE',
+      unavailable: '? SIN LINEUP',
+    },
   },
 };
 
@@ -654,7 +676,8 @@ export default function AnalysisPanel({
   const [result,      setResult]      = useState(null);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalOpen,    setAuthModalOpen]    = useState(false);
+  const [lineupDialogOpen, setLineupDialogOpen] = useState(false);
 
   // Sync parlay legs with actual selection count
   useEffect(() => {
@@ -679,7 +702,10 @@ export default function AnalysisPanel({
   const userCredits   = user?.credits ?? 0;
   const hasEnoughCredits = !isAuthenticated || userCredits >= creditCost;
 
-  async function handleAnalyze() {
+  // Lineup status helpers
+  const unconfirmedGames = selectedGames.filter(g => g.lineupStatus !== 'confirmed');
+
+  function handleAnalyze() {
     if (!canAnalyze) return;
 
     // Auth gate
@@ -694,6 +720,17 @@ export default function AnalysisPanel({
       return;
     }
 
+    // Lineup confirmation gate
+    if (unconfirmedGames.length > 0) {
+      setLineupDialogOpen(true);
+      return;
+    }
+
+    runAnalysis();
+  }
+
+  async function runAnalysis() {
+    setLineupDialogOpen(false);
     setLoading(true);
     setError(null);
     setResult(null);
@@ -901,6 +938,35 @@ export default function AnalysisPanel({
           modelMode={modelMode}
         />
 
+        {/* Lineup status badges — shown when games are selected */}
+        {selectedGames.length > 0 && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {selectedGames.map((g, i) => {
+              const status = g.lineupStatus ?? 'unavailable';
+              const badgeLabel = t.lineupBadge[status] ?? t.lineupBadge.unavailable;
+              const badgeColor = status === 'confirmed' ? C.green : status === 'probable' ? C.amber : C.textMuted;
+              const gameName = g.teams?.away?.abbreviation && g.teams?.home?.abbreviation
+                ? `${g.teams.away.abbreviation}@${g.teams.home.abbreviation}`
+                : `G${i + 1}`;
+              return (
+                <Box
+                  key={g.gamePk ?? i}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    border: `1px solid ${badgeColor}44`,
+                    borderRadius: '2px',
+                    px: '7px', py: '3px',
+                    bgcolor: `${badgeColor}0D`,
+                  }}
+                >
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted }}>{gameName}</Typography>
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.62rem', fontWeight: 700, color: badgeColor, letterSpacing: '0.06em' }}>{badgeLabel}</Typography>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+
         {/* Run button — disabled when insufficient credits */}
         {isAuthenticated && !hasEnoughCredits ? (
           <NoCreditsMessage lang={lang} />
@@ -916,6 +982,55 @@ export default function AnalysisPanel({
 
       {/* ── Auth modal ── */}
       <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} lang={lang} />
+
+      {/* ── Lineup confirmation dialog ── */}
+      {lineupDialogOpen && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          bgcolor: 'rgba(4,8,15,0.88)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Box sx={{
+            position: 'relative', zIndex: 10000,
+            bgcolor: C.cardBg, border: `1px solid ${C.amber}44`,
+            borderLeft: `4px solid ${C.amber}`,
+            borderRadius: '4px', p: '28px', maxWidth: '420px', width: '90%',
+          }}>
+            <Typography sx={{ fontFamily: BARLOW, fontSize: '0.9rem', fontWeight: 700, color: C.amber, textTransform: 'uppercase', letterSpacing: '0.1em', mb: '12px' }}>
+              {t.lineupDialog.title}
+            </Typography>
+            <Typography sx={{ fontFamily: LABEL, fontSize: '0.83rem', color: C.textPrimary, lineHeight: 1.65, mb: '24px' }}>
+              {t.lineupDialog.body(unconfirmedGames.length, selectedGames.length)}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: '10px' }}>
+              <Box
+                component="button"
+                onClick={() => { setLineupDialogOpen(false); runAnalysis(); }}
+                sx={{
+                  flex: 1, py: '10px', fontFamily: BARLOW, fontSize: '0.8rem', fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  bgcolor: C.accent, color: '#fff', border: 'none', borderRadius: '2px', cursor: 'pointer',
+                  '&:hover': { bgcolor: '#0052cc' },
+                }}
+              >
+                {t.lineupDialog.continue}
+              </Box>
+              <Box
+                component="button"
+                onClick={() => setLineupDialogOpen(false)}
+                sx={{
+                  flex: 1, py: '10px', fontFamily: BARLOW, fontSize: '0.8rem', fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  bgcolor: 'transparent', color: C.textMuted, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', cursor: 'pointer',
+                  '&:hover': { color: C.textPrimary },
+                }}
+              >
+                {t.lineupDialog.cancel}
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      )}
 
       {/* ── Loading ── */}
       {loading && <OracleSpinner t={t} />}

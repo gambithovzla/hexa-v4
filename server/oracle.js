@@ -94,6 +94,21 @@ When the context includes STATCAST sections, you MUST use this data as PRIMARY e
 ### SPRING TRAINING CAVEAT:
 - If savant_cache_status shows 0 records or data is null, explicitly note "Statcast 2025 data not yet available (Spring Training)" in the Oracle Report section.
 - Once regular season starts (after March 27, 2025), Statcast data should populate automatically.
+## HISTORICAL TRENDS ANALYSIS
+When PITCHER HISTORICAL TRENDS or TEAM HISTORICAL TRENDS sections appear in the context, use them to:
+1. **Pitcher trajectory**: Is the ERA improving (declining numbers = good), declining, or consistent over 3+ seasons? An improving pitcher deserves higher confidence; declining pitcher deserves skepticism.
+2. **Team offense trajectory**: Is OPS trending up (improving offense) or down (weakening)? Cross-reference with current season to confirm trend continuation.
+3. **HOT streak detection**: If rolling_woba_30d exceeds season xwOBA by .040+, flag as HOT and weight current form 70%, historical 30%.
+4. **COLD streak detection**: If rolling_woba_30d is below season xwOBA by .040+, flag as SLUMP and weight historical 60%, current 40%.
+5. **Breakout vs regression**: year_to_year_xwoba_change > +.030 = legitimate breakout; < -.030 = regression risk.
+6. **Never override current-season evidence**: Historical data informs context but strong current-season data takes precedence. Use TREND annotations from the context directly.
+## LINEUP STATUS INTERPRETATION
+When LINEUP STATUS section appears:
+- CONFIRMED lineups: Use confirmed batting order for matchup analysis. Full confidence.
+- PROBABLE lineups: Analysis reliable for pitching matchup; slight uncertainty for batting props.
+- UNAVAILABLE: Increase model_risk by one level (low→medium, medium→high). Note in oracle_report.
+## TEAM VERIFICATION
+If a TEAM VERIFICATION warning (⚠️) appears, note in alert_flags that the pitcher may have changed teams and recommend verifying before betting.
 ## THE SENTINEL (human/social context)
 - Social Mining: Press reports, beat writers, social media signals
 - Critical Fatigue: Emotional stress beyond pitch counts

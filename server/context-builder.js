@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 
 // ---------------------------------------------------------------------------
@@ -311,6 +311,97 @@ function batterSavantLine(name, savant) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Historical trend blocks
+// ---------------------------------------------------------------------------
+
+function pitcherHistoricalBlock(name, teamAbbr, historicalData) {
+  if (!historicalData?.historical?.length) return null;
+  const cur = historicalData;
+  const s   = cur.stats;
+  const ip  = parseFloat(s.inningsPitched ?? 0);
+  const hr9 = s.homeRuns != null && ip > 0 ? ((s.homeRuns / ip) * 9).toFixed(2) : 'N/A';
+  const lines = [`=== PITCHER HISTORICAL TRENDS (${historicalData.historical.length + 1} seasons) ===`];
+  lines.push(`${name} (${teamAbbr ?? 'UNK'}):`);
+  lines.push(`* ${cur.season}: ERA ${s.era ?? 'N/A'}, WHIP ${s.whip ?? 'N/A'}, K/9 ${s.strikeoutsPer9Inn ?? 'N/A'}, BB/9 ${s.walksPer9Inn ?? 'N/A'}, HR/9 ${hr9}`);
+  for (const h of historicalData.historical) {
+    lines.push(`* ${h.season}: ERA ${h.era ?? 'N/A'}, WHIP ${h.whip ?? 'N/A'}, K/9 ${h.k9 ?? 'N/A'}, BB/9 ${h.bb9 ?? 'N/A'}, HR/9 ${h.hr9 ?? 'N/A'}`);
+  }
+  // Trend annotation
+  const eras = [parseFloat(s.era), ...historicalData.historical.map(h => parseFloat(h.era))].filter(v => !isNaN(v));
+  if (eras.length >= 2) {
+    const avg = (eras.reduce((a, b) => a + b, 0) / eras.length).toFixed(2);
+    const trend = eras[0] < eras[eras.length - 1] - 0.3
+      ? 'Improving ERA trend'
+      : eras[0] > eras[eras.length - 1] + 0.3
+        ? 'Declining ERA trend'
+        : 'Consistent performance';
+    lines.push(`TREND: ${trend}, ${eras.length}-season ERA average ${avg}`);
+  }
+  return lines.join('\n');
+}
+
+function teamHistoricalBlock(teamName, historicalData) {
+  if (!historicalData?.historical?.length) return null;
+  const cur = historicalData;
+  const s   = cur.stats;
+  const lines = [`=== TEAM HISTORICAL TRENDS (${historicalData.historical.length + 1} seasons) ===`];
+  lines.push(`${teamName}:`);
+  lines.push(`* ${cur.season}: AVG ${s.avg ?? 'N/A'}, OPS ${s.ops ?? 'N/A'}, HR ${s.homeRuns ?? 'N/A'}, R ${s.runs ?? 'N/A'}`);
+  for (const h of historicalData.historical) {
+    lines.push(`* ${h.season}: AVG ${h.avg ?? 'N/A'}, OPS ${h.ops ?? 'N/A'}, HR ${h.hr ?? 'N/A'}, R ${h.runs ?? 'N/A'}`);
+  }
+  const opsList = [parseFloat(s.ops), ...historicalData.historical.map(h => parseFloat(h.ops))].filter(v => !isNaN(v));
+  if (opsList.length >= 2) {
+    const trend = opsList[0] > opsList[opsList.length - 1] + 0.02
+      ? 'Improving offense trend'
+      : opsList[0] < opsList[opsList.length - 1] - 0.02
+        ? 'Declining offense trend'
+        : 'Consistent mid-tier offense';
+    lines.push(`TREND: ${trend}`);
+  }
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Lineup status block
+// ---------------------------------------------------------------------------
+
+function lineupStatusBlock(gameData) {
+  const status     = gameData.lineupStatus ?? 'unavailable';
+  const homeLineup = gameData.lineups?.home ?? [];
+  const awayLineup = gameData.lineups?.away ?? [];
+  const lines = ['=== LINEUP STATUS ==='];
+
+  if (status === 'confirmed') {
+    lines.push('✅ LINEUP STATUS: CONFIRMED');
+    if (homeLineup.length > 0) {
+      lines.push(`Home batting order: ${homeLineup.slice(0, 9).map((p, i) => `${i + 1}. ${p.fullName}`).join(', ')}`);
+    }
+    if (awayLineup.length > 0) {
+      lines.push(`Away batting order: ${awayLineup.slice(0, 9).map((p, i) => `${i + 1}. ${p.fullName}`).join(', ')}`);
+    }
+  } else if (status === 'probable') {
+    lines.push('⚠️ LINEUP STATUS: PROBABLE — Analysis based on probable starters only. Confirmed lineups not yet available.');
+  } else {
+    lines.push('⚠️ LINEUP STATUS: UNAVAILABLE — Analysis based on probable starters and team tendencies only.');
+  }
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Team verification helper
+// ---------------------------------------------------------------------------
+
+function teamVerificationLine(playerName, scheduledAbbr, verification) {
+  if (!verification) return null;
+  const curAbbr = verification.currentTeamAbbr;
+  if (curAbbr && scheduledAbbr && curAbbr.toLowerCase() !== scheduledAbbr.toLowerCase()) {
+    return `⚠️ TEAM VERIFICATION: ${playerName} — current MLB team (${curAbbr}) differs from scheduled team (${scheduledAbbr}) — possible trade/FA — verify before betting`;
+  }
+  return `✓ TEAM VERIFICATION: ${playerName} — current team confirmed as ${curAbbr ?? verification.currentTeamName ?? 'Unknown'}`;
+}
+
 /**
  * Construye el contexto estructurado completo para un partido.
  *
@@ -331,20 +422,26 @@ export async function buildContext(gameData, oddsData = null) {
   const awayPitcher = away?.probablePitcher;
 
   // Fetch paralelo: fallo individual no cancela el resto
-  const [homeStatsResult, awayStatsResult, homePitcherResult, awayPitcherResult] =
+  // Use historical versions to get multi-year trend data (same base shape + .historical array)
+  const [homeStatsResult, awayStatsResult, homePitcherResult, awayPitcherResult,
+         homeTeamVerifyResult, awayTeamVerifyResult] =
     await Promise.allSettled([
-      home?.id ? getTeamHittingStats(home.id) : Promise.resolve(null),
-      away?.id ? getTeamHittingStats(away.id) : Promise.resolve(null),
-      homePitcher?.id ? getPitcherStats(homePitcher.id) : Promise.resolve(null),
-      awayPitcher?.id ? getPitcherStats(awayPitcher.id) : Promise.resolve(null),
+      home?.id ? getTeamHittingHistoricalStats(home.id) : Promise.resolve(null),
+      away?.id ? getTeamHittingHistoricalStats(away.id) : Promise.resolve(null),
+      homePitcher?.id ? getPitcherHistoricalStats(homePitcher.id) : Promise.resolve(null),
+      awayPitcher?.id ? getPitcherHistoricalStats(awayPitcher.id) : Promise.resolve(null),
+      homePitcher?.id ? getCurrentTeam(homePitcher.id) : Promise.resolve(null),
+      awayPitcher?.id ? getCurrentTeam(awayPitcher.id) : Promise.resolve(null),
     ]);
 
   const settled = (r) => (r.status === 'fulfilled' ? r.value : null);
 
-  const homeHitting = settled(homeStatsResult);
-  const awayHitting = settled(awayStatsResult);
-  const homePitcherStats = settled(homePitcherResult);
-  const awayPitcherStats = settled(awayPitcherResult);
+  const homeHitting       = settled(homeStatsResult);
+  const awayHitting       = settled(awayStatsResult);
+  const homePitcherStats  = settled(homePitcherResult);
+  const awayPitcherStats  = settled(awayPitcherResult);
+  const homePitcherTeam   = settled(homeTeamVerifyResult);
+  const awayPitcherTeam   = settled(awayTeamVerifyResult);
 
   // ── Baseball Savant Statcast (non-blocking) ──────────────────────────────
   let homePitcherSavant = null;
@@ -577,6 +674,33 @@ export async function buildContext(gameData, oddsData = null) {
       ` | O/U ${ou.total ?? 'N/A'} O${am(ou.overPrice)} U${am(ou.underPrice)}`
     );
   }
+
+  // ── Lineup Status ──────────────────────────────────────────────────────────
+  blocks.push('');
+  blocks.push(lineupStatusBlock(gameData));
+  console.log(`[context-builder] Lineup status: ${gameData.lineupStatus ?? 'unavailable'}`);
+
+  // ── Team Verification ──────────────────────────────────────────────────────
+  const homeVerLine = teamVerificationLine(homePitcher?.fullName ?? 'Home pitcher', homeAbbr, homePitcherTeam);
+  const awayVerLine = teamVerificationLine(awayPitcher?.fullName ?? 'Away pitcher', awayAbbr, awayPitcherTeam);
+  if (homeVerLine || awayVerLine) {
+    blocks.push('');
+    blocks.push('=== TEAM VERIFICATION ===');
+    if (homeVerLine) blocks.push(homeVerLine);
+    if (awayVerLine) blocks.push(awayVerLine);
+  }
+
+  // ── Pitcher Historical Trends ──────────────────────────────────────────────
+  const homePitcherHist = pitcherHistoricalBlock(homePitcher?.fullName ?? 'Home Pitcher', homeAbbr, homePitcherStats);
+  const awayPitcherHist = pitcherHistoricalBlock(awayPitcher?.fullName ?? 'Away Pitcher', awayAbbr, awayPitcherStats);
+  if (homePitcherHist) { blocks.push(''); blocks.push(homePitcherHist); }
+  if (awayPitcherHist) { blocks.push(''); blocks.push(awayPitcherHist); }
+
+  // ── Team Hitting Historical Trends ─────────────────────────────────────────
+  const homeTeamHist = teamHistoricalBlock(homeName, homeHitting);
+  const awayTeamHist = teamHistoricalBlock(awayName, awayHitting);
+  if (homeTeamHist) { blocks.push(''); blocks.push(homeTeamHist); }
+  if (awayTeamHist) { blocks.push(''); blocks.push(awayTeamHist); }
 
   // Historical MLB reference data (always appended — park factors + team tendencies)
   blocks.push('');

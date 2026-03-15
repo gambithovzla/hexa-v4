@@ -70,6 +70,14 @@ const L = {
       combined:   'Combined',
       estimated:  '* Estimated odds — real lines available in regular season',
     },
+    disclaimers: {
+      humanTitle:   '⚠️ IMPORTANT NOTICE',
+      humanBody:    'H.E.X.A. is an advanced statistical analysis system. All analysis is subject to unpredictable human factors: last-minute injuries, manager decisions, real-time weather conditions, and natural game variance. Sports betting carries financial risk. Only bet what you can afford to lose.',
+      lineupTitle:  '📋 LINEUPS',
+      lineupBody:   'For greater accuracy, it is recommended to wait until official lineups are released (generally 3–4 hours before game time) before requesting analysis.',
+      showMore:     'Show',
+      showLess:     'Hide',
+    },
   },
   es: {
     masterPick:       'Pick Principal',
@@ -99,8 +107,64 @@ const L = {
       combined:   'Combinado',
       estimated:  '* Momios estimados — líneas reales disponibles en temporada regular',
     },
+    disclaimers: {
+      humanTitle:   '⚠️ AVISO IMPORTANTE',
+      humanBody:    'H.E.X.A. es un sistema de análisis estadístico avanzado. Todo análisis está sujeto al factor humano impredecible: lesiones de último momento, decisiones del manager, condiciones climáticas en tiempo real y varianza natural del juego. Las apuestas deportivas conllevan riesgo financiero. Apuesta solo lo que estás dispuesto a perder.',
+      lineupTitle:  '📋 ALINEACIONES',
+      lineupBody:   'Para mayor precisión, se recomienda esperar a que las alineaciones oficiales sean publicadas (generalmente 3–4 horas antes del juego) antes de solicitar el análisis.',
+      showMore:     'Ver',
+      showLess:     'Ocultar',
+    },
   },
 };
+
+// ── Disclaimers (collapsible) ────────────────────────────────────────────────
+
+function DisclaimerBlock({ title, body, accentColor }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Box
+      sx={{
+        borderLeft: `3px solid ${accentColor}`,
+        borderRadius: '0 4px 4px 0',
+        bgcolor: `${accentColor}0A`,
+        overflow: 'hidden',
+      }}
+    >
+      <Box
+        component="button"
+        onClick={() => setOpen(v => !v)}
+        sx={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', px: '12px', py: '8px', background: 'none', border: 'none',
+          cursor: 'pointer', gap: '8px',
+        }}
+      >
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.67rem', fontWeight: 700, color: accentColor, textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'left' }}>
+          {title}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: '#4a6580', flexShrink: 0 }}>
+          {open ? '▲' : '▼'}
+        </Typography>
+      </Box>
+      {open && (
+        <Typography sx={{ fontFamily: LABEL, fontSize: '0.73rem', color: '#4a6580', lineHeight: 1.65, px: '12px', pb: '10px' }}>
+          {body}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function Disclaimers({ t }) {
+  const d = t.disclaimers;
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', mt: '4px' }}>
+      <DisclaimerBlock title={d.humanTitle}  body={d.humanBody}  accentColor="#FFB800" />
+      <DisclaimerBlock title={d.lineupTitle} body={d.lineupBody} accentColor="#00D4FF" />
+    </Box>
+  );
+}
 
 // ── Shared sub-components ────────────────────────────────────────────────────
 
@@ -975,6 +1039,9 @@ function SingleGameResult({ hexa, t }) {
 
       {/* ── Market Odds + Bet Calculator ── */}
       {hexa.odds?.odds && <OddsPanel odds={hexa.odds.odds} hexa={hexa} t={t} />}
+
+      {/* ── Disclaimers ── */}
+      <Disclaimers t={t} />
     </Box>
   );
 }
