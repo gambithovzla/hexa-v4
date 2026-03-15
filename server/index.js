@@ -32,6 +32,19 @@ app.use('/api/lemon',     lemonRouter);
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
 
+const CREDIT_COSTS = {
+  single:  { fast: 1,  deep: 2  },
+  parlay:  { fast: 4,  deep: 8  },
+  fullDay: { fast: 8,  deep: 15 },
+};
+const WEB_INTEL_COST = 3; // only applied to single-game
+
+function calcServerCost(type, model, webSearch) {
+  const base = CREDIT_COSTS[type]?.[model] ?? 1;
+  const webBonus = (type === 'single' && webSearch) ? WEB_INTEL_COST : 0;
+  return base + webBonus;
+}
+
 /**
  * deductCredits(req, res, cost)
  * Looks up the user in PostgreSQL, checks credits, deducts `cost` atomically.
@@ -102,7 +115,7 @@ app.get('/api/games/:gameId/context', async (req, res) => {
   }
 });
 
-// POST /api/analyze/game  — requires auth, costs 1 credit
+// POST /api/analyze/game  — requires auth, costs 1 (fast) or 2 (deep) + 3 if webSearch
 app.post('/api/analyze/game', verifyToken, async (req, res) => {
   try {
     const {
@@ -127,7 +140,7 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
       matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     } catch { /* odds are optional */ }
 
-    const updatedUser = await deductCredits(req, res, 1);
+    const updatedUser = await deductCredits(req, res, calcServerCost('single', model, webSearch));
     if (!updatedUser) return;
 
     const context  = await buildContext(gameData, matchedOdds);
@@ -141,7 +154,7 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/analyze/parlay  — requires auth, costs 2 credits
+// POST /api/analyze/parlay  — requires auth, costs 4 (fast) or 8 (deep) credits
 app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
   try {
     const {
@@ -168,7 +181,7 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
       return matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     });
 
-    const updatedUser = await deductCredits(req, res, 2);
+    const updatedUser = await deductCredits(req, res, calcServerCost('parlay', model, false));
     if (!updatedUser) return;
 
     const contexts = await Promise.all(
@@ -189,7 +202,7 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/analyze/full-day  — requires auth, costs 3 credits
+// POST /api/analyze/full-day  — requires auth, costs 8 (fast) or 15 (deep) credits
 app.post('/api/analyze/full-day', verifyToken, async (req, res) => {
   try {
     const {
@@ -208,7 +221,7 @@ app.post('/api/analyze/full-day', verifyToken, async (req, res) => {
     let allOdds = [];
     try { allOdds = await getGameOdds(); } catch { /* optional */ }
 
-    const updatedUser = await deductCredits(req, res, 3);
+    const updatedUser = await deductCredits(req, res, calcServerCost('fullDay', model, false));
     if (!updatedUser) return;
 
     const contexts = await Promise.all(

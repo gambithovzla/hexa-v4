@@ -9,9 +9,9 @@ const LS_WEBHOOK_SECRET = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
 const LS_STORE_ID       = process.env.LEMONSQUEEZY_STORE_ID;
 
 const VARIANT_CREDITS = {
-  '1407032': { credits: 20,  type: 'one_time',     label: 'Starter Pack'  },
-  '1407417': { credits: 60,  type: 'subscription', label: 'MVP Monthly'   },
-  '1407425': { credits: 15,  type: 'one_time',     label: 'Add-on Pack'   },
+  '1407032': { credits: 30,  type: 'one_time',     label: 'Starter Pack'  },
+  '1407417': { credits: 80,  type: 'subscription', label: 'MVP Monthly'   },
+  '1407425': { credits: 18,  type: 'one_time',     label: 'Add-on Pack'   },
 };
 
 // POST /api/lemon/checkout — creates a Lemon Squeezy checkout URL

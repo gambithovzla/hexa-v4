@@ -128,7 +128,7 @@ router.post('/register', async (req, res) => {
       `INSERT INTO users (id, email, password_hash, credits)
        VALUES ($1, $2, $3, $4)
        RETURNING id, email, credits, created_at`,
-      [id, normalizedEmail, passwordHash, 10]
+      [id, normalizedEmail, passwordHash, 5]
     );
 
     const newUser = rows[0];

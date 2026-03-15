@@ -35,46 +35,50 @@ const PLANS = [
     label:      'Free',
     price:      '$0',
     period:     null,
-    credits:    { en: '10 credits on signup', es: '10 créditos al registrarse' },
+    credits:    { en: '5 credits on signup', es: '5 créditos al registrarse' },
     variantId:  null,
     highlight:  false,
     badge:      null,
+    betaBadge:  false,
     btnLabel:   { en: 'Current Plan', es: 'Plan actual' },
     disabled:   true,
   },
   {
     id:         'starter',
     label:      'Starter',
-    price:      '$4.99',
+    price:      '$7.99',
     period:     null,
-    credits:    { en: '20 credits', es: '20 créditos' },
+    credits:    { en: '30 credits', es: '30 créditos' },
     variantId:  '1407032',
     highlight:  false,
     badge:      null,
+    betaBadge:  true,
     btnLabel:   { en: 'Buy Starter', es: 'Comprar Starter' },
     disabled:   false,
   },
   {
     id:         'mvp',
     label:      'MVP',
-    price:      '$9.99',
+    price:      '$19.99',
     period:     { en: '/mo', es: '/mes' },
-    credits:    { en: '60 credits/mo', es: '60 créditos/mes' },
+    credits:    { en: '80 credits/mo', es: '80 créditos/mes' },
     variantId:  '1407417',
     highlight:  true,
     badge:      'MÁS POPULAR',
+    betaBadge:  true,
     btnLabel:   { en: 'Subscribe MVP', es: 'Suscribirse MVP' },
     disabled:   false,
   },
   {
     id:         'addon',
     label:      'Add-on',
-    price:      '$2.99',
+    price:      '$4.99',
     period:     null,
-    credits:    { en: '15 credits', es: '15 créditos' },
+    credits:    { en: '18 credits', es: '18 créditos' },
     variantId:  '1407425',
     highlight:  false,
     badge:      null,
+    betaBadge:  true,
     btnLabel:   { en: 'Buy Add-on', es: 'Comprar Add-on' },
     disabled:   false,
   },
@@ -132,9 +136,18 @@ function PlanCard({ plan, lang, onBuy, loading }) {
       </Box>
 
       {/* Credits */}
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: C.accent, fontWeight: 700, mb: '16px' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: C.accent, fontWeight: 700, mb: '8px' }}>
         {isEs ? plan.credits.es : plan.credits.en}
       </Typography>
+
+      {/* Beta badge */}
+      {plan.betaBadge && (
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px', mb: '12px', px: '7px', py: '3px', bgcolor: 'rgba(255,184,0,0.1)', border: '1px solid rgba(255,184,0,0.3)', borderRadius: 0, alignSelf: 'flex-start' }}>
+          <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', fontWeight: 800, color: '#FFB800', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            🚀 Beta Founding Price
+          </Typography>
+        </Box>
+      )}
 
       {/* Buy button */}
       <Box
@@ -318,11 +331,16 @@ export default function PricingModal({ onClose, lang = 'es' }) {
         </Box>
 
         {/* Footer note */}
-        <Box sx={{ px: '24px', pb: '20px' }}>
+        <Box sx={{ px: '24px', pb: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <Typography sx={{ fontFamily: DM, fontSize: '0.72rem', color: C.textMuted, lineHeight: 1.6 }}>
             {isEs
               ? 'Los créditos nunca vencen (excepto el plan MVP que se renueva mensualmente). Pagos procesados de forma segura por Lemon Squeezy.'
               : 'Credits never expire (except MVP plan which renews monthly). Payments securely processed by Lemon Squeezy.'}
+          </Typography>
+          <Typography sx={{ fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, color: '#FFB800', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            🚀 {isEs
+              ? 'Precios de lanzamiento — Temporada 2026. Los precios subirán una vez validado el modelo.'
+              : 'Launch pricing — 2026 Season. Prices will increase once the model is validated.'}
           </Typography>
         </Box>
       </Box>

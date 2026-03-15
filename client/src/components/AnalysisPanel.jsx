@@ -506,76 +506,87 @@ function NoCreditsMessage({ lang }) {
 // ── Credit cost logic ─────────────────────────────────────────────────────────
 
 const BASE_COST = {
-  single:  { fast: 1,  deep: 3  },
-  parlay:  { fast: 2,  deep: 6  },
-  fullDay: { fast: 5,  deep: 15 },
+  single:  { fast: 1,  deep: 2  },
+  parlay:  { fast: 4,  deep: 8  },
+  fullDay: { fast: 8,  deep: 15 },
 };
-const WEB_INTEL_COST = 3;
+const WEB_INTEL_COST = 3; // only for single game
 
 function calcCreditCost(mode, modelMode, webSearch) {
   const base = BASE_COST[mode]?.[modelMode] ?? 1;
-  return base + (webSearch ? WEB_INTEL_COST : 0);
+  const webBonus = (mode === 'single' && webSearch) ? WEB_INTEL_COST : 0;
+  return base + webBonus;
 }
+
+const ACTION_LABEL = {
+  en: {
+    single:  { fast: 'Single Fast Analysis', deep: 'Single Deep Analysis' },
+    parlay:  { fast: 'Parlay Fast Analysis',  deep: 'Parlay Deep Analysis'  },
+    fullDay: { fast: 'Full Day Fast Analysis', deep: 'Full Day Deep Analysis' },
+  },
+  es: {
+    single:  { fast: 'Análisis Single Fast', deep: 'Análisis Single Deep' },
+    parlay:  { fast: 'Análisis Parlay Fast',  deep: 'Análisis Parlay Deep'  },
+    fullDay: { fast: 'Análisis Full Day Fast', deep: 'Análisis Full Day Deep' },
+  },
+};
 
 // ── CreditCostIndicator ───────────────────────────────────────────────────────
 
-function CreditCostIndicator({ cost, userCredits, isAuthenticated, lang }) {
-  const isEs         = lang === 'es';
-  const credits      = isAuthenticated ? (userCredits ?? 0) : null;
-  const hasEnough    = credits === null || credits >= cost;
-  const accentColor  = hasEnough ? C.accentSec : C.red;
+function CreditCostIndicator({ cost, userCredits, isAuthenticated, lang, mode, modelMode }) {
+  const isEs        = lang === 'es';
+  const credits     = isAuthenticated ? (userCredits ?? 0) : null;
+  const hasEnough   = credits === null || credits >= cost;
+  const actionLabel = ACTION_LABEL[isEs ? 'es' : 'en']?.[mode]?.[modelMode] ?? '';
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-      {/* Cost row */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
-          {isEs ? 'Este análisis consume:' : 'This analysis costs:'}
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-          <Typography component="span" sx={{ fontSize: '0.7rem', lineHeight: 1 }}>⚡</Typography>
-          <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.78rem', fontWeight: 700, color: accentColor }}>
+    <Box
+      sx={{
+        p:            '12px 14px',
+        bgcolor:      hasEnough ? 'rgba(0,102,255,0.05)' : 'rgba(255,61,87,0.06)',
+        border:       `1px solid ${hasEnough ? C.accentLine : 'rgba(255,61,87,0.3)'}`,
+        borderRadius: '2px',
+        display:      'flex',
+        flexDirection:'column',
+        gap:          '6px',
+      }}
+    >
+      {/* Action name */}
+      <Typography sx={{ fontFamily: BARLOW, fontSize: '0.7rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        {actionLabel}
+      </Typography>
+
+      {/* Cost + balance row */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Typography component="span" sx={{ fontSize: '0.75rem' }}>⚡</Typography>
+          <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.9rem', fontWeight: 700, color: hasEnough ? C.accentSec : C.red }}>
             {cost}
           </Typography>
           <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.68rem', color: C.textMuted, letterSpacing: '0.06em' }}>
             {isEs ? 'créditos' : 'credits'}
           </Typography>
         </Box>
+
+        {isAuthenticated && credits !== null && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Typography sx={{ fontFamily: BARLOW, fontSize: '0.64rem', color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              {isEs ? 'Saldo:' : 'Balance:'}
+            </Typography>
+            <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 700, color: hasEnough ? C.green : C.red }}>
+              {credits}
+            </Typography>
+          </Box>
+        )}
       </Box>
 
-      {/* Balance / insufficient row */}
-      {isAuthenticated && credits !== null && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {hasEnough ? (
-            <>
-              <Typography sx={{ fontFamily: BARLOW, fontSize: '0.68rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                {isEs ? 'Tu saldo:' : 'Your balance:'}
-              </Typography>
-              <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 700, color: C.green }}>
-                {credits}
-              </Typography>
-              <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.64rem', color: C.textMuted, letterSpacing: '0.06em' }}>
-                {isEs ? 'créditos restantes' : 'credits remaining'}
-              </Typography>
-            </>
-          ) : (
-            <>
-              <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, color: C.red, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {isEs ? 'Créditos insuficientes' : 'Insufficient credits'}
-              </Typography>
-              <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.64rem', color: C.textMuted }}>
-                —
-              </Typography>
-              <Typography
-                component="a"
-                href="mailto:hexa@hexa.com"
-                sx={{ fontFamily: BARLOW, fontSize: '0.64rem', fontWeight: 700, color: C.accent, textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: C.accentSec } }}
-              >
-                {isEs ? 'Recarga aquí' : 'Top up here'}
-              </Typography>
-            </>
-          )}
-        </Box>
+      {/* Insufficient warning */}
+      {isAuthenticated && !hasEnough && (
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, color: C.red, letterSpacing: '0.06em' }}>
+          ⚠ {isEs
+            ? `Necesitas ${cost} créditos. Tu saldo es ${credits}.`
+            : `You need ${cost} credits. Your balance is ${credits}.`}
+        </Typography>
       )}
     </Box>
   );
@@ -652,10 +663,11 @@ export default function AnalysisPanel({
     }
   }, [selectedGames.length, mode]);
 
-  // Reset result when mode or selection changes
+  // Reset result when mode or selection changes; clear webSearch for non-single modes
   useEffect(() => {
     setResult(null);
     setError(null);
+    if (mode !== 'single') setWebSearch(false);
   }, [mode, selectedGames.length]);
 
   const canAnalyze =
@@ -874,8 +886,10 @@ export default function AnalysisPanel({
           />
         )}
 
-        {/* Web search toggle */}
-        <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
+        {/* Web search toggle — single game only */}
+        {mode === 'single' && (
+          <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
+        )}
 
         {/* Credit cost indicator */}
         <CreditCostIndicator
@@ -883,6 +897,8 @@ export default function AnalysisPanel({
           userCredits={isAuthenticated ? userCredits : null}
           isAuthenticated={isAuthenticated}
           lang={lang}
+          mode={mode}
+          modelMode={modelMode}
         />
 
         {/* Run button — disabled when insufficient credits */}
