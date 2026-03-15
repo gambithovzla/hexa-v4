@@ -11,11 +11,12 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 import LanguageToggle from './LanguageToggle';
 import AuthModal from './AuthModal';
+import HexaHelpModal from './HexaHelpModal';
 import { useAuth } from '../store/authStore';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -315,6 +316,42 @@ function TabButton({ tab, active, lang, onClick }) {
   );
 }
 
+// ── Help button ───────────────────────────────────────────────────────────────
+
+function HelpButton({ lang }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Box
+        component="button"
+        onClick={() => setOpen(true)}
+        title={lang === 'es' ? '¿Cómo funciona H.E.X.A.?' : 'How does H.E.X.A. work?'}
+        sx={{
+          display:        'inline-flex',
+          alignItems:     'center',
+          justifyContent: 'center',
+          width:          '26px',
+          height:         '26px',
+          border:         `1px solid ${C.border}`,
+          borderRadius:   '50%',
+          bgcolor:        'transparent',
+          color:          C.textMuted,
+          fontFamily:     '"DM Sans", system-ui, sans-serif',
+          fontSize:       '0.72rem',
+          fontWeight:     700,
+          cursor:         'pointer',
+          flexShrink:     0,
+          transition:     'all 0.15s',
+          '&:hover':      { color: C.accentSec, borderColor: C.accent, bgcolor: C.accentFade },
+        }}
+      >
+        ?
+      </Box>
+      <HexaHelpModal open={open} onClose={() => setOpen(false)} lang={lang} />
+    </>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange }) {
@@ -418,6 +455,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Auth button / user pill */}
         <AuthButton lang={lang} />
+
+        {/* Help button */}
+        <HelpButton lang={lang} />
 
         {/* Language toggle */}
         <LanguageToggle lang={lang} onToggle={onLangToggle} />

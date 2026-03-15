@@ -503,7 +503,83 @@ function NoCreditsMessage({ lang }) {
   );
 }
 
-// ── Run button ────────────────────────────────────────────────────────────────
+// ── Credit cost logic ─────────────────────────────────────────────────────────
+
+const BASE_COST = {
+  single:  { fast: 1,  deep: 3  },
+  parlay:  { fast: 2,  deep: 6  },
+  fullDay: { fast: 5,  deep: 15 },
+};
+const WEB_INTEL_COST = 3;
+
+function calcCreditCost(mode, modelMode, webSearch) {
+  const base = BASE_COST[mode]?.[modelMode] ?? 1;
+  return base + (webSearch ? WEB_INTEL_COST : 0);
+}
+
+// ── CreditCostIndicator ───────────────────────────────────────────────────────
+
+function CreditCostIndicator({ cost, userCredits, isAuthenticated, lang }) {
+  const isEs         = lang === 'es';
+  const credits      = isAuthenticated ? (userCredits ?? 0) : null;
+  const hasEnough    = credits === null || credits >= cost;
+  const accentColor  = hasEnough ? C.accentSec : C.red;
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      {/* Cost row */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
+          {isEs ? 'Este análisis consume:' : 'This analysis costs:'}
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+          <Typography component="span" sx={{ fontSize: '0.7rem', lineHeight: 1 }}>⚡</Typography>
+          <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.78rem', fontWeight: 700, color: accentColor }}>
+            {cost}
+          </Typography>
+          <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.68rem', color: C.textMuted, letterSpacing: '0.06em' }}>
+            {isEs ? 'créditos' : 'credits'}
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Balance / insufficient row */}
+      {isAuthenticated && credits !== null && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {hasEnough ? (
+            <>
+              <Typography sx={{ fontFamily: BARLOW, fontSize: '0.68rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                {isEs ? 'Tu saldo:' : 'Your balance:'}
+              </Typography>
+              <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 700, color: C.green }}>
+                {credits}
+              </Typography>
+              <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.64rem', color: C.textMuted, letterSpacing: '0.06em' }}>
+                {isEs ? 'créditos restantes' : 'credits remaining'}
+              </Typography>
+            </>
+          ) : (
+            <>
+              <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, color: C.red, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {isEs ? 'Créditos insuficientes' : 'Insufficient credits'}
+              </Typography>
+              <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.64rem', color: C.textMuted }}>
+                —
+              </Typography>
+              <Typography
+                component="a"
+                href="mailto:hexa@hexa.com"
+                sx={{ fontFamily: BARLOW, fontSize: '0.64rem', fontWeight: 700, color: C.accent, textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: C.accentSec } }}
+              >
+                {isEs ? 'Recarga aquí' : 'Top up here'}
+              </Typography>
+            </>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+}
 
 function RunButton({ canAnalyze, loading, onClick, t }) {
   const active = canAnalyze && !loading;
@@ -587,6 +663,10 @@ export default function AnalysisPanel({
     (mode === 'parlay'  && selectedGames.length >= 2)  ||
     (mode === 'fullDay' && selectedGames.length > 0);
 
+  const creditCost    = calcCreditCost(mode, modelMode, webSearch);
+  const userCredits   = user?.credits ?? 0;
+  const hasEnoughCredits = !isAuthenticated || userCredits >= creditCost;
+
   async function handleAnalyze() {
     if (!canAnalyze) return;
 
@@ -597,8 +677,7 @@ export default function AnalysisPanel({
     }
 
     // Credits gate
-    if ((user?.credits ?? 0) < 1) {
-      // show no-credits via error state using a sentinel
+    if (userCredits < creditCost) {
       setError('__no_credits__');
       return;
     }
@@ -798,11 +877,24 @@ export default function AnalysisPanel({
         {/* Web search toggle */}
         <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
 
-        {/* Run button — always visible; auth check happens inside handleAnalyze */}
-        {(user?.credits ?? 0) < 1 && isAuthenticated ? (
+        {/* Credit cost indicator */}
+        <CreditCostIndicator
+          cost={creditCost}
+          userCredits={isAuthenticated ? userCredits : null}
+          isAuthenticated={isAuthenticated}
+          lang={lang}
+        />
+
+        {/* Run button — disabled when insufficient credits */}
+        {isAuthenticated && !hasEnoughCredits ? (
           <NoCreditsMessage lang={lang} />
         ) : (
-          <RunButton canAnalyze={canAnalyze} loading={loading} onClick={handleAnalyze} t={t} />
+          <RunButton
+            canAnalyze={canAnalyze && hasEnoughCredits}
+            loading={loading}
+            onClick={handleAnalyze}
+            t={t}
+          />
         )}
       </Box>
 
