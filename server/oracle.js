@@ -337,11 +337,29 @@ export async function analyzeGame(params) {
     requestBody.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
   }
 
+  // ── DEBUG: log full prompt before API call ─────────────────────────────────
+  console.log('=== H.E.X.A. DEBUG: FULL CONTEXT ===');
+  console.log('Game:', matchup || 'Full Day');
+  console.log('Mode:', mode);
+  console.log('Web Intel:', webSearch);
+  console.log('Model:', modelId);
+  console.log('--- SYSTEM PROMPT ---');
+  console.log(systemPrompt);
+  console.log('--- USER PROMPT / CONTEXT ---');
+  console.log(userMessage);
+  console.log('=== END DEBUG ===');
+
   // Usamos streaming para evitar timeouts con respuestas largas
   const stream  = anthropic.messages.stream(requestBody);
   const message = await stream.finalMessage();
 
   const rawText              = extractRawText(message);
+
+  // ── DEBUG: log response ────────────────────────────────────────────────────
+  console.log('=== H.E.X.A. DEBUG: CLAUDE RESPONSE ===');
+  console.log((rawText?.substring(0, 500) ?? '') + (rawText?.length > 500 ? '...' : ''));
+  console.log('=== END RESPONSE ===');
+
   const { data, parseError } = parseResponse(rawText);
 
   return {
