@@ -14,6 +14,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../store/authStore';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export default function useBankroll() {
   const { token, isAuthenticated } = useAuth();
   const [bankrollData, setBankrollData] = useState(null);
@@ -30,7 +32,7 @@ export default function useBankroll() {
     if (!isAuthenticated || !token) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/bankroll', { headers: authHeaders() });
+      const res = await fetch(`${API_URL}/api/bankroll`, { headers: authHeaders() });
       if (res.ok) {
         const json = await res.json();
         setBankrollData(json.data);
@@ -43,7 +45,7 @@ export default function useBankroll() {
   useEffect(() => { refreshBankroll(); }, [refreshBankroll]);
 
   async function setupBankroll(initialBankroll) {
-    const res  = await fetch('/api/bankroll/setup', {
+    const res  = await fetch(`${API_URL}/api/bankroll/setup`, {
       method:  'POST',
       headers: authHeaders(),
       body:    JSON.stringify({ initialBankroll }),
@@ -55,7 +57,7 @@ export default function useBankroll() {
   }
 
   async function addBet(bet) {
-    const res  = await fetch('/api/bankroll/bet', {
+    const res  = await fetch(`${API_URL}/api/bankroll/bet`, {
       method:  'POST',
       headers: authHeaders(),
       body:    JSON.stringify(bet),
@@ -67,7 +69,7 @@ export default function useBankroll() {
   }
 
   async function updateBetResult(betId, result) {
-    const res  = await fetch(`/api/bankroll/bet/${betId}`, {
+    const res  = await fetch(`${API_URL}/api/bankroll/bet/${betId}`, {
       method:  'PATCH',
       headers: authHeaders(),
       body:    JSON.stringify({ result }),
@@ -79,7 +81,7 @@ export default function useBankroll() {
   }
 
   async function deleteBet(betId) {
-    const res  = await fetch(`/api/bankroll/bet/${betId}`, {
+    const res  = await fetch(`${API_URL}/api/bankroll/bet/${betId}`, {
       method:  'DELETE',
       headers: authHeaders(),
     });

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
   bg:             '#04080F',
@@ -568,7 +570,7 @@ export default function GameSelector({
     setSingleGame(null);
     setSelectedIds(new Set());
 
-    fetch(`/api/games?date=${date}`)
+    fetch(`${API_URL}/api/games?date=${date}`)
       .then(r => r.json())
       .then(json => {
         if (cancelled) return;

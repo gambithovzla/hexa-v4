@@ -11,6 +11,8 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 import LanguageToggle from './LanguageToggle';
 import AuthModal from './AuthModal';
 import { useAuth } from '../store/authStore';
@@ -56,7 +58,7 @@ function StatcastBadge({ lang }) {
 
   async function fetchStatus() {
     try {
-      const res = await fetch('/api/savant/status');
+      const res = await fetch(`${API_URL}/api/savant/status`);
       if (!res.ok) return;
       const json = await res.json();
       if (json.success) setStatus(json.data);
@@ -70,7 +72,7 @@ function StatcastBadge({ lang }) {
     if (spinning) return;
     setSpinning(true);
     try {
-      const res = await fetch('/api/savant/refresh', { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/savant/refresh`, { method: 'POST' });
       if (res.ok) {
         const json = await res.json();
         if (json.success) setStatus(json.data);

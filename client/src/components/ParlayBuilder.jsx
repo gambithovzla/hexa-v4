@@ -5,6 +5,8 @@ import {
 } from '@mui/material';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 const labels = {
   en: {
     title: 'Parlay Builder',
@@ -55,7 +57,7 @@ export default function ParlayBuilder({ games, language = 'en', onSave }) {
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch('/api/analyze/parlay', {
+      const res = await fetch(`${API_URL}/api/analyze/parlay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gameIds: selected.map(g => g.gamePk), language }),

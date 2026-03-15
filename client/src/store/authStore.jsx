@@ -14,6 +14,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = 'hexa_token';
+const API_URL   = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function AuthProvider({ children }) {
   const [user,            setUser]            = useState(null);
@@ -29,7 +30,7 @@ export function AuthProvider({ children }) {
       return;
     }
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await fetch(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${t}` },
       });
       if (res.ok) {
@@ -55,7 +56,7 @@ export function AuthProvider({ children }) {
 
   // ── login ─────────────────────────────────────────────────────────────────
   async function login(email, password) {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ email, password }),
@@ -72,7 +73,7 @@ export function AuthProvider({ children }) {
 
   // ── register ──────────────────────────────────────────────────────────────
   async function register(email, password) {
-    const res = await fetch('/api/auth/register', {
+    const res = await fetch(`${API_URL}/api/auth/register`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ email, password }),

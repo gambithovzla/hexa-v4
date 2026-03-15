@@ -5,6 +5,8 @@ import {
 } from '@mui/material';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 const labels = {
   en: {
     title: 'Full Day Slate Analysis',
@@ -37,7 +39,7 @@ export default function FullDayView({ date, language = 'en', onSave }) {
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch('/api/analyze/full-day', {
+      const res = await fetch(`${API_URL}/api/analyze/full-day`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date, language }),

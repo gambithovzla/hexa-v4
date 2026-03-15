@@ -11,6 +11,8 @@ import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
   bg:          '#04080F',
@@ -584,7 +586,7 @@ function AgregarABanca({ matchup, pick, odds }) {
     setBusy(true);
     setErr('');
     try {
-      const res = await fetch('/api/bankroll/bet', {
+      const res = await fetch(`${API_URL}/api/bankroll/bet`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ matchup, pick, odds, stake: s, source: 'hexa' }),

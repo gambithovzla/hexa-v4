@@ -15,6 +15,8 @@ import ResultCard from './ResultCard';
 import AuthModal from './AuthModal';
 import { useAuth } from '../store/authStore';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 // ── Design tokens ────────────────────────────────────────────────────────────
 const C = {
   bg:          '#04080F',
@@ -610,7 +612,7 @@ export default function AnalysisPanel({
 
       if (mode === 'single') {
         const g = selectedGames[0];
-        endpoint = '/api/analyze/game';
+        endpoint = `${API_URL}/api/analyze/game`;
         body = {
           gameId:      g.gamePk,
           date:        g.gameDate?.split('T')[0],
@@ -621,7 +623,7 @@ export default function AnalysisPanel({
           model:       modelMode,
         };
       } else if (mode === 'parlay') {
-        endpoint = '/api/analyze/parlay';
+        endpoint = `${API_URL}/api/analyze/parlay`;
         body = {
           gameIds:     selectedGames.map(g => g.gamePk),
           date:        selectedGames[0]?.gameDate?.split('T')[0],
@@ -634,7 +636,7 @@ export default function AnalysisPanel({
         };
       } else {
         // fullDay
-        endpoint = '/api/analyze/full-day';
+        endpoint = `${API_URL}/api/analyze/full-day`;
         body = {
           date:        selectedGames[0]?.gameDate?.split('T')[0]
                          ?? new Date().toISOString().split('T')[0],
