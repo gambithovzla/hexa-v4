@@ -12,6 +12,9 @@
 const MLB_BASE = 'https://statsapi.mlb.com/api/v1';
 const SEASON = new Date().getFullYear();
 
+// Seasons to try in order — current year may have no data early in calendar year
+const SEASON_FALLBACK = SEASON >= 2026 ? [SEASON, 2025, 2024] : [SEASON, SEASON - 1];
+
 // ---------------------------------------------------------------------------
 // Utilidades internas
 // ---------------------------------------------------------------------------
@@ -257,19 +260,24 @@ export async function getTeams() {
 export async function getPitcherStats(pitcherId) {
   if (!pitcherId) throw new Error('getPitcherStats: pitcherId es requerido');
 
-  const url =
-    `${MLB_BASE}/people/${pitcherId}/stats` +
-    `?stats=season&season=${SEASON}&group=pitching`;
-
-  try {
-    const data = await fetchJSON(url);
-    const stats = normalizePitcherStats(data);
-    console.log(`[MLB API] Stats del pitcher ${pitcherId} obtenidas (ERA: ${stats.era})`);
-    return { pitcherId, season: SEASON, stats };
-  } catch (err) {
-    console.error(`[MLB API] Error en getPitcherStats(${pitcherId}):`, err.message);
-    throw err;
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url = `${MLB_BASE}/people/${pitcherId}/stats?stats=season&season=${season}&group=pitching`;
+      const data = await fetchJSON(url);
+      const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
+      if (splits.length > 0) {
+        const stats = normalizePitcherStats(data);
+        console.log(`[MLB API] Pitcher ${pitcherId} stats loaded from season ${season} (ERA: ${stats.era})`);
+        return { pitcherId, season, stats };
+      }
+      console.log(`[MLB API] Season ${season} returned empty splits for pitcher ${pitcherId} — trying next`);
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} failed for pitcher ${pitcherId}: ${err.message}`);
+    }
   }
+
+  console.warn(`[MLB API] No stats found for pitcher ${pitcherId} in seasons: ${SEASON_FALLBACK.join(', ')}`);
+  return null;
 }
 
 /**
@@ -280,19 +288,24 @@ export async function getPitcherStats(pitcherId) {
 export async function getTeamHittingStats(teamId) {
   if (!teamId) throw new Error('getTeamHittingStats: teamId es requerido');
 
-  const url =
-    `${MLB_BASE}/teams/${teamId}/stats` +
-    `?stats=season&season=${SEASON}&group=hitting`;
-
-  try {
-    const data = await fetchJSON(url);
-    const stats = normalizeHittingStats(data);
-    console.log(`[MLB API] Stats ofensivas del equipo ${teamId} obtenidas (AVG: ${stats.avg})`);
-    return { teamId, season: SEASON, stats };
-  } catch (err) {
-    console.error(`[MLB API] Error en getTeamHittingStats(${teamId}):`, err.message);
-    throw err;
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url = `${MLB_BASE}/teams/${teamId}/stats?stats=season&season=${season}&group=hitting`;
+      const data = await fetchJSON(url);
+      const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
+      if (splits.length > 0) {
+        const stats = normalizeHittingStats(data);
+        console.log(`[MLB API] Team ${teamId} hitting stats loaded from season ${season} (AVG: ${stats.avg})`);
+        return { teamId, season, stats };
+      }
+      console.log(`[MLB API] Season ${season} returned empty splits for team ${teamId} — trying next`);
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} failed for team ${teamId}: ${err.message}`);
+    }
   }
+
+  console.warn(`[MLB API] No hitting stats found for team ${teamId} in seasons: ${SEASON_FALLBACK.join(', ')}`);
+  return null;
 }
 
 // ---------------------------------------------------------------------------

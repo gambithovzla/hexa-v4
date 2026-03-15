@@ -26,21 +26,39 @@ const HEADERS = {
 const ENDPOINTS = {
   xStatsBatter:      'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=q&csv=true',
   xStatsPitcher:     'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2025&position=&team=&min=q&csv=true',
-  exitVelocity:      'https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=2025&min=q&csv=true',
+  exitVelocity:      [
+    'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=25&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=2025&min=q&csv=true',
+  ],
   pitchArsenal:      'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=2025&min=q&csv=true',
   percentiles:       'https://baseballsavant.mlb.com/leaderboard/percentile-rankings?type=batter&year=2025&csv=true',
-  rollingBatter:     'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=30&year=2025&min=10&csv=true',
-  rollingPitcher:    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=30&year=2025&min=10&csv=true',
+  rollingBatter:     [
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=xba,xslg,xwoba,xobp,exit_velocity_avg,launch_angle_avg,barrel_batted_rate&chart=false&x=xba&y=xba&r=no&chartType=bbs&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=30&year=2025&min=10&csv=true',
+  ],
+  rollingPitcher:    [
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=10&selections=xba,xslg,xwoba,xobp,exit_velocity_avg,launch_angle_avg,barrel_batted_rate&chart=false&x=xba&y=xba&r=no&chartType=bbs&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=30&year=2025&min=10&csv=true',
+  ],
   pitchTempo:        'https://baseballsavant.mlb.com/leaderboard/pitch-tempo?year=2025&type=pitcher&csv=true',
   sprintSpeed:       'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
   battedBallBatter:  'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
   battedBallPitcher: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
-  parkFactors:         'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=&min=1&csv=true',
-  parkFactorsFallback: 'https://baseballsavant.mlb.com/statcast_search/csv?type=park_factors&year=2025',
+  parkFactors:       [
+    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=MLB&min=1&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=&min=1&csv=true',
+    'https://baseballsavant.mlb.com/statcast_search/csv?type=park_factors&year=2025',
+  ],
   catcherFraming:    'https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=2025&team=&min=q&csv=true',
   fieldingOAA:       'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=2025&team=&csv=true',
-  yearToYearBatter:  'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Batter&type=xwoba&year=2025&csv=true',
-  yearToYearPitcher: 'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Pitcher&type=xwoba&year=2025&csv=true',
+  yearToYearBatter:  [
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=25&selections=xwoba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Batter&type=xwoba&year=2025&csv=true',
+  ],
+  yearToYearPitcher: [
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=25&selections=xwoba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Pitcher&type=xwoba&year=2025&csv=true',
+  ],
 };
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
@@ -147,11 +165,10 @@ async function loadAll() {
     'yearToYearBatter', 'yearToYearPitcher',
   ];
 
-  const fetches = KEYS.map(key =>
-    key === 'parkFactors'
-      ? fetchCSVWithFallback([ENDPOINTS.parkFactors, ENDPOINTS.parkFactorsFallback], 'parkFactors')
-      : fetchCSV(ENDPOINTS[key])
-  );
+  const fetches = KEYS.map(key => {
+    const ep = ENDPOINTS[key];
+    return Array.isArray(ep) ? fetchCSVWithFallback(ep, key) : fetchCSV(ep);
+  });
 
   const results = await Promise.allSettled(fetches);
 
