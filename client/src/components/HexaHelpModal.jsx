@@ -306,32 +306,34 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
     <Box
       onClick={onClose}
       sx={{
-        position:   'fixed',
-        inset:      0,
-        zIndex:     2000,
-        display:    'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p:          '16px',
-        bgcolor:    'rgba(4,8,15,0.85)',
-        backdropFilter: 'blur(8px)',
+        position:        'fixed',
+        top:             0,
+        left:            0,
+        width:           '100vw',
+        height:          '100vh',
+        zIndex:          9999,
+        display:         'flex',
+        alignItems:      'center',
+        justifyContent:  'center',
+        backgroundColor: 'rgba(0,0,0,0.85)',
       }}
     >
       {/* Panel */}
       <Box
         onClick={e => e.stopPropagation()}
         sx={{
-          position:     'relative',
-          width:        '100%',
-          maxWidth:     '520px',
-          maxHeight:    '88vh',
-          display:      'flex',
-          flexDirection:'column',
-          bgcolor:      C.bg,
-          border:       `1px solid ${C.cardBorder}`,
-          borderRadius: '4px',
-          boxShadow:    '0 0 60px rgba(0,102,255,0.2), 0 24px 48px rgba(0,0,0,0.6)',
-          overflow:     'hidden',
+          position:      'relative',
+          zIndex:        10000,
+          width:         '90%',
+          maxWidth:      '800px',
+          maxHeight:     '90vh',
+          overflowY:     'auto',
+          display:       'flex',
+          flexDirection: 'column',
+          bgcolor:       C.bg,
+          border:        `1px solid ${C.cardBorder}`,
+          borderRadius:  '4px',
+          boxShadow:     '0 0 60px rgba(0,102,255,0.2), 0 24px 48px rgba(0,0,0,0.6)',
         }}
       >
         {/* Header */}
@@ -398,8 +400,8 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
           ))}
         </Box>
 
-        {/* Tab content — scrollable */}
-        <Box sx={{ flex: 1, overflowY: 'auto', p: '20px', scrollbarWidth: 'thin', scrollbarColor: `${C.cardBorder} ${C.bgSec}` }}>
+        {/* Tab content */}
+        <Box sx={{ p: '20px', scrollbarWidth: 'thin', scrollbarColor: `${C.cardBorder} ${C.bgSec}` }}>
           {activeTab === 0 && <TabModes   lang={lang} />}
           {activeTab === 1 && <TabCredits lang={lang} />}
           {activeTab === 2 && <TabOracle  lang={lang} />}
