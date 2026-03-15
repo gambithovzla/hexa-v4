@@ -75,7 +75,7 @@ const L = {
     masterPick:       'Pick Principal',
     confidence:       'Confianza del Oráculo',
     oracleReport:     'Reporte del Oráculo',
-    hexaHunch:        'Intuición H.E.X.A.',
+    hexaHunch:        'Corazonada H.E.X.A.',
     alertFlags:       'Alertas',
     probabilityModel: 'Probabilidad de Victoria',
     bestPick:         'Mejor Pick',
