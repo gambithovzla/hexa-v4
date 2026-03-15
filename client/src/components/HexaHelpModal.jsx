@@ -251,11 +251,11 @@ function TabOracle({ lang }) {
         : 'Real-time market odds from major sportsbooks.',
     },
     {
-      icon: '🤖',
-      title: 'Claude AI (Anthropic)',
+      icon: '⚙️',
+      title: isEs ? 'Motor de Análisis H.E.X.A.' : 'H.E.X.A. Analysis Engine',
       description: isEs
-        ? 'El modelo de lenguaje más avanzado disponible, que procesa toda esta información y genera picks con nivel de confianza, alertas de riesgo y razonamiento detallado.'
-        : 'The most advanced language model available, processing all this information to generate picks with confidence levels, risk alerts and detailed reasoning.',
+        ? 'Procesa toda esta información y genera picks con nivel de confianza, alertas de riesgo y razonamiento detallado basado en datos.'
+        : 'Processes all this information to generate picks with confidence levels, risk alerts and detailed data-driven reasoning.',
     },
   ];
 
@@ -263,10 +263,10 @@ function TabOracle({ lang }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Intro */}
       <Box sx={{ p: '14px 16px', bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px' }}>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.82rem', color: C.textPrimary, lineHeight: 1.75, mb: '8px' }}>
+        <Typography sx={{ fontFamily: LABEL, fontSize: '0.82rem', color: C.textPrimary, lineHeight: 1.75 }}>
           {isEs
-            ? 'H.E.X.A. (Hybrid Expert X-Analysis) es un sistema de inteligencia artificial entrenado para analizar partidos de MLB combinando:'
-            : 'H.E.X.A. (Hybrid Expert X-Analysis) is an AI system trained to analyze MLB games by combining:'}
+            ? 'H.E.X.A. (Hybrid Expert X-Analysis) es un motor de análisis deportivo que combina múltiples fuentes de datos para generar picks con respaldo estadístico:'
+            : 'H.E.X.A. (Hybrid Expert X-Analysis) is a sports analysis engine that combines multiple data sources to generate statistically-backed picks:'}
         </Typography>
       </Box>
 
@@ -279,8 +279,8 @@ function TabOracle({ lang }) {
       <Box sx={{ p: '12px 16px', bgcolor: 'rgba(0,212,255,0.06)', border: `1px solid rgba(0,212,255,0.2)`, borderRadius: '2px', textAlign: 'center' }}>
         <Typography sx={{ fontFamily: BARLOW, fontSize: '0.88rem', fontWeight: 800, color: C.accentSec, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
           {isEs
-            ? 'El resultado: picks basados en datos, no en corazonadas.'
-            : 'The result: data-driven picks, not gut feelings.'}
+            ? 'El resultado: picks respaldados por estadísticas, no por intuición.'
+            : 'The result: statistically-backed picks, not gut feelings.'}
         </Typography>
       </Box>
     </Box>

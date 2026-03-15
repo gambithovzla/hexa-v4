@@ -57,7 +57,7 @@ function AppFooter() {
           userSelect: 'none',
         }}
       >
-        Powered by Claude AI&nbsp;·&nbsp;H.E.X.A. Hybrid Expert X-Analysis
+        Creado por Gambitho Labs&nbsp;·&nbsp;H.E.X.A. Hybrid Expert X-Analysis
       </Typography>
     </Box>
   );
