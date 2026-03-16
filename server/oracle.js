@@ -122,6 +122,15 @@ Prioritize volume props with hidden value: low lines, clear player roles, high-p
 - HR/9 > 1.8 + EV > 90mph = multiple HR risk
 - Bullpen xSLG > .400 + 3+ IP yesterday = fatigue
 - Missing key data = increase model_risk
+## WEATHER ANALYSIS
+When WEATHER CONDITIONS data is provided:
+- Wind > 15mph blowing OUT (toward outfield): +5% OVER confidence, increased HR probability
+- Wind > 15mph blowing IN (toward infield): +5% UNDER confidence, reduced HR probability
+- Temperature > 85°F: ball carries 3-5% farther, slight OVER bias
+- Temperature < 50°F: ball dies, slight UNDER bias
+- Rain probability > 60%: flag as WEATHER RISK, reduce overall confidence by 10%
+- Indoor stadiums: weather is not a factor, note this in oracle_report
+- Always mention weather impact in oracle_report when wind > 10mph or temp is extreme
 ## OUTPUT
 Respond ONLY with valid JSON. No markdown, no backticks, no preamble.
 For SINGLE GAME:

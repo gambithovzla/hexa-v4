@@ -9,6 +9,7 @@
 
 import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
+import { getGameWeather } from './weather-api.js';
 
 // ---------------------------------------------------------------------------
 // Historical MLB context (static reference data for Spring Training + early season)
@@ -521,6 +522,14 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Baseball Savant unavailable — continuing without Statcast data:', err.message);
   }
 
+  // ── Real-time weather (Open-Meteo, non-blocking) ─────────────────────────
+  let weatherData = null;
+  try {
+    weatherData = await getGameWeather(homeName, gameData.gameTime);
+  } catch (err) {
+    console.warn('[context-builder] Weather fetch failed — continuing without weather data:', err.message);
+  }
+
   // ── DEBUG: log assembled data before building context string ───────────────
   console.log('=== CONTEXT BUILDER DEBUG ===');
   console.log('MLB Stats data keys:', Object.keys({
@@ -670,6 +679,25 @@ export async function buildContext(gameData, oddsData = null) {
       ` | RL Home ${sp(rl.home.spread)} ${am(rl.home.price)} Away ${sp(rl.away.spread)} ${am(rl.away.price)}` +
       ` | O/U ${ou.total ?? 'N/A'} O${am(ou.overPrice)} U${am(ou.underPrice)}`
     );
+  }
+
+  // ── Weather Conditions ─────────────────────────────────────────────────────
+  blocks.push('');
+  if (weatherData) {
+    if (weatherData.isIndoor) {
+      blocks.push(`=== WEATHER: INDOOR STADIUM (${weatherData.stadium}) — Weather not a factor ===`);
+    } else {
+      blocks.push(`=== WEATHER CONDITIONS — ${weatherData.stadium} ===`);
+      blocks.push(`Temperature: ${weatherData.temperature}°F`);
+      blocks.push(`Wind: ${weatherData.windSpeed}mph`);
+      blocks.push(`Rain probability: ${weatherData.precipitationProbability}%`);
+      const flags = weatherData.analysis ?? [];
+      blocks.push(`⚠️ WEATHER FLAGS: ${flags.length > 0 ? flags.join(' | ') : 'No significant weather factors'}`);
+      blocks.push(
+        'ORACLE INSTRUCTION: Factor wind speed and direction into OVER/UNDER analysis. ' +
+        'Wind > 15mph toward outfield = OVER bias. Cold < 50°F = UNDER bias. Rain > 60% = reduce confidence.'
+      );
+    }
   }
 
   // ── Lineup Status ──────────────────────────────────────────────────────────
