@@ -23,7 +23,7 @@ const anthropic = new Anthropic({
 
 const MODELS = {
   fast: { id: 'claude-haiku-4-5-20251001',  maxTokens: 1500 },
-  deep: { id: 'claude-sonnet-4-20250514',   maxTokens: 3000 },
+  deep: { id: 'claude-sonnet-4-20250514',   maxTokens: 4000 },
 };
 
 // ---------------------------------------------------------------------------
@@ -284,6 +284,10 @@ function cleanJsonResponse(text) {
     .trim();
   // Remove any remaining surrounding backticks
   cleaned = cleaned.replace(/^`+|`+$/g, '').trim();
+  // Replace curly/smart quotes with straight quotes
+  cleaned = cleaned
+    .replace(/[\u201C\u201D]/g, '"')  // " "
+    .replace(/[\u2018\u2019]/g, "'"); // ' '
   // Extract from first { to last }
   const firstBrace = cleaned.indexOf('{');
   const lastBrace  = cleaned.lastIndexOf('}');
@@ -291,6 +295,17 @@ function cleanJsonResponse(text) {
     cleaned = cleaned.substring(firstBrace, lastBrace + 1);
   }
   return cleaned;
+}
+
+/** Attempts to repair common JSON issues on a best-effort basis */
+function repairJson(text) {
+  // Replace literal newlines inside string values with \n escape
+  let repaired = text.replace(/"(?:[^"\\]|\\.)*"/g, match =>
+    match.replace(/\n/g, '\\n').replace(/\r/g, '\\r')
+  );
+  // Remove trailing commas before } or ]
+  repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+  return repaired;
 }
 
 /**
@@ -346,8 +361,17 @@ function parseResponse(raw) {
       console.log('[oracle] parse OK (regex)');
       return { data: parsed, parseError: false };
     } catch (err) {
-      console.log('[oracle] regex parse failed:', err.message);
-      return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err.message };
+      console.log('[oracle] regex parse failed:', err.message, '— attempting repair…');
+      // 3. Repair attempt — fix unescaped newlines and trailing commas
+      try {
+        const repaired = repairJson(match[0]);
+        const parsed = sanitize(JSON.parse(repaired));
+        console.log('[oracle] parse OK (repaired)');
+        return { data: parsed, parseError: false };
+      } catch (err2) {
+        console.log('[oracle] repair parse failed:', err2.message);
+        return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err2.message };
+      }
     }
   }
 
