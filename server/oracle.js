@@ -109,6 +109,17 @@ When LINEUP STATUS section appears:
 - UNAVAILABLE: Increase model_risk by one level (low→medium, medium→high). Note in oracle_report.
 ## TEAM VERIFICATION
 If a TEAM VERIFICATION warning (⚠️) appears, note in alert_flags that the pitcher may have changed teams and recommend verifying before betting.
+## WEATHER ANALYSIS
+When WEATHER CONDITIONS data is provided:
+- Wind > 15mph blowing OUT (toward outfield): +5% OVER confidence, increased HR probability — mention in oracle_report
+- Wind > 15mph blowing IN (toward infield): +5% UNDER confidence, reduced HR probability — mention in oracle_report
+- Wind 10-15mph: minor fly ball impact, note directional lean
+- Temperature > 85°F: ball carries 3-5% farther, slight OVER bias
+- Temperature < 50°F: ball dies, slight UNDER bias
+- Rain probability > 60%: flag as WEATHER RISK in alert_flags, reduce overall confidence by 10%
+- Rain probability > 70%: add "HIGH RAIN RISK — game delay/postponement possible" to alert_flags
+- Indoor stadiums: weather is not a factor — note this briefly in oracle_report, do not penalize or boost
+- Always mention weather impact in oracle_report when wind > 10mph or temp is extreme (> 85°F or < 50°F)
 ## THE SENTINEL (human/social context)
 - Social Mining: Press reports, beat writers, social media signals
 - Critical Fatigue: Emotional stress beyond pitch counts
