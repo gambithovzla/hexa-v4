@@ -25,6 +25,19 @@ const HEADERS = {
   'Accept': 'text/csv,*/*',
 };
 
+// ── Season window ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns an array of seasons to query, most recent first.
+ * e.g. getSeasonWindow(5) in 2026 → [2026, 2025, 2024, 2023, 2022, 2021]
+ */
+function getSeasonWindow(historyYears = 5) {
+  const current = new Date().getFullYear();
+  const years = [];
+  for (let i = 0; i <= historyYears; i++) years.push(current - i);
+  return years;
+}
+
 const ENDPOINTS = {
   // ── Existing leaderboards ────────────────────────────────────────────────
   xStatsBatter:      'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=q&csv=true',
@@ -142,6 +155,7 @@ let _cache = {
   rollingPitcher21d: null,
   swingPath:         null,
   lastUpdated:       0,
+  yearsLoaded:       [],
 };
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
@@ -215,8 +229,48 @@ async function fetchCSVWithFallback(urls, name = '') {
   throw lastErr;
 }
 
+/** Replaces year=NNNN with year=<year> in a URL string */
+function substituteYear(url, year) {
+  return url.replace(/year=\d{4}/g, `year=${year}`);
+}
+
+/**
+ * Fetches a leaderboard across multiple seasons and merges results.
+ * Most recent year's data wins when a player appears in multiple seasons.
+ * Returns { rows, yearsLoaded }.
+ */
+async function fetchMultiYear(urlsOrUrl, years, name = '') {
+  const urlList = Array.isArray(urlsOrUrl) ? urlsOrUrl : [urlsOrUrl];
+  const playerMap = new Map(); // playerKey → row (most recent year wins)
+  const yearsLoaded = [];
+
+  for (const year of years) {
+    const yearUrls = urlList.map(u => substituteYear(u, year));
+    try {
+      const rows = await fetchCSVWithFallback(yearUrls, `${name}:${year}`);
+      if (!rows.length) continue;
+      yearsLoaded.push(year);
+      for (const row of rows) {
+        const key =
+          row['player_id'] ??
+          row['last_name, first_name'] ??
+          row['player_name'] ??
+          row['name'] ??
+          JSON.stringify(row).slice(0, 40);
+        // Only set if not already present — years are iterated most-recent-first
+        if (!playerMap.has(key)) playerMap.set(key, row);
+      }
+    } catch {
+      // year unavailable — skip silently (fetchCSVWithFallback already warned)
+    }
+  }
+
+  return { rows: [...playerMap.values()], yearsLoaded };
+}
+
 async function loadAll() {
-  console.log('[savant] Fetching all leaderboards…');
+  const years = getSeasonWindow(5);
+  console.log(`[savant] Fetching all leaderboards for seasons: ${years.join(', ')}…`);
 
   const KEYS = [
     'xStatsBatter', 'xStatsPitcher', 'exitVelocity', 'pitchArsenal', 'percentiles',
@@ -224,7 +278,6 @@ async function loadAll() {
     'battedBallBatter', 'battedBallPitcher',
     'parkFactors', 'catcherFraming', 'fieldingOAA',
     'yearToYearBatter', 'yearToYearPitcher',
-    // New
     'homeRunsBatter', 'homeRunsPitcher',
     'runValueBatter', 'runValuePitcher',
     'rollingBatter7d', 'rollingBatter14d', 'rollingBatter21d',
@@ -232,31 +285,29 @@ async function loadAll() {
     'swingPath',
   ];
 
-  const fetches = KEYS.map(key => {
-    const ep = ENDPOINTS[key];
-    return Array.isArray(ep) ? fetchCSVWithFallback(ep, key) : fetchCSV(ep);
-  });
+  const fetches = KEYS.map(key => fetchMultiYear(ENDPOINTS[key], years, key));
 
   const results = await Promise.allSettled(fetches);
 
-  const newCache = { lastUpdated: Date.now() };
+  const newCache = { lastUpdated: Date.now(), yearsLoaded: new Set() };
   results.forEach((r, idx) => {
     const key = KEYS[idx];
     if (r.status === 'fulfilled') {
-      newCache[key] = r.value;
+      newCache[key] = r.value.rows;
+      r.value.yearsLoaded.forEach(y => newCache.yearsLoaded.add(y));
     } else {
-      const msg = r.reason?.message ?? String(r.reason);
-      const tag = msg.includes('404') ? '404' : 'error';
-      console.warn(`[savant] WARNING: ${key} returned ${tag} — skipping`);
+      console.warn(`[savant] WARNING: ${key} failed entirely — skipping`);
       newCache[key] = [];
     }
   });
+  newCache.yearsLoaded = [...newCache.yearsLoaded].sort((a, b) => b - a);
 
   _cache = newCache;
 
   const c = newCache;
   console.log(
-    `[savant] Cache refreshed — batters: ${c.xStatsBatter.length}, pitchers: ${c.xStatsPitcher.length}, ` +
+    `[savant] Cache refreshed (years: ${c.yearsLoaded.join(',')}) — ` +
+    `batters: ${c.xStatsBatter.length}, pitchers: ${c.xStatsPitcher.length}, ` +
     `EV: ${c.exitVelocity.length}, arsenal: ${c.pitchArsenal.length}, pct: ${c.percentiles.length}, ` +
     `rollingB: ${c.rollingBatter.length}, rollingP: ${c.rollingPitcher.length}, ` +
     `tempo: ${c.pitchTempo.length}, sprint: ${c.sprintSpeed.length}, ` +
@@ -546,6 +597,7 @@ export function getCacheStatus() {
   return {
     lastUpdated: _cache.lastUpdated ? new Date(_cache.lastUpdated).toISOString() : null,
     age_minutes: _cache.lastUpdated ? Math.round((Date.now() - _cache.lastUpdated) / 60000) : null,
+    yearsLoaded: _cache.yearsLoaded ?? [],
     recordCounts: {
       xStatsBatter:      _cache.xStatsBatter?.length      ?? 0,
       xStatsPitcher:     _cache.xStatsPitcher?.length     ?? 0,

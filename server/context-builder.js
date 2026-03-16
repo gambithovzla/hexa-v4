@@ -270,7 +270,7 @@ function pitcherSavantBlock(label, savant) {
   const f3 = (v) => (v != null ? Number(v).toFixed(3) : 'N/A');
   const fp = (v) => (v != null ? `${Number(v).toFixed(1)}%` : 'N/A');
 
-  const lines = [section(`${label} PITCHER STATCAST (Savant 2025)`)];
+  const lines = [section(`${label} PITCHER STATCAST (Savant ${new Date().getFullYear()})`)];
   lines.push(
     `xwOBA against: ${f3(savant.xwOBA_against)} | xBA against: ${f3(savant.xBA_against)} | xSLG against: ${f3(savant.xSLG_against)}`,
     `Whiff%: ${fp(savant.whiff_percent)} | K%: ${fp(savant.k_percent)} | BB%: ${fp(savant.bb_percent)}`,
@@ -593,7 +593,7 @@ export async function buildContext(gameData, oddsData = null) {
 
   // Batter Savant — only rendered when lineup data was available
   if (savantBatters.home.length > 0 || savantBatters.away.length > 0) {
-    blocks.push(section('BATTER STATCAST — TOP 3 per Lineup (Savant 2025)'));
+    blocks.push(section(`BATTER STATCAST — TOP 3 per Lineup (Savant ${new Date().getFullYear()})`));
     if (savantBatters.home.length > 0) {
       blocks.push(`${homeName} (Home):`);
       savantBatters.home.forEach(({ name, savant }) => blocks.push(batterSavantLine(name, savant)));

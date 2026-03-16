@@ -49,7 +49,7 @@ Cross-reference data from the provided context:
   * HR/9 > 1.8 + EV > 90mph = multiple HR risk
   * Bullpen xSLG > .400 + 3+ IP yesterday = fatigue flag
 - ENVIRONMENTAL: Weather, Park Factors, schedule fatigue
-## STATCAST DATA INTERPRETATION (Baseball Savant 2025)
+## STATCAST DATA INTERPRETATION (Baseball Savant 2026)
 When the context includes STATCAST sections, you MUST use this data as PRIMARY evidence. Statcast metrics reveal true talent level beyond traditional stats.
 ### PITCHER STATCAST — How to use:
 - xwOBA_against < .290 → Elite pitcher, strongly favor UNDER and pitcher strikeout props
@@ -118,8 +118,9 @@ When the context includes STATCAST sections, you MUST use this data as PRIMARY e
 - year_to_year_xwoba_change > +.030 → Legitimate breakout, weight current season higher
 - year_to_year_xwoba_change < -.030 → Regression risk, apply skepticism to props
 ### SPRING TRAINING CAVEAT:
-- If savant_cache_status shows 0 records or data is null, explicitly note "Statcast 2025 data not yet available (Spring Training)" in the Oracle Report section.
-- Once regular season starts (after March 27, 2025), Statcast data should populate automatically.
+- If savant_cache_status shows 0 records or data is null, explicitly note "Statcast 2026 data not yet available (Spring Training)" in the Oracle Report section.
+- Once regular season starts (after March 27, 2026), Statcast data should populate automatically.
+- The system queries a 5-year rolling window of historical Statcast data (current season + 5 prior years); savant_cache_status.yearsLoaded lists which seasons were successfully loaded.
 ## HISTORICAL TRENDS ANALYSIS
 When PITCHER HISTORICAL TRENDS or TEAM HISTORICAL TRENDS sections appear in the context, use them to:
 1. **Pitcher trajectory**: Is the ERA improving (declining numbers = good), declining, or consistent over 3+ seasons? An improving pitcher deserves higher confidence; declining pitcher deserves skepticism.
