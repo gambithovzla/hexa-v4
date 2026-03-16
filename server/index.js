@@ -148,8 +148,23 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
   const cost         = calcServerCost('single', model, webSearch);
 
   try {
-    const games    = await getTodayGames(date);
-    const gameData = games.find(g => String(g.gamePk) === String(gameId));
+    let games    = await getTodayGames(date);
+    let gameData = games.find(g => String(g.gamePk) === String(gameId));
+
+    if (!gameData) {
+      // Retry with today's explicit date in case the caller passed a stale/different date
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (todayStr !== date) {
+        const retryGames = await getTodayGames(todayStr);
+        console.log(`[index] gamePk ${gameId} not found in date=${date}; retrying with today=${todayStr}. ` +
+          `Found gamePks: [${retryGames.map(g => g.gamePk).join(', ')}]`);
+        gameData = retryGames.find(g => String(g.gamePk) === String(gameId));
+        if (gameData) games = retryGames;
+      } else {
+        console.log(`[index] gamePk ${gameId} not found. Available gamePks for ${date}: [${games.map(g => g.gamePk).join(', ')}]`);
+      }
+    }
+
     if (!gameData) return res.status(404).json({ success: false, error: `Partido ${gameId} no encontrado` });
 
     let matchedOdds = null;
