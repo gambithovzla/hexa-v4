@@ -307,6 +307,7 @@ function parseResponse(raw) {
  * @param {string[]} [params.games]         — lista de matchups para fullDay/parlay
  * @param {number}   [params.legs]          — número de patas del parlay
  * @param {string}   [params.model]         — "fast" (Haiku) | "deep" (Sonnet)  (def. "fast")
+ * @param {number}   [params.timeoutMs]     — abort oracle call after this many ms; throws Error('TIMEOUT')
  *
  * @returns {Promise<{
  *   data:       object|null,
@@ -328,6 +329,7 @@ export async function analyzeGame(params) {
     games        = [],
     legs,
     model        = 'fast',
+    timeoutMs    = null,
   } = params;
 
   const { id: modelId, maxTokens } = MODELS[model] ?? MODELS.fast;
@@ -364,9 +366,16 @@ export async function analyzeGame(params) {
   console.log(userMessage);
   console.log('=== END DEBUG ===');
 
-  // Usamos streaming para evitar timeouts con respuestas largas
-  const stream  = anthropic.messages.stream(requestBody);
-  const message = await stream.finalMessage();
+  // Stream the response; race against optional timeout
+  const streamPromise = anthropic.messages.stream(requestBody).finalMessage();
+  const message = await (timeoutMs
+    ? Promise.race([
+        streamPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+        ),
+      ])
+    : streamPromise);
 
   const rawText              = extractRawText(message);
 
@@ -409,6 +418,7 @@ export async function analyzeParlay(contexts, language = 'en', opts = {}) {
     riskProfile: opts.riskProfile ?? 'medium',
     webSearch:   opts.webSearch   ?? false,
     model:       opts.model       ?? 'fast',
+    timeoutMs:   opts.timeoutMs   ?? null,
   });
 }
 
@@ -431,5 +441,6 @@ export async function analyzeFullDay(contexts, date = '', language = 'en', opts 
     riskProfile: opts.riskProfile ?? 'medium',
     webSearch:   opts.webSearch   ?? false,
     model:       opts.model       ?? 'fast',
+    timeoutMs:   opts.timeoutMs   ?? null,
   });
 }

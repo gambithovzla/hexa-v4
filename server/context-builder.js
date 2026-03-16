@@ -315,20 +315,20 @@ function batterSavantLine(name, savant) {
 // Historical trend blocks
 // ---------------------------------------------------------------------------
 
-function pitcherHistoricalBlock(name, teamAbbr, historicalData) {
+function pitcherHistoricalBlock(name, teamAbbr, historicalData, maxPastSeasons = 5) {
   if (!historicalData?.historical?.length) return null;
-  const cur = historicalData;
-  const s   = cur.stats;
-  const ip  = parseFloat(s.inningsPitched ?? 0);
-  const hr9 = s.homeRuns != null && ip > 0 ? ((s.homeRuns / ip) * 9).toFixed(2) : 'N/A';
-  const lines = [`=== PITCHER HISTORICAL TRENDS (${historicalData.historical.length + 1} seasons) ===`];
+  const cur  = historicalData;
+  const s    = cur.stats;
+  const ip   = parseFloat(s.inningsPitched ?? 0);
+  const hr9  = s.homeRuns != null && ip > 0 ? ((s.homeRuns / ip) * 9).toFixed(2) : 'N/A';
+  const hist = historicalData.historical.slice(0, maxPastSeasons);
+  const lines = [`=== PITCHER HISTORICAL TRENDS (${hist.length + 1} seasons) ===`];
   lines.push(`${name} (${teamAbbr ?? 'UNK'}):`);
   lines.push(`* ${cur.season}: ERA ${s.era ?? 'N/A'}, WHIP ${s.whip ?? 'N/A'}, K/9 ${s.strikeoutsPer9Inn ?? 'N/A'}, BB/9 ${s.walksPer9Inn ?? 'N/A'}, HR/9 ${hr9}`);
-  for (const h of historicalData.historical) {
+  for (const h of hist) {
     lines.push(`* ${h.season}: ERA ${h.era ?? 'N/A'}, WHIP ${h.whip ?? 'N/A'}, K/9 ${h.k9 ?? 'N/A'}, BB/9 ${h.bb9 ?? 'N/A'}, HR/9 ${h.hr9 ?? 'N/A'}`);
   }
-  // Trend annotation
-  const eras = [parseFloat(s.era), ...historicalData.historical.map(h => parseFloat(h.era))].filter(v => !isNaN(v));
+  const eras = [parseFloat(s.era), ...hist.map(h => parseFloat(h.era))].filter(v => !isNaN(v));
   if (eras.length >= 2) {
     const avg = (eras.reduce((a, b) => a + b, 0) / eras.length).toFixed(2);
     const trend = eras[0] < eras[eras.length - 1] - 0.3
@@ -341,17 +341,18 @@ function pitcherHistoricalBlock(name, teamAbbr, historicalData) {
   return lines.join('\n');
 }
 
-function teamHistoricalBlock(teamName, historicalData) {
+function teamHistoricalBlock(teamName, historicalData, maxPastSeasons = 5) {
   if (!historicalData?.historical?.length) return null;
-  const cur = historicalData;
-  const s   = cur.stats;
-  const lines = [`=== TEAM HISTORICAL TRENDS (${historicalData.historical.length + 1} seasons) ===`];
+  const cur  = historicalData;
+  const s    = cur.stats;
+  const hist = historicalData.historical.slice(0, maxPastSeasons);
+  const lines = [`=== TEAM HISTORICAL TRENDS (${hist.length + 1} seasons) ===`];
   lines.push(`${teamName}:`);
   lines.push(`* ${cur.season}: AVG ${s.avg ?? 'N/A'}, OPS ${s.ops ?? 'N/A'}, HR ${s.homeRuns ?? 'N/A'}, R ${s.runs ?? 'N/A'}`);
-  for (const h of historicalData.historical) {
+  for (const h of hist) {
     lines.push(`* ${h.season}: AVG ${h.avg ?? 'N/A'}, OPS ${h.ops ?? 'N/A'}, HR ${h.hr ?? 'N/A'}, R ${h.runs ?? 'N/A'}`);
   }
-  const opsList = [parseFloat(s.ops), ...historicalData.historical.map(h => parseFloat(h.ops))].filter(v => !isNaN(v));
+  const opsList = [parseFloat(s.ops), ...hist.map(h => parseFloat(h.ops))].filter(v => !isNaN(v));
   if (opsList.length >= 2) {
     const trend = opsList[0] > opsList[opsList.length - 1] + 0.02
       ? 'Improving offense trend'
@@ -402,14 +403,22 @@ function teamVerificationLine(playerName, scheduledAbbr, verification) {
   return `✓ TEAM VERIFICATION: ${playerName} — current team confirmed as ${curAbbr ?? verification.currentTeamName ?? 'Unknown'}`;
 }
 
+// Max context chars for Full Day (≈8000 tokens = 32000 chars)
+const FULL_DAY_MAX_CHARS = 32000;
+
 /**
  * Construye el contexto estructurado completo para un partido.
  *
  * @param {object}      gameData — objeto normalizado devuelto por getTodayGames()
  * @param {object|null} oddsData — resultado de matchOddsToGame() (opcional)
+ * @param {object}      opts
+ * @param {boolean}     [opts.fullDay=false] — if true, produces a slimmer context
  * @returns {Promise<string>} String listo para el prompt del Oracle
  */
-export async function buildContext(gameData, oddsData = null) {
+export async function buildContext(gameData, oddsData = null, opts = {}) {
+  const { fullDay = false } = opts;
+  // Full Day mode: limit past seasons shown to 1 (current + 1 prior only)
+  const maxPastSeasons = fullDay ? 1 : 5;
   const home = gameData.teams?.home;
   const away = gameData.teams?.away;
 
@@ -453,71 +462,81 @@ export async function buildContext(gameData, oddsData = null) {
   let oaaOutfielders    = []; // [{ player, side:'Home'|'Away', oaa }]
 
   try {
-    // Resolve lineup arrays once (used for batters, catchers, and outfielders)
     const homeLineup = gameData.teams?.home?.lineup ?? gameData.lineups?.home ?? null;
     const awayLineup = gameData.teams?.away?.lineup ?? gameData.lineups?.away ?? null;
 
-    const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
-    const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
-
-    // Helper: find a player by position field in a lineup array
     function findByPos(lineup, pos) {
       if (!Array.isArray(lineup)) return null;
       return lineup.find(p => typeof p === 'object' && (p.position === pos || p.pos === pos)) ?? null;
     }
 
-    const homeCatcher = findByPos(homeLineup, 'C');
-    const awayCatcher = findByPos(awayLineup, 'C');
-
-    // Collect outfielders from both teams with side tag
-    const OF_POSITIONS = ['CF', 'LF', 'RF'];
-    const allOFPlayers = [
-      ...OF_POSITIONS.map(pos => { const p = findByPos(homeLineup, pos); return p ? { player: p, pos, side: 'Home' } : null; }),
-      ...OF_POSITIONS.map(pos => { const p = findByPos(awayLineup, pos); return p ? { player: p, pos, side: 'Away' } : null; }),
-    ].filter(Boolean);
-
-    // Fire all savant fetches in one parallel batch
-    const savantFetches     = [
+    // Fire pitcher Statcast always; batters/fielders only for single-game mode
+    const savantFetches = [
       homePitcher?.fullName ? getPitcherStatcast(homePitcher.fullName) : Promise.resolve(null),
       awayPitcher?.fullName ? getPitcherStatcast(awayPitcher.fullName) : Promise.resolve(null),
     ];
-    const batterFetches     = [
-      ...homeBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
-      ...awayBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
-    ];
-    const referenceFetches  = [
-      getParkFactor(homeName),
-      getCatcherFraming(homeCatcher?.fullName ?? homeCatcher?.name ?? ''),
-      getCatcherFraming(awayCatcher?.fullName ?? awayCatcher?.name ?? ''),
-      ...allOFPlayers.map(({ player }) => getFieldingOAA(player.fullName ?? player.name ?? '')),
-    ];
 
-    const [pitcherResults, batterResults, referenceResults] = await Promise.all([
-      Promise.allSettled(savantFetches),
-      Promise.allSettled(batterFetches),
-      Promise.allSettled(referenceFetches),
-    ]);
+    let batterFetches    = [];
+    let referenceFetches = [getParkFactor(homeName)];
 
-    homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
-    awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
+    if (!fullDay) {
+      const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
+      const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
+      const homeCatcher = findByPos(homeLineup, 'C');
+      const awayCatcher = findByPos(awayLineup, 'C');
+      const OF_POSITIONS = ['CF', 'LF', 'RF'];
+      const allOFPlayers = [
+        ...OF_POSITIONS.map(pos => { const p = findByPos(homeLineup, pos); return p ? { player: p, pos, side: 'Home' } : null; }),
+        ...OF_POSITIONS.map(pos => { const p = findByPos(awayLineup, pos); return p ? { player: p, pos, side: 'Away' } : null; }),
+      ].filter(Boolean);
 
-    // Re-associate batter results with their names
-    const allBatters = [...homeBatters, ...awayBatters];
-    batterResults.forEach((r, idx) => {
-      const name   = allBatters[idx]?.fullName ?? allBatters[idx]?.name ?? allBatters[idx] ?? `Batter ${idx + 1}`;
-      const savant = r.status === 'fulfilled' ? r.value : null;
-      if (idx < homeBatters.length) savantBatters.home.push({ name, savant });
-      else                           savantBatters.away.push({ name, savant });
-    });
+      batterFetches = [
+        ...homeBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
+        ...awayBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
+      ];
+      referenceFetches = [
+        getParkFactor(homeName),
+        getCatcherFraming(homeCatcher?.fullName ?? homeCatcher?.name ?? ''),
+        getCatcherFraming(awayCatcher?.fullName ?? awayCatcher?.name ?? ''),
+        ...allOFPlayers.map(({ player }) => getFieldingOAA(player.fullName ?? player.name ?? '')),
+      ];
 
-    // Unpack reference results [park, homeCatcher, awayCatcher, ...oaa]
-    parkFactorData         = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
-    catcherFraming.home    = referenceResults[1].status === 'fulfilled' ? referenceResults[1].value : null;
-    catcherFraming.away    = referenceResults[2].status === 'fulfilled' ? referenceResults[2].value : null;
-    allOFPlayers.forEach(({ player, pos, side }, idx) => {
-      const oaa = referenceResults[3 + idx].status === 'fulfilled' ? referenceResults[3 + idx].value : null;
-      if (oaa) oaaOutfielders.push({ name: player.fullName ?? player.name, pos, side, oaa });
-    });
+      const [pitcherResults, batterResults, referenceResults] = await Promise.all([
+        Promise.allSettled(savantFetches),
+        Promise.allSettled(batterFetches),
+        Promise.allSettled(referenceFetches),
+      ]);
+
+      homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
+      awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
+
+      const homeBattersFull = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
+      const awayBattersFull = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
+      const allBatters = [...homeBattersFull, ...awayBattersFull];
+      batterResults.forEach((r, idx) => {
+        const name   = allBatters[idx]?.fullName ?? allBatters[idx]?.name ?? allBatters[idx] ?? `Batter ${idx + 1}`;
+        const savant = r.status === 'fulfilled' ? r.value : null;
+        if (idx < homeBattersFull.length) savantBatters.home.push({ name, savant });
+        else                               savantBatters.away.push({ name, savant });
+      });
+
+      parkFactorData      = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
+      catcherFraming.home = referenceResults[1].status === 'fulfilled' ? referenceResults[1].value : null;
+      catcherFraming.away = referenceResults[2].status === 'fulfilled' ? referenceResults[2].value : null;
+      allOFPlayers.forEach(({ player, pos, side }, idx) => {
+        const oaa = referenceResults[3 + idx].status === 'fulfilled' ? referenceResults[3 + idx].value : null;
+        if (oaa) oaaOutfielders.push({ name: player.fullName ?? player.name, pos, side, oaa });
+      });
+    } else {
+      // Full Day: pitcher Statcast only, no batters/fielders
+      const [pitcherResults, referenceResults] = await Promise.all([
+        Promise.allSettled(savantFetches),
+        Promise.allSettled(referenceFetches),
+      ]);
+      homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
+      awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
+      parkFactorData    = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
+    }
 
     savantCacheStatus = getCacheStatus();
   } catch (err) {
@@ -691,14 +710,14 @@ export async function buildContext(gameData, oddsData = null) {
   }
 
   // ── Pitcher Historical Trends ──────────────────────────────────────────────
-  const homePitcherHist = pitcherHistoricalBlock(homePitcher?.fullName ?? 'Home Pitcher', homeAbbr, homePitcherStats);
-  const awayPitcherHist = pitcherHistoricalBlock(awayPitcher?.fullName ?? 'Away Pitcher', awayAbbr, awayPitcherStats);
+  const homePitcherHist = pitcherHistoricalBlock(homePitcher?.fullName ?? 'Home Pitcher', homeAbbr, homePitcherStats, maxPastSeasons);
+  const awayPitcherHist = pitcherHistoricalBlock(awayPitcher?.fullName ?? 'Away Pitcher', awayAbbr, awayPitcherStats, maxPastSeasons);
   if (homePitcherHist) { blocks.push(''); blocks.push(homePitcherHist); }
   if (awayPitcherHist) { blocks.push(''); blocks.push(awayPitcherHist); }
 
   // ── Team Hitting Historical Trends ─────────────────────────────────────────
-  const homeTeamHist = teamHistoricalBlock(homeName, homeHitting);
-  const awayTeamHist = teamHistoricalBlock(awayName, awayHitting);
+  const homeTeamHist = teamHistoricalBlock(homeName, homeHitting, maxPastSeasons);
+  const awayTeamHist = teamHistoricalBlock(awayName, awayHitting, maxPastSeasons);
   if (homeTeamHist) { blocks.push(''); blocks.push(homeTeamHist); }
   if (awayTeamHist) { blocks.push(''); blocks.push(awayTeamHist); }
 
@@ -706,7 +725,15 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push('');
   blocks.push(buildHistoricalContextBlock());
 
-  return blocks.join('\n');
+  const contextStr = blocks.join('\n');
+
+  // Full Day: hard truncation to avoid exceeding model context limits
+  if (fullDay && contextStr.length > FULL_DAY_MAX_CHARS) {
+    console.warn(`[context-builder] Full Day context truncated: ${contextStr.length} → ${FULL_DAY_MAX_CHARS} chars`);
+    return contextStr.substring(0, FULL_DAY_MAX_CHARS) + '\n\n[Context truncated for Full Day mode — historical trends omitted]';
+  }
+
+  return contextStr;
 }
 
 // ---------------------------------------------------------------------------

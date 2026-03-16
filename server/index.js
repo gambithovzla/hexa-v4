@@ -74,6 +74,24 @@ async function deductCredits(req, res, cost) {
   return updated.rows[0];
 }
 
+/**
+ * refundCredits(userId, cost, email)
+ * Adds `cost` credits back to the user account.
+ * Admin accounts are skipped (they were never charged).
+ */
+async function refundCredits(userId, cost, email) {
+  if (email === 'admin@hexa.com') return;
+  try {
+    await pool.query(
+      'UPDATE users SET credits = credits + $1 WHERE id = $2',
+      [cost, String(userId)]
+    );
+    console.log(`[Credits] Refunding ${cost} credits to user ${userId} due to analysis failure`);
+  } catch (err) {
+    console.error(`[Credits] Refund failed for user ${userId}:`, err.message);
+  }
+}
+
 // GET /api/games?date=YYYY-MM-DD
 app.get('/api/games', async (req, res) => {
   try {
@@ -117,35 +135,48 @@ app.get('/api/games/:gameId/context', async (req, res) => {
 
 // POST /api/analyze/game  — requires auth, costs 1 (fast) or 2 (deep) + 3 if webSearch
 app.post('/api/analyze/game', verifyToken, async (req, res) => {
+  const {
+    gameId,
+    language    = 'en',
+    lang,
+    betType,
+    riskProfile = 'medium',
+    webSearch   = false,
+    model       = 'fast',
+  } = req.body;
+  const date         = req.body.date || new Date().toISOString().split('T')[0];
+  const resolvedLang = lang ?? language;
+  const cost         = calcServerCost('single', model, webSearch);
+
   try {
-    const {
-      gameId,
-      language    = 'en',
-      lang,
-      betType,
-      riskProfile = 'medium',
-      webSearch   = false,
-      model       = 'fast',
-    } = req.body;
-    const date    = req.body.date || new Date().toISOString().split('T')[0];
-    const resolvedLang = lang ?? language;
-    const games   = await getTodayGames(date);
+    const games    = await getTodayGames(date);
     const gameData = games.find(g => String(g.gamePk) === String(gameId));
     if (!gameData) return res.status(404).json({ success: false, error: `Partido ${gameId} no encontrado` });
 
-    // Fetch odds (non-blocking — analysis proceeds even if odds unavailable)
     let matchedOdds = null;
     try {
       const allOdds = await getGameOdds();
       matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     } catch { /* odds are optional */ }
 
-    const updatedUser = await deductCredits(req, res, calcServerCost('single', model, webSearch));
+    const updatedUser = await deductCredits(req, res, cost);
     if (!updatedUser) return;
 
-    const context  = await buildContext(gameData, matchedOdds);
-    const matchup  = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
-    const analysis = await analyzeGame({ matchup, betType, context, riskProfile, mode: 'single', lang: resolvedLang, webSearch, model });
+    let analysis;
+    try {
+      const context = await buildContext(gameData, matchedOdds);
+      const matchup = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
+      analysis = await analyzeGame({ matchup, betType, context, riskProfile, mode: 'single', lang: resolvedLang, webSearch, model, timeoutMs: 90000 });
+    } catch (err) {
+      await refundCredits(updatedUser.id, cost, updatedUser.email);
+      const isTimeout = err.message === 'TIMEOUT';
+      return res.status(500).json({
+        success: false,
+        error: isTimeout
+          ? 'El análisis tardó demasiado. Créditos reembolsados. Por favor reintenta.'
+          : 'Análisis fallido. Tus créditos han sido reembolsados.',
+      });
+    }
 
     const responseData = analysis.data ? { ...analysis.data, odds: matchedOdds ?? undefined } : null;
     res.json({ success: true, data: responseData, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
@@ -156,22 +187,23 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
 
 // POST /api/analyze/parlay  — requires auth, costs 4 (fast) or 8 (deep) credits
 app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
+  const {
+    gameIds,
+    language    = 'en',
+    lang,
+    betType,
+    riskProfile = 'medium',
+    webSearch   = false,
+    parlayLegs,
+    model       = 'fast',
+  } = req.body;
+  const date         = req.body.date || new Date().toISOString().split('T')[0];
+  const resolvedLang = lang ?? language;
+  const cost         = calcServerCost('parlay', model, false);
+
   try {
-    const {
-      gameIds,
-      language    = 'en',
-      lang,
-      betType,
-      riskProfile = 'medium',
-      webSearch   = false,
-      parlayLegs,
-      model       = 'fast',
-    } = req.body;
-    const date = req.body.date || new Date().toISOString().split('T')[0];
-    const resolvedLang = lang ?? language;
     const games = await getTodayGames(date);
 
-    // Fetch odds once for all games
     let allOdds = [];
     try { allOdds = await getGameOdds(); } catch { /* optional */ }
 
@@ -181,17 +213,29 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
       return matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     });
 
-    const updatedUser = await deductCredits(req, res, calcServerCost('parlay', model, false));
+    const updatedUser = await deductCredits(req, res, cost);
     if (!updatedUser) return;
 
-    const contexts = await Promise.all(
-      gameIds.map(async (id, i) => {
-        const gameData = games.find(g => String(g.gamePk) === String(id));
-        if (!gameData) throw new Error(`Partido ${id} no encontrado`);
-        return buildContext(gameData, legOddsArr[i] ?? null);
-      })
-    );
-    const analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs, model });
+    let analysis;
+    try {
+      const contexts = await Promise.all(
+        gameIds.map(async (id, i) => {
+          const gameData = games.find(g => String(g.gamePk) === String(id));
+          if (!gameData) throw new Error(`Partido ${id} no encontrado`);
+          return buildContext(gameData, legOddsArr[i] ?? null);
+        })
+      );
+      analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs, model, timeoutMs: 90000 });
+    } catch (err) {
+      await refundCredits(updatedUser.id, cost, updatedUser.email);
+      const isTimeout = err.message === 'TIMEOUT';
+      return res.status(500).json({
+        success: false,
+        error: isTimeout
+          ? 'El análisis tardó demasiado. Créditos reembolsados. Por favor reintenta.'
+          : 'Análisis fallido. Tus créditos han sido reembolsados.',
+      });
+    }
 
     const responseData = analysis.data
       ? { ...analysis.data, legOdds: legOddsArr.some(Boolean) ? legOddsArr : undefined }
@@ -204,33 +248,50 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
 
 // POST /api/analyze/full-day  — requires auth, costs 8 (fast) or 15 (deep) credits
 app.post('/api/analyze/full-day', verifyToken, async (req, res) => {
+  const {
+    date,
+    language    = 'en',
+    lang,
+    betType,
+    riskProfile = 'medium',
+    webSearch   = false,
+    model       = 'fast',
+  } = req.body;
+  const resolvedLang = lang ?? language;
+  const resolvedDate = date || new Date().toISOString().split('T')[0];
+  const cost         = calcServerCost('fullDay', model, false);
+  const timeoutMs    = model === 'deep' ? 55000 : 25000;
+
   try {
-    const {
-      date,
-      language    = 'en',
-      lang,
-      betType,
-      riskProfile = 'medium',
-      webSearch   = false,
-      model       = 'fast',
-    } = req.body;
-    const resolvedLang = lang ?? language;
-    const resolvedDate = date || new Date().toISOString().split('T')[0];
     const games = await getTodayGames(resolvedDate);
 
     let allOdds = [];
     try { allOdds = await getGameOdds(); } catch { /* optional */ }
 
-    const updatedUser = await deductCredits(req, res, calcServerCost('fullDay', model, false));
+    const updatedUser = await deductCredits(req, res, cost);
     if (!updatedUser) return;
 
-    const contexts = await Promise.all(
-      games.map(g => {
-        const gameOdds = matchOddsToGame(allOdds, g.teams?.home?.name, g.teams?.away?.name);
-        return buildContext(g, gameOdds);
-      })
-    );
-    const analysis = await analyzeFullDay(contexts, resolvedDate, resolvedLang, { betType, riskProfile, webSearch, model });
+    let analysis;
+    try {
+      // Full Day: build slim contexts (reduced historical + no batter Statcast)
+      const contexts = await Promise.all(
+        games.map(g => {
+          const gameOdds = matchOddsToGame(allOdds, g.teams?.home?.name, g.teams?.away?.name);
+          return buildContext(g, gameOdds, { fullDay: true });
+        })
+      );
+      analysis = await analyzeFullDay(contexts, resolvedDate, resolvedLang, { betType, riskProfile, webSearch, model, timeoutMs });
+    } catch (err) {
+      await refundCredits(updatedUser.id, cost, updatedUser.email);
+      const isTimeout = err.message === 'TIMEOUT';
+      return res.status(500).json({
+        success: false,
+        error: isTimeout
+          ? 'El análisis Full Day tardó demasiado. Créditos reembolsados. Intenta con menos partidos seleccionados o usa Single Game.'
+          : 'Análisis fallido. Tus créditos han sido reembolsados.',
+      });
+    }
+
     res.json({ success: true, data: analysis.data, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
