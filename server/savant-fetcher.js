@@ -121,6 +121,22 @@ const ENDPOINTS = {
     'https://baseballsavant.mlb.com/leaderboard/swing-path?year=2025&type=batter&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=attack_angle_avg,squared_up_pct,fast_swing_rate&chart=false&csv=true',
   ],
+  batTracking: [
+    'https://baseballsavant.mlb.com/leaderboard/bat-tracking?year=2025&type=batter&min=q&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=bat_speed,swing_length,squared_up_pct,blasts_per_swing&chart=false&csv=true',
+  ],
+  catcherPopTime: [
+    'https://baseballsavant.mlb.com/leaderboard/catcher_pop_time?year=2025&team=&min=q&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=catcher&filter=&sort=4&sortDir=desc&min=q&selections=pop_2b_sba,pop_2b_sba_count,exchange_2b_3b_sba&chart=false&csv=true',
+  ],
+  outfieldJump: [
+    'https://baseballsavant.mlb.com/leaderboard/outfield_jump?year=2025&team=&min=q&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=OF&year=2025&team=&csv=true',
+  ],
+  armStrength: [
+    'https://baseballsavant.mlb.com/leaderboard/arm_strength?year=2025&type=outfielder&team=&min=q&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=fielder&filter=&sort=4&sortDir=desc&min=q&selections=arm_strength,arm_value&chart=false&csv=true',
+  ],
 };
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
@@ -154,6 +170,10 @@ let _cache = {
   rollingPitcher14d: null,
   rollingPitcher21d: null,
   swingPath:         null,
+  batTracking:       null,
+  catcherPopTime:    null,
+  outfieldJump:      null,
+  armStrength:       null,
   lastUpdated:       0,
   yearsLoaded:       [],
 };
@@ -283,6 +303,7 @@ async function loadAll() {
     'rollingBatter7d', 'rollingBatter14d', 'rollingBatter21d',
     'rollingPitcher7d', 'rollingPitcher14d', 'rollingPitcher21d',
     'swingPath',
+    'batTracking', 'catcherPopTime', 'outfieldJump', 'armStrength',
   ];
 
   const fetches = KEYS.map(key => fetchMultiYear(ENDPOINTS[key], years, key));
@@ -318,7 +339,8 @@ async function loadAll() {
     `rvBatter: ${c.runValueBatter.length}, rvPitcher: ${c.runValuePitcher.length}, ` +
     `rb7d: ${c.rollingBatter7d.length}, rb14d: ${c.rollingBatter14d.length}, rb21d: ${c.rollingBatter21d.length}, ` +
     `rp7d: ${c.rollingPitcher7d.length}, rp14d: ${c.rollingPitcher14d.length}, rp21d: ${c.rollingPitcher21d.length}, ` +
-    `swingPath: ${c.swingPath.length}`
+    `swingPath: ${c.swingPath.length}, ` +
+    `batTracking: ${c.batTracking.length}, catcherPopTime: ${c.catcherPopTime.length}, outfieldJump: ${c.outfieldJump.length}, armStrength: ${c.armStrength.length}`
   );
 }
 
@@ -407,8 +429,9 @@ export async function getBatterStatcast(playerName) {
   const rb14 = findPlayer(_cache.rollingBatter14d,  playerName);
   const rb21 = findPlayer(_cache.rollingBatter21d,  playerName);
   const sp   = findPlayer(_cache.swingPath,         playerName);
+  const btRow = findPlayer(_cache.batTracking,      playerName);
 
-  if (!xs && !ev && !pct && !rb && !ss && !bb && !y2y && !hr && !rv && !rb7 && !rb14 && !rb21 && !sp) return null;
+  if (!xs && !ev && !pct && !rb && !ss && !bb && !y2y && !hr && !rv && !rb7 && !rb14 && !rb21 && !sp && !btRow) return null;
 
   return {
     player_name: xs?.['last_name, first_name'] ?? ev?.['last_name, first_name'] ?? playerName,
@@ -447,12 +470,18 @@ export async function getBatterStatcast(playerName) {
     run_value_profile: rv ? extractBatterRunValue(rv) : null,
     // Swing path / attack angle (new)
     swing_path: sp ? extractSwingPath(sp) : null,
+    // Bat tracking (new)
+    bat_tracking: btRow ? {
+      bat_speed:        parseFloat(btRow?.bat_speed       ?? btRow?.['avg_bat_speed']    ?? '') || null,
+      swing_length:     parseFloat(btRow?.swing_length    ?? btRow?.['avg_swing_length'] ?? '') || null,
+      blasts_per_swing: parseFloat(btRow?.blasts_per_swing ?? btRow?.['blasts_swing']    ?? '') || null,
+    } : null,
     // Source rows for transparency
     _sources: {
       xStats: !!xs, exitVelocity: !!ev, percentiles: !!pct,
       rolling: !!rb, rolling7d: !!rb7, rolling14d: !!rb14, rolling21d: !!rb21,
       sprintSpeed: !!ss, battedBall: !!bb, yearToYear: !!y2y,
-      homeRuns: !!hr, runValue: !!rv, swingPath: !!sp,
+      homeRuns: !!hr, runValue: !!rv, swingPath: !!sp, batTracking: !!btRow,
     },
   };
 }
@@ -585,6 +614,37 @@ export async function getFieldingOAA(playerName) {
   };
 }
 
+/**
+ * Returns catcher pop time / exchange metrics for a catcher.
+ */
+export async function getCatcherPopTime(catcherName) {
+  await ensureCache();
+  const row = findPlayer(_cache.catcherPopTime, catcherName);
+  if (!row) return null;
+  return {
+    player_name:   row['last_name, first_name'] ?? catcherName,
+    pop_time_2b:   parseFloat(row['pop_2b_sba']         ?? row['pop_time']  ?? '') || null,
+    exchange_time: parseFloat(row['exchange_2b_3b_sba'] ?? row['exchange']  ?? '') || null,
+    attempts:      parseInt(row['pop_2b_sba_count']      ?? row['attempts'] ?? '') || null,
+  };
+}
+
+/**
+ * Returns outfield jump and arm strength metrics for an outfielder.
+ */
+export async function getOutfieldJump(playerName) {
+  await ensureCache();
+  const row = findPlayer(_cache.outfieldJump, playerName);
+  if (!row) return null;
+  return {
+    player_name:      row['last_name, first_name'] ?? playerName,
+    jump_distance:    parseFloat(row['jump_distance']    ?? row['jump']      ?? '') || null,
+    reaction_time:    parseFloat(row['reaction_time']    ?? row['reaction']  ?? '') || null,
+    oaa_of:           parseFloat(row['outs_above_average'] ?? row['oaa']     ?? '') || null,
+    arm_strength_mph: parseFloat(row['arm_strength']     ?? row['arm_speed'] ?? '') || null,
+  };
+}
+
 /** Forces a full cache refresh regardless of TTL. Returns getCacheStatus() after refresh. */
 export async function refreshCache() {
   _cache.lastUpdated = 0;
@@ -627,6 +687,10 @@ export function getCacheStatus() {
       rollingPitcher14d: _cache.rollingPitcher14d?.length ?? 0,
       rollingPitcher21d: _cache.rollingPitcher21d?.length ?? 0,
       swingPath:         _cache.swingPath?.length         ?? 0,
+      batTracking:       _cache.batTracking?.length       ?? 0,
+      catcherPopTime:    _cache.catcherPopTime?.length    ?? 0,
+      outfieldJump:      _cache.outfieldJump?.length      ?? 0,
+      armStrength:       _cache.armStrength?.length       ?? 0,
     },
   };
 }
