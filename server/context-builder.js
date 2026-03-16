@@ -412,7 +412,7 @@ function teamVerificationLine(playerName, scheduledAbbr, verification) {
  * @returns {Promise<string>} String listo para el prompt del Oracle
  */
 export async function buildContext(gameData, oddsData = null) {
-  const maxPastSeasons = 5;
+  const maxPastSeasons = 3;
   const home = gameData.teams?.home;
   const away = gameData.teams?.away;
 
@@ -424,29 +424,27 @@ export async function buildContext(gameData, oddsData = null) {
   const homePitcher = home?.probablePitcher;
   const awayPitcher = away?.probablePitcher;
 
-  // Fetch paralelo: fallo individual no cancela el resto
-  // Use historical versions to get multi-year trend data (same base shape + .historical array)
-  const [homeStatsResult, awayStatsResult, homePitcherResult, awayPitcherResult,
-         homeTeamVerifyResult, awayTeamVerifyResult, weatherResult] =
-    await Promise.allSettled([
-      home?.id ? getTeamHittingHistoricalStats(home.id) : Promise.resolve(null),
-      away?.id ? getTeamHittingHistoricalStats(away.id) : Promise.resolve(null),
-      homePitcher?.id ? getPitcherHistoricalStats(homePitcher.id) : Promise.resolve(null),
-      awayPitcher?.id ? getPitcherHistoricalStats(awayPitcher.id) : Promise.resolve(null),
-      homePitcher?.id ? getCurrentTeam(homePitcher.id) : Promise.resolve(null),
-      awayPitcher?.id ? getCurrentTeam(awayPitcher.id) : Promise.resolve(null),
-      getGameWeather(homeName, gameData.gameTime ?? null),
-    ]);
+  // Fetch sequentially (home first, then away) to avoid rate-limiting on the MLB Stats API.
+  // getCurrentTeam calls are lightweight and run in parallel after historical stats complete.
+  let homeHitting      = null;
+  let awayHitting      = null;
+  let homePitcherStats = null;
+  let awayPitcherStats = null;
+
+  try { homeHitting      = home?.id      ? await getTeamHittingHistoricalStats(home.id)      : null; } catch (_) {}
+  try { homePitcherStats = homePitcher?.id ? await getPitcherHistoricalStats(homePitcher.id) : null; } catch (_) {}
+  try { awayHitting      = away?.id      ? await getTeamHittingHistoricalStats(away.id)      : null; } catch (_) {}
+  try { awayPitcherStats = awayPitcher?.id ? await getPitcherHistoricalStats(awayPitcher.id) : null; } catch (_) {}
+
+  const [homeTeamVerifyResult, awayTeamVerifyResult] = await Promise.allSettled([
+    homePitcher?.id ? getCurrentTeam(homePitcher.id) : Promise.resolve(null),
+    awayPitcher?.id ? getCurrentTeam(awayPitcher.id) : Promise.resolve(null),
+  ]);
 
   const settled = (r) => (r.status === 'fulfilled' ? r.value : null);
 
-  const homeHitting       = settled(homeStatsResult);
-  const awayHitting       = settled(awayStatsResult);
-  const homePitcherStats  = settled(homePitcherResult);
-  const awayPitcherStats  = settled(awayPitcherResult);
-  const homePitcherTeam   = settled(homeTeamVerifyResult);
-  const awayPitcherTeam   = settled(awayTeamVerifyResult);
-  const weatherData       = settled(weatherResult);
+  const homePitcherTeam = settled(homeTeamVerifyResult);
+  const awayPitcherTeam = settled(awayTeamVerifyResult);
 
   // ── Baseball Savant Statcast (non-blocking) ──────────────────────────────
   let homePitcherSavant = null;
@@ -522,6 +520,14 @@ export async function buildContext(gameData, oddsData = null) {
     savantCacheStatus = getCacheStatus();
   } catch (err) {
     console.warn('[context-builder] Baseball Savant unavailable — continuing without Statcast data:', err.message);
+  }
+
+  // ── Real-time weather (Open-Meteo, non-blocking) ─────────────────────────
+  let weatherData = null;
+  try {
+    weatherData = await getGameWeather(homeName, gameData.gameTime);
+  } catch (err) {
+    console.warn('[context-builder] Weather fetch failed — continuing without weather data:', err.message);
   }
 
   // ── DEBUG: log assembled data before building context string ───────────────
@@ -675,29 +681,23 @@ export async function buildContext(gameData, oddsData = null) {
     );
   }
 
-  // ── Weather conditions ──────────────────────────────────────────────────────
+  // ── Weather Conditions ─────────────────────────────────────────────────────
   blocks.push('');
   if (weatherData) {
     if (weatherData.isIndoor) {
-      blocks.push(`=== WEATHER: INDOOR STADIUM (${weatherData.stadiumName ?? weatherData.stadium?.name ?? 'dome'}) — Weather not a factor ===`);
+      blocks.push(`=== WEATHER: INDOOR STADIUM (${weatherData.stadium}) — Weather not a factor ===`);
     } else {
-      const wFlags = weatherData.analysis ?? [];
-      blocks.push(`=== WEATHER CONDITIONS — ${weatherData.stadiumName ?? weatherData.stadium?.name ?? 'Stadium'} ===`);
+      blocks.push(`=== WEATHER CONDITIONS — ${weatherData.stadium} ===`);
+      blocks.push(`Temperature: ${weatherData.temperature}°F`);
+      blocks.push(`Wind: ${weatherData.windSpeed}mph`);
+      blocks.push(`Rain probability: ${weatherData.precipitationProbability}%`);
+      const flags = weatherData.analysis ?? [];
+      blocks.push(`⚠️ WEATHER FLAGS: ${flags.length > 0 ? flags.join(' | ') : 'No significant weather factors'}`);
       blocks.push(
-        `Temperature: ${weatherData.temperature != null ? `${weatherData.temperature}°F` : 'N/A'}` +
-        ` | Wind: ${weatherData.windSpeed != null ? `${weatherData.windSpeed}mph` : 'N/A'}` +
-        ` ${weatherData.windDirectionLabel ?? ''}`.trim() +
-        ` | Rain probability: ${weatherData.precipitationProbability != null ? `${weatherData.precipitationProbability}%` : 'N/A'}`
+        'ORACLE INSTRUCTION: Factor wind speed and direction into OVER/UNDER analysis. ' +
+        'Wind > 15mph toward outfield = OVER bias. Cold < 50°F = UNDER bias. Rain > 60% = reduce confidence.'
       );
-      if (wFlags.length > 0) {
-        blocks.push(`⚠️ WEATHER FLAGS: ${wFlags.join(' | ')}`);
-      } else {
-        blocks.push('No significant weather factors.');
-      }
-      blocks.push('ORACLE INSTRUCTION: Factor wind speed and direction into OVER/UNDER analysis. Wind > 15mph toward outfield = OVER bias. Cold < 50°F = UNDER bias. Rain > 60% = reduce confidence.');
     }
-  } else {
-    blocks.push('=== WEATHER: Data unavailable ===');
   }
 
   // ── Lineup Status ──────────────────────────────────────────────────────────

@@ -15,23 +15,30 @@ const SEASON = new Date().getFullYear();
 // Seasons to try in order — current year may have no data early in calendar year
 const SEASON_FALLBACK = SEASON >= 2026 ? [SEASON, 2025, 2024] : [SEASON, SEASON - 1];
 
-// Up to 6 seasons for historical trend analysis (most recent first)
+// 3 seasons for historical trend analysis (most recent first) — keeps API calls manageable
 const HISTORICAL_SEASONS = SEASON >= 2026
-  ? [SEASON, 2025, 2024, 2023, 2022, 2021]
-  : [SEASON, SEASON - 1, SEASON - 2, SEASON - 3, SEASON - 4, SEASON - 5];
+  ? [2025, 2024, 2023]
+  : [SEASON, SEASON - 1, SEASON - 2];
 
 // ---------------------------------------------------------------------------
 // Utilidades internas
 // ---------------------------------------------------------------------------
 
-async function fetchJSON(url) {
+async function fetchJSON(url, timeoutMs = 10_000) {
   console.log(`[MLB API] GET ${url}`);
   let res;
   try {
-    res = await fetch(url);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      res = await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (err) {
-    console.error(`[MLB API] Network error → ${url}:`, err.message);
-    throw new Error(`Network error al conectar con la API de MLB: ${err.message}`);
+    const msg = err.name === 'AbortError' ? `timeout after ${timeoutMs}ms` : err.message;
+    console.error(`[MLB API] Network error → ${url}:`, msg);
+    throw new Error(`Network error al conectar con la API de MLB: ${msg}`);
   }
 
   if (!res.ok) {
@@ -344,26 +351,21 @@ export async function getTeamHittingStats(teamId) {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches pitcher stats for HISTORICAL_SEASONS in parallel.
+ * Fetches pitcher stats for HISTORICAL_SEASONS sequentially (avoids rate limiting).
  * Returns { pitcherId, season, stats, historical: [{season, era, whip, k9, bb9, hr9},...] }
  */
 export async function getPitcherHistoricalStats(pitcherId) {
   if (!pitcherId) return null;
 
-  const seasonResults = await Promise.allSettled(
-    HISTORICAL_SEASONS.map(season =>
-      fetchJSON(`${MLB_BASE}/people/${pitcherId}/stats?stats=season&season=${season}&group=pitching`)
-        .then(data => {
-          const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
-          if (splits.length === 0) return null;
-          return { season, stats: normalizePitcherStats(data) };
-        })
-    )
-  );
-
-  const seasons = seasonResults
-    .filter(r => r.status === 'fulfilled' && r.value !== null)
-    .map(r => r.value);
+  const seasons = [];
+  for (const season of HISTORICAL_SEASONS) {
+    try {
+      const data = await fetchJSON(`${MLB_BASE}/people/${pitcherId}/stats?stats=season&season=${season}&group=pitching`);
+      const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
+      if (splits.length > 0) seasons.push({ season, stats: normalizePitcherStats(data) });
+    } catch (_) { /* season unavailable — continue */ }
+    await new Promise(r => setTimeout(r, 100));
+  }
 
   if (seasons.length === 0) return null;
 
@@ -381,26 +383,21 @@ export async function getPitcherHistoricalStats(pitcherId) {
 }
 
 /**
- * Fetches team hitting stats for HISTORICAL_SEASONS in parallel.
+ * Fetches team hitting stats for HISTORICAL_SEASONS sequentially (avoids rate limiting).
  * Returns { teamId, season, stats, historical: [{season, avg, ops, hr, runs},...] }
  */
 export async function getTeamHittingHistoricalStats(teamId) {
   if (!teamId) return null;
 
-  const seasonResults = await Promise.allSettled(
-    HISTORICAL_SEASONS.map(season =>
-      fetchJSON(`${MLB_BASE}/teams/${teamId}/stats?stats=season&season=${season}&group=hitting`)
-        .then(data => {
-          const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
-          if (splits.length === 0) return null;
-          return { season, stats: normalizeHittingStats(data) };
-        })
-    )
-  );
-
-  const seasons = seasonResults
-    .filter(r => r.status === 'fulfilled' && r.value !== null)
-    .map(r => r.value);
+  const seasons = [];
+  for (const season of HISTORICAL_SEASONS) {
+    try {
+      const data = await fetchJSON(`${MLB_BASE}/teams/${teamId}/stats?stats=season&season=${season}&group=hitting`);
+      const splits = data.stats?.find(s => s.type?.displayName === 'season')?.splits ?? [];
+      if (splits.length > 0) seasons.push({ season, stats: normalizeHittingStats(data) });
+    } catch (_) { /* season unavailable — continue */ }
+    await new Promise(r => setTimeout(r, 100));
+  }
 
   if (seasons.length === 0) return null;
 
