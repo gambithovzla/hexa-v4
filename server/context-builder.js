@@ -412,7 +412,7 @@ function teamVerificationLine(playerName, scheduledAbbr, verification) {
  * @returns {Promise<string>} String listo para el prompt del Oracle
  */
 export async function buildContext(gameData, oddsData = null) {
-  const maxPastSeasons = 5;
+  const maxPastSeasons = 3;
   const home = gameData.teams?.home;
   const away = gameData.teams?.away;
 
@@ -424,27 +424,27 @@ export async function buildContext(gameData, oddsData = null) {
   const homePitcher = home?.probablePitcher;
   const awayPitcher = away?.probablePitcher;
 
-  // Fetch paralelo: fallo individual no cancela el resto
-  // Use historical versions to get multi-year trend data (same base shape + .historical array)
-  const [homeStatsResult, awayStatsResult, homePitcherResult, awayPitcherResult,
-         homeTeamVerifyResult, awayTeamVerifyResult] =
-    await Promise.allSettled([
-      home?.id ? getTeamHittingHistoricalStats(home.id) : Promise.resolve(null),
-      away?.id ? getTeamHittingHistoricalStats(away.id) : Promise.resolve(null),
-      homePitcher?.id ? getPitcherHistoricalStats(homePitcher.id) : Promise.resolve(null),
-      awayPitcher?.id ? getPitcherHistoricalStats(awayPitcher.id) : Promise.resolve(null),
-      homePitcher?.id ? getCurrentTeam(homePitcher.id) : Promise.resolve(null),
-      awayPitcher?.id ? getCurrentTeam(awayPitcher.id) : Promise.resolve(null),
-    ]);
+  // Fetch sequentially (home first, then away) to avoid rate-limiting on the MLB Stats API.
+  // getCurrentTeam calls are lightweight and run in parallel after historical stats complete.
+  let homeHitting      = null;
+  let awayHitting      = null;
+  let homePitcherStats = null;
+  let awayPitcherStats = null;
+
+  try { homeHitting      = home?.id      ? await getTeamHittingHistoricalStats(home.id)      : null; } catch (_) {}
+  try { homePitcherStats = homePitcher?.id ? await getPitcherHistoricalStats(homePitcher.id) : null; } catch (_) {}
+  try { awayHitting      = away?.id      ? await getTeamHittingHistoricalStats(away.id)      : null; } catch (_) {}
+  try { awayPitcherStats = awayPitcher?.id ? await getPitcherHistoricalStats(awayPitcher.id) : null; } catch (_) {}
+
+  const [homeTeamVerifyResult, awayTeamVerifyResult] = await Promise.allSettled([
+    homePitcher?.id ? getCurrentTeam(homePitcher.id) : Promise.resolve(null),
+    awayPitcher?.id ? getCurrentTeam(awayPitcher.id) : Promise.resolve(null),
+  ]);
 
   const settled = (r) => (r.status === 'fulfilled' ? r.value : null);
 
-  const homeHitting       = settled(homeStatsResult);
-  const awayHitting       = settled(awayStatsResult);
-  const homePitcherStats  = settled(homePitcherResult);
-  const awayPitcherStats  = settled(awayPitcherResult);
-  const homePitcherTeam   = settled(homeTeamVerifyResult);
-  const awayPitcherTeam   = settled(awayTeamVerifyResult);
+  const homePitcherTeam = settled(homeTeamVerifyResult);
+  const awayPitcherTeam = settled(awayTeamVerifyResult);
 
   // ── Baseball Savant Statcast (non-blocking) ──────────────────────────────
   let homePitcherSavant = null;

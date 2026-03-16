@@ -3,13 +3,20 @@
  * Real-time weather data for MLB stadiums via Open-Meteo (free, no API key required).
  */
 
+const _ANGELS   = { lat: 33.8003, lon: -117.8827, name: 'Angel Stadium' };
+const _ATHLETICS = { lat: 37.7516, lon: -122.2005, name: 'Oakland Coliseum' };
+const _GUARDIANS = { lat: 41.4962, lon: -81.6852,  name: 'Progressive Field' };
+const _MARLINS   = { lat: 25.7781, lon: -80.2197,  name: 'LoanDepot Park' };
+const _RAYS      = { lat: 27.7682, lon: -82.6534,  name: 'Tropicana Field' };
+
 const STADIUM_COORDS = {
+  // ── Current canonical names ─────────────────────────────────────────────
   'New York Yankees':        { lat: 40.8296, lon: -73.9262, name: 'Yankee Stadium' },
   'New York Mets':           { lat: 40.7571, lon: -73.8458, name: 'Citi Field' },
   'Los Angeles Dodgers':     { lat: 34.0739, lon: -118.2400, name: 'Dodger Stadium' },
-  'Los Angeles Angels':      { lat: 33.8003, lon: -117.8827, name: 'Angel Stadium' },
+  'Los Angeles Angels':      _ANGELS,
   'San Francisco Giants':    { lat: 37.7786, lon: -122.3893, name: 'Oracle Park' },
-  'Oakland Athletics':       { lat: 37.7516, lon: -122.2005, name: 'Oakland Coliseum' },
+  'Oakland Athletics':       _ATHLETICS,
   'Chicago Cubs':            { lat: 41.9484, lon: -87.6553,  name: 'Wrigley Field' },
   'Chicago White Sox':       { lat: 41.8300, lon: -87.6339,  name: 'Guaranteed Rate Field' },
   'Boston Red Sox':          { lat: 42.3467, lon: -71.0972,  name: 'Fenway Park' },
@@ -17,23 +24,31 @@ const STADIUM_COORDS = {
   'Atlanta Braves':          { lat: 33.8908, lon: -84.4678,  name: 'Truist Park' },
   'Philadelphia Phillies':   { lat: 39.9061, lon: -75.1665,  name: 'Citizens Bank Park' },
   'Washington Nationals':    { lat: 38.8730, lon: -77.0074,  name: 'Nationals Park' },
-  'Miami Marlins':           { lat: 25.7781, lon: -80.2197,  name: 'LoanDepot Park' },
+  'Miami Marlins':           _MARLINS,
   'Pittsburgh Pirates':      { lat: 40.4469, lon: -80.0057,  name: 'PNC Park' },
   'Cincinnati Reds':         { lat: 39.0979, lon: -84.5082,  name: 'Great American Ball Park' },
   'Milwaukee Brewers':       { lat: 43.0280, lon: -87.9712,  name: 'American Family Field' },
   'St. Louis Cardinals':     { lat: 38.6226, lon: -90.1928,  name: 'Busch Stadium' },
   'Minnesota Twins':         { lat: 44.9817, lon: -93.2777,  name: 'Target Field' },
   'Detroit Tigers':          { lat: 42.3390, lon: -83.0485,  name: 'Comerica Park' },
-  'Cleveland Guardians':     { lat: 41.4962, lon: -81.6852,  name: 'Progressive Field' },
+  'Cleveland Guardians':     _GUARDIANS,
   'Kansas City Royals':      { lat: 39.0517, lon: -94.4803,  name: 'Kauffman Stadium' },
   'Texas Rangers':           { lat: 32.7473, lon: -97.0822,  name: 'Globe Life Field' },
   'Seattle Mariners':        { lat: 47.5914, lon: -122.3325, name: 'T-Mobile Park' },
   'Colorado Rockies':        { lat: 39.7559, lon: -104.9942, name: 'Coors Field' },
   'Arizona Diamondbacks':    { lat: 33.4453, lon: -112.0667, name: 'Chase Field' },
   'San Diego Padres':        { lat: 32.7076, lon: -117.1570, name: 'Petco Park' },
-  'Tampa Bay Rays':          { lat: 27.7682, lon: -82.6534,  name: 'Tropicana Field' },
+  'Tampa Bay Rays':          _RAYS,
   'Baltimore Orioles':       { lat: 39.2838, lon: -76.6218,  name: 'Camden Yards' },
   'Toronto Blue Jays':       { lat: 43.6414, lon: -79.3894,  name: 'Rogers Centre' },
+  // ── Aliases: renamed / relocated franchises ─────────────────────────────
+  'Athletics':                        _ATHLETICS,  // Sacramento/Las Vegas A's
+  'Cleveland Indians':                _GUARDIANS,
+  'Los Angeles Angels of Anaheim':    _ANGELS,
+  'Anaheim Angels':                   _ANGELS,
+  'Tampa Bay Devil Rays':             _RAYS,
+  'Florida Marlins':                  _MARLINS,
+  'Montreal Expos':                   null,        // franchise no longer exists
 };
 
 const INDOOR_STADIUMS = new Set([
@@ -63,8 +78,20 @@ function buildWeatherAnalysis(hourly, index, stadiumName) {
   return flags;
 }
 
+function resolveStadium(homeTeam) {
+  // Exact match first
+  if (Object.prototype.hasOwnProperty.call(STADIUM_COORDS, homeTeam)) {
+    return STADIUM_COORDS[homeTeam]; // may be null for defunct franchises
+  }
+  // Partial-name fallback (case-insensitive contains)
+  const lower = homeTeam.toLowerCase();
+  const key = Object.keys(STADIUM_COORDS).find(k => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase()));
+  return key ? STADIUM_COORDS[key] : undefined;
+}
+
 async function getGameWeather(homeTeam, gameTime) {
-  const stadium = STADIUM_COORDS[homeTeam];
+  const stadium = resolveStadium(homeTeam);
+  // null = defunct franchise (known), undefined = truly unknown team
   if (!stadium) return null;
 
   try {
