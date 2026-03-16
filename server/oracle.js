@@ -133,6 +133,26 @@ When outfield jump or arm strength data is present:
 - oaa_of > 3 → Elite outfielder, reduce doubles/triples props in their zone
 - arm_strength_mph > 90 → Strong arm, suppress extra base attempts on balls to that OF
 - arm_strength_mph < 80 → Weak arm, boost runner advancement and XBH props
+### 90FT SPLITS:
+When splits_90ft data is present for a batter:
+- hp_to_1b < 4.10s → Elite first step, favor infield hit props and SB props
+- hp_to_1b > 4.40s → Slow out of box, avoid SB props
+- Use alongside sprint_speed to confirm speed profile
+### PITCHER POSITIONING AND SHIFTS:
+When pitcher_positioning data is present:
+- shift_rate > 25% → Heavy shift usage, may indicate pull-heavy batter tendencies
+- shift_rate < 5% → Minimal shifting, pitcher relies on stuff over positioning
+### ACTIVE SPIN:
+When active_spin data is present for a pitcher:
+- active_spin_pct > 95% → Nearly all spin is active (movement-generating), elite movement pitcher
+- active_spin_pct < 85% → High gyro/inefficient spin, less movement than spin rate suggests
+- Combine with pitch_movement: high active spin + high vertical break → elite ride on fastball, suppress barrel props
+### PITCH MOVEMENT:
+When pitch_movement data is present for a pitcher:
+- vertical_break > 16 inches → Elite rise/sink depending on pitch type, suppresses hard contact
+- horizontal_break > 14 inches → Elite horizontal movement, difficult to square up
+- High movement + high active_spin_pct → flag as ELITE MOVEMENT PITCHER in oracle_report
+- Low movement despite high spin_rate → spin is inefficient, do not overrate the pitcher
 ### YEAR TO YEAR CHANGES:
 - year_to_year_xwoba_change > +.030 → Legitimate breakout, weight current season higher
 - year_to_year_xwoba_change < -.030 → Regression risk, apply skepticism to props

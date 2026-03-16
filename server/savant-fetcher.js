@@ -137,6 +137,22 @@ const ENDPOINTS = {
     'https://baseballsavant.mlb.com/leaderboard/arm_strength?year=2025&type=outfielder&team=&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=fielder&filter=&sort=4&sortDir=desc&min=q&selections=arm_strength,arm_value&chart=false&csv=true',
   ],
+  ninetyFtSplits: [
+    'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=hp_to_1b,sprint_speed&chart=false&csv=true',
+  ],
+  pitcherPositioning: [
+    'https://baseballsavant.mlb.com/leaderboard/pitcher-positioning?year=2025&type=pitcher&min=q&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=n_shift,shift_rate&chart=false&csv=true',
+  ],
+  activeSpin: [
+    'https://baseballsavant.mlb.com/leaderboard/active-spin?year=2025&type=pitcher&min=q&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=active_spin,spin_rate&chart=false&csv=true',
+  ],
+  pitchMovement: [
+    'https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=2025&type=pitcher&min=q&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=pfx_x,pfx_z,spin_rate&chart=false&csv=true',
+  ],
 };
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
@@ -174,6 +190,10 @@ let _cache = {
   catcherPopTime:    null,
   outfieldJump:      null,
   armStrength:       null,
+  ninetyFtSplits:    null,
+  pitcherPositioning: null,
+  activeSpin:        null,
+  pitchMovement:     null,
   lastUpdated:       0,
   yearsLoaded:       [],
 };
@@ -304,6 +324,7 @@ async function loadAll() {
     'rollingPitcher7d', 'rollingPitcher14d', 'rollingPitcher21d',
     'swingPath',
     'batTracking', 'catcherPopTime', 'outfieldJump', 'armStrength',
+    'ninetyFtSplits', 'pitcherPositioning', 'activeSpin', 'pitchMovement',
   ];
 
   const fetches = KEYS.map(key => fetchMultiYear(ENDPOINTS[key], years, key));
@@ -340,7 +361,8 @@ async function loadAll() {
     `rb7d: ${c.rollingBatter7d.length}, rb14d: ${c.rollingBatter14d.length}, rb21d: ${c.rollingBatter21d.length}, ` +
     `rp7d: ${c.rollingPitcher7d.length}, rp14d: ${c.rollingPitcher14d.length}, rp21d: ${c.rollingPitcher21d.length}, ` +
     `swingPath: ${c.swingPath.length}, ` +
-    `batTracking: ${c.batTracking.length}, catcherPopTime: ${c.catcherPopTime.length}, outfieldJump: ${c.outfieldJump.length}, armStrength: ${c.armStrength.length}`
+    `batTracking: ${c.batTracking.length}, catcherPopTime: ${c.catcherPopTime.length}, outfieldJump: ${c.outfieldJump.length}, armStrength: ${c.armStrength.length}, ` +
+    `90ft: ${c.ninetyFtSplits.length}, pitcherPos: ${c.pitcherPositioning.length}, activeSpin: ${c.activeSpin.length}, pitchMovement: ${c.pitchMovement.length}`
   );
 }
 
@@ -430,8 +452,9 @@ export async function getBatterStatcast(playerName) {
   const rb21 = findPlayer(_cache.rollingBatter21d,  playerName);
   const sp   = findPlayer(_cache.swingPath,         playerName);
   const btRow = findPlayer(_cache.batTracking,      playerName);
+  const sf   = findPlayer(_cache.ninetyFtSplits,    playerName);
 
-  if (!xs && !ev && !pct && !rb && !ss && !bb && !y2y && !hr && !rv && !rb7 && !rb14 && !rb21 && !sp && !btRow) return null;
+  if (!xs && !ev && !pct && !rb && !ss && !bb && !y2y && !hr && !rv && !rb7 && !rb14 && !rb21 && !sp && !btRow && !sf) return null;
 
   return {
     player_name: xs?.['last_name, first_name'] ?? ev?.['last_name, first_name'] ?? playerName,
@@ -476,12 +499,18 @@ export async function getBatterStatcast(playerName) {
       swing_length:     parseFloat(btRow?.swing_length    ?? btRow?.['avg_swing_length'] ?? '') || null,
       blasts_per_swing: parseFloat(btRow?.blasts_per_swing ?? btRow?.['blasts_swing']    ?? '') || null,
     } : null,
+    // 90ft splits
+    splits_90ft: sf ? {
+      hp_to_1b:     parseFloat(sf?.hp_to_1b     ?? sf?.['home_to_first'] ?? '') || null,
+      sprint_speed: parseFloat(sf?.sprint_speed ?? sf?.['speed']         ?? '') || null,
+    } : null,
     // Source rows for transparency
     _sources: {
       xStats: !!xs, exitVelocity: !!ev, percentiles: !!pct,
       rolling: !!rb, rolling7d: !!rb7, rolling14d: !!rb14, rolling21d: !!rb21,
       sprintSpeed: !!ss, battedBall: !!bb, yearToYear: !!y2y,
       homeRuns: !!hr, runValue: !!rv, swingPath: !!sp, batTracking: !!btRow,
+      ninetyFtSplits: !!sf,
     },
   };
 }
@@ -502,11 +531,14 @@ export async function getPitcherStatcast(playerName) {
   // New
   const hr   = findPlayer(_cache.homeRunsPitcher,   playerName);
   const rv   = findPlayer(_cache.runValuePitcher,   playerName);
-  const rp7  = findPlayer(_cache.rollingPitcher7d,  playerName);
-  const rp14 = findPlayer(_cache.rollingPitcher14d, playerName);
-  const rp21 = findPlayer(_cache.rollingPitcher21d, playerName);
+  const rp7  = findPlayer(_cache.rollingPitcher7d,    playerName);
+  const rp14 = findPlayer(_cache.rollingPitcher14d,   playerName);
+  const rp21 = findPlayer(_cache.rollingPitcher21d,   playerName);
+  const pp   = findPlayer(_cache.pitcherPositioning,  playerName);
+  const asp  = findPlayer(_cache.activeSpin,           playerName);
+  const pm   = findPlayer(_cache.pitchMovement,        playerName);
 
-  if (!xs && !pa && !rp && !pt && !bb && !y2y && !hr && !rv && !rp7 && !rp14 && !rp21) return null;
+  if (!xs && !pa && !rp && !pt && !bb && !y2y && !hr && !rv && !rp7 && !rp14 && !rp21 && !pp && !asp && !pm) return null;
 
   return {
     player_name: xs?.['last_name, first_name'] ?? pa?.['last_name, first_name'] ?? playerName,
@@ -544,11 +576,28 @@ export async function getPitcherStatcast(playerName) {
     home_run_profile_against: hr ? extractPitcherHomeRunProfile(hr) : null,
     // Run value by pitch type thrown (new)
     run_value_by_pitch: rv ? extractPitcherRunValue(rv) : null,
+    // Pitcher positioning / shift tendencies
+    pitcher_positioning: pp ? {
+      shift_rate: parseFloat(pp?.shift_rate ?? pp?.['n_shift']  ?? '') || null,
+      n_shift:    parseInt(pp?.n_shift      ?? pp?.['shifts']   ?? '') || null,
+    } : null,
+    // Active spin profile
+    active_spin: asp ? {
+      active_spin_pct: parseFloat(asp?.active_spin  ?? asp?.['active_spin_pct']  ?? '') || null,
+      avg_spin_rate:   parseFloat(asp?.spin_rate     ?? asp?.['avg_spin_rate']    ?? '') || null,
+    } : null,
+    // Pitch movement profile
+    pitch_movement: pm ? {
+      horizontal_break: parseFloat(pm?.pfx_x    ?? pm?.['h_break']   ?? '') || null,
+      vertical_break:   parseFloat(pm?.pfx_z    ?? pm?.['v_break']   ?? '') || null,
+      avg_spin_rate:    parseFloat(pm?.spin_rate ?? pm?.['spin_rate'] ?? '') || null,
+    } : null,
     _sources: {
       xStats: !!xs, pitchArsenal: !!pa,
       rolling: !!rp, rolling7d: !!rp7, rolling14d: !!rp14, rolling21d: !!rp21,
       pitchTempo: !!pt, battedBall: !!bb, yearToYear: !!y2y,
       homeRuns: !!hr, runValue: !!rv,
+      pitcherPositioning: !!pp, activeSpin: !!asp, pitchMovement: !!pm,
     },
   };
 }
@@ -690,7 +739,11 @@ export function getCacheStatus() {
       batTracking:       _cache.batTracking?.length       ?? 0,
       catcherPopTime:    _cache.catcherPopTime?.length    ?? 0,
       outfieldJump:      _cache.outfieldJump?.length      ?? 0,
-      armStrength:       _cache.armStrength?.length       ?? 0,
+      armStrength:        _cache.armStrength?.length        ?? 0,
+      ninetyFtSplits:     _cache.ninetyFtSplits?.length     ?? 0,
+      pitcherPositioning: _cache.pitcherPositioning?.length ?? 0,
+      activeSpin:         _cache.activeSpin?.length         ?? 0,
+      pitchMovement:      _cache.pitchMovement?.length      ?? 0,
     },
   };
 }
