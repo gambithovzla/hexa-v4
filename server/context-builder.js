@@ -9,6 +9,7 @@
 
 import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
+import { getGameWeather } from './weather-api.js';
 
 // ---------------------------------------------------------------------------
 // Historical MLB context (static reference data for Spring Training + early season)
@@ -426,7 +427,7 @@ export async function buildContext(gameData, oddsData = null) {
   // Fetch paralelo: fallo individual no cancela el resto
   // Use historical versions to get multi-year trend data (same base shape + .historical array)
   const [homeStatsResult, awayStatsResult, homePitcherResult, awayPitcherResult,
-         homeTeamVerifyResult, awayTeamVerifyResult] =
+         homeTeamVerifyResult, awayTeamVerifyResult, weatherResult] =
     await Promise.allSettled([
       home?.id ? getTeamHittingHistoricalStats(home.id) : Promise.resolve(null),
       away?.id ? getTeamHittingHistoricalStats(away.id) : Promise.resolve(null),
@@ -434,6 +435,7 @@ export async function buildContext(gameData, oddsData = null) {
       awayPitcher?.id ? getPitcherHistoricalStats(awayPitcher.id) : Promise.resolve(null),
       homePitcher?.id ? getCurrentTeam(homePitcher.id) : Promise.resolve(null),
       awayPitcher?.id ? getCurrentTeam(awayPitcher.id) : Promise.resolve(null),
+      getGameWeather(homeName, gameData.gameTime ?? null),
     ]);
 
   const settled = (r) => (r.status === 'fulfilled' ? r.value : null);
@@ -444,6 +446,7 @@ export async function buildContext(gameData, oddsData = null) {
   const awayPitcherStats  = settled(awayPitcherResult);
   const homePitcherTeam   = settled(homeTeamVerifyResult);
   const awayPitcherTeam   = settled(awayTeamVerifyResult);
+  const weatherData       = settled(weatherResult);
 
   // ── Baseball Savant Statcast (non-blocking) ──────────────────────────────
   let homePitcherSavant = null;
@@ -670,6 +673,31 @@ export async function buildContext(gameData, oddsData = null) {
       ` | RL Home ${sp(rl.home.spread)} ${am(rl.home.price)} Away ${sp(rl.away.spread)} ${am(rl.away.price)}` +
       ` | O/U ${ou.total ?? 'N/A'} O${am(ou.overPrice)} U${am(ou.underPrice)}`
     );
+  }
+
+  // ── Weather conditions ──────────────────────────────────────────────────────
+  blocks.push('');
+  if (weatherData) {
+    if (weatherData.isIndoor) {
+      blocks.push(`=== WEATHER: INDOOR STADIUM (${weatherData.stadiumName ?? weatherData.stadium?.name ?? 'dome'}) — Weather not a factor ===`);
+    } else {
+      const wFlags = weatherData.analysis ?? [];
+      blocks.push(`=== WEATHER CONDITIONS — ${weatherData.stadiumName ?? weatherData.stadium?.name ?? 'Stadium'} ===`);
+      blocks.push(
+        `Temperature: ${weatherData.temperature != null ? `${weatherData.temperature}°F` : 'N/A'}` +
+        ` | Wind: ${weatherData.windSpeed != null ? `${weatherData.windSpeed}mph` : 'N/A'}` +
+        ` ${weatherData.windDirectionLabel ?? ''}`.trim() +
+        ` | Rain probability: ${weatherData.precipitationProbability != null ? `${weatherData.precipitationProbability}%` : 'N/A'}`
+      );
+      if (wFlags.length > 0) {
+        blocks.push(`⚠️ WEATHER FLAGS: ${wFlags.join(' | ')}`);
+      } else {
+        blocks.push('No significant weather factors.');
+      }
+      blocks.push('ORACLE INSTRUCTION: Factor wind speed and direction into OVER/UNDER analysis. Wind > 15mph toward outfield = OVER bias. Cold < 50°F = UNDER bias. Rain > 60% = reduce confidence.');
+    }
+  } else {
+    blocks.push('=== WEATHER: Data unavailable ===');
   }
 
   // ── Lineup Status ──────────────────────────────────────────────────────────
