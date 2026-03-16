@@ -3,8 +3,8 @@
  * Orchestrates bet controls, API calls, and result display for H.E.X.A. V4.
  *
  * Props:
- *   selectedGames  — array of game objects (1 for single, N for parlay/fullday)
- *   mode           — 'single' | 'parlay' | 'fullDay'
+ *   selectedGames  — array of game objects (1 for single, N for parlay)
+ *   mode           — 'single' | 'parlay'
  *   lang           — 'en' | 'es'
  *   onSave         — (historyEntry) => void  (optional, for useHistory)
  */
@@ -71,7 +71,6 @@ const L = {
     emptyHint: {
       single:  'Select a game on the left to begin.',
       parlay:  'Select 2–6 games on the left to build your parlay.',
-      fullDay: 'Loading today\'s games…',
     },
     readyHint:    'Configure your options and run the Oracle.',
     parseError:   'Analysis could not be processed. Please retry.',
@@ -116,7 +115,6 @@ const L = {
     emptyHint: {
       single:  'Selecciona un juego a la izquierda para comenzar.',
       parlay:  'Selecciona 2–6 juegos a la izquierda para tu parlay.',
-      fullDay: 'Cargando los juegos de hoy…',
     },
     readyHint:    'Configura las opciones y ejecuta el Oráculo.',
     parseError:   'No se pudo procesar el análisis. Por favor, reintenta.',
@@ -530,7 +528,6 @@ function NoCreditsMessage({ lang }) {
 const BASE_COST = {
   single:  { fast: 1,  deep: 2  },
   parlay:  { fast: 4,  deep: 8  },
-  fullDay: { fast: 8,  deep: 15 },
 };
 const WEB_INTEL_COST = 3; // only for single game
 
@@ -544,12 +541,10 @@ const ACTION_LABEL = {
   en: {
     single:  { fast: 'Single Fast Analysis', deep: 'Single Deep Analysis' },
     parlay:  { fast: 'Parlay Fast Analysis',  deep: 'Parlay Deep Analysis'  },
-    fullDay: { fast: 'Full Day Fast Analysis', deep: 'Full Day Deep Analysis' },
   },
   es: {
     single:  { fast: 'Análisis Single Fast', deep: 'Análisis Single Deep' },
     parlay:  { fast: 'Análisis Parlay Fast',  deep: 'Análisis Parlay Deep'  },
-    fullDay: { fast: 'Análisis Full Day Fast', deep: 'Análisis Full Day Deep' },
   },
 };
 
@@ -694,9 +689,8 @@ export default function AnalysisPanel({
   }, [mode, selectedGames.length]);
 
   const canAnalyze =
-    (mode === 'single'  && selectedGames.length === 1) ||
-    (mode === 'parlay'  && selectedGames.length >= 2)  ||
-    (mode === 'fullDay' && selectedGames.length > 0);
+    (mode === 'single' && selectedGames.length === 1) ||
+    (mode === 'parlay' && selectedGames.length >= 2);
 
   const creditCost    = calcCreditCost(mode, modelMode, webSearch);
   const userCredits   = user?.credits ?? 0;
@@ -762,18 +756,6 @@ export default function AnalysisPanel({
           parlayLegs,
           model:       modelMode,
         };
-      } else {
-        // fullDay
-        endpoint = `${API_URL}/api/analyze/full-day`;
-        body = {
-          date:        selectedGames[0]?.gameDate?.split('T')[0]
-                         ?? new Date().toISOString().split('T')[0],
-          lang,
-          betType,
-          riskProfile,
-          webSearch,
-          model:       modelMode,
-        };
       }
 
       // Auto-retry once after 2 s on any failure (network error or success:false)
@@ -820,7 +802,7 @@ export default function AnalysisPanel({
       // Success path
       setResult(json);
       onSave?.({
-        type:   mode === 'fullDay' ? 'fullday' : mode,
+        type:   mode,
         games:  selectedGames,
         result: json.data,
         date:   new Date().toISOString(),

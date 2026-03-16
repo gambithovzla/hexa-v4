@@ -403,22 +403,15 @@ function teamVerificationLine(playerName, scheduledAbbr, verification) {
   return `✓ TEAM VERIFICATION: ${playerName} — current team confirmed as ${curAbbr ?? verification.currentTeamName ?? 'Unknown'}`;
 }
 
-// Max context chars for Full Day (≈8000 tokens = 32000 chars)
-const FULL_DAY_MAX_CHARS = 32000;
-
 /**
  * Construye el contexto estructurado completo para un partido.
  *
  * @param {object}      gameData — objeto normalizado devuelto por getTodayGames()
  * @param {object|null} oddsData — resultado de matchOddsToGame() (opcional)
- * @param {object}      opts
- * @param {boolean}     [opts.fullDay=false] — if true, produces a slimmer context
  * @returns {Promise<string>} String listo para el prompt del Oracle
  */
-export async function buildContext(gameData, oddsData = null, opts = {}) {
-  const { fullDay = false } = opts;
-  // Full Day mode: limit past seasons shown to 1 (current + 1 prior only)
-  const maxPastSeasons = fullDay ? 1 : 5;
+export async function buildContext(gameData, oddsData = null) {
+  const maxPastSeasons = 5;
   const home = gameData.teams?.home;
   const away = gameData.teams?.away;
 
@@ -470,73 +463,58 @@ export async function buildContext(gameData, oddsData = null, opts = {}) {
       return lineup.find(p => typeof p === 'object' && (p.position === pos || p.pos === pos)) ?? null;
     }
 
-    // Fire pitcher Statcast always; batters/fielders only for single-game mode
     const savantFetches = [
       homePitcher?.fullName ? getPitcherStatcast(homePitcher.fullName) : Promise.resolve(null),
       awayPitcher?.fullName ? getPitcherStatcast(awayPitcher.fullName) : Promise.resolve(null),
     ];
 
-    let batterFetches    = [];
-    let referenceFetches = [getParkFactor(homeName)];
+    const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
+    const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
+    const homeCatcher = findByPos(homeLineup, 'C');
+    const awayCatcher = findByPos(awayLineup, 'C');
+    const OF_POSITIONS = ['CF', 'LF', 'RF'];
+    const allOFPlayers = [
+      ...OF_POSITIONS.map(pos => { const p = findByPos(homeLineup, pos); return p ? { player: p, pos, side: 'Home' } : null; }),
+      ...OF_POSITIONS.map(pos => { const p = findByPos(awayLineup, pos); return p ? { player: p, pos, side: 'Away' } : null; }),
+    ].filter(Boolean);
 
-    if (!fullDay) {
-      const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
-      const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
-      const homeCatcher = findByPos(homeLineup, 'C');
-      const awayCatcher = findByPos(awayLineup, 'C');
-      const OF_POSITIONS = ['CF', 'LF', 'RF'];
-      const allOFPlayers = [
-        ...OF_POSITIONS.map(pos => { const p = findByPos(homeLineup, pos); return p ? { player: p, pos, side: 'Home' } : null; }),
-        ...OF_POSITIONS.map(pos => { const p = findByPos(awayLineup, pos); return p ? { player: p, pos, side: 'Away' } : null; }),
-      ].filter(Boolean);
+    const batterFetches = [
+      ...homeBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
+      ...awayBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
+    ];
+    const referenceFetches = [
+      getParkFactor(homeName),
+      getCatcherFraming(homeCatcher?.fullName ?? homeCatcher?.name ?? ''),
+      getCatcherFraming(awayCatcher?.fullName ?? awayCatcher?.name ?? ''),
+      ...allOFPlayers.map(({ player }) => getFieldingOAA(player.fullName ?? player.name ?? '')),
+    ];
 
-      batterFetches = [
-        ...homeBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
-        ...awayBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
-      ];
-      referenceFetches = [
-        getParkFactor(homeName),
-        getCatcherFraming(homeCatcher?.fullName ?? homeCatcher?.name ?? ''),
-        getCatcherFraming(awayCatcher?.fullName ?? awayCatcher?.name ?? ''),
-        ...allOFPlayers.map(({ player }) => getFieldingOAA(player.fullName ?? player.name ?? '')),
-      ];
+    const [pitcherResults, batterResults, referenceResults] = await Promise.all([
+      Promise.allSettled(savantFetches),
+      Promise.allSettled(batterFetches),
+      Promise.allSettled(referenceFetches),
+    ]);
 
-      const [pitcherResults, batterResults, referenceResults] = await Promise.all([
-        Promise.allSettled(savantFetches),
-        Promise.allSettled(batterFetches),
-        Promise.allSettled(referenceFetches),
-      ]);
+    homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
+    awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
 
-      homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
-      awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
+    const homeBattersFull = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
+    const awayBattersFull = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
+    const allBatters = [...homeBattersFull, ...awayBattersFull];
+    batterResults.forEach((r, idx) => {
+      const name   = allBatters[idx]?.fullName ?? allBatters[idx]?.name ?? allBatters[idx] ?? `Batter ${idx + 1}`;
+      const savant = r.status === 'fulfilled' ? r.value : null;
+      if (idx < homeBattersFull.length) savantBatters.home.push({ name, savant });
+      else                               savantBatters.away.push({ name, savant });
+    });
 
-      const homeBattersFull = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
-      const awayBattersFull = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
-      const allBatters = [...homeBattersFull, ...awayBattersFull];
-      batterResults.forEach((r, idx) => {
-        const name   = allBatters[idx]?.fullName ?? allBatters[idx]?.name ?? allBatters[idx] ?? `Batter ${idx + 1}`;
-        const savant = r.status === 'fulfilled' ? r.value : null;
-        if (idx < homeBattersFull.length) savantBatters.home.push({ name, savant });
-        else                               savantBatters.away.push({ name, savant });
-      });
-
-      parkFactorData      = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
-      catcherFraming.home = referenceResults[1].status === 'fulfilled' ? referenceResults[1].value : null;
-      catcherFraming.away = referenceResults[2].status === 'fulfilled' ? referenceResults[2].value : null;
-      allOFPlayers.forEach(({ player, pos, side }, idx) => {
-        const oaa = referenceResults[3 + idx].status === 'fulfilled' ? referenceResults[3 + idx].value : null;
-        if (oaa) oaaOutfielders.push({ name: player.fullName ?? player.name, pos, side, oaa });
-      });
-    } else {
-      // Full Day: pitcher Statcast only, no batters/fielders
-      const [pitcherResults, referenceResults] = await Promise.all([
-        Promise.allSettled(savantFetches),
-        Promise.allSettled(referenceFetches),
-      ]);
-      homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
-      awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
-      parkFactorData    = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
-    }
+    parkFactorData      = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
+    catcherFraming.home = referenceResults[1].status === 'fulfilled' ? referenceResults[1].value : null;
+    catcherFraming.away = referenceResults[2].status === 'fulfilled' ? referenceResults[2].value : null;
+    allOFPlayers.forEach(({ player, pos, side }, idx) => {
+      const oaa = referenceResults[3 + idx].status === 'fulfilled' ? referenceResults[3 + idx].value : null;
+      if (oaa) oaaOutfielders.push({ name: player.fullName ?? player.name, pos, side, oaa });
+    });
 
     savantCacheStatus = getCacheStatus();
   } catch (err) {
@@ -725,15 +703,7 @@ export async function buildContext(gameData, oddsData = null, opts = {}) {
   blocks.push('');
   blocks.push(buildHistoricalContextBlock());
 
-  const contextStr = blocks.join('\n');
-
-  // Full Day: hard truncation to avoid exceeding model context limits
-  if (fullDay && contextStr.length > FULL_DAY_MAX_CHARS) {
-    console.warn(`[context-builder] Full Day context truncated: ${contextStr.length} → ${FULL_DAY_MAX_CHARS} chars`);
-    return contextStr.substring(0, FULL_DAY_MAX_CHARS) + '\n\n[Context truncated for Full Day mode — historical trends omitted]';
-  }
-
-  return contextStr;
+  return blocks.join('\n');
 }
 
 // ---------------------------------------------------------------------------

@@ -134,22 +134,6 @@ function TabModes({ lang }) {
         : 'Deep analysis with detailed reasoning. Examines pitcher matchups, offensive trends, bullpen, park factors and more. ~30 seconds.',
     },
     {
-      icon: '📅',
-      title: 'FULL DAY FAST',
-      cost: isEs ? '8 créditos' : '8 credits',
-      description: isEs
-        ? 'Analiza todos los partidos del día de una sola vez. Incluye pick recomendado por juego y el mejor parlay del día.'
-        : 'Analyzes all games of the day at once. Includes a recommended pick per game and the best parlay of the day.',
-    },
-    {
-      icon: '📅',
-      title: 'FULL DAY DEEP',
-      cost: isEs ? '15 créditos' : '15 credits',
-      description: isEs
-        ? 'El análisis más completo disponible. Análisis profundo de cada juego del día. Para el apostador profesional que quiere máxima información.'
-        : 'The most complete analysis available. Deep analysis of every game. For the professional bettor who demands maximum information.',
-    },
-    {
       icon: '🃏',
       title: 'PARLAY FAST',
       cost: isEs ? '4 créditos' : '4 credits',
@@ -229,8 +213,8 @@ function TabCredits({ lang }) {
         {[
           isEs ? '30 análisis Single Fast, ó' : '30 Single Fast analyses, or',
           isEs ? '15 análisis Single Deep, ó' : '15 Single Deep analyses, or',
-          isEs ? '3 Full Day Fast + 6 Single Fast, ó' : '3 Full Day Fast + 6 Single Fast, or',
-          isEs ? '2 Full Day Deep' : '2 Full Day Deep',
+          isEs ? '7 análisis Parlay Fast, ó' : '7 Parlay Fast analyses, or',
+          isEs ? '3 análisis Parlay Deep' : '3 Parlay Deep analyses',
         ].map((line, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
             <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: C.accent, flexShrink: 0 }} />

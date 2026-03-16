@@ -5,7 +5,7 @@
  * Props:
  *   lang        — 'en' | 'es'
  *   onLangToggle — (nextLang) => void
- *   activeTab   — 'game' | 'fullday' | 'parlay' | 'history'
+ *   activeTab   — 'game' | 'parlay' | 'history'
  *   onTabChange — (tab) => void
  */
 
@@ -43,10 +43,9 @@ const SUBTITLE = {
 };
 
 const TABS = [
-  { value: 'game',    en: 'Single Game',    es: 'Juego Individual' },
-  { value: 'fullday', en: 'Full Day',        es: 'Día Completo'     },
-  { value: 'parlay',  en: 'Parlay',          es: 'Parlay'           },
-  { value: 'history', en: 'History',         es: 'Historial'        },
+  { value: 'game',    en: 'Single Game', es: 'Juego Individual' },
+  { value: 'parlay',  en: 'Parlay',      es: 'Parlay'           },
+  { value: 'history', en: 'History',     es: 'Historial'        },
 ];
 
 // ── Statcast badge ────────────────────────────────────────────────────────────

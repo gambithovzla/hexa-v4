@@ -6,7 +6,6 @@
  *   activeTab   — controls which tab panel is visible
  *   singleGame  — last game selected in the Single tab
  *   parlayGames — games selected in the Parlay tab
- *   fullDayGames — games loaded for the Full Day tab
  *
  * History:
  *   App owns one useHistory() instance solely for addPick (write side).
@@ -27,7 +26,7 @@ const muiTheme = createTheme(themeConfig);
 
 const MONO = '"JetBrains Mono", "Fira Code", monospace';
 
-// Two-column layout used on game / parlay / fullday tabs
+// Two-column layout used on game / parlay tabs
 const TAB_LAYOUT = {
   display:             'grid',
   gridTemplateColumns: { xs: '1fr', md: '380px 1fr' },
@@ -66,11 +65,10 @@ function AppFooter() {
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [lang,         setLang]         = useState('en');
-  const [activeTab,    setActiveTab]    = useState('game');
-  const [singleGame,   setSingleGame]   = useState(null);
-  const [parlayGames,  setParlayGames]  = useState([]);
-  const [fullDayGames, setFullDayGames] = useState([]);
+  const [lang,        setLang]        = useState('en');
+  const [activeTab,   setActiveTab]   = useState('game');
+  const [singleGame,  setSingleGame]  = useState(null);
+  const [parlayGames, setParlayGames] = useState([]);
 
   // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
   // HistoryPanel reads history via its own hook instance (remounts each visit).
@@ -118,23 +116,6 @@ export default function App() {
               <AnalysisPanel
                 mode="single"
                 selectedGames={singleGame ? [singleGame] : []}
-                lang={lang}
-                onSave={addPick}
-              />
-            </Box>
-          )}
-
-          {/* Full day */}
-          {activeTab === 'fullday' && (
-            <Box sx={TAB_LAYOUT}>
-              <GameSelector
-                mode="fullDay"
-                onSelectMultiple={setFullDayGames}
-                language={lang}
-              />
-              <AnalysisPanel
-                mode="fullDay"
-                selectedGames={fullDayGames}
                 lang={lang}
                 onSave={addPick}
               />

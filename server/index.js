@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
-import { analyzeGame, analyzeParlay, analyzeFullDay } from './oracle.js';
+import { analyzeGame, analyzeParlay } from './oracle.js';
 import { getGameOdds, matchOddsToGame } from './odds-api.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
@@ -35,7 +35,6 @@ app.use('/api/lemon',     lemonRouter);
 const CREDIT_COSTS = {
   single:  { fast: 1,  deep: 2  },
   parlay:  { fast: 4,  deep: 8  },
-  fullDay: { fast: 8,  deep: 15 },
 };
 const WEB_INTEL_COST = 3; // only applied to single-game
 
@@ -241,58 +240,6 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
       ? { ...analysis.data, legOdds: legOddsArr.some(Boolean) ? legOddsArr : undefined }
       : null;
     res.json({ success: true, data: responseData, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// POST /api/analyze/full-day  — requires auth, costs 8 (fast) or 15 (deep) credits
-app.post('/api/analyze/full-day', verifyToken, async (req, res) => {
-  const {
-    date,
-    language    = 'en',
-    lang,
-    betType,
-    riskProfile = 'medium',
-    webSearch   = false,
-    model       = 'fast',
-  } = req.body;
-  const resolvedLang = lang ?? language;
-  const resolvedDate = date || new Date().toISOString().split('T')[0];
-  const cost         = calcServerCost('fullDay', model, false);
-  const timeoutMs    = model === 'deep' ? 55000 : 25000;
-
-  try {
-    const games = await getTodayGames(resolvedDate);
-
-    let allOdds = [];
-    try { allOdds = await getGameOdds(); } catch { /* optional */ }
-
-    const updatedUser = await deductCredits(req, res, cost);
-    if (!updatedUser) return;
-
-    let analysis;
-    try {
-      // Full Day: build slim contexts (reduced historical + no batter Statcast)
-      const contexts = await Promise.all(
-        games.map(g => {
-          const gameOdds = matchOddsToGame(allOdds, g.teams?.home?.name, g.teams?.away?.name);
-          return buildContext(g, gameOdds, { fullDay: true });
-        })
-      );
-      analysis = await analyzeFullDay(contexts, resolvedDate, resolvedLang, { betType, riskProfile, webSearch, model, timeoutMs });
-    } catch (err) {
-      await refundCredits(updatedUser.id, cost, updatedUser.email);
-      const isTimeout = err.message === 'TIMEOUT';
-      return res.status(500).json({
-        success: false,
-        error: isTimeout
-          ? 'El análisis Full Day tardó demasiado. Créditos reembolsados. Intenta con menos partidos seleccionados o usa Single Game.'
-          : 'Análisis fallido. Tus créditos han sido reembolsados.',
-      });
-    }
-
-    res.json({ success: true, data: analysis.data, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
