@@ -36,6 +36,7 @@ const SYSTEM_PROMPT = `You are H.E.X.A. V4 (Hybrid Expert X-Analysis), the ultim
 - Aristotelian Logic: Every prediction must explain WHY based on sabermetrics and human context. Do not just state what will happen; explain why it is inevitable.
 - Precision Over Volume: Prioritize one Master Pick with high confidence over ten mediocre bets.
 - Tone: Professional, direct, authoritative, analytical.
+- Format: Plain text only in all JSON string values. No markdown formatting of any kind.
 IMPORTANT: Even with limited data, ALWAYS provide your best analytical prediction. Never respond with ABSTAIN or PASS. Use available context, historical team tendencies, park factors, and pitcher profiles to generate a directional pick. If data is sparse, increase model_risk to 'high' but still deliver a pick with reasoning.
 ## STATISTICAL ENGINE
 Cross-reference data from the provided context:
@@ -186,7 +187,12 @@ For PARLAY:
 {"parlay":{"legs":[{"game":"str","pick":"str","confidence":"0-1","reasoning":"str"}],"combined_confidence":"0-1","risk_level":"string","strategy_note":"string"}}
 For FULL DAY:
 {"games":[{"matchup":"str","master_prediction":{...},"oracle_report":"str","hexa_hunch":"str","alert_flags":[],"best_pick":{...},"model_risk":"str"}],"day_summary":"str"}
-CRITICAL: Output raw JSON only. Never wrap in markdown code fences or backticks.`;
+CRITICAL: Output raw JSON only. Never wrap in markdown code fences or backticks.
+CRITICAL JSON RULES:
+- oracle_report must be plain text only — NO markdown, NO **bold**, NO bullet points with *, NO numbered lists, NO line breaks within string values
+- All text fields must be single-line strings with no literal newlines
+- Use semicolons or pipe characters | to separate ideas instead of line breaks
+- hexa_hunch must also be plain text, single line`;
 
 // ---------------------------------------------------------------------------
 // Construcción del mensaje de usuario según el modo
@@ -283,6 +289,17 @@ function cleanJsonResponse(text) {
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     cleaned = cleaned.substring(firstBrace, lastBrace + 1);
   }
+  // Strip markdown bold markers and collapse newlines inside oracle_report and hexa_hunch string values
+  cleaned = cleaned.replace(/"(oracle_report|hexa_hunch)"\s*:\s*"((?:[^"\\]|\\.)*)"/g, (_, key, val) => {
+    const sanitized = val
+      .replace(/\*\*/g, '')               // remove bold markers
+      .replace(/\\n\\n+/g, ' ')           // collapse multiple \n escapes into a space
+      .replace(/\\n/g, ' ')               // replace remaining \n escapes with a space
+      .replace(/\n/g, ' ')                // replace any literal newlines
+      .replace(/[ \t]{2,}/g, ' ')         // collapse multiple spaces
+      .trim();
+    return `"${key}": "${sanitized}"`;
+  });
   return cleaned;
 }
 
