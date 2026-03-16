@@ -22,8 +22,8 @@ const anthropic = new Anthropic({
 });
 
 const MODELS = {
-  fast: { id: 'claude-haiku-4-5-20251001',  maxTokens: 1500 },
-  deep: { id: 'claude-sonnet-4-20250514',   maxTokens: 4000 },
+  fast: { id: 'claude-haiku-4-5-20251001',  maxTokens: 2500 },
+  deep: { id: 'claude-sonnet-4-20250514',   maxTokens: 5000 },
 };
 
 // ---------------------------------------------------------------------------
@@ -207,6 +207,7 @@ For PARLAY:
 {"parlay":{"legs":[{"game":"str","pick":"str","confidence":"0-1","reasoning":"str"}],"combined_confidence":"0-1","risk_level":"string","strategy_note":"string"}}
 For FULL DAY:
 {"games":[{"matchup":"str","master_prediction":{...},"oracle_report":"str","hexa_hunch":"str","alert_flags":[],"best_pick":{...},"model_risk":"str"}],"day_summary":"str"}
+LENGTH RULE: Keep oracle_report under 400 characters. Keep hexa_hunch under 200 characters. Each alert_flags item under 100 characters. Be concise — the JSON must fit within token limits.
 CRITICAL: Output raw JSON only. Never wrap in markdown code fences or backticks.
 CRITICAL JSON RULES:
 - oracle_report must be plain text only — NO markdown, NO **bold**, NO bullet points with *, NO numbered lists, NO line breaks within string values
