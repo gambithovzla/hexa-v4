@@ -114,6 +114,24 @@ When the context includes STATCAST sections, you MUST use this data as PRIMARY e
 - squared_up_pct > 25% → elite contact quality, favor hits props; < 15% → fade hits props
 - fast_swing_rate < 40% + pitcher Whiff% > 28% → K prop OVER high value
 - attack_angle > 18° + pitcher fb_pct > 45% + park_factor_HR > 105 → HR prop high value
+### BAT TRACKING — NEW:
+When bat_tracking data is present:
+- bat_speed > 75 mph → Elite bat speed, handles hard throwers well
+- bat_speed < 68 mph → Slow bat, struggles vs high-velo pitchers (Whiff% risk)
+- blasts_per_swing > 0.08 → High hard contact rate, favor XBH and HR props
+- bat_speed > 73 + pitcher Whiff% < 22% → Contact prop OVER has value
+### CATCHER POP TIME — NEW:
+When catcher pop_time_2b data is present:
+- pop_time_2b < 1.90s → Elite pop time, strongly suppress stolen base props
+- pop_time_2b < 2.00s → Above average, lean against SB props
+- pop_time_2b > 2.10s → Below average, boost runner SB props if sprint_speed > 27
+- exchange_time < 0.70s → Elite transfer, adds to SB suppression
+### OUTFIELD JUMP & ARM STRENGTH — NEW:
+When outfield jump or arm strength data is present:
+- jump_distance > 5ft → Elite jump, suppresses XBH for balls hit to that OF zone
+- oaa_of > 3 → Elite outfielder, reduce doubles/triples props in their zone
+- arm_strength_mph > 90 → Strong arm, suppress extra base attempts on balls to that OF
+- arm_strength_mph < 80 → Weak arm, boost runner advancement and XBH props
 ### YEAR TO YEAR CHANGES:
 - year_to_year_xwoba_change > +.030 → Legitimate breakout, weight current season higher
 - year_to_year_xwoba_change < -.030 → Regression risk, apply skepticism to props
