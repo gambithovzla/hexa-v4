@@ -303,73 +303,67 @@ function extractRawText(response) {
  */
 function cleanJsonResponse(text) {
   if (!text) return text;
+
   let cleaned = text
-    .replace(/```json/gi, '')
-    .replace(/```JSON/gi, '')
-    .replace(/```/g, '')
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .replace(/^`+|`+$/g, '')
     .trim();
-  // Remove any remaining surrounding backticks
-  cleaned = cleaned.replace(/^`+|`+$/g, '').trim();
-  // Replace curly/smart quotes with straight quotes
-  cleaned = cleaned
-    .replace(/[\u201C\u201D]/g, '"')  // " "
-    .replace(/[\u2018\u2019]/g, "'"); // ' '
-  // Extract from first { to last }
+
   const firstBrace = cleaned.indexOf('{');
   const lastBrace  = cleaned.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     cleaned = cleaned.substring(firstBrace, lastBrace + 1);
   }
-  // Strip markdown bold markers and collapse newlines inside oracle_report and hexa_hunch string values
-  cleaned = cleaned.replace(/"(oracle_report|hexa_hunch)"\s*:\s*"((?:[^"\\]|\\.)*)"/g, (_, key, val) => {
-    const sanitized = val
-      .replace(/\*\*/g, '')               // remove bold markers
-      .replace(/\\n\\n+/g, ' ')           // collapse multiple \n escapes into a space
-      .replace(/\\n/g, ' ')               // replace remaining \n escapes with a space
-      .replace(/\n/g, ' ')                // replace any literal newlines
-      .replace(/[ \t]{2,}/g, ' ')         // collapse multiple spaces
-      .trim();
-    return `"${key}": "${sanitized}"`;
-  });
   return cleaned;
 }
 
-/** Attempts to repair common JSON issues on a best-effort basis */
+/** Repairs common JSON issues: smart quotes, special chars, markdown inside strings, trailing commas */
 function repairJson(text) {
-  // Replace literal newlines inside string values with \n escape
-  let repaired = text.replace(/"(?:[^"\\]|\\.)*"/g, match =>
-    match.replace(/\n/g, '\\n').replace(/\r/g, '\\r')
-  );
+  let s = text;
+  // Replace smart/curly quotes with straight quotes
+  s = s.replace(/[\u201C\u201D]/g, '"');
+  s = s.replace(/[\u2018\u2019]/g, "'");
+  // Replace em-dash and en-dash inside strings with hyphen
+  s = s.replace(/[\u2014\u2013]/g, '-');
+  // Remove literal newlines inside JSON string values
+  // Strategy: find all string values and sanitize them
+  s = s.replace(/"((?:[^"\\]|\\.)*)"/g, (match, inner) => {
+    const fixed = inner
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, ' ')
+      .replace(/\t/g, ' ')
+      .replace(/\*\*/g, '')
+      .replace(/\*/g, '')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    return `"${fixed}"`;
+  });
   // Remove trailing commas before } or ]
-  repaired = repaired.replace(/,\s*([}\]])/g, '$1');
-  return repaired;
+  s = s.replace(/,\s*([}\]])/g, '$1');
+  return s;
 }
 
 /**
  * Intenta parsear el texto como JSON.
- * - Si el texto empieza con { o [, asume JSON e intenta parsearlo.
- *   · Si tiene éxito  → { data: <objeto>, parseError: false }
- *   · Si falla        → { data: null, parseError: true }  (JSON malformado)
- * - Si el texto es prosa/markdown libre:
- *                     → { data: null, parseError: false }  (no es un error)
+ * - Si tiene éxito  → { data: <objeto>, parseError: false }
+ * - Si falla        → { data: null, parseError: true }  (JSON malformado)
+ * - Si no hay JSON  → { data: null, parseError: false }  (prosa — no es un error)
  *
  * @param {string} raw
  * @returns {{ data: object|null, parseError: boolean }}
  */
 function parseResponse(raw) {
   if (!raw || raw.trim() === '') {
-    console.log('[oracle] parseResponse: empty raw text');
     return { data: null, parseError: true, errorReason: 'empty_response' };
   }
 
   console.log('[oracle] RAW (first 300):', JSON.stringify(raw.slice(0, 300)));
 
-  // Aggressive cleaning first
   const cleaned = cleanJsonResponse(raw);
-
   console.log('[oracle] CLEANED (first 300):', JSON.stringify(cleaned.slice(0, 300)));
 
-  // Helper: strip probability_model.note if present
   function sanitize(obj) {
     if (obj?.probability_model?.note !== undefined) {
       const { note: _note, ...rest } = obj.probability_model; // eslint-disable-line no-unused-vars
@@ -378,42 +372,39 @@ function parseResponse(raw) {
     return obj;
   }
 
-  // 1. Direct parse
-  if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
-    try {
-      const parsed = sanitize(JSON.parse(cleaned));
-      console.log('[oracle] parse OK (direct)');
-      return { data: parsed, parseError: false };
-    } catch (e) {
-      console.log('[oracle] direct parse failed:', e.message);
-      // fall through to regex extraction
-    }
+  // Attempt 1: direct parse
+  try {
+    const parsed = sanitize(JSON.parse(cleaned));
+    console.log('[oracle] parse OK (direct)');
+    return { data: parsed, parseError: false };
+  } catch (e) {
+    console.log('[oracle] direct parse failed:', e.message);
   }
 
-  // 2. Regex extraction — grab largest {...} block from the cleaned string
+  // Attempt 2: repair then parse
+  try {
+    const repaired = repairJson(cleaned);
+    const parsed = sanitize(JSON.parse(repaired));
+    console.log('[oracle] parse OK (repaired)');
+    return { data: parsed, parseError: false };
+  } catch (e) {
+    console.log('[oracle] repair parse failed:', e.message);
+  }
+
+  // Attempt 3: extract largest {...} block and repair
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (match) {
     try {
-      const parsed = sanitize(JSON.parse(match[0]));
-      console.log('[oracle] parse OK (regex)');
+      const repaired = repairJson(match[0]);
+      const parsed = sanitize(JSON.parse(repaired));
+      console.log('[oracle] parse OK (extract+repair)');
       return { data: parsed, parseError: false };
     } catch (err) {
-      console.log('[oracle] regex parse failed:', err.message, '— attempting repair…');
-      // 3. Repair attempt — fix unescaped newlines and trailing commas
-      try {
-        const repaired = repairJson(match[0]);
-        const parsed = sanitize(JSON.parse(repaired));
-        console.log('[oracle] parse OK (repaired)');
-        return { data: parsed, parseError: false };
-      } catch (err2) {
-        console.log('[oracle] repair parse failed:', err2.message);
-        return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err2.message };
-      }
+      console.log('[oracle] extract+repair failed:', err.message);
+      return { data: null, parseError: true, errorReason: 'invalid_json', parseErrorMessage: err.message };
     }
   }
 
-  // 3. Raw text fallback (prose response — not an error)
-  console.log('[oracle] no JSON found, returning prose');
   return { data: null, parseError: false };
 }
 
