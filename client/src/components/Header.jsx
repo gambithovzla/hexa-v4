@@ -303,7 +303,7 @@ function AuthButton({ lang }) {
 
 // ── Tab button ────────────────────────────────────────────────────────────────
 
-function TabButton({ tab, active, lang, onClick }) {
+function TabButton({ tab, active, lang, onClick, disabled = false }) {
   const label = lang === 'es' ? tab.es : tab.en;
 
   return (
@@ -327,7 +327,9 @@ function TabButton({ tab, active, lang, onClick }) {
         fontWeight:    700,
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
-        cursor:        'pointer',
+        cursor:        disabled ? 'default' : 'pointer',
+        pointerEvents: disabled ? 'none' : 'auto',
+        opacity:       disabled && !active ? 0.4 : 1,
         transition:    'all 0.15s',
         flexShrink:    0,
         boxShadow:     active
@@ -385,7 +387,7 @@ function HelpButton({ lang }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange }) {
+export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false }) {
   return (
     <Box
       component="header"
@@ -421,64 +423,19 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         }}
       >
         {/* Logo block */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <Typography
-              component="span"
-              sx={{
-                fontFamily:    BARLOW,
-                fontSize:      { xs: '22px', sm: '28px' },
-                fontWeight:    800,
-                lineHeight:    1,
-                letterSpacing: '0.15em',
-                background:    'linear-gradient(135deg, #E8EDF5 0%, #A0B8D0 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor:  'transparent',
-                backgroundClip:       'text',
-                userSelect:    'none',
-                textTransform: 'uppercase',
-                filter:        'drop-shadow(0 0 20px rgba(255,255,255,0.15))',
-              }}
-            >
-              H.E.X.A.
-            </Typography>
-            {/* V4 superscript badge */}
-            <Box
-              component="span"
-              sx={{
-                fontFamily:    BARLOW,
-                fontSize:      '0.62rem',
-                fontWeight:    700,
-                color:         '#fff',
-                bgcolor:       C.accent,
-                px:            '4px',
-                py:            '1px',
-                borderRadius:  '2px',
-                letterSpacing: '0.04em',
-                lineHeight:    1,
-                verticalAlign: 'super',
-                userSelect:    'none',
-              }}
-            >
-              V4
-            </Box>
-          </Box>
-          <Typography
-            component="span"
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+          <Box
+            component="img"
+            src="/hexa-logo.png"
+            alt="H.E.X.A."
             sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '0.62rem',
-              fontWeight:    600,
-              color:         C.textMuted,
-              textTransform: 'uppercase',
-              letterSpacing: '0.3em',
-              display:       'block',
-              mt:            '2px',
-              userSelect:    'none',
+              height:    { xs: '40px', sm: '48px' },
+              width:     'auto',
+              display:   'block',
+              userSelect:'none',
+              filter:    'drop-shadow(0 0 16px rgba(0,102,255,0.35))',
             }}
-          >
-            {SUBTITLE[lang] ?? SUBTITLE.en}
-          </Typography>
+          />
         </Box>
 
         {/* Statcast status badge */}
@@ -511,7 +468,8 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             tab={tab}
             active={activeTab === tab.value}
             lang={lang}
-            onClick={() => onTabChange(tab.value)}
+            onClick={disabled ? undefined : () => onTabChange(tab.value)}
+            disabled={disabled}
           />
         ))}
       </Box>

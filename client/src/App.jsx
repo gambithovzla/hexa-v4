@@ -16,11 +16,12 @@
 import { useState } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, Typography } from '@mui/material';
 import { theme as themeConfig } from './styles/theme';
-import Header        from './components/Header';
-import GameSelector  from './components/GameSelector';
-import AnalysisPanel from './components/AnalysisPanel';
-import HistoryPanel  from './components/HistoryPanel';
-import useHistory    from './hooks/useHistory';
+import Header               from './components/Header';
+import GameSelector         from './components/GameSelector';
+import AnalysisPanel        from './components/AnalysisPanel';
+import HistoryPanel         from './components/HistoryPanel';
+import OracleLoadingOverlay from './components/OracleLoadingOverlay';
+import useHistory           from './hooks/useHistory';
 
 const muiTheme = createTheme(themeConfig);
 
@@ -65,10 +66,11 @@ function AppFooter() {
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [lang,        setLang]        = useState('en');
-  const [activeTab,   setActiveTab]   = useState('game');
-  const [singleGame,  setSingleGame]  = useState(null);
-  const [parlayGames, setParlayGames] = useState([]);
+  const [lang,         setLang]         = useState('en');
+  const [activeTab,    setActiveTab]    = useState('game');
+  const [singleGame,   setSingleGame]   = useState(null);
+  const [parlayGames,  setParlayGames]  = useState([]);
+  const [isAnalyzing,  setIsAnalyzing]  = useState(false);
 
   // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
   // HistoryPanel reads history via its own hook instance (remounts each visit).
@@ -85,12 +87,16 @@ export default function App() {
           flexDirection:   'column',
         }}
       >
+        {/* ── Oracle loading overlay (blocks UI during analysis) ── */}
+        {isAnalyzing && <OracleLoadingOverlay lang={lang} />}
+
         {/* ── Sticky header + tab bar ── */}
         <Header
           lang={lang}
           onLangToggle={setLang}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={isAnalyzing ? () => {} : setActiveTab}
+          disabled={isAnalyzing}
         />
 
         {/* ── Main content ── */}
@@ -118,6 +124,7 @@ export default function App() {
                 selectedGames={singleGame ? [singleGame] : []}
                 lang={lang}
                 onSave={addPick}
+                setIsAnalyzing={setIsAnalyzing}
               />
             </Box>
           )}
@@ -135,6 +142,7 @@ export default function App() {
                 selectedGames={parlayGames}
                 lang={lang}
                 onSave={addPick}
+                setIsAnalyzing={setIsAnalyzing}
               />
             </Box>
           )}

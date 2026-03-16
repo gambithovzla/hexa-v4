@@ -659,6 +659,7 @@ export default function AnalysisPanel({
   mode = 'single',
   lang = 'en',
   onSave,
+  setIsAnalyzing,
 }) {
   const t = L[lang] ?? L.en;
   const { isAuthenticated, token, user, updateCredits } = useAuth();
@@ -726,6 +727,7 @@ export default function AnalysisPanel({
   async function runAnalysis() {
     setLineupDialogOpen(false);
     setLoading(true);
+    setIsAnalyzing?.(true);
     setError(null);
     setResult(null);
 
@@ -777,12 +779,13 @@ export default function AnalysisPanel({
           if (json.error === 'No credits remaining') {
             setError('__no_credits__');
             setLoading(false);
+            setIsAnalyzing?.(false);
             return;
           }
           throw new Error(json.error ?? 'Server error');
         }
       } catch (e) {
-        if (e.message === '__no_credits__') { setError('__no_credits__'); setLoading(false); return; }
+        if (e.message === '__no_credits__') { setError('__no_credits__'); setLoading(false); setIsAnalyzing?.(false); return; }
         await new Promise(r => setTimeout(r, 2000));
         try {
           json = await doFetch();
@@ -790,6 +793,7 @@ export default function AnalysisPanel({
         } catch (e2) {
           setError(e2.message ?? 'Network error');
           setLoading(false);
+          setIsAnalyzing?.(false);
           return;
         }
       }
@@ -811,6 +815,7 @@ export default function AnalysisPanel({
       setError(e.message ?? 'Network error');
     } finally {
       setLoading(false);
+      setIsAnalyzing?.(false);
     }
   }
 
