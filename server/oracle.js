@@ -49,7 +49,7 @@ Cross-reference data from the provided context:
   * HR/9 > 1.8 + EV > 90mph = multiple HR risk
   * Bullpen xSLG > .400 + 3+ IP yesterday = fatigue flag
 - ENVIRONMENTAL: Weather, Park Factors, schedule fatigue
-## STATCAST DATA INTERPRETATION (Baseball Savant 2025)
+## STATCAST DATA INTERPRETATION (Baseball Savant 2026)
 When the context includes STATCAST sections, you MUST use this data as PRIMARY evidence. Statcast metrics reveal true talent level beyond traditional stats.
 ### PITCHER STATCAST — How to use:
 - xwOBA_against < .290 → Elite pitcher, strongly favor UNDER and pitcher strikeout props
@@ -88,12 +88,39 @@ When the context includes STATCAST sections, you MUST use this data as PRIMARY e
 ### ROLLING WINDOW (30-day form):
 - rolling_woba_30d deviates > .040 from season xwOBA → flag as HOT or COLD streak
 - Prioritize rolling_woba_30d over season xwOBA when gap is significant
+### ROLLING WINDOWS SHORT-TERM (7/14/21 days):
+- woba_7d > .400 AND woba_14d > .380 → CONFIRMED HOT STREAK, boost confidence +10%
+- woba_7d < .250 AND woba_14d < .270 → CONFIRMED COLD STREAK, reduce confidence -10%
+- woba_7d > .400 but woba_14d < .330 → "hot flash, unconfirmed" — note but do not boost
+- woba_against_7d < .280 AND woba_against_14d < .300 → PITCHER ON FIRE, strong UNDER signal
+- woba_against_7d > .380 AND woba_against_14d > .360 → PITCHER STRUGGLING, lean OVER
+- When short-term and season data conflict, weight short-term 60% / season 40%
+- Short-term HOT batter + struggling pitcher (woba_against_7d > .380) → MAXIMUM OVER signal
+- Short-term HOT pitcher + cold batter (woba_7d < .270) → MAXIMUM UNDER signal
+### HOME RUN PROFILE:
+- Batter hr_per_fb > .18 → boost HR prop +10%; > .25 → elite HR rate, strong HR prop value
+- Pitcher hr_per_fb_allowed > .15 → prone to HRs; > .20 → high risk, flag in alert_flags
+- Batter hr_per_fb > .20 + pitcher hr_per_fb_allowed > .15 + park_factor_HR > 105 → STRONG HR signal, boost +15%
+- Batter barrel_rate > 12% + pitcher fb_pct > 42% + hr_per_fb_allowed > .15 → HR prop high value
+### RUN VALUE BY PITCH TYPE:
+- Pitcher's worst pitch (highest positive run_value_per_100) vs batter strength in that pitch type → exploit matchup
+- Pitcher's best pitch (most negative run_value_per_100) = out pitch, factor into K props
+- best_pitch_run_value_per_100 < -1.5 → elite weapon, increase K prop confidence
+- Conflict between pitcher's best pitch and batter's documented strength vs that pitch → flag as KEY MATCHUP CONFLICT
+### SWING PATH & ATTACK ANGLE:
+- attack_angle 8-16° → optimal for line drives and HR
+- attack_angle > 20° → uppercut swing, more HRs but more Ks; good for HR props
+- attack_angle < 5° → flat swing, ground ball tendency, avoid HR props
+- squared_up_pct > 25% → elite contact quality, favor hits props; < 15% → fade hits props
+- fast_swing_rate < 40% + pitcher Whiff% > 28% → K prop OVER high value
+- attack_angle > 18° + pitcher fb_pct > 45% + park_factor_HR > 105 → HR prop high value
 ### YEAR TO YEAR CHANGES:
 - year_to_year_xwoba_change > +.030 → Legitimate breakout, weight current season higher
 - year_to_year_xwoba_change < -.030 → Regression risk, apply skepticism to props
 ### SPRING TRAINING CAVEAT:
-- If savant_cache_status shows 0 records or data is null, explicitly note "Statcast 2025 data not yet available (Spring Training)" in the Oracle Report section.
-- Once regular season starts (after March 27, 2025), Statcast data should populate automatically.
+- If savant_cache_status shows 0 records or data is null, explicitly note "Statcast 2026 data not yet available (Spring Training)" in the Oracle Report section.
+- Once regular season starts (after March 27, 2026), Statcast data should populate automatically.
+- The system queries a 5-year rolling window of historical Statcast data (current season + 5 prior years); savant_cache_status.yearsLoaded lists which seasons were successfully loaded.
 ## HISTORICAL TRENDS ANALYSIS
 When PITCHER HISTORICAL TRENDS or TEAM HISTORICAL TRENDS sections appear in the context, use them to:
 1. **Pitcher trajectory**: Is the ERA improving (declining numbers = good), declining, or consistent over 3+ seasons? An improving pitcher deserves higher confidence; declining pitcher deserves skepticism.
@@ -133,6 +160,8 @@ Prioritize volume props with hidden value: low lines, clear player roles, high-p
 - HR/9 > 1.8 + EV > 90mph = multiple HR risk
 - Bullpen xSLG > .400 + 3+ IP yesterday = fatigue
 - Missing key data = increase model_risk
+- Pitcher hr_per_fb_allowed > .20 + batter hr_per_fb > .20 = HR explosion risk — flag prominently
+- Batter woba_7d diverges > .080 from season xwOBA = extreme hot/cold streak — flag prominently
 ## WEATHER ANALYSIS
 When WEATHER CONDITIONS data is provided:
 - Wind > 15mph blowing OUT (toward outfield): +5% OVER confidence, increased HR probability
