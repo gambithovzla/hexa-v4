@@ -638,6 +638,16 @@ export async function buildContext(gameData, oddsData = null) {
 
   const blocks = [];
 
+  blocks.push('=== DATA INTEGRITY REPORT ===');
+  blocks.push(`Quality Score: ${dataQuality.score}/100 — Strategy: ${dataQuality.strategy}`);
+  blocks.push(`Confidence penalty: -${dataQuality.confidencePenalty}%`);
+  blocks.push(`Allowed bet types: ${dataQuality.allowedBetTypes}`);
+  blocks.push(`Available: ${dataQuality.available.join(', ')}`);
+  blocks.push(`Missing: ${dataQuality.missing.length > 0 ? dataQuality.missing.join(', ') : 'none'}`);
+  blocks.push('ORACLE INSTRUCTION: Adjust your confidence by subtracting the confidence penalty from your calculated oracle_confidence. Restrict bet types to the allowed list above. If strategy is MINIMAL_ANALYSIS, set model_risk to high regardless of other signals.');
+  blocks.push('=== END DATA INTEGRITY ===');
+  blocks.push('');
+
   // Encabezado
   blocks.push(header(`GAME CONTEXT: ${awayAbbr} @ ${homeAbbr} — ${awayName} @ ${homeName}`));
   blocks.push(`Venue: ${gameData.venue?.name ?? '⚠ MISSING DATA: venue unknown'}`);
