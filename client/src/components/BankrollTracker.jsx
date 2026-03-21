@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useBankroll } from "../hooks/useBankroll";
+import useBankroll from "../hooks/useBankroll";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 function getToken() {
   return localStorage.getItem("hexa_token");
