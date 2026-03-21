@@ -384,3 +384,135 @@ bankrollRouter.delete('/bet/:betId', verifyToken, async (req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ─── KELLY CRITERION ────────────────────────────────────────────────
+function calcKellyStake(currentBankroll, oracleConfidence, odds) {
+  // Convertir odds americanas a decimales
+  let decimalOdds;
+  if (odds > 0) {
+    decimalOdds = (odds / 100) + 1;
+  } else {
+    decimalOdds = (100 / Math.abs(odds)) + 1;
+  }
+  const b = decimalOdds - 1; // ganancia neta por unidad
+  const p = oracleConfidence / 100; // probabilidad según Oracle (0-1)
+  const q = 1 - p;
+  // Kelly fraction = (bp - q) / b
+  const kellyFraction = (b * p - q) / b;
+  // Aplicar Kelly conservador (25% del Kelly completo para gestión de riesgo)
+  const conservativeKelly = Math.max(0, kellyFraction * 0.25);
+  // Stake sugerido (máximo 5% del bankroll como tope de seguridad)
+  const suggestedStake = Math.min(
+    currentBankroll * conservativeKelly,
+    currentBankroll * 0.05
+  );
+  return Math.round(suggestedStake * 100) / 100;
+}
+
+// GET /api/bankroll/kelly?odds=-110&confidence=72
+bankrollRouter.get('/kelly', verifyToken, async (req, res) => {
+  const { odds, confidence } = req.query;
+  const userId = req.user.id;
+  try {
+    const result = await pool.query(
+      'SELECT current_bankroll FROM bankroll WHERE user_id = $1',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bankroll no configurado' });
+    }
+    const currentBankroll = parseFloat(result.rows[0].current_bankroll);
+    const parsedOdds = parseFloat(odds);
+    const parsedConfidence = parseFloat(confidence);
+    if (!parsedOdds || !parsedConfidence) {
+      return res.status(400).json({ error: 'odds y confidence son requeridos' });
+    }
+    const suggestedStake = calcKellyStake(currentBankroll, parsedConfidence, parsedOdds);
+    res.json({
+      success: true,
+      data: {
+        currentBankroll,
+        suggestedStake,
+        kellyInputs: { odds: parsedOdds, confidence: parsedConfidence }
+      }
+    });
+  } catch (err) {
+    console.error('Kelly error:', err);
+    res.status(500).json({ error: 'Error calculando Kelly' });
+  }
+});
+
+// GET /api/bankroll/stats
+bankrollRouter.get('/stats', verifyToken, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    // Stats generales
+    const generalStats = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE result = 'won') as wins,
+        COUNT(*) FILTER (WHERE result = 'lost') as losses,
+        COUNT(*) FILTER (WHERE result = 'pending') as pending,
+        COUNT(*) as total,
+        COALESCE(SUM(CASE
+          WHEN result = 'won' THEN stake * (
+            CASE WHEN odds > 0 THEN odds::float/100 ELSE 100.0/ABS(odds) END
+          )
+          WHEN result = 'lost' THEN -stake
+          ELSE 0
+        END), 0) as total_profit
+      FROM bets WHERE user_id = $1
+    `, [userId]);
+
+    // Stats por tipo de pick (usando matchup como referencia)
+    const bySource = await pool.query(`
+      SELECT
+        source,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE result = 'won') as wins,
+        ROUND(
+          COUNT(*) FILTER (WHERE result = 'won')::numeric /
+          NULLIF(COUNT(*) FILTER (WHERE result IN ('won','lost')), 0) * 100, 1
+        ) as win_rate
+      FROM bets WHERE user_id = $1 GROUP BY source
+    `, [userId]);
+
+    // Evolución del bankroll (últimas 30 apuestas)
+    const bankrollHistory = await pool.query(`
+      SELECT id, created_at, stake, odds, result, matchup, pick
+      FROM bets WHERE user_id = $1 ORDER BY created_at ASC LIMIT 30
+    `, [userId]);
+
+    // Bankroll actual
+    const bankrollResult = await pool.query(
+      'SELECT initial_bankroll, current_bankroll FROM bankroll WHERE user_id = $1',
+      [userId]
+    );
+
+    const stats = generalStats.rows[0];
+    const total = parseInt(stats.total);
+    const settled = parseInt(stats.wins) + parseInt(stats.losses);
+
+    res.json({
+      success: true,
+      data: {
+        bankroll: bankrollResult.rows[0] || null,
+        general: {
+          wins: parseInt(stats.wins),
+          losses: parseInt(stats.losses),
+          pending: parseInt(stats.pending),
+          total,
+          winRate: settled > 0 ? Math.round((stats.wins / settled) * 100 * 10) / 10 : 0,
+          totalProfit: parseFloat(stats.total_profit),
+          roi: bankrollResult.rows[0]
+            ? Math.round((stats.total_profit / bankrollResult.rows[0].initial_bankroll) * 100 * 10) / 10
+            : 0
+        },
+        bySource: bySource.rows,
+        bankrollHistory: bankrollHistory.rows
+      }
+    });
+  } catch (err) {
+    console.error('Stats error:', err);
+    res.status(500).json({ error: 'Error obteniendo estadísticas' });
+  }
+});
