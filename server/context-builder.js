@@ -67,7 +67,7 @@ function buildHistoricalContextBlock() {
 
   return [
     '=== HISTORICAL MLB REFERENCE DATA ===',
-    '--- PARK FACTORS (2025 estimates) ---',
+    `--- PARK FACTORS (${new Date().getFullYear()} estimates) ---`,
     ...pfLines,
     '--- TEAM TENDENCIES (5-year historical) ---',
     ...ttLines,
