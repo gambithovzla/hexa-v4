@@ -642,55 +642,9 @@ function BancaTab() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function HistoryPanel({ lang = 'en' }) {
-  const [activeTab, setActiveTab] = useState('analisis');
-
-  const tabs = [
-    { id: 'analisis', label: 'Análisis' },
-    { id: 'banca',    label: 'Banca'    },
-  ];
-
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '60vh', p: 2, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-      {/* ── Sub-tab bar ── */}
-      <Box sx={{ display: 'flex', borderBottom: `1px solid ${C.cardBorder}`, gap: 0 }}>
-        {tabs.map(tab => {
-          const active = activeTab === tab.id;
-          return (
-            <Box
-              key={tab.id}
-              component="button"
-              onClick={() => setActiveTab(tab.id)}
-              sx={{
-                px:            '20px',
-                py:            '10px',
-                background:    active ? C.accentDim : 'transparent',
-                border:        'none',
-                borderBottom:  active ? `2px solid ${C.accent}` : '2px solid transparent',
-                color:         active ? C.accentSec : C.textMuted,
-                fontFamily:    BARLOW,
-                fontSize:      '0.82rem',
-                fontWeight:    700,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                cursor:        'pointer',
-                transition:    'color 0.15s, background 0.15s',
-                flexShrink:    0,
-                '&:hover':     { color: active ? C.accentSec : C.textPrimary },
-              }}
-            >
-              {tab.label}
-            </Box>
-          );
-        })}
-      </Box>
-
-      {/* ── Tab content ── */}
-      {activeTab === 'analisis' ? (
-        <AnalisisTab lang={lang} />
-      ) : (
-        <BancaTab />
-      )}
+      <AnalisisTab lang={lang} />
     </Box>
   );
 }
