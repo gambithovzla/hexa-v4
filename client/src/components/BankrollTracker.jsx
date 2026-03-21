@@ -220,11 +220,14 @@ const inputStyle = {
 };
 // ── Componente principal ──────────────────────────────────────────────
 export default function BankrollTracker({ lang = "es" }) {
-  const { bankrollData, loading, refreshBankroll, setupBankroll, addBet, updateBetResult, deleteBet } = useBankroll();
+  const { bankrollData, loading, refreshBankroll, setupBankroll, addBet, updateBetResult, deleteBet, updateInitialBankroll } = useBankroll();
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [activeView, setActiveView] = useState("dashboard");
   const [filterResult, setFilterResult] = useState("all");
+  const [editingBankroll, setEditingBankroll] = useState(false);
+  const [editAmount, setEditAmount] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
   useEffect(() => {
     fetchStats();
   }, []);
@@ -288,7 +291,7 @@ export default function BankrollTracker({ lang = "es" }) {
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
             {[
-              { label: "Bankroll actual", value: formatMoney(currentBankroll), color: "#e8d5a3" },
+              { label: "Bankroll actual", value: formatMoney(currentBankroll), color: "#e8d5a3", editable: true },
               { label: "P&L total", value: (isPositive ? "+" : "") + formatMoney(profitLoss), color: isPositive ? "#00ff88" : "#ff4444" },
               { label: "ROI", value: (stats?.general?.roi ?? 0) + "%", color: isPositive ? "#00ff88" : "#ff4444" },
             ].map(c => (
