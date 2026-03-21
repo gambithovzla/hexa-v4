@@ -256,6 +256,44 @@ bankrollRouter.post('/setup', verifyToken, async (req, res) => {
   }
 });
 
+// PATCH /api/bankroll/setup — modify initial bankroll
+bankrollRouter.patch('/setup', verifyToken, async (req, res) => {
+  try {
+    const { initialBankroll } = req.body ?? {};
+    const amount = Number(initialBankroll);
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'initialBankroll must be a positive number' });
+    }
+
+    const existing = await pool.query(
+      'SELECT user_id, current_bankroll, initial_bankroll FROM bankroll WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Bankroll not initialized' });
+    }
+
+    // Adjust current_bankroll proportionally to the change
+    const oldInitial = parseFloat(existing.rows[0].initial_bankroll);
+    const oldCurrent = parseFloat(existing.rows[0].current_bankroll);
+    const diff = amount - oldInitial;
+    const newCurrent = Math.max(0, oldCurrent + diff);
+
+    await pool.query(
+      'UPDATE bankroll SET initial_bankroll = $1, current_bankroll = $2 WHERE user_id = $3',
+      [amount, newCurrent, req.user.id]
+    );
+
+    const data = await getBankrollData(req.user.id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[bankroll] patch setup error:', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/bankroll/bet
 bankrollRouter.post('/bet', verifyToken, async (req, res) => {
   try {
