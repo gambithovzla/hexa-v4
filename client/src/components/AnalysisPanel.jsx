@@ -51,12 +51,6 @@ const L = {
       totals:     'Over/Under',
       playerprops:'Player Props',
     },
-    riskProfile: {
-      label:        'Risk Profile',
-      conservative: 'Conservative',
-      balanced:     'Balanced',
-      aggressive:   'Aggressive',
-    },
     modelSelect: {
       label:   'Analysis Model',
       deep:    '🧠 Deep',
@@ -94,12 +88,6 @@ const L = {
       runline:    'Línea de Carreras',
       totals:     'Totales (O/U)',
       playerprops:'Props de Jugador',
-    },
-    riskProfile: {
-      label:        'Perfil de Riesgo',
-      conservative: 'Conservador',
-      balanced:     'Equilibrado',
-      aggressive:   'Agresivo',
     },
     modelSelect: {
       label:   'Modelo de Análisis',
@@ -204,63 +192,6 @@ function BetTypeSelect({ value, onChange, t }) {
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
-    </Box>
-  );
-}
-
-const RISK_CFG = {
-  conservative: { color: '#00E676', glow: 'rgba(0,230,118,0.35)',  dim: 'rgba(0,230,118,0.08)'  },
-  balanced:     { color: '#0066FF', glow: 'rgba(0,102,255,0.35)',  dim: 'rgba(0,102,255,0.08)'  },
-  aggressive:   { color: '#FF9800', glow: 'rgba(255,152,0,0.35)', dim: 'rgba(255,152,0,0.08)' },
-};
-
-function RiskProfilePicker({ value, onChange, t }) {
-  const options = [
-    { value: 'conservative', label: t.riskProfile.conservative },
-    { value: 'balanced',     label: t.riskProfile.balanced     },
-    { value: 'aggressive',   label: t.riskProfile.aggressive   },
-  ];
-
-  return (
-    <Box>
-      <SectionLabel>{t.riskProfile.label}</SectionLabel>
-      <Box sx={{ display: 'flex', gap: '6px' }}>
-        {options.map(o => {
-          const active = value === o.value;
-          const cfg    = RISK_CFG[o.value];
-          return (
-            <Box
-              key={o.value}
-              component="button"
-              onClick={() => onChange(o.value)}
-              sx={{
-                flex:          1,
-                py:            '7px',
-                px:            '4px',
-                border:        `1px solid ${active ? cfg.color + '80' : C.cardBorder}`,
-                borderRadius:  '2px',
-                bgcolor:       active ? cfg.dim : 'transparent',
-                color:         active ? cfg.color : C.textMuted,
-                fontFamily:    BARLOW,
-                fontSize:      '0.75rem',
-                fontWeight:    700,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                cursor:        'pointer',
-                transition:    'all 0.15s',
-                boxShadow:     active ? `0 0 12px ${cfg.glow}` : 'none',
-                '&:hover':     {
-                  borderColor: cfg.color + '60',
-                  color:       active ? cfg.color : C.textPrimary,
-                  boxShadow:   `0 0 8px ${cfg.glow}`,
-                },
-              }}
-            >
-              {o.label}
-            </Box>
-          );
-        })}
-      </Box>
     </Box>
   );
 }
@@ -665,7 +596,6 @@ export default function AnalysisPanel({
   const { isAuthenticated, token, user, updateCredits } = useAuth();
 
   const [betType,     setBetType]     = useState('all');
-  const [riskProfile, setRiskProfile] = useState('balanced');
   const [modelMode,   setModelMode]   = useState('deep');
   const [webSearch,   setWebSearch]   = useState(false);
   const [parlayLegs,  setParlayLegs]  = useState(2);
@@ -742,7 +672,7 @@ export default function AnalysisPanel({
           date:        g.gameDate?.split('T')[0],
           lang,
           betType,
-          riskProfile,
+          riskProfile: 'balanced',
           webSearch,
           model:       modelMode,
         };
@@ -753,7 +683,7 @@ export default function AnalysisPanel({
           date:        selectedGames[0]?.gameDate?.split('T')[0],
           lang,
           betType,
-          riskProfile,
+          riskProfile: 'balanced',
           webSearch,
           parlayLegs,
           model:       modelMode,
@@ -884,17 +814,7 @@ export default function AnalysisPanel({
           boxShadow:    'inset 3px 0 12px rgba(0,102,255,0.12), inset 0 0 40px rgba(0,102,255,0.02)',
         }}
       >
-        {/* Bet type + Risk profile side by side on wide screens */}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-            gap: '16px',
-          }}
-        >
-          <BetTypeSelect value={betType} onChange={setBetType} t={t} />
-          <RiskProfilePicker value={riskProfile} onChange={setRiskProfile} t={t} />
-        </Box>
+        <BetTypeSelect value={betType} onChange={setBetType} t={t} />
 
         {/* Model picker */}
         <ModelPicker value={modelMode} onChange={setModelMode} t={t} />
