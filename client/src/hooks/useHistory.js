@@ -116,7 +116,7 @@ export default function useHistory() {
       return;
     }
 
-    fetch('/api/picks', {
+    fetch(`${import.meta.env.VITE_API_URL}/api/picks`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
@@ -171,7 +171,7 @@ export default function useHistory() {
     };
 
     try {
-      const res  = await fetch('/api/picks', {
+      const res  = await fetch(`${import.meta.env.VITE_API_URL}/api/picks`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify(body),
@@ -200,7 +200,7 @@ export default function useHistory() {
     }
 
     try {
-      const res  = await fetch(`/api/picks/${id}`, {
+      const res  = await fetch(`${import.meta.env.VITE_API_URL}/api/picks/${id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ result: outcome }),
