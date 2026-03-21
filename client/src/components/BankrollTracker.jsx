@@ -290,8 +290,43 @@ export default function BankrollTracker({ lang = "es" }) {
       {activeView === "dashboard" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+            <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 10, padding: "14px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ color: "#555", fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>Bankroll actual</div>
+                <button onClick={() => { setEditingBankroll(!editingBankroll); setEditAmount(initialBankroll); }} style={{
+                  background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 11, padding: "0 2px"
+                }}>✏️</button>
+              </div>
+              {editingBankroll ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+                  <input
+                    type="number"
+                    value={editAmount}
+                    onChange={e => setEditAmount(e.target.value)}
+                    style={{ width: "80px", padding: "4px 8px", borderRadius: 5, border: "1px solid #333", background: "#0d0d0d", color: "#fff", fontSize: 13, outline: "none" }}
+                  />
+                  <button
+                    onClick={async () => {
+                      const n = parseFloat(editAmount);
+                      if (!n || n <= 0) return;
+                      setEditLoading(true);
+                      await updateInitialBankroll(n);
+                      setEditLoading(false);
+                      setEditingBankroll(false);
+                      await fetchStats();
+                    }}
+                    disabled={editLoading}
+                    style={{ padding: "4px 8px", borderRadius: 5, background: "#e8d5a3", color: "#0a0a0a", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700 }}
+                  >{editLoading ? "..." : "✓"}</button>
+                  <button onClick={() => setEditingBankroll(false)} style={{
+                    padding: "4px 8px", borderRadius: 5, background: "transparent", border: "1px solid #333", color: "#666", cursor: "pointer", fontSize: 11
+                  }}>✕</button>
+                </div>
+              ) : (
+                <div style={{ color: "#e8d5a3", fontSize: 20, fontWeight: 700 }}>{formatMoney(currentBankroll)}</div>
+              )}
+            </div>
             {[
-              { label: "Bankroll actual", value: formatMoney(currentBankroll), color: "#e8d5a3", editable: true },
               { label: "P&L total", value: (isPositive ? "+" : "") + formatMoney(profitLoss), color: isPositive ? "#00ff88" : "#ff4444" },
               { label: "ROI", value: (stats?.general?.roi ?? 0) + "%", color: isPositive ? "#00ff88" : "#ff4444" },
             ].map(c => (
