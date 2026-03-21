@@ -80,6 +80,18 @@ export default function useBankroll() {
     return json.data;
   }
 
+  async function updateInitialBankroll(amount) {
+    const res = await fetch(`${API_URL}/api/bankroll/setup`, {
+      method: 'PATCH',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initialBankroll: amount }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? 'Failed to update bankroll');
+    setBankrollData(json.data);
+    return json.data;
+  }
+
   async function deleteBet(betId) {
     const res  = await fetch(`${API_URL}/api/bankroll/bet/${betId}`, {
       method:  'DELETE',
@@ -97,6 +109,7 @@ export default function useBankroll() {
     setupBankroll,
     addBet,
     updateBetResult,
+    updateInitialBankroll,
     deleteBet,
     refreshBankroll,
   };
