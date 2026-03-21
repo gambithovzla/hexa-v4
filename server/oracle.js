@@ -50,7 +50,7 @@ Cross-reference data from the provided context:
   * HR/9 > 1.8 + EV > 90mph = multiple HR risk
   * Bullpen xSLG > .400 + 3+ IP yesterday = fatigue flag
 - ENVIRONMENTAL: Weather, Park Factors, schedule fatigue
-## STATCAST DATA INTERPRETATION (Baseball Savant 2026)
+## STATCAST DATA INTERPRETATION (Baseball Savant ${new Date().getFullYear()})
 When the context includes STATCAST sections, you MUST use this data as PRIMARY evidence. Statcast metrics reveal true talent level beyond traditional stats.
 ### PITCHER STATCAST — How to use:
 - xwOBA_against < .290 → Elite pitcher, strongly favor UNDER and pitcher strikeout props
@@ -157,9 +157,10 @@ When pitch_movement data is present for a pitcher:
 - year_to_year_xwoba_change > +.030 → Legitimate breakout, weight current season higher
 - year_to_year_xwoba_change < -.030 → Regression risk, apply skepticism to props
 ### SPRING TRAINING CAVEAT:
-- If savant_cache_status shows 0 records or data is null, explicitly note "Statcast 2026 data not yet available (Spring Training)" in the Oracle Report section.
-- Once regular season starts (after March 27, 2026), Statcast data should populate automatically.
-- The system queries a 5-year rolling window of historical Statcast data (current season + 5 prior years); savant_cache_status.yearsLoaded lists which seasons were successfully loaded.
+- If savant_cache_status.dataYear is less than the current year or records are 0, note: "Using ${new Date().getFullYear() - 1} historical data as reference — ${new Date().getFullYear()} data will populate automatically when the season begins."
+- Do NOT say data is unavailable — historical data from prior seasons is always present and valid for analysis.
+- savant_cache_status.dataYear shows which season's data is active; savant_cache_status.yearsLoaded lists all seasons loaded.
+- The system queries a 5-year rolling window: most-recent year with data wins per player.
 ## HISTORICAL TRENDS ANALYSIS
 When PITCHER HISTORICAL TRENDS or TEAM HISTORICAL TRENDS sections appear in the context, use them to:
 1. **Pitcher trajectory**: Is the ERA improving (declining numbers = good), declining, or consistent over 3+ seasons? An improving pitcher deserves higher confidence; declining pitcher deserves skepticism.

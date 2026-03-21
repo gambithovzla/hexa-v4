@@ -27,6 +27,9 @@ const HEADERS = {
 
 // ── Season window ─────────────────────────────────────────────────────────────
 
+const CURRENT_YEAR  = new Date().getFullYear();
+const FALLBACK_YEAR = CURRENT_YEAR - 1;
+
 /**
  * Returns an array of seasons to query, most recent first.
  * e.g. getSeasonWindow(5) in 2026 → [2026, 2025, 2024, 2023, 2022, 2021]
@@ -40,118 +43,118 @@ function getSeasonWindow(historyYears = 5) {
 
 const ENDPOINTS = {
   // ── Existing leaderboards ────────────────────────────────────────────────
-  xStatsBatter:      'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=q&csv=true',
-  xStatsPitcher:     'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=2025&position=&team=&min=q&csv=true',
+  xStatsBatter:      `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=${CURRENT_YEAR}&position=&team=&min=q&csv=true`,
+  xStatsPitcher:     `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=pitcher&year=${CURRENT_YEAR}&position=&team=&min=q&csv=true`,
   exitVelocity:      [
-    'https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=2025&position=&team=&min=25&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=2025&min=q&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/exit_velocity_barrels?type=batter&year=${CURRENT_YEAR}&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=${CURRENT_YEAR}&position=&team=&min=25&csv=true`,
   ],
-  pitchArsenal:      'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=2025&min=q&csv=true',
-  percentiles:       'https://baseballsavant.mlb.com/leaderboard/percentile-rankings?type=batter&year=2025&csv=true',
+  pitchArsenal:      `https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=${CURRENT_YEAR}&min=q&csv=true`,
+  percentiles:       `https://baseballsavant.mlb.com/leaderboard/percentile-rankings?type=batter&year=${CURRENT_YEAR}&csv=true`,
   rollingBatter:     [
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=xba,xslg,xwoba,xobp,exit_velocity_avg,launch_angle_avg,barrel_batted_rate&chart=false&x=xba&y=xba&r=no&chartType=bbs&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=30&year=2025&min=10&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=30&year=${CURRENT_YEAR}&min=10&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=xba,xslg,xwoba,xobp,exit_velocity_avg,launch_angle_avg,barrel_batted_rate&chart=false&x=xba&y=xba&r=no&chartType=bbs&csv=true`,
   ],
   rollingPitcher:    [
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=10&selections=xba,xslg,xwoba,xobp,exit_velocity_avg,launch_angle_avg,barrel_batted_rate&chart=false&x=xba&y=xba&r=no&chartType=bbs&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=30&year=2025&min=10&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=30&year=${CURRENT_YEAR}&min=10&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=10&selections=xba,xslg,xwoba,xobp,exit_velocity_avg,launch_angle_avg,barrel_batted_rate&chart=false&x=xba&y=xba&r=no&chartType=bbs&csv=true`,
   ],
-  pitchTempo:        'https://baseballsavant.mlb.com/leaderboard/pitch-tempo?year=2025&type=pitcher&csv=true',
-  sprintSpeed:       'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
-  battedBallBatter:  'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
-  battedBallPitcher: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
+  pitchTempo:        `https://baseballsavant.mlb.com/leaderboard/pitch-tempo?year=${CURRENT_YEAR}&type=pitcher&csv=true`,
+  sprintSpeed:       `https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=${CURRENT_YEAR}&position=&team=&min=10&csv=true`,
+  battedBallBatter:  `https://baseballsavant.mlb.com/leaderboard/batted-ball?year=${CURRENT_YEAR}&type=batter&min=q&csv=true`,
+  battedBallPitcher: `https://baseballsavant.mlb.com/leaderboard/batted-ball?year=${CURRENT_YEAR}&type=pitcher&min=q&csv=true`,
   parkFactors:       [
-    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=MLB&min=1&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=&min=1&csv=true',
-    'https://baseballsavant.mlb.com/statcast_search/csv?type=park_factors&year=2025',
+    `https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=&min=1&year=${CURRENT_YEAR}&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=MLB&min=1&csv=true`,
+    `https://baseballsavant.mlb.com/statcast_search/csv?type=park_factors&year=${CURRENT_YEAR}`,
   ],
-  catcherFraming:    'https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=2025&team=&min=q&csv=true',
-  fieldingOAA:       'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=2025&team=&csv=true',
+  catcherFraming:    `https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=${CURRENT_YEAR}&team=&min=q&csv=true`,
+  fieldingOAA:       `https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=${CURRENT_YEAR}&team=&csv=true`,
   yearToYearBatter:  [
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=25&selections=xwoba&chart=false&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Batter&type=xwoba&year=2025&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Batter&type=xwoba&year=${CURRENT_YEAR}&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=25&selections=xwoba&chart=false&csv=true`,
   ],
   yearToYearPitcher: [
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=25&selections=xwoba&chart=false&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Pitcher&type=xwoba&year=2025&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/statcast-year-to-year?group=Pitcher&type=xwoba&year=${CURRENT_YEAR}&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=25&selections=xwoba&chart=false&csv=true`,
   ],
 
   // ── New leaderboards ─────────────────────────────────────────────────────
   homeRunsBatter:    [
-    'https://baseballsavant.mlb.com/leaderboard/home_runs?year=2025&type=batter&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=hr,hr_per_fb,fb_percent&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/home_runs?year=${CURRENT_YEAR}&type=batter&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=hr,hr_per_fb,fb_percent&chart=false&csv=true`,
   ],
   homeRunsPitcher:   [
-    'https://baseballsavant.mlb.com/leaderboard/home_runs?year=2025&type=pitcher&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=hr,hr_per_fb,fb_percent&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/home_runs?year=${CURRENT_YEAR}&type=pitcher&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=hr,hr_per_fb,fb_percent&chart=false&csv=true`,
   ],
   runValueBatter:    [
-    'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=batter&year=2025&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=run_value,run_value_per_100&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=batter&year=${CURRENT_YEAR}&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=run_value,run_value_per_100&chart=false&csv=true`,
   ],
   runValuePitcher:   [
-    'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=2025&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=run_value,run_value_per_100&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=pitcher&year=${CURRENT_YEAR}&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=run_value,run_value_per_100&chart=false&csv=true`,
   ],
   rollingBatter7d:   [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=7&year=2025&min=5&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=5&selections=woba&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=7&year=${CURRENT_YEAR}&min=5&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=5&selections=woba&chart=false&csv=true`,
   ],
   rollingBatter14d:  [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=14&year=2025&min=8&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=8&selections=woba&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=14&year=${CURRENT_YEAR}&min=8&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=8&selections=woba&chart=false&csv=true`,
   ],
   rollingBatter21d:  [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=21&year=2025&min=10&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=woba&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=21&year=${CURRENT_YEAR}&min=10&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=woba&chart=false&csv=true`,
   ],
   rollingPitcher7d:  [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=7&year=2025&min=5&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=5&selections=woba&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=7&year=${CURRENT_YEAR}&min=5&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=5&selections=woba&chart=false&csv=true`,
   ],
   rollingPitcher14d: [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=14&year=2025&min=8&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=8&selections=woba&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=14&year=${CURRENT_YEAR}&min=8&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=8&selections=woba&chart=false&csv=true`,
   ],
   rollingPitcher21d: [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=21&year=2025&min=10&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=10&selections=woba&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=21&year=${CURRENT_YEAR}&min=10&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=10&selections=woba&chart=false&csv=true`,
   ],
   swingPath:         [
-    'https://baseballsavant.mlb.com/leaderboard/swing-path?year=2025&type=batter&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=attack_angle_avg,squared_up_pct,fast_swing_rate&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/swing-path?year=${CURRENT_YEAR}&type=batter&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=attack_angle_avg,squared_up_pct,fast_swing_rate&chart=false&csv=true`,
   ],
   batTracking: [
-    'https://baseballsavant.mlb.com/leaderboard/bat-tracking?year=2025&type=batter&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=bat_speed,swing_length,squared_up_pct,blasts_per_swing&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/bat-tracking?year=${CURRENT_YEAR}&type=batter&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=bat_speed,swing_length,squared_up_pct,blasts_per_swing&chart=false&csv=true`,
   ],
   catcherPopTime: [
-    'https://baseballsavant.mlb.com/leaderboard/catcher_pop_time?year=2025&team=&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=catcher&filter=&sort=4&sortDir=desc&min=q&selections=pop_2b_sba,pop_2b_sba_count,exchange_2b_3b_sba&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/catcher_pop_time?year=${CURRENT_YEAR}&team=&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=catcher&filter=&sort=4&sortDir=desc&min=q&selections=pop_2b_sba,pop_2b_sba_count,exchange_2b_3b_sba&chart=false&csv=true`,
   ],
   outfieldJump: [
-    'https://baseballsavant.mlb.com/leaderboard/outfield_jump?year=2025&team=&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=OF&year=2025&team=&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/outfield_jump?year=${CURRENT_YEAR}&team=&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=OF&year=${CURRENT_YEAR}&team=&csv=true`,
   ],
   armStrength: [
-    'https://baseballsavant.mlb.com/leaderboard/arm_strength?year=2025&type=outfielder&team=&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=fielder&filter=&sort=4&sortDir=desc&min=q&selections=arm_strength,arm_value&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/arm_strength?year=${CURRENT_YEAR}&type=outfielder&team=&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=fielder&filter=&sort=4&sortDir=desc&min=q&selections=arm_strength,arm_value&chart=false&csv=true`,
   ],
   ninetyFtSplits: [
-    'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=hp_to_1b,sprint_speed&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=${CURRENT_YEAR}&position=&team=&min=10&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=hp_to_1b,sprint_speed&chart=false&csv=true`,
   ],
   pitcherPositioning: [
-    'https://baseballsavant.mlb.com/leaderboard/pitcher-positioning?year=2025&type=pitcher&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=n_shift,shift_rate&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/pitcher-positioning?year=${CURRENT_YEAR}&type=pitcher&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=n_shift,shift_rate&chart=false&csv=true`,
   ],
   activeSpin: [
-    'https://baseballsavant.mlb.com/leaderboard/active-spin?year=2025&type=pitcher&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=active_spin,spin_rate&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/active-spin?year=${CURRENT_YEAR}&type=pitcher&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=active_spin,spin_rate&chart=false&csv=true`,
   ],
   pitchMovement: [
-    'https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=2025&type=pitcher&min=q&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=pfx_x,pfx_z,spin_rate&chart=false&csv=true',
+    `https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=${CURRENT_YEAR}&type=pitcher&min=q&csv=true`,
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${CURRENT_YEAR}&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=pfx_x,pfx_z,spin_rate&chart=false&csv=true`,
   ],
 };
 
@@ -298,7 +301,10 @@ async function fetchMultiYear(urlsOrUrl, years, name = '') {
           row['name'] ??
           JSON.stringify(row).slice(0, 40);
         // Only set if not already present — years are iterated most-recent-first
-        if (!playerMap.has(key)) playerMap.set(key, row);
+        if (!playerMap.has(key)) {
+          row._year = year;
+          playerMap.set(key, row);
+        }
       }
     } catch {
       // year unavailable — skip silently (fetchCSVWithFallback already warned)
@@ -707,6 +713,7 @@ export function getCacheStatus() {
     lastUpdated: _cache.lastUpdated ? new Date(_cache.lastUpdated).toISOString() : null,
     age_minutes: _cache.lastUpdated ? Math.round((Date.now() - _cache.lastUpdated) / 60000) : null,
     yearsLoaded: _cache.yearsLoaded ?? [],
+    dataYear:    _cache.yearsLoaded?.[0] ?? null,
     recordCounts: {
       xStatsBatter:      _cache.xStatsBatter?.length      ?? 0,
       xStatsPitcher:     _cache.xStatsPitcher?.length     ?? 0,
