@@ -294,7 +294,7 @@ export default function BankrollTracker({ lang = "es" }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                 <div style={{ color: "#555", fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>Bankroll actual</div>
                 <button onClick={() => { setEditingBankroll(!editingBankroll); setEditAmount(initialBankroll); }} style={{
-                  background: "transparent", border: "none", color: "#444", cursor: "pointer", fontSize: 11, padding: "0 2px"
+                  background: "transparent", border: "1px solid #333", color: "#e8d5a3", cursor: "pointer", fontSize: 13, padding: "2px 6px", borderRadius: 4
                 }}>✏️</button>
               </div>
               {editingBankroll ? (
@@ -487,8 +487,8 @@ function BetRow({ bet, onUpdate, onDelete }) {
           </>
         )}
         <button onClick={() => onDelete(bet.id)} style={{
-          padding: "4px 10px", borderRadius: 5, border: "1px solid #222",
-          background: "transparent", color: "#444", cursor: "pointer", fontSize: 11, marginLeft: "auto"
+          padding: "5px 12px", borderRadius: 5, border: "1px solid #ff444440",
+          background: "#ff444410", color: "#ff6666", cursor: "pointer", fontSize: 13, marginLeft: "auto", fontWeight: 700
         }}>🗑</button>
       </div>
     </div>
