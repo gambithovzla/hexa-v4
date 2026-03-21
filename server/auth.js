@@ -410,9 +410,9 @@ function calcKellyStake(currentBankroll, oracleConfidence, odds) {
 }
 
 // GET /api/bankroll/kelly?odds=-110&confidence=72
-bankrollRouter.get('/kelly', authenticateToken, async (req, res) => {
+bankrollRouter.get('/kelly', verifyToken, async (req, res) => {
   const { odds, confidence } = req.query;
-  const userId = req.user.userId;
+  const userId = req.user.id;
   try {
     const result = await pool.query(
       'SELECT current_bankroll FROM bankroll WHERE user_id = $1',
@@ -443,8 +443,8 @@ bankrollRouter.get('/kelly', authenticateToken, async (req, res) => {
 });
 
 // GET /api/bankroll/stats
-bankrollRouter.get('/stats', authenticateToken, async (req, res) => {
-  const userId = req.user.userId;
+bankrollRouter.get('/stats', verifyToken, async (req, res) => {
+  const userId = req.user.id;
   try {
     // Stats generales
     const generalStats = await pool.query(`
