@@ -33,8 +33,8 @@ app.use('/api/lemon',     lemonRouter);
 // ── Credit helpers ────────────────────────────────────────────────────────────
 
 const CREDIT_COSTS = {
-  single:  { fast: 1,  deep: 2  },
-  parlay:  { fast: 4,  deep: 8  },
+  single:  { deep: 2,  premium: 5  },
+  parlay:  { deep: 8,  premium: 15 },
 };
 const WEB_INTEL_COST = 3; // only applied to single-game
 
@@ -141,7 +141,7 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
     betType,
     riskProfile = 'medium',
     webSearch   = false,
-    model       = 'fast',
+    model       = 'deep',
   } = req.body;
   const date         = req.body.date || new Date().toISOString().split('T')[0];
   const resolvedLang = lang ?? language;
@@ -209,7 +209,7 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
     riskProfile = 'medium',
     webSearch   = false,
     parlayLegs,
-    model       = 'fast',
+    model       = 'deep',
   } = req.body;
   const date         = req.body.date || new Date().toISOString().split('T')[0];
   const resolvedLang = lang ?? language;
