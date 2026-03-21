@@ -60,11 +60,7 @@ const ENDPOINTS = {
   sprintSpeed:       'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
   battedBallBatter:  'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
   battedBallPitcher: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
-  parkFactors:       [
-    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=MLB&min=1&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=&min=1&csv=true',
-    'https://baseballsavant.mlb.com/statcast_search/csv?type=park_factors&year=2025',
-  ],
+  parkFactors:       [], // Savant park factors endpoint deprecated — using hardcoded values in context-builder.js
   catcherFraming:    'https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=2025&team=&min=q&csv=true',
   fieldingOAA:       'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=2025&team=&csv=true',
   yearToYearBatter:  [
@@ -327,7 +323,13 @@ async function loadAll() {
     'ninetyFtSplits', 'pitcherPositioning', 'activeSpin', 'pitchMovement',
   ];
 
-  const fetches = KEYS.map(key => fetchMultiYear(ENDPOINTS[key], years, key));
+  const fetches = KEYS.map(key => {
+    const endpoint = ENDPOINTS[key];
+    if (Array.isArray(endpoint) && endpoint.length === 0) {
+      return Promise.resolve({ rows: [], yearsLoaded: [] });
+    }
+    return fetchMultiYear(endpoint, years, key);
+  });
 
   const results = await Promise.allSettled(fetches);
 
