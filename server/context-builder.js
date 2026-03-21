@@ -404,6 +404,86 @@ function teamVerificationLine(playerName, scheduledAbbr, verification) {
   return `✓ TEAM VERIFICATION: ${playerName} — current team confirmed as ${curAbbr ?? verification.currentTeamName ?? 'Unknown'}`;
 }
 
+// ---------------------------------------------------------------------------
+// Data Integrity Layer
+// ---------------------------------------------------------------------------
+
+function calcDataQuality({
+  homePitcherStats, awayPitcherStats,
+  homePitcher, awayPitcher,
+  homePitcherSavant, awayPitcherSavant,
+  savantBatters, weatherData, parkFactorData,
+  oddsData, gameData,
+}) {
+  let score = 0;
+  const missing = [];
+  const available = [];
+
+  // Pitchers (30 pts)
+  if (homePitcher?.fullName && homePitcherStats?.stats) { score += 15; available.push('home_pitcher_stats'); }
+  else missing.push('home_pitcher_stats');
+  if (awayPitcher?.fullName && awayPitcherStats?.stats) { score += 15; available.push('away_pitcher_stats'); }
+  else missing.push('away_pitcher_stats');
+
+  // Statcast pitchers (20 pts)
+  if (homePitcherSavant?.xwOBA_against != null) { score += 10; available.push('home_pitcher_statcast'); }
+  else missing.push('home_pitcher_statcast');
+  if (awayPitcherSavant?.xwOBA_against != null) { score += 10; available.push('away_pitcher_statcast'); }
+  else missing.push('away_pitcher_statcast');
+
+  // Statcast batters (10 pts)
+  const battersWithData = [
+    ...(savantBatters?.home ?? []),
+    ...(savantBatters?.away ?? []),
+  ].filter(b => b.savant?.xwOBA != null).length;
+  if (battersWithData >= 3) { score += 10; available.push('batter_statcast'); }
+  else missing.push(`batter_statcast (only ${battersWithData} with data)`);
+
+  // Rolling windows (10 pts)
+  const hasRolling = homePitcherSavant?.rolling_windows_against?.woba_against_7d != null
+    || awayPitcherSavant?.rolling_windows_against?.woba_against_7d != null;
+  if (hasRolling) { score += 10; available.push('rolling_windows'); }
+  else missing.push('rolling_windows');
+
+  // Odds (10 pts)
+  if (oddsData?.odds && oddsData.source !== 'estimated_spring_training') { score += 10; available.push('real_odds'); }
+  else missing.push('real_odds (spring training estimates)');
+
+  // Lineup (10 pts)
+  if (gameData?.lineupStatus === 'confirmed') { score += 10; available.push('confirmed_lineup'); }
+  else missing.push('confirmed_lineup');
+
+  // Weather (5 pts)
+  if (weatherData && !weatherData.error) { score += 5; available.push('weather'); }
+  else missing.push('weather');
+
+  // Park factor (5 pts)
+  if (parkFactorData?.park_factor_overall != null) { score += 5; available.push('park_factor'); }
+  else missing.push('park_factor');
+
+  // Determine strategy
+  let strategy, confidencePenalty, allowedBetTypes;
+  if (score >= 80) {
+    strategy = 'FULL_ANALYSIS';
+    confidencePenalty = 0;
+    allowedBetTypes = 'all';
+  } else if (score >= 60) {
+    strategy = 'STANDARD_ANALYSIS';
+    confidencePenalty = 0;
+    allowedBetTypes = 'moneyline, runline, over-under, props only if batter statcast available';
+  } else if (score >= 40) {
+    strategy = 'LIMITED_ANALYSIS';
+    confidencePenalty = 15;
+    allowedBetTypes = 'moneyline and over-under only';
+  } else {
+    strategy = 'MINIMAL_ANALYSIS';
+    confidencePenalty = 25;
+    allowedBetTypes = 'moneyline only';
+  }
+
+  return { score, strategy, confidencePenalty, allowedBetTypes, missing, available };
+}
+
 /**
  * Construye el contexto estructurado completo para un partido.
  *
@@ -530,6 +610,15 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Weather fetch failed — continuing without weather data:', err.message);
   }
 
+  // ── Data Integrity Layer ───────────────────────────────────────────────────
+  const dataQuality = calcDataQuality({
+    homePitcherStats, awayPitcherStats,
+    homePitcher, awayPitcher,
+    homePitcherSavant, awayPitcherSavant,
+    savantBatters, weatherData, parkFactorData,
+    oddsData, gameData,
+  });
+
   // ── DEBUG: log assembled data before building context string ───────────────
   console.log('=== CONTEXT BUILDER DEBUG ===');
   console.log('MLB Stats data keys:', Object.keys({
@@ -555,6 +644,18 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push(`Status: ${gameData.status?.description ?? 'Scheduled'}`);
   if (gameData.seriesDescription) {
     blocks.push(`Series: ${gameData.seriesDescription} — Game ${gameData.seriesGameNumber ?? '?'} of ${gameData.gamesInSeries ?? '?'}`);
+  }
+  blocks.push('');
+
+  // ── Data Quality Block ────────────────────────────────────────────────────
+  blocks.push(section('DATA QUALITY'));
+  blocks.push(`Score: ${dataQuality.score}/100 | Strategy: ${dataQuality.strategy} | Confidence penalty: ${dataQuality.confidencePenalty}%`);
+  blocks.push(`Allowed bet types: ${dataQuality.allowedBetTypes}`);
+  if (dataQuality.available.length > 0) {
+    blocks.push(`Available: ${dataQuality.available.join(', ')}`);
+  }
+  if (dataQuality.missing.length > 0) {
+    blocks.push(`Missing: ${dataQuality.missing.join(', ')}`);
   }
   blocks.push('');
 
