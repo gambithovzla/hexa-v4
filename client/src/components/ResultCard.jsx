@@ -7,7 +7,7 @@
  *   lang  — 'en' | 'es'
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
 
@@ -633,13 +633,23 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
 
 // ── AgregarABanca button + inline form ───────────────────────────────────────
 
-function AgregarABanca({ matchup, pick, odds }) {
+function AgregarABanca({ matchup, pick, odds, confidence }) {
   const { isAuthenticated, token } = useAuth();
-  const [open,    setOpen]    = useState(false);
-  const [stake,   setStake]   = useState('');
-  const [busy,    setBusy]    = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [err,     setErr]     = useState('');
+  const [open,            setOpen]            = useState(false);
+  const [stake,           setStake]           = useState('');
+  const [busy,            setBusy]            = useState(false);
+  const [success,         setSuccess]         = useState(false);
+  const [err,             setErr]             = useState('');
+  const [kellySuggestion, setKellySuggestion] = useState(null);
+  useEffect(() => {
+    if (!open || !odds || !confidence || !token) return;
+    fetch(`${API_URL}/api/bankroll/kelly?odds=${odds}&confidence=${confidence}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(j => { if (j.success) setKellySuggestion(j.data.suggestedStake); })
+      .catch(() => {});
+  }, [open, odds, confidence, token]);
 
   if (!isAuthenticated) return null;
 
