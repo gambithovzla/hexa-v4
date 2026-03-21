@@ -48,8 +48,8 @@ function extractMatchup(payload) {
 
   if (mode === 'single' && games.length > 0) {
     const g    = games[0];
-    const away = g?.teams?.away?.team?.name ?? 'Away';
-    const home = g?.teams?.home?.team?.name ?? 'Home';
+    const away = g?.teams?.away?.name ?? 'Away';
+    const home = g?.teams?.home?.name ?? 'Home';
     return `${away} @ ${home}`;
   }
 
@@ -115,7 +115,7 @@ export default function useHistory() {
    * Normalises raw payload into a structured entry.
    */
   function addPick(payload) {
-    const hexaData                = payload?.result?.data ?? null;
+    const hexaData                = payload?.result ?? null;
     const { pick, confidence }    = extractPickAndConfidence(hexaData);
     const matchup                 = extractMatchup(payload);
 
