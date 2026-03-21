@@ -286,16 +286,19 @@ runMigrations()
     app.listen(PORT, () => {
       console.log(`Hexa-v4 server running on http://localhost:${PORT}`);
 
-      // ── Statcast cache warm-up (non-blocking) ────────────────────────────
-      console.log('[H.E.X.A.] Warming up Statcast cache...');
-      refreshCache()
-        .then(status => {
-          const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
-          console.log(`[H.E.X.A.] Statcast cache ready: ${total} records loaded`);
-        })
-        .catch(err => {
-          console.warn('[H.E.X.A.] Statcast warm-up failed (will retry on first request):', err.message);
-        });
+      // ── Statcast cache warm-up (non-blocking, delayed 30s) ──────────────
+      console.log('[H.E.X.A.] Statcast cache warm-up programado en 30s...');
+      setTimeout(() => {
+        console.log('[H.E.X.A.] Warming up Statcast cache...');
+        refreshCache()
+          .then(status => {
+            const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
+            console.log(`[H.E.X.A.] Statcast cache ready: ${total} records loaded`);
+          })
+          .catch(err => {
+            console.warn('[H.E.X.A.] Statcast warm-up failed (will retry on first request):', err.message);
+          });
+      }, 30000).unref();
 
       // ── Auto-refresh every 6 hours ───────────────────────────────────────
       const SIX_HOURS = 6 * 60 * 60 * 1000;
