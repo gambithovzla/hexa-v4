@@ -435,22 +435,24 @@ function BetRow({ bet, onUpdate, onDelete }) {
         <span style={{ color: "#666", fontSize: 12 }}>Win: <span style={{ color: "#00ff88" }}>{formatMoney(potentialWin)}</span></span>
         {bet.source === "hexa" && <span style={{ color: "#e8d5a350", fontSize: 11 }}>🤖 Oracle</span>}
       </div>
-      {bet.result === "pending" && (
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => handleResult("won")} disabled={updating} style={{
-            padding: "4px 12px", borderRadius: 5, border: "1px solid #00ff8840",
-            background: "#00ff8810", color: "#00ff88", cursor: "pointer", fontSize: 11, fontWeight: 700
-          }}>✓ WON</button>
-          <button onClick={() => handleResult("lost")} disabled={updating} style={{
-            padding: "4px 12px", borderRadius: 5, border: "1px solid #ff444440",
-            background: "#ff444410", color: "#ff4444", cursor: "pointer", fontSize: 11, fontWeight: 700
-          }}>✗ LOST</button>
-          <button onClick={() => onDelete(bet.id)} style={{
-            padding: "4px 10px", borderRadius: 5, border: "1px solid #222",
-            background: "transparent", color: "#444", cursor: "pointer", fontSize: 11, marginLeft: "auto"
-          }}>🗑</button>
-        </div>
-      )}
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {bet.result === "pending" && (
+          <>
+            <button onClick={() => handleResult("won")} disabled={updating} style={{
+              padding: "4px 12px", borderRadius: 5, border: "1px solid #00ff8840",
+              background: "#00ff8810", color: "#00ff88", cursor: "pointer", fontSize: 11, fontWeight: 700
+            }}>✓ WON</button>
+            <button onClick={() => handleResult("lost")} disabled={updating} style={{
+              padding: "4px 12px", borderRadius: 5, border: "1px solid #ff444440",
+              background: "#ff444410", color: "#ff4444", cursor: "pointer", fontSize: 11, fontWeight: 700
+            }}>✗ LOST</button>
+          </>
+        )}
+        <button onClick={() => onDelete(bet.id)} style={{
+          padding: "4px 10px", borderRadius: 5, border: "1px solid #222",
+          background: "transparent", color: "#444", cursor: "pointer", fontSize: 11, marginLeft: "auto"
+        }}>🗑</button>
+      </div>
     </div>
   );
 }
