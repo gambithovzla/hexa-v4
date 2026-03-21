@@ -633,15 +633,28 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
 
 // ── AgregarABanca button + inline form ───────────────────────────────────────
 
-function AgregarABanca({ matchup, pick, odds }) {
+function AgregarABanca({ matchup, pick, odds, confidence }) {
   const { isAuthenticated, token } = useAuth();
-  const [open,    setOpen]    = useState(false);
-  const [stake,   setStake]   = useState('');
-  const [busy,    setBusy]    = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [err,     setErr]     = useState('');
+  const [open,            setOpen]            = useState(false);
+  const [stake,           setStake]           = useState('');
+  const [busy,            setBusy]            = useState(false);
+  const [success,         setSuccess]         = useState(false);
+  const [err,             setErr]             = useState('');
+  const [kellySuggestion, setKellySuggestion] = useState(null);
 
   if (!isAuthenticated) return null;
+
+  async function fetchKelly() {
+    if (!odds || !confidence) return;
+    try {
+      const res  = await fetch(
+        `${API_URL}/api/bankroll/kelly?odds=${odds}&confidence=${confidence}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const json = await res.json();
+      if (json.success) setKellySuggestion(json.data.suggestedStake);
+    } catch {}
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -660,6 +673,7 @@ function AgregarABanca({ matchup, pick, odds }) {
       setSuccess(true);
       setOpen(false);
       setStake('');
+      setKellySuggestion(null);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
       setErr(e.message);
@@ -692,7 +706,7 @@ function AgregarABanca({ matchup, pick, odds }) {
       ) : !open ? (
         <Box
           component="button"
-          onClick={() => setOpen(true)}
+          onClick={() => { setOpen(true); fetchKelly(); }}
           sx={{
             display: 'inline-flex', alignItems: 'center', gap: '5px',
             px: '12px', py: '5px',
@@ -733,8 +747,28 @@ function AgregarABanca({ matchup, pick, odds }) {
             onChange={e => setStake(e.target.value)}
             style={inputSx}
           />
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', color: '#475569', flexShrink: 0 }}>
-            Pick: <span style={{ color: '#94a3b8' }}>{pick}</span>
+          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', color: '#475569', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            Pick: <span style={{ color: '#94a3b8', marginLeft: '4px' }}>{pick}</span>
+            {kellySuggestion && (
+              <Box
+                component="span"
+                onClick={() => setStake(String(kellySuggestion))}
+                sx={{
+                  ml: '8px', px: '6px', py: '2px',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(232,213,163,0.3)',
+                  background: 'rgba(232,213,163,0.08)',
+                  color: '#e8d5a3',
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  '&:hover': { background: 'rgba(232,213,163,0.15)' },
+                }}
+              >
+                Kelly: ${kellySuggestion}
+              </Box>
+            )}
           </Typography>
           <Typography sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.65rem', color: '#94a3b8', flexShrink: 0 }}>
             {odds > 0 ? `+${odds}` : odds}
@@ -899,6 +933,7 @@ function SingleGameResult({ hexa, t }) {
           matchup={hexa.matchup ?? hexa.odds?.game ?? ''}
           pick={mp.pick ?? ''}
           odds={hexa.odds?.odds?.moneyline?.home ?? null}
+          confidence={confidence}
         />
       </Box>
 
