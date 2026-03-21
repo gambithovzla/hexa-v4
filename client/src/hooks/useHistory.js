@@ -179,9 +179,11 @@ export default function useHistory() {
       const json = await res.json();
       if (json.success) {
         setHistory(prev => [dbRowToEntry(json.data), ...prev]);
+      } else {
+        console.error('[useHistory] POST /api/picks failed:', json);
       }
-    } catch {
-      // Network error — silently ignore so analysis is not blocked
+    } catch (err) {
+      console.error('[useHistory] addPick network error:', err);
     }
   }
 
