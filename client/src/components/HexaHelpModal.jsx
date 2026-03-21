@@ -118,14 +118,6 @@ function TabModes({ lang }) {
   const isEs = lang === 'es';
   const modes = [
     {
-      icon: '⚡',
-      title: 'SINGLE FAST',
-      cost: isEs ? '1 crédito' : '1 credit',
-      description: isEs
-        ? 'Análisis rápido de un partido. Usa datos MLB + Statcast en tiempo real. Ideal para decisiones rápidas antes del juego. Respuesta en ~10 segundos.'
-        : 'Quick single-game analysis. Uses live MLB + Statcast data. Ideal for fast pre-game decisions. Response in ~10 seconds.',
-    },
-    {
       icon: '🧠',
       title: 'SINGLE DEEP',
       cost: isEs ? '2 créditos' : '2 credits',
@@ -134,12 +126,12 @@ function TabModes({ lang }) {
         : 'Deep analysis with detailed reasoning. Examines pitcher matchups, offensive trends, bullpen, park factors and more. ~30 seconds.',
     },
     {
-      icon: '🃏',
-      title: 'PARLAY FAST',
-      cost: isEs ? '4 créditos' : '4 credits',
+      icon: '✨',
+      title: 'SINGLE PREMIUM',
+      cost: isEs ? '5 créditos' : '5 credits',
       description: isEs
-        ? 'Análisis rápido de parlay con varios partidos seleccionados. Genera la combinación óptima de picks.'
-        : 'Fast parlay analysis across selected games. Generates the optimal pick combination.',
+        ? 'Análisis con máxima profundidad de razonamiento. Modelo Opus con capacidad analítica superior para los picks de mayor valor.'
+        : 'Analysis with maximum reasoning depth. Opus model with superior analytical capability for highest-value picks.',
     },
     {
       icon: '🃏',
@@ -148,6 +140,14 @@ function TabModes({ lang }) {
       description: isEs
         ? 'Análisis profundo de parlay. Razonamiento detallado para cada pierna del parlay con máxima precisión.'
         : 'Deep parlay analysis. Detailed reasoning for each parlay leg with maximum precision.',
+    },
+    {
+      icon: '✨',
+      title: 'PARLAY PREMIUM',
+      cost: isEs ? '15 créditos' : '15 credits',
+      description: isEs
+        ? 'Parlay con razonamiento independiente por pick. Modelo Opus evalúa cada pierna de forma autónoma para máxima precisión combinada.'
+        : 'Parlay with independent reasoning per pick. Opus model evaluates each leg autonomously for maximum combined precision.',
     },
     {
       icon: '🌐',
@@ -211,10 +211,10 @@ function TabCredits({ lang }) {
           {isEs ? 'Ejemplo: Con 30 créditos (Starter) puedes hacer:' : 'Example: With 30 credits (Starter) you can run:'}
         </Typography>
         {[
-          isEs ? '30 análisis Single Fast, ó' : '30 Single Fast analyses, or',
           isEs ? '15 análisis Single Deep, ó' : '15 Single Deep analyses, or',
-          isEs ? '7 análisis Parlay Fast, ó' : '7 Parlay Fast analyses, or',
-          isEs ? '3 análisis Parlay Deep' : '3 Parlay Deep analyses',
+          isEs ? '6 análisis Single Premium, ó' : '6 Single Premium analyses, or',
+          isEs ? '3 análisis Parlay Deep, ó' : '3 Parlay Deep analyses, or',
+          isEs ? '2 análisis Parlay Premium' : '2 Parlay Premium analyses',
         ].map((line, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
             <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: C.accent, flexShrink: 0 }} />

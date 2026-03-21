@@ -58,9 +58,9 @@ const L = {
       aggressive:   'Aggressive',
     },
     modelSelect: {
-      label: 'Analysis Model',
-      fast:  '⚡ Fast',
-      deep:  '🧠 Deep',
+      label:   'Analysis Model',
+      deep:    '🧠 Deep',
+      premium: '✨ Premium',
     },
     webSearch:    'Web Intel',
     parlayLegs:   'Parlay Legs',
@@ -102,9 +102,9 @@ const L = {
       aggressive:   'Agresivo',
     },
     modelSelect: {
-      label: 'Modelo de Análisis',
-      fast:  '⚡ Fast',
-      deep:  '🧠 Deep',
+      label:   'Modelo de Análisis',
+      deep:    '🧠 Deep',
+      premium: '✨ Premium',
     },
     webSearch:    'Intel Web',
     parlayLegs:   'Patas del Parlay',
@@ -266,24 +266,24 @@ function RiskProfilePicker({ value, onChange, t }) {
 }
 
 const MODEL_CFG = {
-  fast: {
-    gradient: 'linear-gradient(135deg, #0066FF 0%, #00D4FF 100%)',
-    glow:     'rgba(0,212,255,0.35)',
-    dim:      'rgba(0,102,255,0.08)',
-    color:    '#00D4FF',
-  },
   deep: {
     gradient: 'linear-gradient(135deg, #6B21A8 0%, #9333EA 100%)',
     glow:     'rgba(147,51,234,0.4)',
     dim:      'rgba(107,33,168,0.12)',
     color:    '#C084FC',
   },
+  premium: {
+    gradient: 'linear-gradient(135deg, #B45309 0%, #F59E0B 100%)',
+    glow:     'rgba(245,158,11,0.4)',
+    dim:      'rgba(180,83,9,0.12)',
+    color:    '#FCD34D',
+  },
 };
 
 function ModelPicker({ value, onChange, t }) {
   const options = [
-    { value: 'fast', label: t.modelSelect.fast },
-    { value: 'deep', label: t.modelSelect.deep },
+    { value: 'deep',    label: t.modelSelect.deep    },
+    { value: 'premium', label: t.modelSelect.premium },
   ];
 
   return (
@@ -526,8 +526,8 @@ function NoCreditsMessage({ lang }) {
 // ── Credit cost logic ─────────────────────────────────────────────────────────
 
 const BASE_COST = {
-  single:  { fast: 1,  deep: 2  },
-  parlay:  { fast: 4,  deep: 8  },
+  single:  { deep: 2, premium: 5  },
+  parlay:  { deep: 8, premium: 15 },
 };
 const WEB_INTEL_COST = 3; // only for single game
 
@@ -539,12 +539,12 @@ function calcCreditCost(mode, modelMode, webSearch) {
 
 const ACTION_LABEL = {
   en: {
-    single:  { fast: 'Single Fast Analysis', deep: 'Single Deep Analysis' },
-    parlay:  { fast: 'Parlay Fast Analysis',  deep: 'Parlay Deep Analysis'  },
+    single:  { deep: 'Single Deep Analysis', premium: 'Single Premium Analysis' },
+    parlay:  { deep: 'Parlay Deep Analysis',  premium: 'Parlay Premium Analysis'  },
   },
   es: {
-    single:  { fast: 'Análisis Single Fast', deep: 'Análisis Single Deep' },
-    parlay:  { fast: 'Análisis Parlay Fast',  deep: 'Análisis Parlay Deep'  },
+    single:  { deep: 'Análisis Single Deep', premium: 'Análisis Single Premium' },
+    parlay:  { deep: 'Análisis Parlay Deep',  premium: 'Análisis Parlay Premium'  },
   },
 };
 
@@ -666,7 +666,7 @@ export default function AnalysisPanel({
 
   const [betType,     setBetType]     = useState('all');
   const [riskProfile, setRiskProfile] = useState('balanced');
-  const [modelMode,   setModelMode]   = useState('fast');
+  const [modelMode,   setModelMode]   = useState('deep');
   const [webSearch,   setWebSearch]   = useState(false);
   const [parlayLegs,  setParlayLegs]  = useState(2);
   const [result,      setResult]      = useState(null);
