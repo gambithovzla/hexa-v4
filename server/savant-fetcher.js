@@ -27,8 +27,7 @@ const HEADERS = {
 
 // ── Season window ─────────────────────────────────────────────────────────────
 
-const CURRENT_YEAR  = new Date().getFullYear();
-const FALLBACK_YEAR = CURRENT_YEAR - 1;
+const CURRENT_YEAR = new Date().getFullYear();
 
 /**
  * Returns an array of seasons to query, most recent first.
