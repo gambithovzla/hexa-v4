@@ -22,8 +22,8 @@ const anthropic = new Anthropic({
 });
 
 const MODELS = {
-  fast: { id: 'claude-haiku-4-5-20251001',  maxTokens: 2500 },
-  deep: { id: 'claude-sonnet-4-20250514',   maxTokens: 5000 },
+  deep:    { id: 'claude-sonnet-4-6',  maxTokens: 8000  },
+  premium: { id: 'claude-opus-4-5',    maxTokens: 10000 },
 };
 
 // ---------------------------------------------------------------------------
@@ -233,7 +233,7 @@ function parseResponse(raw) {
  * @param {boolean}  [params.webSearch]     — incluir tool web_search (def. false)
  * @param {string[]} [params.games]         — lista de matchups para fullDay/parlay
  * @param {number}   [params.legs]          — número de patas del parlay
- * @param {string}   [params.model]         — "fast" (Haiku) | "deep" (Sonnet)  (def. "fast")
+ * @param {string}   [params.model]         — "deep" (Sonnet) | "premium" (Opus)  (def. "deep")
  * @param {number}   [params.timeoutMs]     — abort oracle call after this many ms; throws Error('TIMEOUT')
  *
  * @returns {Promise<{
@@ -344,7 +344,7 @@ export async function analyzeParlay(contexts, language = 'en', opts = {}) {
     betType:     opts.betType,
     riskProfile: opts.riskProfile ?? 'medium',
     webSearch:   opts.webSearch   ?? false,
-    model:       opts.model       ?? 'fast',
+    model:       opts.model       ?? 'deep',
     timeoutMs:   opts.timeoutMs   ?? null,
   });
 }
@@ -367,7 +367,7 @@ export async function analyzeFullDay(contexts, date = '', language = 'en', opts 
     betType:     opts.betType,
     riskProfile: opts.riskProfile ?? 'medium',
     webSearch:   opts.webSearch   ?? false,
-    model:       opts.model       ?? 'fast',
+    model:       opts.model       ?? 'deep',
     timeoutMs:   opts.timeoutMs   ?? null,
   });
 }
