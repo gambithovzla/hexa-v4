@@ -255,11 +255,11 @@ export async function analyzeGame(params) {
     webSearch    = false,
     games        = [],
     legs,
-    model        = 'fast',
+    model        = 'deep',
     timeoutMs    = null,
   } = params;
 
-  const { id: modelId, maxTokens } = MODELS[model] ?? MODELS.fast;
+  const { id: modelId, maxTokens } = MODELS[model] ?? MODELS.deep;
 
   const userMessage = buildUserMessage({
     matchup, betType, context, riskProfile, mode, lang, games, legs,
