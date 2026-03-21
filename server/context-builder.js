@@ -618,6 +618,7 @@ export async function buildContext(gameData, oddsData = null) {
     savantBatters, weatherData, parkFactorData,
     oddsData, gameData,
   });
+  console.log(`[context-builder] Data Quality Score: ${dataQuality.score}/100 — ${dataQuality.strategy}`);
 
   // ── DEBUG: log assembled data before building context string ───────────────
   console.log('=== CONTEXT BUILDER DEBUG ===');
