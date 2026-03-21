@@ -22,8 +22,8 @@ const anthropic = new Anthropic({
 });
 
 const MODELS = {
-  fast: { id: 'claude-haiku-4-5-20251001',  maxTokens: 2500 },
-  deep: { id: 'claude-sonnet-4-20250514',   maxTokens: 5000 },
+  deep:    { id: 'claude-sonnet-4-6',  maxTokens: 8000  },
+  premium: { id: 'claude-opus-4-5',    maxTokens: 10000 },
 };
 
 // ---------------------------------------------------------------------------
