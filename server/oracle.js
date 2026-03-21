@@ -55,14 +55,18 @@ function buildUserMessage({ matchup, betType, context, riskProfile, mode, lang, 
     : '';
 
   switch (mode) {
-    case 'single':
+    case 'single': {
+      const betInstruction = betType && betType !== 'all' && betType !== 'general'
+        ? `MANDATORY BET TYPE: You MUST deliver your pick as a ${betType.toUpperCase()} bet. Do not switch to moneyline, over-under, or any other bet type regardless of your analysis. Analyze the ${betType} market specifically and deliver the best pick within that market.`
+        : `Bet focus: all types — select the highest-value bet type based on the data.`;
       return (
         `Analyze: ${matchup}\n` +
-        `Bet focus: ${betType ?? 'general'}\n` +
+        `${betInstruction}\n` +
         `Risk: ${riskProfile}\n\n` +
         `CONTEXT:\n${context}` +
         langTag
       );
+    }
 
     case 'fullDay':
       return (
@@ -75,11 +79,14 @@ function buildUserMessage({ matchup, betType, context, riskProfile, mode, lang, 
 
     case 'parlay': {
       const numLegs = legs ?? games.length;
+      const parlayBetInstruction = betType && betType !== 'all' && betType !== 'general'
+        ? `MANDATORY BET TYPE: Every leg MUST be a ${betType.toUpperCase()} bet. Do not mix in moneyline, over-under, or any other bet type. Build each leg within the ${betType} market specifically.`
+        : `Bet focus: all types — select the highest-value bet type per leg based on the data.`;
       return (
         `Build ${numLegs}-leg parlay from:\n` +
         `${games.join('\n')}\n` +
         `Risk: ${riskProfile}\n` +
-        `Prioritize volume props with hidden value.\n\n` +
+        `${parlayBetInstruction}\n\n` +
         `CONTEXT:\n${context}` +
         langTag
       );
