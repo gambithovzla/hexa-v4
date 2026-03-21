@@ -22,8 +22,8 @@ const anthropic = new Anthropic({
 });
 
 const MODELS = {
-  fast: { id: 'claude-haiku-4-5-20251001', maxTokens: 2500 },
-  deep: { id: 'claude-sonnet-4-6',         maxTokens: 5000 },
+  deep:    { id: 'claude-sonnet-4-6', maxTokens: 8000  },
+  premium: { id: 'claude-opus-4-5',   maxTokens: 10000 },
 };
 
 // ---------------------------------------------------------------------------
@@ -449,11 +449,11 @@ export async function analyzeGame(params) {
     webSearch    = false,
     games        = [],
     legs,
-    model        = 'fast',
+    model        = 'deep',
     timeoutMs    = null,
   } = params;
 
-  const { id: modelId, maxTokens } = MODELS[model] ?? MODELS.fast;
+  const { id: modelId, maxTokens } = MODELS[model] ?? MODELS.deep;
 
   const userMessage = buildUserMessage({
     matchup, betType, context, riskProfile, mode, lang, games, legs,
