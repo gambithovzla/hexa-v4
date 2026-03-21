@@ -736,10 +736,12 @@ export default function AnalysisPanel({
       // Success path
       setResult(json);
       onSave?.({
-        type:   mode,
-        games:  selectedGames,
-        result: json.data,
-        date:   new Date().toISOString(),
+        type:     mode,
+        games:    selectedGames,
+        result:   json.data,
+        date:     new Date().toISOString(),
+        model:    modelMode,
+        language: lang,
       });
     } catch (e) {
       setError(e.message ?? 'Network error');

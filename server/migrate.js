@@ -52,6 +52,29 @@ export async function runMigrations() {
       )
     `);
 
+    // ── picks ─────────────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS picks (
+        id                SERIAL        PRIMARY KEY,
+        user_id           TEXT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type              VARCHAR(20)   NOT NULL,
+        matchup           VARCHAR(200),
+        pick              TEXT,
+        oracle_confidence INTEGER,
+        bet_value         VARCHAR(50),
+        model_risk        VARCHAR(20),
+        oracle_report     TEXT,
+        hexa_hunch        TEXT,
+        alert_flags       JSONB,
+        probability_model JSONB,
+        best_pick         JSONB,
+        model             VARCHAR(50),
+        language          VARCHAR(5),
+        result            VARCHAR(10)   DEFAULT 'pending',
+        created_at        TIMESTAMP     DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
     console.log('[H.E.X.A.] Database migrations applied successfully');
   } catch (err) {
