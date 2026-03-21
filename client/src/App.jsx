@@ -152,6 +152,10 @@ export default function App() {
           {activeTab === 'history' && (
             <HistoryPanel lang={lang} />
           )}
+
+          {activeTab === 'bankroll' && (
+            <BankrollTracker lang={lang} />
+          )}
         </Box>
 
         {/* ── Footer ── */}
