@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import useBankroll from "../hooks/useBankroll";
+import { useAuth } from "../store/authStore";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 function getToken() {
   return localStorage.getItem("hexa_token");
@@ -220,6 +221,7 @@ const inputStyle = {
 };
 // ── Componente principal ──────────────────────────────────────────────
 export default function BankrollTracker({ lang = "es" }) {
+  const { isAuthenticated } = useAuth();
   const { bankrollData, loading, refreshBankroll, setupBankroll, addBet, updateBetResult, deleteBet, updateInitialBankroll } = useBankroll();
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -256,6 +258,12 @@ export default function BankrollTracker({ lang = "es" }) {
     await refreshBankroll();
     await fetchStats();
   };
+  if (!isAuthenticated) return (
+    <div style={{ textAlign: "center", padding: "60px 20px" }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+      <p style={{ color: "#888", fontSize: 14 }}>Inicia sesión para usar el Bankroll Tracker.</p>
+    </div>
+  );
   if (loading) return (
     <div style={{ color: "#666", textAlign: "center", padding: 60, fontSize: 13 }}>
       Cargando bankroll...

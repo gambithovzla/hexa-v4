@@ -171,6 +171,7 @@ function MarkBtn({ label, color, dim, onClick }) {
 
 function AnalisisTab({ lang }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
+  const { isAuthenticated } = useAuth();
   const { history, markResult, clearHistory, getStats } = useHistory();
   const stats = getStats();
   const [confirming, setConfirming] = useState(false);
@@ -185,6 +186,17 @@ function AnalisisTab({ lang }) {
       clearHistory();
       setConfirming(false);
     }
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 10, gap: '16px', minHeight: 300 }}>
+        <Typography sx={{ fontSize: '2rem', lineHeight: 1 }}>📋</Typography>
+        <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 1.7 }}>
+          Inicia sesión para ver tu historial de picks.
+        </Typography>
+      </Box>
+    );
   }
 
   return (
