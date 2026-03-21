@@ -1,10 +1,7 @@
 /**
- * Auto-context fetcher
- * Construye el contexto estructurado que H.E.X.A. necesita para analizar un partido.
- *
- * Función principal: buildContext(gameData)
- *   Recibe un objeto normalizado de getTodayGames() y devuelve un string listo
- *   para inyectar en el prompt del Oracle.
+ * context-builder.js — H.E.X.A. V4
+ * Construye el contexto estructurado completo para el Oracle.
+ * ACTUALIZADO: todos los campos Statcast al prompt, 9 bateadores por lineup (lineup completo).
  */
 
 import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam } from './mlb-api.js';
@@ -469,8 +466,8 @@ export async function buildContext(gameData, oddsData = null) {
       awayPitcher?.fullName ? getPitcherStatcast(awayPitcher.fullName) : Promise.resolve(null),
     ];
 
-    const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
-    const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
+    const homeBatters9 = Array.isArray(homeLineup) ? homeLineup.slice(0, 9) : [];
+    const awayBatters9 = Array.isArray(awayLineup) ? awayLineup.slice(0, 9) : [];
     const homeCatcher = findByPos(homeLineup, 'C');
     const awayCatcher = findByPos(awayLineup, 'C');
     const OF_POSITIONS = ['CF', 'LF', 'RF'];
@@ -480,8 +477,8 @@ export async function buildContext(gameData, oddsData = null) {
     ].filter(Boolean);
 
     const batterFetches = [
-      ...homeBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
-      ...awayBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
+      ...homeBatters9.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
+      ...awayBatters9.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
     ];
     const referenceFetches = [
       getParkFactor(homeName),
@@ -499,14 +496,12 @@ export async function buildContext(gameData, oddsData = null) {
     homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
     awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
 
-    const homeBattersFull = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
-    const awayBattersFull = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
-    const allBatters = [...homeBattersFull, ...awayBattersFull];
+    const allBatters = [...homeBatters9, ...awayBatters9];
     batterResults.forEach((r, idx) => {
       const name   = allBatters[idx]?.fullName ?? allBatters[idx]?.name ?? allBatters[idx] ?? `Batter ${idx + 1}`;
       const savant = r.status === 'fulfilled' ? r.value : null;
-      if (idx < homeBattersFull.length) savantBatters.home.push({ name, savant });
-      else                               savantBatters.away.push({ name, savant });
+      if (idx < homeBatters9.length) savantBatters.home.push({ name, savant });
+      else                            savantBatters.away.push({ name, savant });
     });
 
     parkFactorData      = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
