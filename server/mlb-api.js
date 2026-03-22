@@ -436,6 +436,85 @@ export async function getCurrentTeam(playerId) {
 }
 
 // ---------------------------------------------------------------------------
+// Team pitching stats (starters + bullpen)
+// ---------------------------------------------------------------------------
+
+/**
+ * Stats de pitcheo de temporada de un equipo.
+ * Endpoint: /teams/{teamId}/stats?stats=season,seasonAdvanced&season={year}&group=pitching
+ *
+ * Intenta aislar métricas específicas del bullpen (relevistas) si la API las
+ * expone en los splits. Si no, bullpen quedará null.
+ *
+ * @param {number|string} teamId
+ * @returns {Promise<{teamId, season, overall: object, bullpen: object|null}>}
+ *          Devuelve un objeto vacío si la API falla — NUNCA lanza.
+ */
+export async function getTeamPitchingStats(teamId) {
+  if (!teamId) return {};
+
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url =
+        `${MLB_BASE}/teams/${teamId}/stats` +
+        `?stats=season,seasonAdvanced&season=${season}&group=pitching`;
+      const data = await fetchJSON(url);
+
+      const stats = data.stats ?? [];
+      const seasonBlock = stats.find(s => s.type?.displayName === 'season');
+      const splits = seasonBlock?.splits ?? [];
+
+      if (splits.length === 0) {
+        console.log(`[MLB API] Season ${season} returned empty pitching splits for team ${teamId} — trying next`);
+        continue;
+      }
+
+      // El primer split suele ser el total del equipo
+      const overallStat = splits[0]?.stat ?? {};
+
+      // Intentar encontrar un split específico de relevistas:
+      // La API puede exponer splits por rol (relief) en el campo split.code o description.
+      const bullpenSplit = splits.find(s => {
+        const code = s.split?.code ?? '';
+        const desc = (s.split?.description ?? '').toLowerCase();
+        return (
+          code === 'R' ||
+          desc.includes('relief') ||
+          desc.includes('bullpen')
+        );
+      }) ?? null;
+      const bullpenStat = bullpenSplit?.stat ?? null;
+
+      const extractMetrics = (stat) => ({
+        era:               stat.era               ?? null,
+        whip:              stat.whip              ?? null,
+        strikeoutsPer9Inn: stat.strikeoutsPer9Inn  ?? null,
+        walksPer9Inn:      stat.walksPer9Inn       ?? null,
+        inningsPitched:    stat.inningsPitched     ?? null,
+        strikeOuts:        stat.strikeOuts         ?? null,
+        baseOnBalls:       stat.baseOnBalls        ?? null,
+        saves:             stat.saves              ?? null,
+        blownSaves:        stat.blownSaves         ?? null,
+        holds:             stat.holds              ?? null,
+        gamesFinished:     stat.gamesFinished      ?? null,
+      });
+
+      const overall = extractMetrics(overallStat);
+      const bullpen  = bullpenStat ? extractMetrics(bullpenStat) : null;
+
+      console.log(`[MLB API] Team ${teamId} pitching stats loaded from season ${season} (ERA: ${overall.era})`);
+      return { teamId, season, overall, bullpen };
+
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} pitching failed for team ${teamId}: ${err.message}`);
+    }
+  }
+
+  console.warn(`[MLB API] No pitching stats found for team ${teamId} in seasons: ${SEASON_FALLBACK.join(', ')}`);
+  return {};
+}
+
+// ---------------------------------------------------------------------------
 // Función auxiliar mantenida para compatibilidad con context-builder.js
 // ---------------------------------------------------------------------------
 

@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 
@@ -269,6 +269,47 @@ function offenseBlock(label, hittingData, teamName) {
     `HR: ${fmt.int(s.homeRuns)} | R: ${fmt.int(s.runs)} | RBI: ${fmt.int(s.rbi)} | SB: ${fmt.int(s.stolenBases)}`,
     `K: ${fmt.int(s.strikeOuts)} | BB: ${fmt.int(s.baseOnBalls)} | LOB: ${fmt.int(s.leftOnBase)} | G: ${fmt.int(s.gamesPlayed)}`,
   );
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Bloque de bullpen / pitcheo del equipo (texto)
+// ---------------------------------------------------------------------------
+
+/**
+ * Formatea las estadísticas de pitcheo/bullpen de ambos equipos en un bloque
+ * de texto claro para el LLM.
+ *
+ * @param {string} homeName       — Nombre del equipo local
+ * @param {string} awayName       — Nombre del equipo visitante
+ * @param {object|null} homePitching — Resultado de getTeamPitchingStats() para Home
+ * @param {object|null} awayPitching — Resultado de getTeamPitchingStats() para Away
+ * @returns {string}
+ */
+function buildBullpenBlock(homeName, awayName, homePitching, awayPitching) {
+  const lines = ['### BULLPEN & RELIEF PITCHING ###'];
+
+  const fmtStat = (v, d = 2) => (v != null ? Number(v).toFixed(d) : 'N/A');
+
+  const formatTeamLine = (label, pitchingData) => {
+    // Preferir métricas de bullpen si la API las expone; fallback a overall del equipo
+    const stats = pitchingData?.bullpen ?? pitchingData?.overall ?? null;
+    if (!stats) {
+      return `[${label}] Bullpen: Datos no disponibles`;
+    }
+    const era  = fmtStat(stats.era);
+    const whip = fmtStat(stats.whip);
+    const k9   = fmtStat(stats.strikeoutsPer9Inn);
+    const bb9  = fmtStat(stats.walksPer9Inn);
+    const saves = stats.saves != null ? ` | SV: ${stats.saves}` : '';
+    const source = pitchingData?.bullpen ? '(Bullpen)' : '(Team pitching)';
+    return `[${label}] ${source} ERA: ${era} | WHIP: ${whip} | K/9: ${k9} | BB/9: ${bb9}${saves}`;
+  };
+
+  lines.push(formatTeamLine(homeName, homePitching ?? null));
+  lines.push(formatTeamLine(awayName, awayPitching ?? null));
+  lines.push('### END BULLPEN ###');
 
   return lines.join('\n');
 }
@@ -541,6 +582,20 @@ export async function buildContext(gameData, oddsData = null) {
 
   const settled = (r) => (r.status === 'fulfilled' ? r.value : null);
 
+  // ── Team pitching / bullpen stats (parallel, non-blocking) ─────────────────
+  let homePitching = null;
+  let awayPitching = null;
+  try {
+    const [homePitchingResult, awayPitchingResult] = await Promise.all([
+      home?.id ? getTeamPitchingStats(home.id) : Promise.resolve({}),
+      away?.id ? getTeamPitchingStats(away.id) : Promise.resolve({}),
+    ]);
+    homePitching = homePitchingResult ?? {};
+    awayPitching = awayPitchingResult ?? {};
+  } catch (err) {
+    console.warn('[context-builder] Team pitching stats unavailable — continuing without bullpen data:', err.message);
+  }
+
   const homePitcherTeam = settled(homeTeamVerifyResult);
   const awayPitcherTeam = settled(awayTeamVerifyResult);
 
@@ -688,10 +743,14 @@ export async function buildContext(gameData, oddsData = null) {
   }
   blocks.push('');
 
-  // Pitcheo
+  // Pitcheo — abridores
   blocks.push(pitcherBlock('HOME', homePitcherStats, homePitcher));
   blocks.push('');
   blocks.push(pitcherBlock('AWAY', awayPitcherStats, awayPitcher));
+  blocks.push('');
+
+  // Bullpen / pitcheo del equipo
+  blocks.push(buildBullpenBlock(homeName, awayName, homePitching, awayPitching));
   blocks.push('');
 
   // Ofensiva
