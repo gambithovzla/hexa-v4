@@ -48,6 +48,7 @@ export async function runMigrations() {
         result         TEXT          DEFAULT 'pending',
         source         TEXT          DEFAULT 'manual',
         notes          TEXT,
+        pick_id        INTEGER       REFERENCES picks(id) ON DELETE SET NULL,
         created_at     TIMESTAMP     DEFAULT NOW()
       )
     `);
@@ -73,6 +74,12 @@ export async function runMigrations() {
         result            VARCHAR(10)   DEFAULT 'pending',
         created_at        TIMESTAMP     DEFAULT NOW()
       )
+    `);
+
+    // ── link bets → picks (safe for existing DBs) ─────────────────────────────
+    await client.query(`
+      ALTER TABLE bets
+        ADD COLUMN IF NOT EXISTS pick_id INTEGER REFERENCES picks(id) ON DELETE SET NULL
     `);
 
     await client.query('COMMIT');
