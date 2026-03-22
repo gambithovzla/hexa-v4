@@ -33,6 +33,106 @@ function ResultBadge({ result }) {
     }}>{s.label}</span>
   );
 }
+// ── Oracle Pick Badge (pick_result from picks table) ─────────────────
+function OraclePickBadge({ pickResult }) {
+  const map = {
+    win:     { label: "ORACLE WIN",  bg: "#00ff8818", color: "#00ff88", border: "#00ff8840" },
+    loss:    { label: "ORACLE LOSS", bg: "#ff444418", color: "#ff4444", border: "#ff444440" },
+    pending: { label: "PENDIENTE",   bg: "#f5c84218", color: "#f5c842", border: "#f5c84240" },
+    push:    { label: "PUSH",        bg: "#0088ff18", color: "#0088ff", border: "#0088ff40" },
+  };
+  const s = map[pickResult] || map.pending;
+  return (
+    <span style={{
+      background: s.bg, color: s.color,
+      border: `1px solid ${s.border}`,
+      borderRadius: 4, padding: "2px 7px",
+      fontSize: 10, fontWeight: 700, letterSpacing: 1
+    }}>{s.label}</span>
+  );
+}
+// ── Oracle ROI Panel ──────────────────────────────────────────────────
+function OracleROIPanel({ bets }) {
+  const oracleBets = bets.filter(b => b.pick_id != null);
+  if (oracleBets.length === 0) return null;
+
+  const settledBets = oracleBets.filter(
+    b => b.pick_result && b.pick_result !== "pending"
+  );
+  const wins   = settledBets.filter(b => b.pick_result === "win").length;
+  const losses = settledBets.filter(b => b.pick_result === "loss").length;
+  const pushes = settledBets.filter(b => b.pick_result === "push").length;
+
+  const totalStaked = settledBets.reduce((sum, b) => sum + parseFloat(b.stake || 0), 0);
+  const totalReturned = settledBets.reduce((sum, b) => {
+    if (b.pick_result === "win")  return sum + parseFloat(b.stake || 0) + calcPotentialWin(b.stake, b.odds);
+    if (b.pick_result === "push") return sum + parseFloat(b.stake || 0);
+    return sum;
+  }, 0);
+
+  const totalProfit = totalReturned - totalStaked;
+  const roi = totalStaked > 0
+    ? ((totalProfit / totalStaked) * 100).toFixed(1)
+    : "0.0";
+  const roiPositive = parseFloat(roi) >= 0;
+  const winRate = (wins + losses) > 0
+    ? ((wins / (wins + losses)) * 100).toFixed(0)
+    : 0;
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #0a0f1a 0%, #0d1220 100%)",
+      border: "1px solid #1a2840",
+      borderRadius: 12, padding: 16, marginBottom: 20
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <span style={{ fontSize: 15 }}>🤖</span>
+        <span style={{ color: "#e8d5a3", fontWeight: 700, fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase" }}>
+          H.E.X.A. Oracle ROI
+        </span>
+        <span style={{ color: "#444", fontSize: 11, marginLeft: "auto" }}>
+          {oracleBets.length} apuesta{oracleBets.length !== 1 ? "s" : ""} vinculada{oracleBets.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+        <div style={{
+          background: "#0d0d0d", borderRadius: 8, padding: "12px 14px",
+          border: `1px solid ${roiPositive ? "#00ff8830" : "#ff444430"}`
+        }}>
+          <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>ROI Oracle</div>
+          <div style={{ color: roiPositive ? "#00ff88" : "#ff4444", fontSize: 20, fontWeight: 700 }}>
+            {roiPositive ? "+" : ""}{roi}%
+          </div>
+        </div>
+        <div style={{
+          background: "#0d0d0d", borderRadius: 8, padding: "12px 14px",
+          border: `1px solid ${totalProfit >= 0 ? "#00ff8830" : "#ff444430"}`
+        }}>
+          <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Profit Neto</div>
+          <div style={{ color: totalProfit >= 0 ? "#00ff88" : "#ff4444", fontSize: 18, fontWeight: 700 }}>
+            {totalProfit >= 0 ? "+" : ""}{formatMoney(totalProfit)}
+          </div>
+        </div>
+        <div style={{ background: "#0d0d0d", borderRadius: 8, padding: "12px 14px", border: "1px solid #1e1e1e" }}>
+          <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Récord</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>
+            <span style={{ color: "#00ff88" }}>{wins}W</span>
+            <span style={{ color: "#333", margin: "0 3px" }}>·</span>
+            <span style={{ color: "#ff4444" }}>{losses}L</span>
+            <span style={{ color: "#333", margin: "0 3px" }}>·</span>
+            <span style={{ color: "#0088ff" }}>{pushes}P</span>
+          </div>
+        </div>
+        <div style={{ background: "#0d0d0d", borderRadius: 8, padding: "12px 14px", border: "1px solid #1e1e1e" }}>
+          <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Win Rate</div>
+          <div style={{ color: parseFloat(winRate) >= 55 ? "#00ff88" : "#e8d5a3", fontSize: 20, fontWeight: 700 }}>
+            {winRate}%
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 // ── Mini gráfica de evolución ─────────────────────────────────────────
 function BankrollChart({ history, initial }) {
   if (!history || history.length === 0) return (
@@ -297,6 +397,8 @@ export default function BankrollTracker({ lang = "es" }) {
       {/* ── DASHBOARD ── */}
       {activeView === "dashboard" && (
         <div>
+          {/* Oracle ROI Panel — arriba del todo */}
+          <OracleROIPanel bets={bets} />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
             <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 10, padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -455,6 +557,12 @@ export default function BankrollTracker({ lang = "es" }) {
   );
 }
 // ── Fila de apuesta ───────────────────────────────────────────────────
+const PICK_RESULT_BORDER = {
+  win:     "#00ff8828",
+  loss:    "#ff444428",
+  push:    "#0088ff28",
+  pending: "#f5c84218",
+};
 function BetRow({ bet, onUpdate, onDelete }) {
   const [updating, setUpdating] = useState(false);
   const handleResult = async (result) => {
@@ -463,23 +571,47 @@ function BetRow({ bet, onUpdate, onDelete }) {
     setUpdating(false);
   };
   const potentialWin = calcPotentialWin(bet.stake, bet.odds);
+  const hasOraclePick = bet.pick_id != null;
+  const borderColor = hasOraclePick
+    ? (PICK_RESULT_BORDER[bet.pick_result] || PICK_RESULT_BORDER.pending)
+    : "#1a1a1a";
   return (
     <div style={{
-      background: "#0d0d0d", border: "1px solid #1a1a1a",
-      borderRadius: 8, padding: "12px 14px", marginBottom: 8
+      background: "#0d0d0d",
+      border: `1px solid ${borderColor}`,
+      borderRadius: 8, padding: "12px 14px", marginBottom: 8,
+      borderLeft: hasOraclePick ? `3px solid ${borderColor.replace("28", "99")}` : undefined,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ color: "#ccc", fontSize: 13, fontWeight: 600 }}>{bet.pick}</div>
           <div style={{ color: "#555", fontSize: 11, marginTop: 2 }}>{bet.matchup}</div>
+          {/* Oracle pick info — only if linked to a pick */}
+          {hasOraclePick && (bet.oracle_pick || bet.pick_result) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+              {bet.oracle_pick && (
+                <span style={{
+                  color: "#0088ff", fontSize: 11, background: "#0088ff12",
+                  border: "1px solid #0088ff30", borderRadius: 4, padding: "1px 6px"
+                }}>
+                  🤖 {bet.oracle_pick}
+                </span>
+              )}
+              {bet.pick_result && <OraclePickBadge pickResult={bet.pick_result} />}
+            </div>
+          )}
         </div>
-        <ResultBadge result={bet.result} />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+          <ResultBadge result={bet.result} />
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 16, marginBottom: bet.result === "pending" ? 10 : 0 }}>
+      <div style={{ display: "flex", gap: 16, marginBottom: bet.result === "pending" ? 10 : 6 }}>
         <span style={{ color: "#666", fontSize: 12 }}>Stake: <span style={{ color: "#ccc" }}>${bet.stake}</span></span>
         <span style={{ color: "#666", fontSize: 12 }}>Odds: <span style={{ color: "#ccc" }}>{bet.odds > 0 ? "+" : ""}{bet.odds}</span></span>
         <span style={{ color: "#666", fontSize: 12 }}>Win: <span style={{ color: "#00ff88" }}>{formatMoney(potentialWin)}</span></span>
-        {bet.source === "hexa" && <span style={{ color: "#e8d5a350", fontSize: 11 }}>🤖 Oracle</span>}
+        {bet.source === "hexa" && !hasOraclePick && (
+          <span style={{ color: "#e8d5a350", fontSize: 11 }}>🤖 Oracle</span>
+        )}
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         {bet.result === "pending" && (
