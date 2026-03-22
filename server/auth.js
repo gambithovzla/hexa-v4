@@ -69,8 +69,13 @@ async function getBankrollData(userId) {
   const br = brRes.rows[0] ?? null;
 
   const betsRes = await pool.query(
-    `SELECT id, date, matchup, pick, odds, stake, potential_win, result, source, notes
-     FROM bets WHERE user_id = $1 ORDER BY created_at ASC`,
+    `SELECT b.id, b.date, b.matchup, b.pick, b.odds, b.stake, b.potential_win,
+            b.result, b.source, b.notes, b.pick_id,
+            p.matchup AS pick_matchup, p.pick AS oracle_pick, p.result AS pick_result
+     FROM bets b
+     LEFT JOIN picks p ON b.pick_id = p.id
+     WHERE b.user_id = $1
+     ORDER BY b.created_at ASC`,
     [userId]
   );
 
@@ -88,6 +93,10 @@ async function getBankrollData(userId) {
       result:       b.result,
       source:       b.source,
       notes:        b.notes ?? '',
+      pickId:       b.pick_id ?? null,
+      pickMatchup:  b.pick_matchup ?? null,
+      oraclePick:   b.oracle_pick ?? null,
+      pickResult:   b.pick_result ?? null,
     })),
   };
 }
@@ -297,7 +306,7 @@ bankrollRouter.patch('/setup', verifyToken, async (req, res) => {
 // POST /api/bankroll/bet
 bankrollRouter.post('/bet', verifyToken, async (req, res) => {
   try {
-    const { matchup, pick, odds, stake, source = 'manual', notes = '' } = req.body ?? {};
+    const { matchup, pick, odds, stake, source = 'manual', notes = '', pick_id = null } = req.body ?? {};
 
     if (!matchup || !pick || odds == null || !stake) {
       return res.status(400).json({ error: 'matchup, pick, odds, and stake are required' });
@@ -308,10 +317,11 @@ bankrollRouter.post('/bet', verifyToken, async (req, res) => {
 
     const potentialWin = calcPotentialWin(stake, odds);
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pickId = pick_id != null ? Number(pick_id) : null;
 
     await pool.query(
-      `INSERT INTO bets (id, user_id, matchup, pick, odds, stake, potential_win, result, source, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9)`,
+      `INSERT INTO bets (id, user_id, matchup, pick, odds, stake, potential_win, result, source, notes, pick_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10)`,
       [
         id,
         req.user.id,
@@ -322,6 +332,7 @@ bankrollRouter.post('/bet', verifyToken, async (req, res) => {
         potentialWin,
         source === 'hexa' ? 'hexa' : 'manual',
         String(notes ?? ''),
+        pickId,
       ]
     );
 

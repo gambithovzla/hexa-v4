@@ -13,6 +13,7 @@ import { verifyToken } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import pool from './db.js';
 import lemonRouter from './lemon.js';
+import { resolvePendingPicks } from './pick-resolver.js';
 
 dotenv.config();
 
@@ -279,6 +280,16 @@ app.post('/api/savant/refresh', async (_req, res) => {
   }
 });
 
+// GET /api/picks/resolve — manually trigger pick resolution (admin/testing)
+app.get('/api/picks/resolve', verifyToken, async (_req, res) => {
+  try {
+    const summary = await resolvePendingPicks();
+    res.json({ success: true, data: summary });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/picks — guarda un pick en el historial
 app.post('/api/picks', verifyToken, async (req, res) => {
   try {
@@ -361,6 +372,25 @@ runMigrations()
             console.warn('[H.E.X.A.] Scheduled Statcast refresh failed:', err.message);
           });
       }, SIX_HOURS).unref();
+
+      // ── Pick resolver: every 30 min between 10pm–3am ET ──────────────────
+      const THIRTY_MIN = 30 * 60 * 1000;
+      setInterval(() => {
+        // Get current hour in US Eastern Time (handles EDT/EST automatically)
+        const etHour = parseInt(
+          new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric', hour12: false, timeZone: 'America/New_York',
+          }).format(new Date()),
+          10
+        );
+        // Window: 22:00–02:59 ET (when MLB games finish)
+        if (etHour >= 22 || etHour < 3) {
+          console.log(`[pick-resolver] Scheduled run triggered (ET hour: ${etHour})`);
+          resolvePendingPicks().catch(err => {
+            console.error('[pick-resolver] Scheduled run failed:', err.message);
+          });
+        }
+      }, THIRTY_MIN).unref();
     });
   })
   .catch(err => {
