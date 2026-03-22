@@ -279,6 +279,54 @@ app.post('/api/savant/refresh', async (_req, res) => {
   }
 });
 
+// POST /api/picks — guarda un pick en el historial
+app.post('/api/picks', verifyToken, async (req, res) => {
+  try {
+    const {
+      type, matchup, pick, oracle_confidence, bet_value,
+      model_risk, oracle_report, hexa_hunch, alert_flags,
+      probability_model, best_pick, model, language,
+    } = req.body;
+    const { rows } = await pool.query(
+      `INSERT INTO picks (user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk, oracle_report, hexa_hunch, alert_flags, probability_model, best_pick, model, language)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [req.user.id, type, matchup, pick, oracle_confidence, bet_value, model_risk, oracle_report, hexa_hunch,
+       JSON.stringify(alert_flags ?? []), JSON.stringify(probability_model ?? {}), JSON.stringify(best_pick ?? {}), model, language]
+    );
+    res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/picks — obtiene el historial del usuario
+app.get('/api/picks', verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM picks WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100',
+      [req.user.id]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PATCH /api/picks/:id — actualiza resultado (win/loss/pending)
+app.patch('/api/picks/:id', verifyToken, async (req, res) => {
+  try {
+    const { result } = req.body;
+    const { rows } = await pool.query(
+      'UPDATE picks SET result = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [result, req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
+    res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Startup: run migrations → seed admin → start server ───────────────────────
 runMigrations()
   .then(() => seedAdminUser())
@@ -286,16 +334,19 @@ runMigrations()
     app.listen(PORT, () => {
       console.log(`Hexa-v4 server running on http://localhost:${PORT}`);
 
-      // ── Statcast cache warm-up (non-blocking) ────────────────────────────
-      console.log('[H.E.X.A.] Warming up Statcast cache...');
-      refreshCache()
-        .then(status => {
-          const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
-          console.log(`[H.E.X.A.] Statcast cache ready: ${total} records loaded`);
-        })
-        .catch(err => {
-          console.warn('[H.E.X.A.] Statcast warm-up failed (will retry on first request):', err.message);
-        });
+      // ── Statcast cache warm-up (non-blocking, delayed 30s) ──────────────
+      console.log('[H.E.X.A.] Statcast cache warm-up programado en 30s...');
+      setTimeout(() => {
+        console.log('[H.E.X.A.] Warming up Statcast cache...');
+        refreshCache()
+          .then(status => {
+            const total = Object.values(status?.recordCounts ?? {}).reduce((a, b) => a + b, 0);
+            console.log(`[H.E.X.A.] Statcast cache ready: ${total} records loaded`);
+          })
+          .catch(err => {
+            console.warn('[H.E.X.A.] Statcast warm-up failed (will retry on first request):', err.message);
+          });
+      }, 30000).unref();
 
       // ── Auto-refresh every 6 hours ───────────────────────────────────────
       const SIX_HOURS = 6 * 60 * 60 * 1000;

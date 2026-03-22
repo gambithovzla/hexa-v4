@@ -171,6 +171,7 @@ function MarkBtn({ label, color, dim, onClick }) {
 
 function AnalisisTab({ lang }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
+  const { isAuthenticated } = useAuth();
   const { history, markResult, clearHistory, getStats } = useHistory();
   const stats = getStats();
   const [confirming, setConfirming] = useState(false);
@@ -185,6 +186,17 @@ function AnalisisTab({ lang }) {
       clearHistory();
       setConfirming(false);
     }
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 10, gap: '16px', minHeight: 300 }}>
+        <Typography sx={{ fontSize: '2rem', lineHeight: 1 }}>📋</Typography>
+        <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 1.7 }}>
+          Inicia sesión para ver tu historial de picks.
+        </Typography>
+      </Box>
+    );
   }
 
   return (
@@ -642,55 +654,9 @@ function BancaTab() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function HistoryPanel({ lang = 'en' }) {
-  const [activeTab, setActiveTab] = useState('analisis');
-
-  const tabs = [
-    { id: 'analisis', label: 'Análisis' },
-    { id: 'banca',    label: 'Banca'    },
-  ];
-
   return (
     <Box sx={{ bgcolor: C.bg, minHeight: '60vh', p: 2, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-      {/* ── Sub-tab bar ── */}
-      <Box sx={{ display: 'flex', borderBottom: `1px solid ${C.cardBorder}`, gap: 0 }}>
-        {tabs.map(tab => {
-          const active = activeTab === tab.id;
-          return (
-            <Box
-              key={tab.id}
-              component="button"
-              onClick={() => setActiveTab(tab.id)}
-              sx={{
-                px:            '20px',
-                py:            '10px',
-                background:    active ? C.accentDim : 'transparent',
-                border:        'none',
-                borderBottom:  active ? `2px solid ${C.accent}` : '2px solid transparent',
-                color:         active ? C.accentSec : C.textMuted,
-                fontFamily:    BARLOW,
-                fontSize:      '0.82rem',
-                fontWeight:    700,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                cursor:        'pointer',
-                transition:    'color 0.15s, background 0.15s',
-                flexShrink:    0,
-                '&:hover':     { color: active ? C.accentSec : C.textPrimary },
-              }}
-            >
-              {tab.label}
-            </Box>
-          );
-        })}
-      </Box>
-
-      {/* ── Tab content ── */}
-      {activeTab === 'analisis' ? (
-        <AnalisisTab lang={lang} />
-      ) : (
-        <BancaTab />
-      )}
+      <AnalisisTab lang={lang} />
     </Box>
   );
 }

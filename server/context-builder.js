@@ -17,18 +17,36 @@ import { getGameWeather } from './weather-api.js';
 
 const HISTORICAL_MLB_CONTEXT = {
   park_factors_2025: {
-    // Hitter-friendly parks
-    COL: { overall: 112, hr: 123, description: 'Coors Field - extreme hitter park, high altitude' },
-    CIN: { overall: 105, hr: 108, description: 'Great American Ball Park - hitter friendly' },
-    TEX: { overall: 104, hr: 106, description: 'Globe Life Field - hitter friendly dome' },
-    // Pitcher-friendly parks
-    SF:  { overall: 94,  hr: 88,  description: 'Oracle Park - extreme pitcher park, marine layer' },
-    NYM: { overall: 95,  hr: 92,  description: 'Citi Field - pitcher friendly' },
-    OAK: { overall: 96,  hr: 94,  description: 'Oakland Coliseum - pitcher friendly' },
-    MIA: { overall: 95,  hr: 91,  description: 'LoanDepot Park - pitcher friendly dome' },
-    // Neutral / slight hitter
-    LAD: { overall: 100, hr: 100, description: 'Dodger Stadium - neutral' },
-    NYY: { overall: 101, hr: 103, description: 'Yankee Stadium - slight hitter friendly' },
+    COL: { overall: 112, hr: 123, r: 115, description: 'Coors Field - extreme hitter park, high altitude' },
+    CIN: { overall: 105, hr: 113, r: 106, description: 'Great American Ball Park - hitter friendly' },
+    TEX: { overall: 104, hr: 106, r: 104, description: 'Globe Life Field - hitter friendly dome' },
+    BAL: { overall: 103, hr: 112, r: 103, description: 'Camden Yards - slight hitter friendly' },
+    BOS: { overall: 103, hr: 95,  r: 104, description: 'Fenway Park - hitter friendly, unique dimensions' },
+    NYY: { overall: 101, hr: 103, r: 101, description: 'Yankee Stadium - short porch favors lefty power' },
+    PHI: { overall: 101, hr: 104, r: 101, description: 'Citizens Bank Park - slight hitter friendly' },
+    ATL: { overall: 100, hr: 98,  r: 100, description: 'Truist Park - neutral' },
+    HOU: { overall: 100, hr: 97,  r: 100, description: 'Minute Maid Park - neutral, Crawford boxes' },
+    LAD: { overall: 100, hr: 100, r: 100, description: 'Dodger Stadium - neutral' },
+    MIN: { overall: 100, hr: 102, r: 100, description: 'Target Field - neutral' },
+    STL: { overall: 100, hr: 96,  r: 100, description: 'Busch Stadium - neutral' },
+    TOR: { overall: 100, hr: 99,  r: 100, description: 'Rogers Centre - neutral dome' },
+    ARI: { overall: 99,  hr: 101, r: 99,  description: 'Chase Field - neutral, retractable roof' },
+    CLE: { overall: 99,  hr: 95,  r: 99,  description: 'Progressive Field - slight pitcher friendly' },
+    DET: { overall: 99,  hr: 96,  r: 99,  description: 'Comerica Park - slight pitcher friendly, deep center' },
+    KC:  { overall: 99,  hr: 97,  r: 99,  description: 'Kauffman Stadium - slight pitcher friendly' },
+    MIL: { overall: 99,  hr: 100, r: 99,  description: 'American Family Field - neutral dome' },
+    PIT: { overall: 99,  hr: 96,  r: 99,  description: 'PNC Park - slight pitcher friendly' },
+    SEA: { overall: 99,  hr: 96,  r: 99,  description: 'T-Mobile Park - pitcher friendly' },
+    TB:  { overall: 99,  hr: 97,  r: 99,  description: 'Tropicana Field - pitcher friendly dome' },
+    CHC: { overall: 98,  hr: 99,  r: 98,  description: 'Wrigley Field - wind dependent, can favor either' },
+    CWS: { overall: 98,  hr: 101, r: 98,  description: 'Guaranteed Rate Field - neutral' },
+    LAA: { overall: 98,  hr: 95,  r: 98,  description: 'Angel Stadium - pitcher friendly' },
+    WSH: { overall: 98,  hr: 99,  r: 98,  description: 'Nationals Park - slight pitcher friendly' },
+    OAK: { overall: 96,  hr: 94,  r: 96,  description: 'Oakland Coliseum - pitcher friendly' },
+    MIA: { overall: 95,  hr: 91,  r: 95,  description: 'LoanDepot Park - pitcher friendly dome' },
+    NYM: { overall: 95,  hr: 92,  r: 95,  description: 'Citi Field - pitcher friendly' },
+    SD:  { overall: 94,  hr: 90,  r: 94,  description: 'Petco Park - pitcher friendly, marine layer' },
+    SF:  { overall: 94,  hr: 88,  r: 93,  description: 'Oracle Park - extreme pitcher park, marine layer' },
   },
   team_tendencies_historical: {
     LAD: { home_win_pct_5yr: 0.587, notes: 'Elite pitching depth, strong home record' },
@@ -57,7 +75,7 @@ function buildHistoricalContextBlock() {
   const st = HISTORICAL_MLB_CONTEXT.spring_training_adjustments;
 
   const pfLines = Object.entries(pf).map(([abbr, d]) =>
-    `  ${abbr}: overall=${d.overall} HR=${d.hr} — ${d.description}`
+    `  ${abbr}: overall=${d.overall} HR=${d.hr} R=${d.r ?? 'N/A'} — ${d.description}`
   );
   const ttLines = Object.entries(tt).map(([abbr, d]) => {
     const pct = d.home_win_pct_5yr ?? d.road_win_pct_5yr;
@@ -404,6 +422,86 @@ function teamVerificationLine(playerName, scheduledAbbr, verification) {
   return `✓ TEAM VERIFICATION: ${playerName} — current team confirmed as ${curAbbr ?? verification.currentTeamName ?? 'Unknown'}`;
 }
 
+// ---------------------------------------------------------------------------
+// Data Integrity Layer
+// ---------------------------------------------------------------------------
+
+function calcDataQuality({
+  homePitcherStats, awayPitcherStats,
+  homePitcher, awayPitcher,
+  homePitcherSavant, awayPitcherSavant,
+  savantBatters, weatherData, parkFactorData,
+  oddsData, gameData,
+}) {
+  let score = 0;
+  const missing = [];
+  const available = [];
+
+  // Pitchers (30 pts)
+  if (homePitcher?.fullName && homePitcherStats?.stats) { score += 15; available.push('home_pitcher_stats'); }
+  else missing.push('home_pitcher_stats');
+  if (awayPitcher?.fullName && awayPitcherStats?.stats) { score += 15; available.push('away_pitcher_stats'); }
+  else missing.push('away_pitcher_stats');
+
+  // Statcast pitchers (20 pts)
+  if (homePitcherSavant?.xwOBA_against != null) { score += 10; available.push('home_pitcher_statcast'); }
+  else missing.push('home_pitcher_statcast');
+  if (awayPitcherSavant?.xwOBA_against != null) { score += 10; available.push('away_pitcher_statcast'); }
+  else missing.push('away_pitcher_statcast');
+
+  // Statcast batters (10 pts)
+  const battersWithData = [
+    ...(savantBatters?.home ?? []),
+    ...(savantBatters?.away ?? []),
+  ].filter(b => b.savant?.xwOBA != null).length;
+  if (battersWithData >= 3) { score += 10; available.push('batter_statcast'); }
+  else missing.push(`batter_statcast (only ${battersWithData} with data)`);
+
+  // Rolling windows (10 pts)
+  const hasRolling = homePitcherSavant?.rolling_windows_against?.woba_against_7d != null
+    || awayPitcherSavant?.rolling_windows_against?.woba_against_7d != null;
+  if (hasRolling) { score += 10; available.push('rolling_windows'); }
+  else missing.push('rolling_windows');
+
+  // Odds (10 pts)
+  if (oddsData?.odds && oddsData.source !== 'estimated_spring_training') { score += 10; available.push('real_odds'); }
+  else missing.push('real_odds (spring training estimates)');
+
+  // Lineup (10 pts)
+  if (gameData?.lineupStatus === 'confirmed') { score += 10; available.push('confirmed_lineup'); }
+  else missing.push('confirmed_lineup');
+
+  // Weather (5 pts)
+  if (weatherData && !weatherData.error) { score += 5; available.push('weather'); }
+  else missing.push('weather');
+
+  // Park factor (5 pts)
+  if (parkFactorData?.park_factor_overall != null) { score += 5; available.push('park_factor'); }
+  else missing.push('park_factor');
+
+  // Determine strategy
+  let strategy, confidencePenalty, allowedBetTypes;
+  if (score >= 80) {
+    strategy = 'FULL_ANALYSIS';
+    confidencePenalty = 0;
+    allowedBetTypes = 'all';
+  } else if (score >= 60) {
+    strategy = 'STANDARD_ANALYSIS';
+    confidencePenalty = 0;
+    allowedBetTypes = 'moneyline, runline, over-under, props only if batter statcast available';
+  } else if (score >= 40) {
+    strategy = 'LIMITED_ANALYSIS';
+    confidencePenalty = 15;
+    allowedBetTypes = 'moneyline and over-under only';
+  } else {
+    strategy = 'MINIMAL_ANALYSIS';
+    confidencePenalty = 25;
+    allowedBetTypes = 'moneyline only';
+  }
+
+  return { score, strategy, confidencePenalty, allowedBetTypes, missing, available };
+}
+
 /**
  * Construye el contexto estructurado completo para un partido.
  *
@@ -530,6 +628,16 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Weather fetch failed — continuing without weather data:', err.message);
   }
 
+  // ── Data Integrity Layer ───────────────────────────────────────────────────
+  const dataQuality = calcDataQuality({
+    homePitcherStats, awayPitcherStats,
+    homePitcher, awayPitcher,
+    homePitcherSavant, awayPitcherSavant,
+    savantBatters, weatherData, parkFactorData,
+    oddsData, gameData,
+  });
+  console.log(`[context-builder] Data Quality Score: ${dataQuality.score}/100 — ${dataQuality.strategy}`);
+
   // ── DEBUG: log assembled data before building context string ───────────────
   console.log('=== CONTEXT BUILDER DEBUG ===');
   console.log('MLB Stats data keys:', Object.keys({
@@ -548,6 +656,16 @@ export async function buildContext(gameData, oddsData = null) {
 
   const blocks = [];
 
+  blocks.push('=== DATA INTEGRITY REPORT ===');
+  blocks.push(`Quality Score: ${dataQuality.score}/100 — Strategy: ${dataQuality.strategy}`);
+  blocks.push(`Confidence penalty: -${dataQuality.confidencePenalty}%`);
+  blocks.push(`Allowed bet types: ${dataQuality.allowedBetTypes}`);
+  blocks.push(`Available: ${dataQuality.available.join(', ')}`);
+  blocks.push(`Missing: ${dataQuality.missing.length > 0 ? dataQuality.missing.join(', ') : 'none'}`);
+  blocks.push('ORACLE INSTRUCTION: Adjust your confidence by subtracting the confidence penalty from your calculated oracle_confidence. Restrict bet types to the allowed list above. If strategy is MINIMAL_ANALYSIS, set model_risk to high regardless of other signals.');
+  blocks.push('=== END DATA INTEGRITY ===');
+  blocks.push('');
+
   // Encabezado
   blocks.push(header(`GAME CONTEXT: ${awayAbbr} @ ${homeAbbr} — ${awayName} @ ${homeName}`));
   blocks.push(`Venue: ${gameData.venue?.name ?? '⚠ MISSING DATA: venue unknown'}`);
@@ -555,6 +673,18 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push(`Status: ${gameData.status?.description ?? 'Scheduled'}`);
   if (gameData.seriesDescription) {
     blocks.push(`Series: ${gameData.seriesDescription} — Game ${gameData.seriesGameNumber ?? '?'} of ${gameData.gamesInSeries ?? '?'}`);
+  }
+  blocks.push('');
+
+  // ── Data Quality Block ────────────────────────────────────────────────────
+  blocks.push(section('DATA QUALITY'));
+  blocks.push(`Score: ${dataQuality.score}/100 | Strategy: ${dataQuality.strategy} | Confidence penalty: ${dataQuality.confidencePenalty}%`);
+  blocks.push(`Allowed bet types: ${dataQuality.allowedBetTypes}`);
+  if (dataQuality.available.length > 0) {
+    blocks.push(`Available: ${dataQuality.available.join(', ')}`);
+  }
+  if (dataQuality.missing.length > 0) {
+    blocks.push(`Missing: ${dataQuality.missing.join(', ')}`);
   }
   blocks.push('');
 

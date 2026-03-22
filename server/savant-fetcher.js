@@ -60,11 +60,7 @@ const ENDPOINTS = {
   sprintSpeed:       'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
   battedBallBatter:  'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
   battedBallPitcher: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
-  parkFactors:       [
-    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=MLB&min=1&csv=true',
-    'https://baseballsavant.mlb.com/leaderboard/park-factors?type=season&batSide=&pitchHand=&leagueId=&min=1&csv=true',
-    'https://baseballsavant.mlb.com/statcast_search/csv?type=park_factors&year=2025',
-  ],
+  parkFactors:       [], // Savant park factors endpoint deprecated — using hardcoded values in context-builder.js
   catcherFraming:    'https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=2025&team=&min=q&csv=true',
   fieldingOAA:       'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=2025&team=&csv=true',
   yearToYearBatter:  [
@@ -78,12 +74,12 @@ const ENDPOINTS = {
 
   // ── New leaderboards ─────────────────────────────────────────────────────
   homeRunsBatter:    [
-    'https://baseballsavant.mlb.com/leaderboard/home_runs?year=2025&type=batter&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=hr,hr_per_fb,fb_percent&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/home_runs?year=2025&type=batter&min=q&csv=true',
   ],
   homeRunsPitcher:   [
-    'https://baseballsavant.mlb.com/leaderboard/home_runs?year=2025&type=pitcher&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=hr,hr_per_fb,fb_percent&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/home_runs?year=2025&type=pitcher&min=q&csv=true',
   ],
   runValueBatter:    [
     'https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats?type=batter&year=2025&min=q&csv=true',
@@ -94,56 +90,56 @@ const ENDPOINTS = {
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=run_value,run_value_per_100&chart=false&csv=true',
   ],
   rollingBatter7d:   [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=7&year=2025&min=5&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=5&selections=woba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=7&year=2025&min=5&csv=true',
   ],
   rollingBatter14d:  [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=14&year=2025&min=8&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=8&selections=woba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=14&year=2025&min=8&csv=true',
   ],
   rollingBatter21d:  [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=21&year=2025&min=10&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=woba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=batter&type=woba&rolling=21&year=2025&min=10&csv=true',
   ],
   rollingPitcher7d:  [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=7&year=2025&min=5&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=5&selections=woba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=7&year=2025&min=5&csv=true',
   ],
   rollingPitcher14d: [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=14&year=2025&min=8&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=8&selections=woba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=14&year=2025&min=8&csv=true',
   ],
   rollingPitcher21d: [
-    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=21&year=2025&min=10&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=10&selections=woba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/rolling-stats?group=pitcher&type=woba&rolling=21&year=2025&min=10&csv=true',
   ],
   swingPath:         [
-    'https://baseballsavant.mlb.com/leaderboard/swing-path?year=2025&type=batter&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=attack_angle_avg,squared_up_pct,fast_swing_rate&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/swing-path?year=2025&type=batter&min=q&csv=true',
   ],
   batTracking: [
-    'https://baseballsavant.mlb.com/leaderboard/bat-tracking?year=2025&type=batter&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=q&selections=bat_speed,swing_length,squared_up_pct,blasts_per_swing&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/bat-tracking?year=2025&type=batter&min=q&csv=true',
   ],
   catcherPopTime: [
-    'https://baseballsavant.mlb.com/leaderboard/catcher_pop_time?year=2025&team=&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=catcher&filter=&sort=4&sortDir=desc&min=q&selections=pop_2b_sba,pop_2b_sba_count,exchange_2b_3b_sba&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/catcher_pop_time?year=2025&team=&min=q&csv=true',
   ],
   outfieldJump: [
     'https://baseballsavant.mlb.com/leaderboard/outfield_jump?year=2025&team=&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=OF&year=2025&team=&csv=true',
   ],
   armStrength: [
-    'https://baseballsavant.mlb.com/leaderboard/arm_strength?year=2025&type=outfielder&team=&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=fielder&filter=&sort=4&sortDir=desc&min=q&selections=arm_strength,arm_value&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/arm_strength?year=2025&type=outfielder&team=&min=q&csv=true',
   ],
   ninetyFtSplits: [
     'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=batter&filter=&sort=4&sortDir=desc&min=10&selections=hp_to_1b,sprint_speed&chart=false&csv=true',
   ],
   pitcherPositioning: [
-    'https://baseballsavant.mlb.com/leaderboard/pitcher-positioning?year=2025&type=pitcher&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=n_shift,shift_rate&chart=false&csv=true',
+    'https://baseballsavant.mlb.com/leaderboard/pitcher-positioning?year=2025&type=pitcher&min=q&csv=true',
   ],
   activeSpin: [
     'https://baseballsavant.mlb.com/leaderboard/active-spin?year=2025&type=pitcher&min=q&csv=true',
@@ -327,7 +323,13 @@ async function loadAll() {
     'ninetyFtSplits', 'pitcherPositioning', 'activeSpin', 'pitchMovement',
   ];
 
-  const fetches = KEYS.map(key => fetchMultiYear(ENDPOINTS[key], years, key));
+  const fetches = KEYS.map(key => {
+    const endpoint = ENDPOINTS[key];
+    if (Array.isArray(endpoint) && endpoint.length === 0) {
+      return Promise.resolve({ rows: [], yearsLoaded: [] });
+    }
+    return fetchMultiYear(endpoint, years, key);
+  });
 
   const results = await Promise.allSettled(fetches);
 

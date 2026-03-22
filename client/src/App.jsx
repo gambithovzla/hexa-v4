@@ -20,6 +20,7 @@ import Header               from './components/Header';
 import GameSelector         from './components/GameSelector';
 import AnalysisPanel        from './components/AnalysisPanel';
 import HistoryPanel         from './components/HistoryPanel';
+import BankrollTracker      from './components/BankrollTracker';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import useHistory           from './hooks/useHistory';
 
@@ -150,6 +151,10 @@ export default function App() {
           {/* History — remounts on each visit so it re-reads localStorage */}
           {activeTab === 'history' && (
             <HistoryPanel lang={lang} />
+          )}
+
+          {activeTab === 'bankroll' && (
+            <BankrollTracker lang={lang} />
           )}
         </Box>
 

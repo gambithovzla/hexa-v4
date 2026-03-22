@@ -51,16 +51,10 @@ const L = {
       totals:     'Over/Under',
       playerprops:'Player Props',
     },
-    riskProfile: {
-      label:        'Risk Profile',
-      conservative: 'Conservative',
-      balanced:     'Balanced',
-      aggressive:   'Aggressive',
-    },
     modelSelect: {
-      label: 'Analysis Model',
-      fast:  '⚡ Fast',
-      deep:  '🧠 Deep',
+      label:   'Analysis Model',
+      deep:    '🧠 Deep',
+      premium: '✨ Premium',
     },
     webSearch:    'Web Intel',
     parlayLegs:   'Parlay Legs',
@@ -95,16 +89,10 @@ const L = {
       totals:     'Totales (O/U)',
       playerprops:'Props de Jugador',
     },
-    riskProfile: {
-      label:        'Perfil de Riesgo',
-      conservative: 'Conservador',
-      balanced:     'Equilibrado',
-      aggressive:   'Agresivo',
-    },
     modelSelect: {
-      label: 'Modelo de Análisis',
-      fast:  '⚡ Fast',
-      deep:  '🧠 Deep',
+      label:   'Modelo de Análisis',
+      deep:    '🧠 Deep',
+      premium: '✨ Premium',
     },
     webSearch:    'Intel Web',
     parlayLegs:   'Patas del Parlay',
@@ -208,82 +196,25 @@ function BetTypeSelect({ value, onChange, t }) {
   );
 }
 
-const RISK_CFG = {
-  conservative: { color: '#00E676', glow: 'rgba(0,230,118,0.35)',  dim: 'rgba(0,230,118,0.08)'  },
-  balanced:     { color: '#0066FF', glow: 'rgba(0,102,255,0.35)',  dim: 'rgba(0,102,255,0.08)'  },
-  aggressive:   { color: '#FF9800', glow: 'rgba(255,152,0,0.35)', dim: 'rgba(255,152,0,0.08)' },
-};
-
-function RiskProfilePicker({ value, onChange, t }) {
-  const options = [
-    { value: 'conservative', label: t.riskProfile.conservative },
-    { value: 'balanced',     label: t.riskProfile.balanced     },
-    { value: 'aggressive',   label: t.riskProfile.aggressive   },
-  ];
-
-  return (
-    <Box>
-      <SectionLabel>{t.riskProfile.label}</SectionLabel>
-      <Box sx={{ display: 'flex', gap: '6px' }}>
-        {options.map(o => {
-          const active = value === o.value;
-          const cfg    = RISK_CFG[o.value];
-          return (
-            <Box
-              key={o.value}
-              component="button"
-              onClick={() => onChange(o.value)}
-              sx={{
-                flex:          1,
-                py:            '7px',
-                px:            '4px',
-                border:        `1px solid ${active ? cfg.color + '80' : C.cardBorder}`,
-                borderRadius:  '2px',
-                bgcolor:       active ? cfg.dim : 'transparent',
-                color:         active ? cfg.color : C.textMuted,
-                fontFamily:    BARLOW,
-                fontSize:      '0.75rem',
-                fontWeight:    700,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                cursor:        'pointer',
-                transition:    'all 0.15s',
-                boxShadow:     active ? `0 0 12px ${cfg.glow}` : 'none',
-                '&:hover':     {
-                  borderColor: cfg.color + '60',
-                  color:       active ? cfg.color : C.textPrimary,
-                  boxShadow:   `0 0 8px ${cfg.glow}`,
-                },
-              }}
-            >
-              {o.label}
-            </Box>
-          );
-        })}
-      </Box>
-    </Box>
-  );
-}
-
 const MODEL_CFG = {
-  fast: {
-    gradient: 'linear-gradient(135deg, #0066FF 0%, #00D4FF 100%)',
-    glow:     'rgba(0,212,255,0.35)',
-    dim:      'rgba(0,102,255,0.08)',
-    color:    '#00D4FF',
-  },
   deep: {
     gradient: 'linear-gradient(135deg, #6B21A8 0%, #9333EA 100%)',
     glow:     'rgba(147,51,234,0.4)',
     dim:      'rgba(107,33,168,0.12)',
     color:    '#C084FC',
   },
+  premium: {
+    gradient: 'linear-gradient(135deg, #B45309 0%, #F59E0B 100%)',
+    glow:     'rgba(245,158,11,0.4)',
+    dim:      'rgba(180,83,9,0.12)',
+    color:    '#FCD34D',
+  },
 };
 
 function ModelPicker({ value, onChange, t }) {
   const options = [
-    { value: 'fast', label: t.modelSelect.fast },
-    { value: 'deep', label: t.modelSelect.deep },
+    { value: 'deep',    label: t.modelSelect.deep    },
+    { value: 'premium', label: t.modelSelect.premium },
   ];
 
   return (
@@ -526,8 +457,8 @@ function NoCreditsMessage({ lang }) {
 // ── Credit cost logic ─────────────────────────────────────────────────────────
 
 const BASE_COST = {
-  single:  { fast: 1,  deep: 2  },
-  parlay:  { fast: 4,  deep: 8  },
+  single:  { deep: 2, premium: 5  },
+  parlay:  { deep: 8, premium: 15 },
 };
 const WEB_INTEL_COST = 3; // only for single game
 
@@ -539,12 +470,12 @@ function calcCreditCost(mode, modelMode, webSearch) {
 
 const ACTION_LABEL = {
   en: {
-    single:  { fast: 'Single Fast Analysis', deep: 'Single Deep Analysis' },
-    parlay:  { fast: 'Parlay Fast Analysis',  deep: 'Parlay Deep Analysis'  },
+    single:  { deep: 'Single Deep Analysis', premium: 'Single Premium Analysis' },
+    parlay:  { deep: 'Parlay Deep Analysis',  premium: 'Parlay Premium Analysis'  },
   },
   es: {
-    single:  { fast: 'Análisis Single Fast', deep: 'Análisis Single Deep' },
-    parlay:  { fast: 'Análisis Parlay Fast',  deep: 'Análisis Parlay Deep'  },
+    single:  { deep: 'Análisis Single Deep', premium: 'Análisis Single Premium' },
+    parlay:  { deep: 'Análisis Parlay Deep',  premium: 'Análisis Parlay Premium'  },
   },
 };
 
@@ -665,8 +596,7 @@ export default function AnalysisPanel({
   const { isAuthenticated, token, user, updateCredits } = useAuth();
 
   const [betType,     setBetType]     = useState('all');
-  const [riskProfile, setRiskProfile] = useState('balanced');
-  const [modelMode,   setModelMode]   = useState('fast');
+  const [modelMode,   setModelMode]   = useState('deep');
   const [webSearch,   setWebSearch]   = useState(false);
   const [parlayLegs,  setParlayLegs]  = useState(2);
   const [result,      setResult]      = useState(null);
@@ -742,7 +672,7 @@ export default function AnalysisPanel({
           date:        g.gameDate?.split('T')[0],
           lang,
           betType,
-          riskProfile,
+          riskProfile: 'balanced',
           webSearch,
           model:       modelMode,
         };
@@ -753,7 +683,7 @@ export default function AnalysisPanel({
           date:        selectedGames[0]?.gameDate?.split('T')[0],
           lang,
           betType,
-          riskProfile,
+          riskProfile: 'balanced',
           webSearch,
           parlayLegs,
           model:       modelMode,
@@ -806,10 +736,12 @@ export default function AnalysisPanel({
       // Success path
       setResult(json);
       onSave?.({
-        type:   mode,
-        games:  selectedGames,
-        result: json.data,
-        date:   new Date().toISOString(),
+        type:     mode,
+        games:    selectedGames,
+        result:   json.data,
+        date:     new Date().toISOString(),
+        model:    modelMode,
+        language: lang,
       });
     } catch (e) {
       setError(e.message ?? 'Network error');
@@ -884,17 +816,7 @@ export default function AnalysisPanel({
           boxShadow:    'inset 3px 0 12px rgba(0,102,255,0.12), inset 0 0 40px rgba(0,102,255,0.02)',
         }}
       >
-        {/* Bet type + Risk profile side by side on wide screens */}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-            gap: '16px',
-          }}
-        >
-          <BetTypeSelect value={betType} onChange={setBetType} t={t} />
-          <RiskProfilePicker value={riskProfile} onChange={setRiskProfile} t={t} />
-        </Box>
+        <BetTypeSelect value={betType} onChange={setBetType} t={t} />
 
         {/* Model picker */}
         <ModelPicker value={modelMode} onChange={setModelMode} t={t} />
