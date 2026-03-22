@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon-32.png', 'hexa-logo.png'],
+      includeAssets: ['favicon-32.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'H.E.X.A. Oracle',
         short_name: 'HEXA',
