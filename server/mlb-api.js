@@ -515,6 +515,100 @@ export async function getTeamPitchingStats(teamId) {
 }
 
 // ---------------------------------------------------------------------------
+// Platoon Splits — batting stats vs LHP and vs RHP
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches a team's batting splits broken down by opposing pitcher handedness.
+ *
+ * Endpoint: /teams/{teamId}/stats?stats=statSplits&group=hitting&sitCodes=vl,vr
+ *   - sitCode "vl" → vs Left-Handed Pitcher
+ *   - sitCode "vr" → vs Right-Handed Pitcher
+ *
+ * Returns { vsLHP: { avg, obp, slg, ops }, vsRHP: { avg, obp, slg, ops } }
+ * or null if the API returns no usable data.
+ *
+ * @param {number|string} teamId
+ * @returns {Promise<{vsLHP: object, vsRHP: object}|null>}
+ */
+export async function getTeamHittingSplits(teamId) {
+  if (!teamId) return null;
+
+  // Helper to extract the four core batting metrics from a raw stat block.
+  const extractSplitStats = (stat) => ({
+    avg: stat.avg ?? null,
+    obp: stat.obp ?? null,
+    slg: stat.slg ?? null,
+    ops: stat.ops ?? null,
+    atBats: stat.atBats ?? null,
+    hits:   stat.hits   ?? null,
+    homeRuns: stat.homeRuns ?? null,
+  });
+
+  // Attempt each fallback season in order — same pattern as the rest of the module.
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url =
+        `${MLB_BASE}/teams/${teamId}/stats` +
+        `?stats=statSplits&group=hitting&season=${season}&sitCodes=vl,vr`;
+
+      const data = await fetchJSON(url);
+
+      // The API wraps results in data.stats[].splits[]; each split entry has:
+      //   split.code  → "vl" | "vr"
+      //   split.description → "vs. Left" | "vs. Right" (varies by API version)
+      //   stat → the batting stat block
+      const splitsBlock = (data.stats ?? []).find(
+        s => s.type?.displayName === 'statSplits' || s.group?.displayName === 'hitting'
+      );
+
+      const rawSplits = splitsBlock?.splits ?? data.stats?.[0]?.splits ?? [];
+
+      if (rawSplits.length === 0) {
+        console.log(`[MLB API] Season ${season} returned no platoon splits for team ${teamId} — trying next`);
+        continue;
+      }
+
+      // Identify vs-Left and vs-Right entries by split code or description.
+      const vsLeft = rawSplits.find(s => {
+        const code = (s.split?.code ?? '').toLowerCase();
+        const desc = (s.split?.description ?? '').toLowerCase();
+        return code === 'vl' || desc.includes('vs. left') || desc.includes('vs left');
+      });
+
+      const vsRight = rawSplits.find(s => {
+        const code = (s.split?.code ?? '').toLowerCase();
+        const desc = (s.split?.description ?? '').toLowerCase();
+        return code === 'vr' || desc.includes('vs. right') || desc.includes('vs right');
+      });
+
+      if (!vsLeft && !vsRight) {
+        console.log(`[MLB API] Season ${season} splits found but no vl/vr entries for team ${teamId} — trying next`);
+        continue;
+      }
+
+      const result = {
+        season,
+        vsLHP: vsLeft  ? extractSplitStats(vsLeft.stat  ?? {}) : null,
+        vsRHP: vsRight ? extractSplitStats(vsRight.stat ?? {}) : null,
+      };
+
+      console.log(
+        `[MLB API] Team ${teamId} platoon splits loaded (season ${season})` +
+        ` vsLHP AVG:${result.vsLHP?.avg ?? 'N/A'} vsRHP AVG:${result.vsRHP?.avg ?? 'N/A'}`
+      );
+      return result;
+
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} platoon splits failed for team ${teamId}: ${err.message}`);
+    }
+  }
+
+  console.warn(`[MLB API] No platoon splits found for team ${teamId} in seasons: ${SEASON_FALLBACK.join(', ')}`);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Función auxiliar mantenida para compatibilidad con context-builder.js
 // ---------------------------------------------------------------------------
 

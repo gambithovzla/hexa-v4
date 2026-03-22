@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 
@@ -254,7 +254,16 @@ function pitcherBlock(label, pitcherData, probablePitcher) {
 // Bloque ofensivo (texto)
 // ---------------------------------------------------------------------------
 
-function offenseBlock(label, hittingData, teamName) {
+/**
+ * Builds the offensive context block for one team.
+ *
+ * @param {string}      label        — 'HOME' | 'AWAY'
+ * @param {object|null} hittingData  — season overall stats from getTeamHittingHistoricalStats()
+ * @param {string}      teamName     — display name of the team
+ * @param {object|null} splitsData   — result of getTeamHittingSplits() { vsLHP, vsRHP }
+ * @param {string|null} rivalHand    — throwing hand of the opposing starter: 'L', 'R', or null
+ */
+function offenseBlock(label, hittingData, teamName, splitsData = null, rivalHand = null) {
   const lines = [section(`${label} OFFENSE (Season)`)];
 
   if (!hittingData?.stats) {
@@ -269,6 +278,42 @@ function offenseBlock(label, hittingData, teamName) {
     `HR: ${fmt.int(s.homeRuns)} | R: ${fmt.int(s.runs)} | RBI: ${fmt.int(s.rbi)} | SB: ${fmt.int(s.stolenBases)}`,
     `K: ${fmt.int(s.strikeOuts)} | BB: ${fmt.int(s.baseOnBalls)} | LOB: ${fmt.int(s.leftOnBase)} | G: ${fmt.int(s.gamesPlayed)}`,
   );
+
+  // ── Platoon Splits cross-match ─────────────────────────────────────────────
+  // If we know the rival pitcher's hand, inject the specific split stats.
+  // Fallback: show both splits when hand is unknown but splits data is available.
+  if (splitsData) {
+    if (rivalHand === 'L' && splitsData.vsLHP) {
+      const sp = splitsData.vsLHP;
+      lines.push(
+        `[PLATOON SPLIT — vs LHP (Matchup)] AVG: ${fmt.stat(sp.avg)} | OBP: ${fmt.stat(sp.obp)} | SLG: ${fmt.stat(sp.slg)} | OPS: ${fmt.stat(sp.ops)}` +
+        (sp.atBats ? ` | AB: ${sp.atBats}` : '') +
+        ` ← ORACLE: use these figures, not the season overall above`
+      );
+    } else if (rivalHand === 'R' && splitsData.vsRHP) {
+      const sp = splitsData.vsRHP;
+      lines.push(
+        `[PLATOON SPLIT — vs RHP (Matchup)] AVG: ${fmt.stat(sp.avg)} | OBP: ${fmt.stat(sp.obp)} | SLG: ${fmt.stat(sp.slg)} | OPS: ${fmt.stat(sp.ops)}` +
+        (sp.atBats ? ` | AB: ${sp.atBats}` : '') +
+        ` ← ORACLE: use these figures, not the season overall above`
+      );
+    } else if (!rivalHand) {
+      // Rival hand unknown — expose both so the Oracle at least has context.
+      if (splitsData.vsLHP) {
+        const sp = splitsData.vsLHP;
+        lines.push(
+          `[PLATOON SPLIT — vs LHP (pitcher hand TBD)] AVG: ${fmt.stat(sp.avg)} | OBP: ${fmt.stat(sp.obp)} | SLG: ${fmt.stat(sp.slg)} | OPS: ${fmt.stat(sp.ops)}`
+        );
+      }
+      if (splitsData.vsRHP) {
+        const sp = splitsData.vsRHP;
+        lines.push(
+          `[PLATOON SPLIT — vs RHP (pitcher hand TBD)] AVG: ${fmt.stat(sp.avg)} | OBP: ${fmt.stat(sp.obp)} | SLG: ${fmt.stat(sp.slg)} | OPS: ${fmt.stat(sp.ops)}`
+        );
+      }
+    }
+    // rivalHand defined but no matching split entry → fall through silently (overall already shown).
+  }
 
   return lines.join('\n');
 }
@@ -575,6 +620,20 @@ export async function buildContext(gameData, oddsData = null) {
   try { awayHitting      = away?.id      ? await getTeamHittingHistoricalStats(away.id)      : null; } catch (_) {}
   try { awayPitcherStats = awayPitcher?.id ? await getPitcherHistoricalStats(awayPitcher.id) : null; } catch (_) {}
 
+  // ── Platoon splits (parallel, non-blocking) ─────────────────────────────────
+  let homeSplits = null;
+  let awaySplits = null;
+  try {
+    const [homeSplitsResult, awaySplitsResult] = await Promise.all([
+      home?.id ? getTeamHittingSplits(home.id) : Promise.resolve(null),
+      away?.id ? getTeamHittingSplits(away.id) : Promise.resolve(null),
+    ]);
+    homeSplits = homeSplitsResult;
+    awaySplits = awaySplitsResult;
+  } catch (err) {
+    console.warn('[context-builder] Platoon splits unavailable — continuing without split data:', err.message);
+  }
+
   const [homeTeamVerifyResult, awayTeamVerifyResult] = await Promise.allSettled([
     homePitcher?.id ? getCurrentTeam(homePitcher.id) : Promise.resolve(null),
     awayPitcher?.id ? getCurrentTeam(awayPitcher.id) : Promise.resolve(null),
@@ -753,10 +812,15 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push(buildBullpenBlock(homeName, awayName, homePitching, awayPitching));
   blocks.push('');
 
-  // Ofensiva
-  blocks.push(offenseBlock('HOME', homeHitting, homeName));
+  // Ofensiva — cross-matched with rival pitcher's throwing hand for platoon splits
+  // Home offense faces the Away pitcher → use awayPitcher.throwingHand
+  // Away offense faces the Home pitcher → use homePitcher.throwingHand
+  const homePitcherHand = homePitcher?.throwingHand ?? null;  // hand of HOME starter (faces Away batters)
+  const awayPitcherHand = awayPitcher?.throwingHand ?? null;  // hand of AWAY starter (faces Home batters)
+
+  blocks.push(offenseBlock('HOME', homeHitting, homeName, homeSplits, awayPitcherHand));
   blocks.push('');
-  blocks.push(offenseBlock('AWAY', awayHitting, awayName));
+  blocks.push(offenseBlock('AWAY', awayHitting, awayName, awaySplits, homePitcherHand));
   blocks.push('');
 
   // Flags situacionales
