@@ -90,6 +90,31 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS clv                   DECIMAL(5,2)`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS odds_details          JSONB`);
 
+    // ── odds_snapshots (P7 — Line Movement Tracking) ──────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS odds_snapshots (
+        id                   SERIAL       PRIMARY KEY,
+        game_id              VARCHAR(100) NOT NULL,
+        game_date            DATE         NOT NULL,
+        home_team            VARCHAR(100),
+        away_team            VARCHAR(100),
+        moneyline_home       INTEGER,
+        moneyline_away       INTEGER,
+        run_line_home        DECIMAL(3,1),
+        run_line_home_price  INTEGER,
+        run_line_away        DECIMAL(3,1),
+        run_line_away_price  INTEGER,
+        total                DECIMAL(4,1),
+        over_price           INTEGER,
+        under_price          INTEGER,
+        captured_at          TIMESTAMP    DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_snapshots_game_date ON odds_snapshots(game_id, game_date)
+    `);
+
     await client.query('COMMIT');
     console.log('[H.E.X.A.] Database migrations applied successfully');
   } catch (err) {
