@@ -214,11 +214,53 @@ export default function useHistory() {
     }
   }
 
+  // ── deletePick ─────────────────────────────────────────────────────────────
+
+  async function deletePick(id) {
+    if (!isAuthenticated || !token) {
+      setHistory(prev => {
+        const next = prev.filter(e => e.id !== id);
+        save(next);
+        return next;
+      });
+      return;
+    }
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/picks/${id}`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success) {
+        setHistory(prev => prev.filter(e => e.id !== id));
+      }
+    } catch {
+      // ignore network errors
+    }
+  }
+
   // ── clearHistory ───────────────────────────────────────────────────────────
 
-  function clearHistory() {
-    setHistory([]);
-    if (!isAuthenticated) save([]);
+  async function clearHistory() {
+    if (!isAuthenticated || !token) {
+      setHistory([]);
+      save([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/picks`, {
+        method:  'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success) {
+        setHistory([]);
+      }
+    } catch {
+      // ignore network errors
+    }
   }
 
   // ── getStats ───────────────────────────────────────────────────────────────
@@ -233,5 +275,5 @@ export default function useHistory() {
     return { total, wins, losses, pending, winRate };
   }
 
-  return { history, addPick, markResult, clearHistory, getStats };
+  return { history, addPick, markResult, deletePick, clearHistory, getStats };
 }
