@@ -11,6 +11,7 @@ import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTea
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
+import { getLineMovement } from './line-movement.js';
 
 // ---------------------------------------------------------------------------
 // Historical MLB context (static reference data for Spring Training + early season)
@@ -965,6 +966,18 @@ export async function buildContext(gameData, oddsData = null) {
   });
   console.log(`[context-builder] Signal Coherence Score: ${signalCoherence.coherenceScore}/100 — ${signalCoherence.dominantDirection} (${signalCoherence.overSignals}O/${signalCoherence.underSignals}U/${signalCoherence.neutralSignals}N)`);
 
+  // ── Line Movement (P7 — from odds_snapshots) ──────────────────────────────
+  let lineMovement = null;
+  try {
+    const gameDate = (gameData.gameDate ?? new Date().toISOString()).split('T')[0];
+    lineMovement = await getLineMovement(homeName, awayName, gameDate);
+    if (lineMovement) {
+      console.log(`[context-builder] Line movement: ${lineMovement.snapshots_count} snapshots, sharp=${lineMovement.sharp_signal}, dir=${lineMovement.direction}`);
+    }
+  } catch (err) {
+    console.warn('[context-builder] Line movement fetch failed — continuing:', err.message);
+  }
+
   // ── DEBUG: log assembled data before building context string ───────────────
   console.log('=== CONTEXT BUILDER DEBUG ===');
   console.log('MLB Stats data keys:', Object.keys({
@@ -1144,6 +1157,33 @@ export async function buildContext(gameData, oddsData = null) {
       `batters: ${savantCacheStatus.recordCounts.xStatsBatter} pitchers: ${savantCacheStatus.recordCounts.xStatsPitcher}]`
     );
     blocks.push('');
+  }
+
+  // Line Movement (injected when at least 2 snapshots exist for this game)
+  if (lineMovement && lineMovement.snapshots_count >= 2) {
+    const am = (n) => (n == null ? 'N/A' : n > 0 ? `+${n}` : String(n));
+    const mv = (n) => (n == null ? 'N/A' : n > 0 ? `+${n}` : String(n));
+    const { opening: op, current: cu, movement_ml_home, movement_ml_away, movement_total, sharp_signal, direction, snapshots_count, hours_tracked } = lineMovement;
+
+    blocks.push('');
+    blocks.push('=== LINE MOVEMENT ===');
+    blocks.push(`Snapshots: ${snapshots_count} captures over ${hours_tracked} hours`);
+    blocks.push(`Opening Line: HOME ${am(op.moneyline_home)} / AWAY ${am(op.moneyline_away)} | Total ${op.total ?? 'N/A'}`);
+    blocks.push(`Current Line: HOME ${am(cu.moneyline_home)} / AWAY ${am(cu.moneyline_away)} | Total ${cu.total ?? 'N/A'}`);
+
+    const mlMoveStr = movement_ml_home != null
+      ? `HOME ML moved ${Math.abs(movement_ml_home)} cents${sharp_signal && Math.abs(movement_ml_home) >= 15 ? ' (sharp money detected)' : ''}`
+      : 'HOME ML no movement';
+
+    blocks.push(`Movement: ${mlMoveStr}`);
+    if (movement_total != null) {
+      blocks.push(`Total moved: ${mv(movement_total)} (from ${op.total ?? 'N/A'} to ${cu.total ?? 'N/A'})`);
+    }
+    if (sharp_signal && direction) {
+      const side = direction === 'sharp on home' ? 'HOME' : 'AWAY';
+      blocks.push(`⚠️ SHARP SIGNAL: Significant line movement on ${side} — indicates professional money.`);
+    }
+    blocks.push('=== END LINE MOVEMENT ===');
   }
 
   // Market odds (injected when The Odds API data is available)

@@ -15,6 +15,7 @@ import pool from './db.js';
 import lemonRouter from './lemon.js';
 import { resolvePendingPicks } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
+import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 
 dotenv.config();
 
@@ -443,6 +444,23 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/odds/movement — line movement data for a specific game
+app.get('/api/odds/movement', verifyToken, async (req, res) => {
+  try {
+    const { home, away, date } = req.query;
+    if (!home || !away || !date) {
+      return res.status(400).json({ success: false, error: 'home, away and date query params are required' });
+    }
+    const movement = await getLineMovement(home, away, date);
+    if (!movement) {
+      return res.json({ success: true, data: null, message: 'Not enough snapshots for line movement (need at least 2)' });
+    }
+    res.json({ success: true, data: movement });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Startup: run migrations → seed admin → start server ───────────────────────
 runMigrations()
   .then(() => seedAdminUser())
@@ -477,6 +495,24 @@ runMigrations()
             console.warn('[H.E.X.A.] Scheduled Statcast refresh failed:', err.message);
           });
       }, SIX_HOURS).unref();
+
+      // ── Line movement snapshot: every 3 hours between 9am–7pm ET ────────
+      const THREE_HOURS = 3 * 60 * 60 * 1000;
+      setInterval(() => {
+        const etHour = parseInt(
+          new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric', hour12: false, timeZone: 'America/New_York',
+          }).format(new Date()),
+          10
+        );
+        // Window: 09:00–18:59 ET (lines open in the morning, games start ~18:00+)
+        if (etHour >= 9 && etHour < 19) {
+          console.log(`[line-movement] Scheduled snapshot triggered (ET hour: ${etHour})`);
+          captureOddsSnapshot().catch(err => {
+            console.error('[line-movement] Scheduled snapshot failed:', err.message);
+          });
+        }
+      }, THREE_HOURS).unref();
 
       // ── Pick resolver: every 30 min between 10pm–3am ET ──────────────────
       const THIRTY_MIN = 30 * 60 * 1000;
