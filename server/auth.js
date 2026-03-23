@@ -140,8 +140,30 @@ router.post('/register', async (req, res) => {
       [id, normalizedEmail, passwordHash, 5]
     );
 
-    const newUser = rows[0];
-    const token   = signToken(newUser);
+    let newUser = rows[0];
+
+    // Claim any pending BMC credits for this email
+    const pending = await pool.query(
+      'SELECT id, credits FROM pending_credits WHERE email = $1 AND claimed = false',
+      [normalizedEmail]
+    );
+    if (pending.rows.length > 0) {
+      const totalPending = pending.rows.reduce((sum, r) => sum + r.credits, 0);
+      const pendingIds   = pending.rows.map(r => r.id);
+
+      const updated = await pool.query(
+        'UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING id, email, credits, created_at',
+        [totalPending, newUser.id]
+      );
+      await pool.query(
+        'UPDATE pending_credits SET claimed = true WHERE id = ANY($1)',
+        [pendingIds]
+      );
+      newUser = updated.rows[0];
+      console.log(`[auth] Claimed ${totalPending} pending BMC credits for ${normalizedEmail}`);
+    }
+
+    const token = signToken(newUser);
     return res.status(201).json({ token, user: safeUser(newUser) });
   } catch (err) {
     console.error('[auth] register error:', err.message);
