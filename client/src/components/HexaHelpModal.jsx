@@ -169,7 +169,6 @@ function TabModes({ lang }) {
 function TabCredits({ lang }) {
   const isEs = lang === 'es';
   const plans = [
-    { plan: isEs ? 'Free'       : 'Free',        credits: isEs ? '5 al registrarse' : '5 on signup', price: isEs ? 'Gratis' : 'Free'  },
     { plan: 'HEXA Rookie',                        credits: '15',                                        price: '$7.99'                   },
     { plan: 'HEXA All-Star',                      credits: '50',                                        price: '$19.99',   highlight: true },
     { plan: 'HEXA MVP',                           credits: '120',                                       price: '$39.99'                  },
