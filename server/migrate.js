@@ -82,6 +82,14 @@ export async function runMigrations() {
         ADD COLUMN IF NOT EXISTS pick_id INTEGER REFERENCES picks(id) ON DELETE SET NULL
     `);
 
+    // ── CLV tracking columns (safe for existing DBs) ──────────────────────────
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS odds_at_pick         INTEGER`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS implied_prob_at_pick DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS closing_odds          INTEGER`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS implied_prob_closing  DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS clv                   DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS odds_details          JSONB`);
+
     await client.query('COMMIT');
     console.log('[H.E.X.A.] Database migrations applied successfully');
   } catch (err) {
