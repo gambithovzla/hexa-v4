@@ -550,9 +550,13 @@ export async function getPitcherStatcast(playerName) {
     xSLG_against:  parseFloat(xs?.xSLG  ?? xs?.['xslg']  ?? '') || null,
     wOBA_against:  parseFloat(xs?.wOBA  ?? xs?.['woba']  ?? '') || null,
     // Plate discipline
-    whiff_percent: parseFloat(xs?.['whiff_percent'] ?? xs?.['swstr_percent'] ?? '') || null,
-    k_percent:     parseFloat(xs?.['k_percent']     ?? xs?.['strikeout_percent'] ?? '') || null,
-    bb_percent:    parseFloat(xs?.['bb_percent']    ?? xs?.['walk_percent'] ?? '') || null,
+    whiff_percent:     parseFloat(xs?.['whiff_percent']      ?? xs?.['swstr_percent']        ?? '') || null,
+    k_percent:         parseFloat(xs?.['k_percent']          ?? xs?.['strikeout_percent']    ?? '') || null,
+    bb_percent:        parseFloat(xs?.['bb_percent']         ?? xs?.['walk_percent']         ?? '') || null,
+    // Deep K props metrics — multiple fallback keys per field (Savant changes column names between seasons)
+    csw_percent:       parseFloat(xs?.['csw_percent']        ?? xs?.['csw_rate']             ?? xs?.['called_plus_whiff_pct'] ?? '') || null,
+    o_swing_percent:   parseFloat(xs?.['o_swing_percent']    ?? xs?.['chase_percent']        ?? xs?.['chase_rate']           ?? xs?.['oz_swing_percent'] ?? '') || null,
+    z_contact_percent: parseFloat(xs?.['z_contact_percent']  ?? xs?.['zone_contact_pct']    ?? '') || null,
     // Pitch arsenal (existing)
     arsenal: pa ? extractArsenal(pa) : null,
     // Best single-pitch run value
