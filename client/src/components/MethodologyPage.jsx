@@ -624,6 +624,76 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
       {/* ── Divider ── */}
       <Box sx={{ borderTop: `1px solid ${C.border}` }} />
 
+      {/* ── Data Integrity ── */}
+      <section style={{ maxWidth: 1100, margin: '0 auto', padding: '6rem 2rem' }}>
+        <div style={{ marginBottom: '0.75rem', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#00d4ff' }}>
+          {lang === 'es' ? '03 — INTEGRIDAD DE DATOS' : '03 — DATA INTEGRITY'}
+        </div>
+        <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', color: '#fff', lineHeight: 1.1, marginBottom: '1rem' }}>
+          {lang === 'es' ? <>Si los datos son incompletos,<br/>la confianza baja. Siempre.</> : <>If data is incomplete,<br/>confidence drops. Always.</>}
+        </h2>
+        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: 'rgba(232,237,244,0.5)', maxWidth: 600, marginBottom: '3rem' }}>
+          {lang === 'es'
+            ? 'Antes de cada análisis, H.E.X.A. calcula un score de calidad de datos (0-100) que determina qué tipos de apuesta están disponibles y cuánto se penaliza la confianza. Sin teatro.'
+            : 'Before every analysis, H.E.X.A. calculates a data quality score (0-100) that determines which bet types are available and how much confidence is penalized. No theater.'}
+        </p>
+        <div style={{ background: '#0f2035', border: '1px solid rgba(0,212,255,0.12)', borderRadius: 16, padding: '3rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 1, background: 'rgba(0,212,255,0.12)', borderRadius: 8, overflow: 'hidden' }}>
+            {/* FULL */}
+            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#4ade80', marginBottom: '0.5rem' }}>80-100</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS COMPLETO' : 'FULL ANALYSIS'}
+              </div>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+                {lang === 'es'
+                  ? 'Todos los datos disponibles. Todos los tipos de apuesta habilitados. Máxima confianza.'
+                  : 'All data available. All bet types enabled. Maximum confidence.'}
+              </p>
+            </div>
+            {/* STANDARD */}
+            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#00d4ff', marginBottom: '0.5rem' }}>60-79</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS ESTÁNDAR' : 'STANDARD ANALYSIS'}
+              </div>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+                {lang === 'es'
+                  ? 'Props solo con datos Statcast confirmados del jugador. Confianza ajustada.'
+                  : 'Props only with confirmed player Statcast data. Adjusted confidence.'}
+              </p>
+            </div>
+            {/* LIMITED */}
+            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#f0c040', marginBottom: '0.5rem' }}>40-59</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS LIMITADO' : 'LIMITED ANALYSIS'}
+              </div>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+                {lang === 'es'
+                  ? 'Solo Moneyline y Over/Under. Confianza penalizada -15%. Riesgo elevado.'
+                  : 'Moneyline and Over/Under only. Confidence penalized -15%. Elevated risk.'}
+              </p>
+            </div>
+            {/* MINIMAL */}
+            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#f87171', marginBottom: '0.5rem' }}>0-39</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS MÍNIMO' : 'MINIMAL ANALYSIS'}
+              </div>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+                {lang === 'es'
+                  ? 'Solo Moneyline. Confianza -25%. Riesgo alto obligatorio. Máxima transparencia.'
+                  : 'Moneyline only. Confidence -25%. High risk mandatory. Maximum transparency.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Divider ── */}
+      <Box sx={{ borderTop: `1px solid ${C.border}` }} />
+
       {/* ── Process ── */}
       <Section>
         <SectionLabel>{t.processTitle}</SectionLabel>
