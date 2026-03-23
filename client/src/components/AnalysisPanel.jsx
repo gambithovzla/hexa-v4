@@ -49,7 +49,8 @@ const L = {
       moneyline:  'Moneyline',
       runline:    'Run Line',
       totals:     'Over/Under',
-      playerprops:'Player Props',
+      pitcherprops:'🔥 Pitcher Props (Strikeouts)',
+      batterprops: '🦇 Batter Props (HR, Hits)',
     },
     modelSelect: {
       label:   'Analysis Model',
@@ -87,7 +88,8 @@ const L = {
       moneyline:  'Moneyline',
       runline:    'Línea de Carreras',
       totals:     'Totales (O/U)',
-      playerprops:'Props de Jugador',
+      pitcherprops:'🔥 Pitcher Props (Ponches)',
+      batterprops: '🦇 Batter Props (HR, Hits)',
     },
     modelSelect: {
       label:   'Modelo de Análisis',
@@ -160,7 +162,8 @@ function BetTypeSelect({ value, onChange, t }) {
     { value: 'moneyline',   label: t.betType.moneyline   },
     { value: 'runline',     label: t.betType.runline      },
     { value: 'totals',      label: t.betType.totals       },
-    { value: 'playerprops', label: t.betType.playerprops  },
+    { value: 'Pitcher Props', label: t.betType.pitcherprops },
+    { value: 'Batter Props',  label: t.betType.batterprops  },
   ];
 
   return (
