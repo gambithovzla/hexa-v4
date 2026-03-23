@@ -386,9 +386,41 @@ function HelpButton({ lang }) {
   );
 }
 
+// ── Methodology link ──────────────────────────────────────────────────────────
+
+function MethodologyLink({ lang, onClick }) {
+  const label = lang === 'es' ? 'Metodología' : 'Methodology';
+  return (
+    <Box
+      component="button"
+      onClick={onClick}
+      sx={{
+        px:            '12px',
+        py:            '5px',
+        border:        `1px solid ${C.border}`,
+        borderRadius:  '2px',
+        bgcolor:       'transparent',
+        color:         C.textMuted,
+        fontFamily:    BARLOW,
+        fontSize:      '0.72rem',
+        fontWeight:    700,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        cursor:        'pointer',
+        whiteSpace:    'nowrap',
+        flexShrink:    0,
+        transition:    'all 0.15s',
+        '&:hover':     { color: C.accentSec, borderColor: C.accent, bgcolor: C.accentFade },
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false }) {
+export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology }) {
   return (
     <Box
       component="header"
@@ -444,6 +476,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Auth button / user pill */}
         <AuthButton lang={lang} />
+
+        {/* Methodology link */}
+        <MethodologyLink lang={lang} onClick={onMethodology} />
 
         {/* Help button */}
         <HelpButton lang={lang} />

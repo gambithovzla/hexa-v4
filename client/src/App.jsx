@@ -22,6 +22,7 @@ import AnalysisPanel        from './components/AnalysisPanel';
 import HistoryPanel         from './components/HistoryPanel';
 import BankrollTracker      from './components/BankrollTracker';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
+import MethodologyPage      from './components/MethodologyPage';
 import useHistory           from './hooks/useHistory';
 
 const muiTheme = createTheme(themeConfig);
@@ -67,15 +68,26 @@ function AppFooter() {
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [lang,         setLang]         = useState('en');
-  const [activeTab,    setActiveTab]    = useState('game');
-  const [singleGame,   setSingleGame]   = useState(null);
-  const [parlayGames,  setParlayGames]  = useState([]);
-  const [isAnalyzing,  setIsAnalyzing]  = useState(false);
+  const [lang,              setLang]              = useState('en');
+  const [activeTab,         setActiveTab]         = useState('game');
+  const [singleGame,        setSingleGame]        = useState(null);
+  const [parlayGames,       setParlayGames]       = useState([]);
+  const [isAnalyzing,       setIsAnalyzing]       = useState(false);
+  const [showMethodology,   setShowMethodology]   = useState(false);
 
   // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
   // HistoryPanel reads history via its own hook instance (remounts each visit).
   const { addPick } = useHistory();
+
+  // Render Methodology as a full-page takeover (no tab, no header)
+  if (showMethodology) {
+    return (
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
+        <MethodologyPage lang={lang} onBack={() => setShowMethodology(false)} />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={muiTheme}>
@@ -98,6 +110,7 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={isAnalyzing ? () => {} : setActiveTab}
           disabled={isAnalyzing}
+          onMethodology={() => setShowMethodology(true)}
         />
 
         {/* ── Main content ── */}
