@@ -9,6 +9,7 @@
  *   onBack — () => void  (returns user to main app)
  */
 
+import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 
 // ── Fonts / colours ──────────────────────────────────────────────────────────
@@ -175,6 +176,17 @@ const COPY = {
     footerLine: 'H.E.X.A. Hybrid Expert X-Analysis · Desarrollado por Gambitho Labs',
   },
 };
+
+// ── Signal hierarchy data ─────────────────────────────────────────────────────
+
+const SIGNAL_HIERARCHY = [
+  { level: '01', name: 'CONTACTO REAL',      desc: 'Datos Statcast de la temporada actual: calidad de contacto medida, no estimada. Es la señal más predictiva que existe en baseball.',                                                                                       descEn: 'Current season Statcast data: measured contact quality, not estimated. The most predictive signal in baseball.',                                              weight: 95 },
+  { level: '02', name: 'FORMA INMEDIATA',    desc: 'Rendimiento en ventanas de 7 y 14 días. Cuando un bateador está en racha o un pitcher en crisis, esto domina sobre los promedios.',                                                                                        descEn: 'Performance in 7 and 14-day windows. When a batter is hot or a pitcher is struggling, this dominates over averages.',                                        weight: 80 },
+  { level: '03', name: 'TEMPORADA COMPLETA', desc: 'Promedios estabilizados de la temporada. Sirven como ancla cuando los datos de corto plazo son ruidosos o la muestra es pequeña.',                                                                                         descEn: 'Stabilized season averages. They serve as an anchor when short-term data is noisy or sample size is small.',                                                  weight: 65 },
+  { level: '04', name: 'TENDENCIA HISTÓRICA',desc: 'Comparación multi-año. Detecta regresiones, breakouts y cambios de perfil. Contexto — nunca anula los datos actuales.',                                                                                                   descEn: 'Multi-year comparison. Detects regressions, breakouts and profile changes. Context — never overrides current data.',                                          weight: 45 },
+  { level: '05', name: 'MERCADO DE ODDS',    desc: 'Las líneas de las casas de apuesta representan la opinión agregada del mercado. H.E.X.A. las usa para encontrar gaps de valor, no para validar picks.',                                                                    descEn: 'Sportsbook lines represent the aggregated market opinion. H.E.X.A. uses them to find value gaps, not to validate picks.',                                     weight: 30 },
+  { level: '06', name: 'ENTORNO FÍSICO',     desc: 'Clima y park factors son modificadores obligatorios. Un análisis sin considerar viento a favor en Wrigley está incompleto.',                                                                                               descEn: 'Weather and park factors are mandatory modifiers. An analysis without considering tailwind at Wrigley is incomplete.',                                        weight: 20 },
+];
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -417,6 +429,7 @@ function SectionTitle({ children }) {
 
 export default function MethodologyPage({ lang = 'en', onBack }) {
   const t = COPY[lang] ?? COPY.en;
+  const [activeLevel, setActiveLevel] = useState(0);
 
   return (
     <Box
@@ -555,6 +568,58 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
           ))}
         </Box>
       </Section>
+
+      {/* ── Divider ── */}
+      <Box sx={{ borderTop: `1px solid ${C.border}` }} />
+
+      {/* ── Signal Hierarchy ── */}
+      <section style={{ maxWidth: 1100, margin: '0 auto', padding: '6rem 2rem' }}>
+        <div style={{ marginBottom: '0.75rem', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#00d4ff' }}>
+          {lang === 'es' ? '02 — JERARQUÍA DE SEÑALES' : '02 — SIGNAL HIERARCHY'}
+        </div>
+        <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', color: '#fff', lineHeight: 1.1, marginBottom: '1rem' }}>
+          {lang === 'es' ? <>Cuando los datos se contradicen,<br/>H.E.X.A. sabe cuál manda.</> : <>When data conflicts,<br/>H.E.X.A. knows which signal wins.</>}
+        </h2>
+        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: 'rgba(232,237,244,0.5)', maxWidth: 600, marginBottom: '3rem' }}>
+          {lang === 'es' ? 'No todas las señales pesan igual. Este es el orden de prioridad que resuelve conflictos entre datos.' : 'Not all signals carry equal weight. This is the priority order that resolves data conflicts.'}
+        </p>
+        <div style={{ display: 'flex', gap: '3rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {SIGNAL_HIERARCHY.map((h, i) => (
+              <div key={i} onClick={() => setActiveLevel(i)} style={{
+                display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem',
+                borderRadius: 8, cursor: 'pointer', border: '1px solid transparent',
+                background: activeLevel === i ? '#0f2035' : 'transparent',
+                borderColor: activeLevel === i ? 'rgba(0,212,255,0.12)' : 'transparent',
+                transition: 'all 0.3s ease',
+              }}>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.5rem', color: activeLevel === i ? '#00d4ff' : 'rgba(232,237,244,0.15)', minWidth: 36, transition: 'color 0.3s ease' }}>{h.level}</span>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '0.9rem', letterSpacing: 1.5, color: activeLevel === i ? '#fff' : 'rgba(232,237,244,0.5)', transition: 'color 0.3s ease' }}>{h.name}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, background: '#0f2035', border: '1px solid rgba(0,212,255,0.12)', borderRadius: 12, padding: '2.5rem', position: 'relative', overflow: 'hidden', minHeight: 240, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 280 }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, width: 3, height: '100%', background: 'linear-gradient(to bottom, #00d4ff, transparent)' }} />
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 3, textTransform: 'uppercase', color: '#00d4ff', marginBottom: '0.75rem' }}>
+              {lang === 'es' ? 'PRIORIDAD' : 'PRIORITY'} {SIGNAL_HIERARCHY[activeLevel].level}
+            </div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.8rem', color: '#fff', marginBottom: '1rem' }}>
+              {SIGNAL_HIERARCHY[activeLevel].name}
+            </div>
+            <p style={{ fontSize: '0.95rem', lineHeight: 1.8, color: 'rgba(232,237,244,0.6)', maxWidth: 480 }}>
+              {lang === 'es' ? SIGNAL_HIERARCHY[activeLevel].desc : SIGNAL_HIERARCHY[activeLevel].descEn}
+            </p>
+            <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, height: 4, background: 'rgba(232,237,244,0.08)', borderRadius: 4, overflow: 'hidden', maxWidth: 200 }}>
+                <div style={{ height: '100%', width: `${SIGNAL_HIERARCHY[activeLevel].weight}%`, background: 'linear-gradient(90deg, #00d4ff, #f0c040)', borderRadius: 4, transition: 'width 0.6s ease' }} />
+              </div>
+              <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '0.8rem', color: 'rgba(232,237,244,0.35)', letterSpacing: 1 }}>
+                {lang === 'es' ? 'PESO RELATIVO' : 'RELATIVE WEIGHT'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ── Divider ── */}
       <Box sx={{ borderTop: `1px solid ${C.border}` }} />
