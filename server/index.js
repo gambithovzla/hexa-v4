@@ -493,6 +493,30 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
   }
 });
 
+// DELETE /api/picks/:id — elimina un pick individual del historial
+app.delete('/api/picks/:id', verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'DELETE FROM picks WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
+    res.json({ success: true, id: rows[0].id });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/picks — elimina todo el historial del usuario autenticado
+app.delete('/api/picks', verifyToken, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM picks WHERE user_id = $1', [req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/odds/movement — line movement data for a specific game
 app.get('/api/odds/movement', verifyToken, async (req, res) => {
   try {

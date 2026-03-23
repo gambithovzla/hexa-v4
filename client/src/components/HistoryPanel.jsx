@@ -114,7 +114,7 @@ function ModeBadge({ mode }) {
   );
 }
 
-function PickCard({ entry, onMarkResult, t }) {
+function PickCard({ entry, onMarkResult, onDelete, t }) {
   const borderColor = resultBorderColor(entry.result);
   const badgeSx     = resultBadgeSx(entry.result);
   const resultLabel = t.history.result?.[entry.result] ?? entry.result.toUpperCase();
@@ -131,6 +131,14 @@ function PickCard({ entry, onMarkResult, t }) {
         <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: C.textMuted, flex: 1 }}>{dateStr}</Typography>
         <Box sx={{ ...badgeSx, px: '8px', py: '2px', borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
           {resultLabel}
+        </Box>
+        <Box
+          component="button"
+          onClick={() => onDelete(entry.id)}
+          title="Eliminar pick"
+          sx={{ ml: '4px', px: '6px', py: '2px', border: `1px solid transparent`, borderRadius: '2px', bgcolor: 'transparent', color: C.textMuted, fontFamily: BARLOW, fontSize: '0.75rem', lineHeight: 1, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0, '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}
+        >
+          ✕
         </Box>
       </Box>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.9rem', fontWeight: 700, color: C.textPrimary, lineHeight: 1.3 }}>
@@ -172,19 +180,19 @@ function MarkBtn({ label, color, dim, onClick }) {
 function AnalisisTab({ lang }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
   const { isAuthenticated } = useAuth();
-  const { history, markResult, clearHistory, getStats } = useHistory();
+  const { history, markResult, deletePick, clearHistory, getStats } = useHistory();
   const stats = getStats();
   const [confirming, setConfirming] = useState(false);
   const confirmTimeout = useRef(null);
 
-  function handleClearClick() {
+  async function handleClearClick() {
     if (!confirming) {
       setConfirming(true);
       confirmTimeout.current = setTimeout(() => setConfirming(false), 3500);
     } else {
       clearTimeout(confirmTimeout.current);
-      clearHistory();
       setConfirming(false);
+      await clearHistory();
     }
   }
 
@@ -219,7 +227,7 @@ function AnalisisTab({ lang }) {
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {history.map(entry => (
-            <PickCard key={entry.id} entry={entry} onMarkResult={markResult} t={t} />
+            <PickCard key={entry.id} entry={entry} onMarkResult={markResult} onDelete={deletePick} t={t} />
           ))}
         </Box>
       )}
