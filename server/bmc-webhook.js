@@ -31,24 +31,28 @@ function resolveCredits(extras) {
 
 export async function handleBMCWebhook(req, res) {
   try {
-    // 1. Verify HMAC-SHA256 signature
-    const signature = req.headers['x-bmc-signature'];
-    if (!signature || !BMC_WEBHOOK_SECRET) {
-      return res.status(401).json({ error: 'Missing signature' });
-    }
-
-    const hmac   = crypto.createHmac('sha256', BMC_WEBHOOK_SECRET);
-    const digest = hmac.update(req.body).digest('hex');
-
-    if (
-      digest.length !== signature.length ||
-      !crypto.timingSafeEqual(Buffer.from(digest, 'utf8'), Buffer.from(signature, 'utf8'))
-    ) {
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
-
-    // 2. Parse payload
+    // 1. Parse payload (needed early to check live_mode before signature verification)
     const payload = JSON.parse(req.body.toString());
+
+    // 2. Verify HMAC-SHA256 signature (skip for BMC test events)
+    if (payload?.live_mode === false) {
+      console.log('[bmc-webhook] TEST MODE — skipping signature verification');
+    } else {
+      const signature = req.headers['x-bmc-signature'];
+      if (!signature || !BMC_WEBHOOK_SECRET) {
+        return res.status(401).json({ error: 'Missing signature' });
+      }
+
+      const hmac   = crypto.createHmac('sha256', BMC_WEBHOOK_SECRET);
+      const digest = hmac.update(req.body).digest('hex');
+
+      if (
+        digest.length !== signature.length ||
+        !crypto.timingSafeEqual(Buffer.from(digest, 'utf8'), Buffer.from(signature, 'utf8'))
+      ) {
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
+    }
 
     if (payload?.type !== 'extra_purchase.created') {
       console.log(`[bmc-webhook] Ignoring event type "${payload?.type}"`);
