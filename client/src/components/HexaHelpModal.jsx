@@ -169,10 +169,10 @@ function TabModes({ lang }) {
 function TabCredits({ lang }) {
   const isEs = lang === 'es';
   const plans = [
-    { plan: isEs ? 'Free'    : 'Free',    credits: isEs ? '5 al registrarse' : '5 on signup',  price: isEs ? 'Gratis' : 'Free'        },
-    { plan: 'Starter',                    credits: '30',                                         price: '$7.99',          highlight: true },
-    { plan: 'MVP',                         credits: isEs ? '80/mes' : '80/mo',                   price: '$19.99/mo'                       },
-    { plan: 'Add-on',                      credits: '18',                                         price: '$4.99'                           },
+    { plan: isEs ? 'Free'       : 'Free',        credits: isEs ? '5 al registrarse' : '5 on signup', price: isEs ? 'Gratis' : 'Free'  },
+    { plan: 'HEXA Rookie',                        credits: '15',                                        price: '$7.99'                   },
+    { plan: 'HEXA All-Star',                      credits: '50',                                        price: '$19.99',   highlight: true },
+    { plan: 'HEXA MVP',                           credits: '120',                                       price: '$39.99'                  },
   ];
 
   return (
@@ -200,21 +200,21 @@ function TabCredits({ lang }) {
       <Box sx={{ p: '12px 14px', bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px' }}>
         <Typography sx={{ fontFamily: LABEL, fontSize: '0.75rem', color: C.textMuted, lineHeight: 1.65 }}>
           {isEs
-            ? 'Los créditos nunca vencen (excepto en el plan MVP que se renuevan mensualmente). Úsalos cuando quieras, en los análisis que quieras.'
-            : 'Credits never expire (except MVP plan which renews monthly). Use them whenever you want, on whatever analyses you want.'}
+            ? 'Los créditos nunca vencen. Úsalos cuando quieras, en los análisis que quieras.'
+            : 'Credits never expire. Use them whenever you want, on whatever analyses you want.'}
         </Typography>
       </Box>
 
       {/* Example */}
       <Box sx={{ p: '14px 16px', bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderLeft: `3px solid ${C.accent}`, borderRadius: '2px' }}>
         <Typography sx={{ fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: 800, color: C.accentSec, textTransform: 'uppercase', letterSpacing: '0.08em', mb: '8px' }}>
-          {isEs ? 'Ejemplo: Con 30 créditos (Starter) puedes hacer:' : 'Example: With 30 credits (Starter) you can run:'}
+          {isEs ? 'Ejemplo: Con 50 créditos (HEXA All-Star) puedes hacer:' : 'Example: With 50 credits (HEXA All-Star) you can run:'}
         </Typography>
         {[
-          isEs ? '15 análisis Single Deep, ó' : '15 Single Deep analyses, or',
-          isEs ? '6 análisis Single Premium, ó' : '6 Single Premium analyses, or',
-          isEs ? '3 análisis Parlay Deep, ó' : '3 Parlay Deep analyses, or',
-          isEs ? '2 análisis Parlay Premium' : '2 Parlay Premium analyses',
+          isEs ? '25 análisis Single Deep, ó' : '25 Single Deep analyses, or',
+          isEs ? '10 análisis Single Premium, ó' : '10 Single Premium analyses, or',
+          isEs ? '6 análisis Parlay Deep, ó' : '6 Parlay Deep analyses, or',
+          isEs ? '3 análisis Parlay Premium' : '3 Parlay Premium analyses',
         ].map((line, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
             <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: C.accent, flexShrink: 0 }} />
