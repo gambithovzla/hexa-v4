@@ -40,7 +40,6 @@ const L = {
     loading:       'Please wait…',
     switchToReg:   "Don't have an account? Register",
     switchToLogin: 'Already have an account? Login',
-    creditsNote:   '10 free credits on sign-up',
     close:         'Close',
   },
   es: {
@@ -53,7 +52,6 @@ const L = {
     loading:       'Espera…',
     switchToReg:   '¿No tienes cuenta? Regístrate',
     switchToLogin: '¿Ya tienes cuenta? Inicia sesión',
-    creditsNote:   '10 créditos gratis al registrarte',
     close:         'Cerrar',
   },
 };
@@ -274,13 +272,6 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
                 {error}
               </Typography>
             </Box>
-          )}
-
-          {/* Credits note on register tab */}
-          {tab === 'register' && (
-            <Typography sx={{ fontFamily: LABEL, fontSize: '0.72rem', color: C.accent, textAlign: 'center' }}>
-              ✦ {t.creditsNote}
-            </Typography>
           )}
 
           {/* Submit */}

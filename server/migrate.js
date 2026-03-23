@@ -19,7 +19,7 @@ export async function runMigrations() {
         id            TEXT        PRIMARY KEY,
         email         TEXT        UNIQUE NOT NULL,
         password_hash TEXT        NOT NULL,
-        credits       INTEGER     DEFAULT 10,
+        credits       INTEGER     DEFAULT 0,
         created_at    TIMESTAMP   DEFAULT NOW()
       )
     `);
