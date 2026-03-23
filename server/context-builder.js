@@ -419,6 +419,158 @@ function batterSavantLine(name, savant) {
 }
 
 // ---------------------------------------------------------------------------
+// Deep K Props Analysis block
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the Deep K Props Analysis context block.
+ * Inserted after BATTER STATCAST, before PARK FACTOR.
+ * Returns null when neither pitcher has Statcast data.
+ *
+ * @param {object|null} homePitcher       — probable pitcher object (home)
+ * @param {object|null} awayPitcher       — probable pitcher object (away)
+ * @param {object|null} homePitcherSavant — Statcast data for home pitcher
+ * @param {object|null} awayPitcherSavant — Statcast data for away pitcher
+ * @param {{ home: Array, away: Array }} savantBatters — top-3 batter Statcast per side
+ * @returns {string|null}
+ */
+function buildKPropsBlock(homePitcher, awayPitcher, homePitcherSavant, awayPitcherSavant, savantBatters) {
+  if (!homePitcherSavant && !awayPitcherSavant) return null;
+
+  const fp1 = (v) => (v != null ? Number(v).toFixed(1) : 'N/A');
+  const f3  = (v) => (v != null ? Number(v).toFixed(3) : 'N/A');
+
+  const PITCH_DISPLAY = {
+    ff: '4-seam FB', si: 'Sinker', fc: 'Cutter', sl: 'Slider',
+    cu: 'Curveball', ch: 'Changeup', fs: 'Splitter', kn: 'Knuckleball',
+    sv: 'Sweeper', st: 'Sweeper', cs: 'Slow Curve',
+  };
+
+  /** Finds the pitch type with the highest whiff% in the arsenal object. */
+  function bestKPitch(arsenal) {
+    if (!arsenal || typeof arsenal !== 'object') return null;
+    let best = null;
+    for (const prefix of Object.keys(PITCH_DISPLAY)) {
+      const whiffKey = Object.keys(arsenal).find(k =>
+        k.toLowerCase().startsWith(prefix + '_') && k.toLowerCase().includes('whiff')
+      );
+      if (!whiffKey) continue;
+      const whiff = parseFloat(arsenal[whiffKey]);
+      if (isNaN(whiff)) continue;
+      const rvKey = Object.keys(arsenal).find(k =>
+        k.toLowerCase().startsWith(prefix + '_') && k.toLowerCase().includes('run_value_per_100')
+      );
+      const rv = rvKey ? parseFloat(arsenal[rvKey]) : null;
+      if (!best || whiff > best.whiff) {
+        best = { pitchType: PITCH_DISPLAY[prefix] ?? prefix.toUpperCase(), whiff, runValue: isNaN(rv) ? null : rv };
+      }
+    }
+    return best;
+  }
+
+  /** Returns K Props Edge label based on whiff% and K%. Values are percentages (e.g. 32.5, not 0.325). */
+  function kPropsEdge(whiffPct, kPct) {
+    if (whiffPct == null || kPct == null) return 'NEUTRAL (insufficient data)';
+    if (whiffPct > 32 && kPct > 27) return 'STRONG OVER';
+    if (whiffPct > 28 && kPct > 24) return 'LEAN OVER';
+    if (whiffPct < 20 || kPct < 18) return 'STRONG UNDER';
+    if (whiffPct < 24 && kPct < 21) return 'LEAN UNDER';
+    return 'NEUTRAL';
+  }
+
+  /** Calculates lineup K susceptibility from top-N batter data, scaled to 9-batter lineup. */
+  function lineupKSusceptibility(batters) {
+    const withData = batters.filter(b => b.savant?.xwOBA != null);
+    if (withData.length === 0) {
+      return { label: 'UNKNOWN (no Statcast data)', weakCount: 'N/A', avgXwOBA: null };
+    }
+    const weakCount    = withData.filter(b => b.savant.xwOBA < 0.300).length;
+    const avgXwOBA     = withData.reduce((s, b) => s + b.savant.xwOBA, 0) / withData.length;
+    // Scale weak-contact count to 9-batter lineup estimate
+    const scaledWeak   = Math.round((weakCount / withData.length) * 9);
+    const label        = scaledWeak >= 5 ? 'HIGH' : scaledWeak >= 3 ? 'MEDIUM' : 'LOW';
+    return { label, weakCount: scaledWeak, avgXwOBA };
+  }
+
+  /** Builds the profile block for one pitcher side. */
+  function pitcherKSection(side, pitcher, savant, opponentBatters) {
+    const name        = pitcher?.fullName ?? `${side} Pitcher`;
+    const oppSide     = side === 'HOME' ? 'AWAY' : 'HOME';
+    const lines       = [`${side} PITCHER K PROFILE: ${name}`];
+
+    if (!savant) {
+      lines.push('No Statcast data available');
+      return lines.join('\n');
+    }
+
+    const whiff = savant.whiff_percent;
+    const kPct  = savant.k_percent;
+    const csw   = savant.csw_percent;
+    const chase = savant.o_swing_percent;
+
+    // Savant stores k_percent / whiff_percent as decimals (e.g. 0.285) OR whole numbers (28.5).
+    // Normalise to percentage point values for display and logic.
+    const toPercPt = (v) => (v != null ? (v <= 1 ? v * 100 : v) : null);
+    const whiffPP = toPercPt(whiff);
+    const kPctPP  = toPercPt(kPct);
+    const cswPP   = toPercPt(csw);
+    const chasePP = toPercPt(chase);
+
+    const statLine = [
+      `Season K%: ${kPctPP != null ? fp1(kPctPP) + '%' : 'N/A'}`,
+      `Whiff%: ${whiffPP != null ? fp1(whiffPP) + '%' : 'N/A'}`,
+    ];
+    if (cswPP   != null) statLine.push(`CSW%: ${fp1(cswPP)}%`);
+    if (chasePP != null) statLine.push(`Chase Rate: ${fp1(chasePP)}%`);
+    lines.push(statLine.join(' | '));
+
+    const bestPitch = bestKPitch(savant.arsenal);
+    if (bestPitch) {
+      const rvStr = bestPitch.runValue != null ? `, Run Value ${Number(bestPitch.runValue).toFixed(1)}` : '';
+      lines.push(`Best Strikeout Pitch: ${bestPitch.pitchType} — Whiff% ${fp1(bestPitch.whiff)}%${rvStr}`);
+    } else {
+      lines.push('Best Strikeout Pitch: N/A (no per-pitch arsenal data)');
+    }
+
+    const edge = kPropsEdge(whiffPP, kPctPP);
+    lines.push(`K Props Edge: ${edge}`);
+    lines.push('');
+
+    const sus = lineupKSusceptibility(opponentBatters);
+    lines.push(`vs ${oppSide} LINEUP K Vulnerability:`);
+    lines.push(`* Batters with xwOBA < .300 (weak contact): ~${sus.weakCount} of 9`);
+    if (sus.avgXwOBA != null) lines.push(`* Avg lineup xwOBA: ${f3(sus.avgXwOBA)}`);
+    lines.push(`* Lineup K Susceptibility: ${sus.label}`);
+
+    return lines.join('\n');
+  }
+
+  /** Returns recommendation string for one pitcher. */
+  function kPropRec(sideLabel, savant) {
+    if (!savant) return `${sideLabel} Pitcher K Prop: SKIP — no Statcast data`;
+    const toPercPt = (v) => (v != null ? (v <= 1 ? v * 100 : v) : null);
+    const edge = kPropsEdge(toPercPt(savant.whiff_percent), toPercPt(savant.k_percent));
+    if (edge === 'STRONG OVER')  return `${sideLabel} Pitcher K Prop: OVER — Elite Whiff% + K% combination`;
+    if (edge === 'LEAN OVER')    return `${sideLabel} Pitcher K Prop: OVER — Above-average strikeout profile`;
+    if (edge === 'STRONG UNDER') return `${sideLabel} Pitcher K Prop: UNDER — Below-average strikeout metrics`;
+    if (edge === 'LEAN UNDER')   return `${sideLabel} Pitcher K Prop: UNDER — Below-league-average K profile`;
+    return `${sideLabel} Pitcher K Prop: SKIP — No strong K prop edge identified`;
+  }
+
+  const out = ['=== DEEP K PROPS ANALYSIS ===', ''];
+  out.push(pitcherKSection('HOME', homePitcher, homePitcherSavant, savantBatters?.away ?? []));
+  out.push('');
+  out.push(pitcherKSection('AWAY', awayPitcher, awayPitcherSavant, savantBatters?.home ?? []));
+  out.push('');
+  out.push('K PROPS RECOMMENDATION:');
+  out.push(kPropRec('Home', homePitcherSavant));
+  out.push(kPropRec('Away', awayPitcherSavant));
+  out.push('=== END K PROPS ===');
+
+  return out.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Historical trend blocks
 // ---------------------------------------------------------------------------
 
@@ -1099,6 +1251,19 @@ export async function buildContext(gameData, oddsData = null) {
     }
     blocks.push('');
   }
+
+  // ── Deep K Props Analysis ─────────────────────────────────────────────────
+  try {
+    const kPropsBlock = buildKPropsBlock(
+      homePitcher, awayPitcher,
+      homePitcherSavant, awayPitcherSavant,
+      savantBatters,
+    );
+    if (kPropsBlock) {
+      blocks.push(kPropsBlock);
+      blocks.push('');
+    }
+  } catch (_) { /* skip silently on any error */ }
 
   // ── Park Factor ──────────────────────────────────────────────────────────
   try {
