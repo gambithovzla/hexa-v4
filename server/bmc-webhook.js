@@ -3,24 +3,30 @@ import pool from './db.js';
 
 const BMC_WEBHOOK_SECRET = process.env.BMC_WEBHOOK_SECRET;
 
-function resolveCredits(purchaseQuestion, purchaseAmount) {
-  const name   = (purchaseQuestion ?? '').toLowerCase();
-  const amount = String(purchaseAmount ?? '');
+function resolveCredits(extras) {
+  if (!Array.isArray(extras) || extras.length === 0) return 0;
 
-  if (name.includes('rookie') || amount === '7.99')   return 15;
-  if (name.includes('all-star') || amount === '19.99') return 50;
-  if (name.includes('mvp') || amount === '39.99')      return 120;
+  let total = 0;
+  for (const extra of extras) {
+    const title  = (extra.title ?? '').toLowerCase();
+    const amount = String(extra.amount ?? '');
 
-  // Fallback: ~2 credits per dollar
-  const dollars = parseFloat(amount);
-  if (!isNaN(dollars) && dollars > 0) {
-    const fallback = Math.round(dollars * 2);
-    console.warn(`[bmc-webhook] Unknown product "${purchaseQuestion}" ($${amount}) — assigning ${fallback} credits (fallback ~$1=2cr)`);
-    return fallback;
+    if (title.includes('rookie') || amount === '7.99')   { total += 15;  continue; }
+    if (title.includes('all-star') || amount === '19.99') { total += 50;  continue; }
+    if (title.includes('mvp') || amount === '39.99')      { total += 120; continue; }
+
+    // Fallback: ~2 credits per dollar
+    const dollars = parseFloat(amount);
+    if (!isNaN(dollars) && dollars > 0) {
+      const fallback = Math.round(dollars * 2);
+      console.warn(`[bmc-webhook] Unknown extra "${extra.title}" ($${amount}) — assigning ${fallback} credits (fallback ~$1=2cr)`);
+      total += fallback;
+    } else {
+      console.warn(`[bmc-webhook] Cannot determine credits for extra "${extra.title}" ($${amount})`);
+    }
   }
 
-  console.warn(`[bmc-webhook] Cannot determine credits for "${purchaseQuestion}" ($${amount})`);
-  return 0;
+  return total;
 }
 
 export async function handleBMCWebhook(req, res) {
@@ -42,28 +48,32 @@ export async function handleBMCWebhook(req, res) {
     }
 
     // 2. Parse payload
-    const payload  = JSON.parse(req.body.toString());
-    const response = payload?.response ?? {};
-    const {
-      purchase_id,
-      purchase_question,
-      purchase_amount,
-      purchase_is_revoked,
-      supporter_email,
-    } = response;
+    const payload = JSON.parse(req.body.toString());
 
-    if (purchase_is_revoked) {
-      console.log(`[bmc-webhook] Skipping revoked purchase ${purchase_id}`);
+    if (payload?.type !== 'extra_purchase.created') {
+      console.log(`[bmc-webhook] Ignoring event type "${payload?.type}"`);
       return res.status(200).json({ success: true });
     }
 
+    const data = payload?.data ?? {};
+
+    if (data.status !== 'succeeded') {
+      console.log(`[bmc-webhook] Skipping purchase ${data.id} with status "${data.status}"`);
+      return res.status(200).json({ success: true });
+    }
+
+    const supporter_email = data.supporter_email;
     if (!supporter_email) {
       console.warn('[bmc-webhook] No supporter_email in payload — ignoring');
       return res.status(200).json({ success: true });
     }
 
-    const email   = supporter_email.toLowerCase().trim();
-    const credits = resolveCredits(purchase_question, purchase_amount);
+    const purchase_id    = data.id;
+    const extras         = data.extras ?? [];
+    const email          = supporter_email.toLowerCase().trim();
+    const credits        = resolveCredits(extras);
+    const product_name   = extras[0]?.title ?? null;
+    const purchase_amount = extras[0]?.amount ?? null;
 
     if (credits === 0) {
       return res.status(200).json({ success: true });
@@ -80,7 +90,7 @@ export async function handleBMCWebhook(req, res) {
         'UPDATE users SET credits = credits + $1 WHERE email = $2',
         [credits, email]
       );
-      console.log(`[bmc-webhook] Credited ${credits} credits to ${email} (Extra: "${purchase_question}", Amount: $${purchase_amount})`);
+      console.log(`[bmc-webhook] Credited ${credits} credits to ${email} (supporter: "${data.supporter_name}", extras: ${extras.length})`);
     } else {
       await pool.query(
         `INSERT INTO pending_credits (email, credits, source, purchase_id, amount, product_name)
@@ -90,10 +100,10 @@ export async function handleBMCWebhook(req, res) {
           credits,
           String(purchase_id ?? ''),
           parseFloat(purchase_amount) || null,
-          purchase_question ?? null,
+          product_name,
         ]
       );
-      console.log(`[bmc-webhook] User ${email} not found — saved ${credits} pending credits (Extra: "${purchase_question}", Amount: $${purchase_amount})`);
+      console.log(`[bmc-webhook] User ${email} not found — saved ${credits} pending credits (supporter: "${data.supporter_name}", extras: ${extras.length})`);
     }
 
     return res.status(200).json({ success: true });
