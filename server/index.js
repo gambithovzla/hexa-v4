@@ -7,7 +7,7 @@ import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay } from './oracle.js';
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
-import { getCacheStatus, refreshCache } from './savant-fetcher.js';
+import { getCacheStatus, refreshCache, getPitcherStatcast, getBatterStatcast } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
@@ -186,7 +186,53 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
     try {
       const context = await buildContext(gameData, matchedOdds);
       const matchup = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
-      analysis = await analyzeGame({ matchup, betType, context, riskProfile, mode: 'single', lang: resolvedLang, webSearch, model, timeoutMs: 90000 });
+
+      // Construir statcastData para el validador XGBoost.
+      // Los datos ya están en caché desde buildContext, por lo que no hay overhead.
+      let statcastData = null;
+      try {
+        const homePitcherName = gameData.teams?.home?.probablePitcher?.fullName;
+        const awayPitcherName = gameData.teams?.away?.probablePitcher?.fullName;
+
+        const [homePitcherStat, awayPitcherStat] = await Promise.all([
+          homePitcherName ? getPitcherStatcast(homePitcherName) : Promise.resolve(null),
+          awayPitcherName ? getPitcherStatcast(awayPitcherName) : Promise.resolve(null),
+        ]);
+
+        // Calcular xwOBA y wOBA promedios de la alineación local y visitante
+        const buildLineupStats = async (lineupArr) => {
+          if (!lineupArr?.length) return { avg_xwOBA: null, avg_woba_7d: null };
+          const stats = await Promise.all(
+            lineupArr.slice(0, 5).map(p => getBatterStatcast(p.fullName).catch(() => null))
+          );
+          const valid = stats.filter(s => s?.xwOBA != null);
+          if (!valid.length) return { avg_xwOBA: null, avg_woba_7d: null };
+          const avg_xwOBA  = valid.reduce((s, p) => s + p.xwOBA, 0) / valid.length;
+          const avg_woba_7d = valid.reduce((s, p) => s + (p.rolling_windows?.woba_7d ?? p.xwOBA), 0) / valid.length;
+          return { avg_xwOBA, avg_woba_7d };
+        };
+
+        const [homeLineup, awayLineup] = await Promise.all([
+          buildLineupStats(gameData.lineups?.home),
+          buildLineupStats(gameData.lineups?.away),
+        ]);
+
+        statcastData = {
+          homePitcher: homePitcherStat,
+          awayPitcher: awayPitcherStat,
+          homeLineup,
+          awayLineup,
+        };
+      } catch (statcastErr) {
+        console.warn('[index] statcastData build failed (non-critical):', statcastErr.message);
+      }
+
+      analysis = await analyzeGame({
+        matchup, betType, context, riskProfile,
+        mode: 'single', lang: resolvedLang, webSearch, model, timeoutMs: 90000,
+        statcastData,
+        mlbApiData: gameData,
+      });
     } catch (err) {
       await refundCredits(updatedUser.id, cost, updatedUser.email);
       const isTimeout = err.message === 'TIMEOUT';
