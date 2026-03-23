@@ -6,7 +6,7 @@ import path from 'path';
 import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay } from './oracle.js';
-import { getGameOdds, matchOddsToGame } from './odds-api.js';
+import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken } from './middleware/auth-middleware.js';
@@ -14,6 +14,7 @@ import { runMigrations } from './migrate.js';
 import pool from './db.js';
 import lemonRouter from './lemon.js';
 import { resolvePendingPicks } from './pick-resolver.js';
+import { captureClosingLines } from './closing-line-capture.js';
 
 dotenv.config();
 
@@ -297,14 +298,118 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       type, matchup, pick, oracle_confidence, bet_value,
       model_risk, oracle_report, hexa_hunch, alert_flags,
       probability_model, best_pick, model, language,
+      odds_at_pick, odds_details,
     } = req.body;
+
+    // Calculate implied probability server-side from the American odds provided by the client
+    const implied_prob_at_pick = odds_at_pick != null
+      ? calculateImpliedProbability(odds_at_pick)
+      : null;
+
     const { rows } = await pool.query(
-      `INSERT INTO picks (user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk, oracle_report, hexa_hunch, alert_flags, probability_model, best_pick, model, language)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [req.user.id, type, matchup, pick, oracle_confidence, bet_value, model_risk, oracle_report, hexa_hunch,
-       JSON.stringify(alert_flags ?? []), JSON.stringify(probability_model ?? {}), JSON.stringify(best_pick ?? {}), model, language]
+      `INSERT INTO picks (
+         user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
+         oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
+         model, language, odds_at_pick, implied_prob_at_pick, odds_details
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      [
+        req.user.id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
+        oracle_report, hexa_hunch,
+        JSON.stringify(alert_flags ?? []), JSON.stringify(probability_model ?? {}),
+        JSON.stringify(best_pick ?? {}), model, language,
+        odds_at_pick ?? null,
+        implied_prob_at_pick,
+        odds_details != null ? JSON.stringify(odds_details) : null,
+      ]
     );
     res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/picks/clv-stats — CLV dashboard stats for authenticated user
+app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Aggregate stats for picks with CLV data
+    const { rows: [stats] } = await pool.query(`
+      SELECT
+        COUNT(*)                                              AS "totalPicks",
+        COUNT(*) FILTER (WHERE clv IS NOT NULL)              AS "picksWithCLV",
+        ROUND(AVG(clv) FILTER (WHERE clv IS NOT NULL), 2)   AS "avgCLV",
+        COUNT(*) FILTER (WHERE clv > 0)                     AS "positiveCLV",
+        COUNT(*) FILTER (WHERE clv < 0)                     AS "negativeCLV"
+      FROM picks
+      WHERE user_id = $1
+    `, [userId]);
+
+    // Last 20 picks with CLV fields
+    const { rows: recentPicks } = await pool.query(`
+      SELECT id, matchup, pick, model, result,
+             odds_at_pick, implied_prob_at_pick,
+             closing_odds, implied_prob_closing, clv,
+             created_at
+      FROM picks
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 20
+    `, [userId]);
+
+    // Group by bet type (parsed from pick string in JS to avoid SQL regex complexity)
+    const betTypeMap = { moneyline: { count: 0, totalCLV: 0 }, runline: { count: 0, totalCLV: 0 }, over_under: { count: 0, totalCLV: 0 } };
+    const modelMap   = {};
+
+    const { rows: allWithCLV } = await pool.query(`
+      SELECT pick, model, clv FROM picks WHERE user_id = $1 AND clv IS NOT NULL
+    `, [userId]);
+
+    for (const row of allWithCLV) {
+      const p = (row.pick ?? '').toLowerCase();
+      let betType = 'moneyline';
+      if (/over|under|m[aá]s\s+de|menos\s+de|alta|baja/i.test(p)) betType = 'over_under';
+      else if (/run\s+line|rl|l[ií]nea\s+de\s+carrera/i.test(p)) betType = 'runline';
+
+      betTypeMap[betType].count++;
+      betTypeMap[betType].totalCLV += parseFloat(row.clv);
+
+      const m = row.model ?? 'unknown';
+      if (!modelMap[m]) modelMap[m] = { count: 0, totalCLV: 0 };
+      modelMap[m].count++;
+      modelMap[m].totalCLV += parseFloat(row.clv);
+    }
+
+    const clvByBetType = {};
+    for (const [key, val] of Object.entries(betTypeMap)) {
+      clvByBetType[key] = {
+        count:  val.count,
+        avgCLV: val.count > 0 ? Math.round((val.totalCLV / val.count) * 100) / 100 : null,
+      };
+    }
+
+    const clvByModel = {};
+    for (const [key, val] of Object.entries(modelMap)) {
+      clvByModel[key] = {
+        count:  val.count,
+        avgCLV: val.count > 0 ? Math.round((val.totalCLV / val.count) * 100) / 100 : null,
+      };
+    }
+
+    res.json({
+      success: true,
+      data: {
+        totalPicks:   parseInt(stats.totalPicks),
+        picksWithCLV: parseInt(stats.picksWithCLV),
+        avgCLV:       stats.avgCLV != null ? parseFloat(stats.avgCLV) : null,
+        positiveCLV:  parseInt(stats.positiveCLV),
+        negativeCLV:  parseInt(stats.negativeCLV),
+        clvByBetType,
+        clvByModel,
+        recentPicks,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -388,6 +493,13 @@ runMigrations()
           console.log(`[pick-resolver] Scheduled run triggered (ET hour: ${etHour})`);
           resolvePendingPicks().catch(err => {
             console.error('[pick-resolver] Scheduled run failed:', err.message);
+          });
+        }
+        // Closing line capture: 17:00–00:59 ET (before and during MLB game windows)
+        if (etHour >= 17 || etHour < 1) {
+          console.log(`[closing-line] Scheduled capture triggered (ET hour: ${etHour})`);
+          captureClosingLines().catch(err => {
+            console.error('[closing-line] Scheduled capture failed:', err.message);
           });
         }
       }, THIRTY_MIN).unref();
