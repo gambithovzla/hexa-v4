@@ -100,7 +100,7 @@ const COPY = {
     ],
 
     disclaimer:
-      'H.E.X.A. provides analytical intelligence to support your own decision-making. No system eliminates variance in sports betting. Always bet within your means.',
+      'H.E.X.A. provides analytical insights to support your own decision-making. No system eliminates variance in sports betting. Always bet within your means.',
 
     footerLine: 'H.E.X.A. Hybrid Expert X-Analysis · Powered by Gambitho Labs',
   },
@@ -170,7 +170,7 @@ const COPY = {
     ],
 
     disclaimer:
-      'H.E.X.A. proporciona inteligencia analítica para apoyar tu propia toma de decisiones. Ningún sistema elimina la varianza en las apuestas deportivas. Siempre apuesta dentro de tus posibilidades.',
+      'H.E.X.A. proporciona información analítica para apoyar tu propia toma de decisiones. Ningún sistema elimina la varianza en las apuestas deportivas. Siempre apuesta dentro de tus posibilidades.',
 
     footerLine: 'H.E.X.A. Hybrid Expert X-Analysis · Desarrollado por Gambitho Labs',
   },
