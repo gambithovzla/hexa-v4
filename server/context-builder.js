@@ -589,6 +589,209 @@ function calcDataQuality({
   return { score, strategy, confidencePenalty, allowedBetTypes, missing, available };
 }
 
+// ---------------------------------------------------------------------------
+// Signal Coherence Layer
+// ---------------------------------------------------------------------------
+
+/**
+ * Evalúa si las señales estadísticas se alinean (coherentes) o se contradicen.
+ * Cada señal vota OVER, UNDER o NEUTRAL.
+ *
+ * @param {object|null} homePitcherSavant
+ * @param {object|null} awayPitcherSavant
+ * @param {{ home: Array, away: Array }} savantBatters
+ * @param {object|null} parkFactorData
+ * @param {object|null} weatherData
+ * @param {object|null} homePitching
+ * @param {object|null} awayPitching
+ * @returns {{ coherenceScore: number, overSignals: number, underSignals: number,
+ *             neutralSignals: number, dominantDirection: string,
+ *             signals: Array<{name:string, vote:string, reason:string}> }}
+ */
+function calcSignalCoherence({
+  homePitcherSavant, awayPitcherSavant,
+  savantBatters,
+  parkFactorData,
+  weatherData,
+  homePitching, awayPitching,
+}) {
+  const signals = [];
+
+  function vote(name, v, reason) {
+    signals.push({ name, vote: v, reason });
+  }
+
+  // 1. HOME PITCHER (xwOBA_against)
+  const homeXwOBA = homePitcherSavant?.xwOBA_against;
+  if (homeXwOBA == null) {
+    vote('Home Pitcher (Statcast)', 'NEUTRAL', 'No xwOBA_against data');
+  } else if (homeXwOBA < 0.300) {
+    vote('Home Pitcher (Statcast)', 'UNDER', `xwOBA_against ${homeXwOBA.toFixed(3)} — elite`);
+  } else if (homeXwOBA > 0.360) {
+    vote('Home Pitcher (Statcast)', 'OVER', `xwOBA_against ${homeXwOBA.toFixed(3)} — hittable`);
+  } else {
+    vote('Home Pitcher (Statcast)', 'NEUTRAL', `xwOBA_against ${homeXwOBA.toFixed(3)} — league avg`);
+  }
+
+  // 2. AWAY PITCHER (xwOBA_against)
+  const awayXwOBA = awayPitcherSavant?.xwOBA_against;
+  if (awayXwOBA == null) {
+    vote('Away Pitcher (Statcast)', 'NEUTRAL', 'No xwOBA_against data');
+  } else if (awayXwOBA < 0.300) {
+    vote('Away Pitcher (Statcast)', 'UNDER', `xwOBA_against ${awayXwOBA.toFixed(3)} — elite`);
+  } else if (awayXwOBA > 0.360) {
+    vote('Away Pitcher (Statcast)', 'OVER', `xwOBA_against ${awayXwOBA.toFixed(3)} — hittable`);
+  } else {
+    vote('Away Pitcher (Statcast)', 'NEUTRAL', `xwOBA_against ${awayXwOBA.toFixed(3)} — league avg`);
+  }
+
+  // 3. HOME ROLLING FORM (woba_against_7d)
+  const homeWoba7d = homePitcherSavant?.rolling_windows_against?.woba_against_7d;
+  if (homeWoba7d == null) {
+    vote('Home Pitcher Form (7d)', 'NEUTRAL', 'No rolling window data');
+  } else if (homeWoba7d < 0.280) {
+    vote('Home Pitcher Form (7d)', 'UNDER', `woba_against_7d ${homeWoba7d.toFixed(3)} — dominant streak`);
+  } else if (homeWoba7d > 0.380) {
+    vote('Home Pitcher Form (7d)', 'OVER', `woba_against_7d ${homeWoba7d.toFixed(3)} — struggling`);
+  } else {
+    vote('Home Pitcher Form (7d)', 'NEUTRAL', `woba_against_7d ${homeWoba7d.toFixed(3)}`);
+  }
+
+  // 4. AWAY ROLLING FORM (woba_against_7d)
+  const awayWoba7d = awayPitcherSavant?.rolling_windows_against?.woba_against_7d;
+  if (awayWoba7d == null) {
+    vote('Away Pitcher Form (7d)', 'NEUTRAL', 'No rolling window data');
+  } else if (awayWoba7d < 0.280) {
+    vote('Away Pitcher Form (7d)', 'UNDER', `woba_against_7d ${awayWoba7d.toFixed(3)} — dominant streak`);
+  } else if (awayWoba7d > 0.380) {
+    vote('Away Pitcher Form (7d)', 'OVER', `woba_against_7d ${awayWoba7d.toFixed(3)} — struggling`);
+  } else {
+    vote('Away Pitcher Form (7d)', 'NEUTRAL', `woba_against_7d ${awayWoba7d.toFixed(3)}`);
+  }
+
+  // 5. HOME OFFENSE (avg xwOBA of home batters with Statcast data)
+  const homeSCBatters = (savantBatters?.home ?? []).filter(b => b.savant?.xwOBA != null);
+  if (homeSCBatters.length === 0) {
+    vote('Home Offense (Statcast)', 'NEUTRAL', 'No batter Statcast data');
+  } else {
+    const avgXwOBA = homeSCBatters.reduce((s, b) => s + b.savant.xwOBA, 0) / homeSCBatters.length;
+    if (avgXwOBA > 0.360) {
+      vote('Home Offense (Statcast)', 'OVER', `Avg xwOBA ${avgXwOBA.toFixed(3)} — elite lineup`);
+    } else if (avgXwOBA < 0.300) {
+      vote('Home Offense (Statcast)', 'UNDER', `Avg xwOBA ${avgXwOBA.toFixed(3)} — weak lineup`);
+    } else {
+      vote('Home Offense (Statcast)', 'NEUTRAL', `Avg xwOBA ${avgXwOBA.toFixed(3)}`);
+    }
+  }
+
+  // 6. AWAY OFFENSE (avg xwOBA of away batters with Statcast data)
+  const awaySCBatters = (savantBatters?.away ?? []).filter(b => b.savant?.xwOBA != null);
+  if (awaySCBatters.length === 0) {
+    vote('Away Offense (Statcast)', 'NEUTRAL', 'No batter Statcast data');
+  } else {
+    const avgXwOBA = awaySCBatters.reduce((s, b) => s + b.savant.xwOBA, 0) / awaySCBatters.length;
+    if (avgXwOBA > 0.360) {
+      vote('Away Offense (Statcast)', 'OVER', `Avg xwOBA ${avgXwOBA.toFixed(3)} — elite lineup`);
+    } else if (avgXwOBA < 0.300) {
+      vote('Away Offense (Statcast)', 'UNDER', `Avg xwOBA ${avgXwOBA.toFixed(3)} — weak lineup`);
+    } else {
+      vote('Away Offense (Statcast)', 'NEUTRAL', `Avg xwOBA ${avgXwOBA.toFixed(3)}`);
+    }
+  }
+
+  // 7. PARK FACTOR
+  const parkOverall = parkFactorData?.park_factor_overall;
+  if (parkOverall == null) {
+    vote('Park Factor', 'NEUTRAL', 'No park factor data');
+  } else if (parkOverall > 105) {
+    vote('Park Factor', 'OVER', `park_factor_overall ${parkOverall} — hitter friendly`);
+  } else if (parkOverall < 95) {
+    vote('Park Factor', 'UNDER', `park_factor_overall ${parkOverall} — pitcher friendly`);
+  } else {
+    vote('Park Factor', 'NEUTRAL', `park_factor_overall ${parkOverall} — neutral`);
+  }
+
+  // 8. WEATHER
+  if (!weatherData || weatherData.error) {
+    vote('Weather', 'NEUTRAL', 'No weather data');
+  } else if (weatherData.isIndoor) {
+    vote('Weather', 'NEUTRAL', 'Indoor stadium — weather not a factor');
+  } else {
+    const temp = weatherData.temperature;
+    const wind = weatherData.windSpeed;
+    if (temp > 85 && wind > 10) {
+      vote('Weather', 'OVER', `Temp ${temp}°F + wind ${wind}mph — ball carries`);
+    } else if (temp < 50) {
+      vote('Weather', 'UNDER', `Cold ${temp}°F — ball dies`);
+    } else if (wind > 10) {
+      vote('Weather', 'NEUTRAL', `Wind ${wind}mph at ${temp}°F — direction indeterminate`);
+    } else {
+      vote('Weather', 'NEUTRAL', `Temp ${temp}°F, wind ${wind}mph — no strong bias`);
+    }
+  }
+
+  // 9. BULLPEN HOME
+  const homeBP = homePitching?.bullpen ?? homePitching?.overall ?? null;
+  if (!homeBP) {
+    vote('Bullpen Home', 'NEUTRAL', 'No bullpen data');
+  } else {
+    const bpEra   = homeBP.era     != null ? parseFloat(homeBP.era)              : null;
+    const bpInn3d = homeBP.innings_last_3d != null ? parseFloat(homeBP.innings_last_3d) : null;
+    const eraStr  = bpEra  != null ? `ERA ${bpEra.toFixed(2)}`   : 'ERA N/A';
+    const innStr  = bpInn3d != null ? ` / ${bpInn3d}IP last 3d` : '';
+    if (bpEra != null && (bpEra > 4.50 || (bpInn3d != null && bpInn3d > 8))) {
+      vote('Bullpen Home', 'OVER', `${eraStr}${innStr} — tired/vulnerable`);
+    } else if (bpEra != null && bpEra < 3.00 && (bpInn3d == null || bpInn3d < 4)) {
+      vote('Bullpen Home', 'UNDER', `${eraStr}${innStr} — fresh/elite`);
+    } else {
+      vote('Bullpen Home', 'NEUTRAL', `${eraStr}${innStr} — neutral range`);
+    }
+  }
+
+  // 10. BULLPEN AWAY
+  const awayBP = awayPitching?.bullpen ?? awayPitching?.overall ?? null;
+  if (!awayBP) {
+    vote('Bullpen Away', 'NEUTRAL', 'No bullpen data');
+  } else {
+    const bpEra   = awayBP.era     != null ? parseFloat(awayBP.era)              : null;
+    const bpInn3d = awayBP.innings_last_3d != null ? parseFloat(awayBP.innings_last_3d) : null;
+    const eraStr  = bpEra  != null ? `ERA ${bpEra.toFixed(2)}`   : 'ERA N/A';
+    const innStr  = bpInn3d != null ? ` / ${bpInn3d}IP last 3d` : '';
+    if (bpEra != null && (bpEra > 4.50 || (bpInn3d != null && bpInn3d > 8))) {
+      vote('Bullpen Away', 'OVER', `${eraStr}${innStr} — tired/vulnerable`);
+    } else if (bpEra != null && bpEra < 3.00 && (bpInn3d == null || bpInn3d < 4)) {
+      vote('Bullpen Away', 'UNDER', `${eraStr}${innStr} — fresh/elite`);
+    } else {
+      vote('Bullpen Away', 'NEUTRAL', `${eraStr}${innStr} — neutral range`);
+    }
+  }
+
+  // ── Calculate coherence score ─────────────────────────────────────────────
+  const overCount    = signals.filter(s => s.vote === 'OVER').length;
+  const underCount   = signals.filter(s => s.vote === 'UNDER').length;
+  const neutralCount = signals.filter(s => s.vote === 'NEUTRAL').length;
+  const total        = overCount + underCount;
+
+  let coherenceScore;
+  let dominantDirection;
+
+  if (total === 0) {
+    coherenceScore    = 50;
+    dominantDirection = 'MIXED';
+  } else if (underCount === 0) {
+    coherenceScore    = 100;
+    dominantDirection = 'OVER';
+  } else if (overCount === 0) {
+    coherenceScore    = 100;
+    dominantDirection = 'UNDER';
+  } else {
+    coherenceScore    = Math.round((Math.max(overCount, underCount) / total) * 100);
+    dominantDirection = overCount > underCount ? 'OVER' : underCount > overCount ? 'UNDER' : 'MIXED';
+  }
+
+  return { coherenceScore, overSignals: overCount, underSignals: underCount, neutralSignals: neutralCount, dominantDirection, signals };
+}
+
 /**
  * Construye el contexto estructurado completo para un partido.
  *
@@ -753,6 +956,15 @@ export async function buildContext(gameData, oddsData = null) {
   });
   console.log(`[context-builder] Data Quality Score: ${dataQuality.score}/100 — ${dataQuality.strategy}`);
 
+  const signalCoherence = calcSignalCoherence({
+    homePitcherSavant, awayPitcherSavant,
+    savantBatters,
+    parkFactorData,
+    weatherData,
+    homePitching, awayPitching,
+  });
+  console.log(`[context-builder] Signal Coherence Score: ${signalCoherence.coherenceScore}/100 — ${signalCoherence.dominantDirection} (${signalCoherence.overSignals}O/${signalCoherence.underSignals}U/${signalCoherence.neutralSignals}N)`);
+
   // ── DEBUG: log assembled data before building context string ───────────────
   console.log('=== CONTEXT BUILDER DEBUG ===');
   console.log('MLB Stats data keys:', Object.keys({
@@ -779,6 +991,22 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push(`Missing: ${dataQuality.missing.length > 0 ? dataQuality.missing.join(', ') : 'none'}`);
   blocks.push('ORACLE INSTRUCTION: Adjust your confidence by subtracting the confidence penalty from your calculated oracle_confidence. Restrict bet types to the allowed list above. If strategy is MINIMAL_ANALYSIS, set model_risk to high regardless of other signals.');
   blocks.push('=== END DATA INTEGRITY ===');
+  blocks.push('');
+
+  // ── Signal Coherence Report ────────────────────────────────────────────────
+  blocks.push('=== SIGNAL COHERENCE REPORT ===');
+  blocks.push(`Coherence Score: ${signalCoherence.coherenceScore}/100`);
+  blocks.push(`Dominant Direction: ${signalCoherence.dominantDirection}`);
+  blocks.push(`Signals Aligned: ${signalCoherence.overSignals} OVER | ${signalCoherence.underSignals} UNDER | ${signalCoherence.neutralSignals} NEUTRAL`);
+  blocks.push('');
+  blocks.push('Signal Details:');
+  signalCoherence.signals.forEach(s => {
+    blocks.push(`* ${s.name}: ${s.vote} — ${s.reason}`);
+  });
+  if (signalCoherence.coherenceScore < 50) {
+    blocks.push(`⚠️ COHERENCE WARNING: Multiple signals conflict. Reduce confidence by 10% and flag model_risk accordingly.`);
+  }
+  blocks.push('=== END SIGNAL COHERENCE ===');
   blocks.push('');
 
   // Encabezado
