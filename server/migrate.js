@@ -115,6 +115,21 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_snapshots_game_date ON odds_snapshots(game_id, game_date)
     `);
 
+    // ── pending_credits (BMC webhook — credits for users not yet registered) ───
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pending_credits (
+        id           SERIAL        PRIMARY KEY,
+        email        VARCHAR(255)  NOT NULL,
+        credits      INTEGER       NOT NULL,
+        source       VARCHAR(50)   DEFAULT 'buymeacoffee',
+        purchase_id  VARCHAR(100),
+        amount       DECIMAL(10,2),
+        product_name VARCHAR(255),
+        claimed      BOOLEAN       DEFAULT false,
+        created_at   TIMESTAMP     DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
     console.log('[H.E.X.A.] Database migrations applied successfully');
   } catch (err) {
