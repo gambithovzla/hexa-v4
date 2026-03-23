@@ -233,6 +233,23 @@ export function matchOddsToGame(oddsData, homeTeamName, awayTeamName) {
 }
 
 /**
+ * Converts American odds to implied probability (as a percentage).
+ *   Positive: implied% = 100 / (n + 100)
+ *   Negative: implied% = |n| / (|n| + 100)
+ *
+ * @param {number} americanOdds
+ * @returns {number|null}  e.g. 56.5 for -130
+ */
+export function calculateImpliedProbability(americanOdds) {
+  const n = Number(americanOdds);
+  if (!isFinite(n) || n === 0) return null;
+  const prob = n > 0
+    ? 100 / (n + 100)
+    : Math.abs(n) / (Math.abs(n) + 100);
+  return Math.round(prob * 1000) / 10; // one decimal place
+}
+
+/**
  * Converts American odds to decimal format.
  *   Positive: decimal = (american / 100) + 1
  *   Negative: decimal = (100 / |american|) + 1

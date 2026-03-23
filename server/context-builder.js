@@ -10,6 +10,7 @@
 import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
+import { calculateImpliedProbability } from './odds-api.js';
 
 // ---------------------------------------------------------------------------
 // Historical MLB context (static reference data for Spring Training + early season)
@@ -927,8 +928,11 @@ export async function buildContext(gameData, oddsData = null) {
     if (oddsData.source === 'estimated_spring_training') {
       blocks.push('⚠ ESTIMATED LINES (Spring Training — no real market available)');
     }
+    const implHome = calculateImpliedProbability(ml.home);
+    const implAway = calculateImpliedProbability(ml.away);
+    const impl = (n) => (n == null ? '' : ` (Implied: ${n}%)`);
     blocks.push(
-      `ML Home ${am(ml.home)} Away ${am(ml.away)}` +
+      `ML Home ${am(ml.home)}${impl(implHome)} Away ${am(ml.away)}${impl(implAway)}` +
       ` | RL Home ${sp(rl.home.spread)} ${am(rl.home.price)} Away ${sp(rl.away.spread)} ${am(rl.away.price)}` +
       ` | O/U ${ou.total ?? 'N/A'} O${am(ou.overPrice)} U${am(ou.underPrice)}`
     );
