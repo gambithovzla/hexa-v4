@@ -15,6 +15,7 @@ import LanguageToggle from './LanguageToggle';
 import AuthModal from './AuthModal';
 import HexaHelpModal from './HexaHelpModal';
 import PricingModal from './PricingModal';
+import AdminCreditPanel from './AdminCreditPanel';
 import { useAuth } from '../store/authStore';
 import { C, BARLOW, MONO } from '../theme';
 
@@ -396,6 +397,8 @@ function MethodologyLink({ lang, onClick }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, isAdmin = false, onOracleChat }) {
+  const [showCreditPanel, setShowCreditPanel] = useState(false);
+
   return (
     <Box
       component="header"
@@ -465,6 +468,46 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             }}
           >
             ORACLE CHAT
+          </Box>
+        )}
+
+        {/* Credit Manager button + panel — admin only */}
+        {isAdmin && (
+          <Box sx={{ position: 'relative', flexShrink: 0 }}>
+            <Box
+              component="button"
+              onClick={() => setShowCreditPanel(v => !v)}
+              sx={{
+                px:            '16px',
+                py:            '6px',
+                border:        showCreditPanel
+                  ? '1px solid rgba(249,115,22,0.7)'
+                  : '1px solid rgba(249,115,22,0.4)',
+                borderRadius:  '3px',
+                bgcolor:       showCreditPanel
+                  ? 'rgba(249,115,22,0.25)'
+                  : 'rgba(249,115,22,0.15)',
+                color:         '#f97316',
+                fontFamily:    MONO,
+                fontWeight:    500,
+                fontSize:      '10px',
+                letterSpacing: '1.5px',
+                textTransform: 'uppercase',
+                cursor:        'pointer',
+                whiteSpace:    'nowrap',
+                transition:    'all 0.2s ease',
+                '&:hover':     { bgcolor: 'rgba(249,115,22,0.25)', borderColor: 'rgba(249,115,22,0.6)' },
+              }}
+            >
+              CREDIT MGR
+            </Box>
+
+            {showCreditPanel && (
+              <AdminCreditPanel
+                lang={lang}
+                onClose={() => setShowCreditPanel(false)}
+              />
+            )}
           </Box>
         )}
 
