@@ -17,6 +17,9 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
   en: {
+    safePick:         'SAFE PICK',
+    hitProbability:   'HIT PROBABILITY',
+    otherSafeOptions: 'OTHER SAFE OPTIONS',
     masterPick:       'Master Pick',
     confidence:       'Oracle Confidence',
     oracleReport:     'Oracle Report',
@@ -54,6 +57,9 @@ const L = {
     },
   },
   es: {
+    safePick:         'PICK SEGURO',
+    hitProbability:   'PROBABILIDAD DE ACIERTO',
+    otherSafeOptions: 'OTRAS OPCIONES SEGURAS',
     masterPick:       'Pick Principal',
     confidence:       'Confianza del Oráculo',
     oracleReport:     'Reporte del Oráculo',
@@ -841,6 +847,143 @@ function ProbabilityBar({ homeWins, awayWins, t }) {
   );
 }
 
+// ── Safe Pick Result ──────────────────────────────────────────────────────────
+
+function SafePickResult({ data, lang, t }) {
+  const sp       = data.safe_pick ?? {};
+  const alts     = data.alternatives ?? [];
+  const hitProb  = Number(sp.hit_probability) || 0;
+  const probColor = hitProb >= 75 ? '#22c55e' : hitProb >= 55 ? '#f59e0b' : '#ef4444';
+  const circumference = 125.6;
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+      {/* SAFE PICK HEADER */}
+      <Box sx={{
+        background:  '#111111',
+        border:      '1px solid #2a2a2a',
+        borderLeft:  '3px solid #22c55e',
+        borderRadius:'4px',
+        p:           '20px',
+      }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '8px' }}>
+          <Typography sx={{
+            fontFamily: MONO, fontSize: '10px', fontWeight: 500,
+            letterSpacing: '2px', color: '#22c55e', textTransform: 'uppercase',
+          }}>
+            {t.safePick ?? 'SAFE PICK'}
+          </Typography>
+          <Typography sx={{
+            fontFamily: MONO, fontSize: '9px', letterSpacing: '1px',
+            color: probColor, background: `${probColor}15`,
+            border: `1px solid ${probColor}30`,
+            padding: '2px 8px', borderRadius: '2px',
+          }}>
+            {sp.type ?? 'ML'}
+          </Typography>
+        </Box>
+
+        {/* THE PICK */}
+        <Typography sx={{
+          fontFamily: BARLOW, fontWeight: 800, fontSize: '28px',
+          color: '#ffffff', letterSpacing: '-0.5px', lineHeight: 1.1, mb: '12px',
+        }}>
+          {sp.pick ?? '—'}
+        </Typography>
+
+        {/* HIT PROBABILITY ring */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Box sx={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+            <svg viewBox="0 0 48 48" style={{ transform: 'rotate(-90deg)', width: 48, height: 48 }}>
+              <circle cx="24" cy="24" r="20" fill="none" stroke="#2a2a2a" strokeWidth="4"/>
+              <circle
+                cx="24" cy="24" r="20" fill="none"
+                stroke={probColor} strokeWidth="4" strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={circumference - (circumference * hitProb / 100)}
+              />
+            </svg>
+            <Box sx={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontFamily: MONO, fontWeight: 500,
+              fontSize: '12px', color: probColor,
+            }}>
+              {hitProb}%
+            </Box>
+          </Box>
+          <Box>
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: '#666', letterSpacing: '1px' }}>
+              {t.hitProbability ?? 'HIT PROBABILITY'}
+            </Typography>
+            <Typography sx={{ fontFamily: SANS, fontSize: '12px', color: '#888', mt: '2px', lineHeight: 1.4 }}>
+              {sp.reasoning ?? ''}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* ALTERNATIVES */}
+      {alts.length > 0 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Typography sx={{
+            fontFamily: MONO, fontSize: '10px', letterSpacing: '2px',
+            color: '#555', textTransform: 'uppercase', mb: '4px',
+          }}>
+            {t.otherSafeOptions ?? 'OTHER SAFE OPTIONS'}
+          </Typography>
+          {alts.map((alt, i) => (
+            <Box key={i} sx={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '3px',
+              p: '10px 12px',
+            }}>
+              <Box sx={{ flex: 1, minWidth: 0, mr: '12px' }}>
+                <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '14px', color: '#ccc' }}>
+                  {alt.pick}
+                </Typography>
+                <Typography sx={{ fontFamily: SANS, fontSize: '11px', color: '#666', mt: '2px' }}>
+                  {alt.reasoning}
+                </Typography>
+              </Box>
+              <Typography sx={{ fontFamily: MONO, fontSize: '13px', fontWeight: 500, color: '#f59e0b', flexShrink: 0 }}>
+                {alt.hit_probability}%
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* GAME OVERVIEW */}
+      {data.game_overview && (
+        <Box sx={{ borderLeft: '2px solid #333', pl: '12px', py: '4px' }}>
+          <Typography sx={{ fontFamily: SANS, fontSize: '12px', color: '#777', fontStyle: 'italic' }}>
+            {data.game_overview}
+          </Typography>
+        </Box>
+      )}
+
+      {/* ALERT FLAGS */}
+      {data.alert_flags?.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {data.alert_flags.map((flag, i) => {
+            const fc = getFlagColor(flag);
+            return (
+              <Typography key={i} sx={{
+                fontFamily: MONO, fontSize: '10px', color: fc.color,
+                background: fc.bg, border: `1px solid ${fc.border}`,
+                padding: '3px 8px', borderRadius: '2px',
+              }}>
+                {flag}
+              </Typography>
+            );
+          })}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function SingleGameResult({ hexa, t }) {
   const mp         = hexa.master_prediction ?? {};
   const bp         = hexa.best_pick;
@@ -1371,6 +1514,11 @@ export default function ResultCard({ data, lang = 'en' }) {
         {t.noData}
       </Typography>
     );
+  }
+
+  // Safe Pick
+  if (data.safe_pick) {
+    return <SafePickResult data={data} lang={lang} t={t} />;
   }
 
   // Single game

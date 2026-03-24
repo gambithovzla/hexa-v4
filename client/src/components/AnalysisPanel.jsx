@@ -177,7 +177,8 @@ function BetTypeSelect({ value, onChange, t }) {
   );
 }
 
-function ModelPicker({ value, onChange, t }) {
+function ModelPicker({ value, onChange, t, lang }) {
+  const safeActive = value === 'safe';
   const options = [
     { value: 'deep',    label: t.modelSelect.deep    },
     { value: 'premium', label: t.modelSelect.premium },
@@ -187,6 +188,29 @@ function ModelPicker({ value, onChange, t }) {
     <Box>
       <SectionLabel>{t.modelSelect.label}</SectionLabel>
       <Box sx={{ display: 'flex', gap: '4px' }}>
+        {/* Safe Pick button */}
+        <Box
+          component="button"
+          onClick={() => onChange('safe')}
+          sx={{
+            flex:          1,
+            border:        `1px solid ${safeActive ? 'rgba(34,197,94,0.3)' : '#2a2a2a'}`,
+            borderRadius:  '3px',
+            background:    safeActive ? 'rgba(34,197,94,0.1)' : 'transparent',
+            color:         safeActive ? '#22c55e' : '#666',
+            fontFamily:    "'Barlow Condensed', sans-serif",
+            fontWeight:    700,
+            fontSize:      '11px',
+            letterSpacing: '1.5px',
+            padding:       '6px 14px',
+            cursor:        'pointer',
+            transition:    'all 0.15s',
+          }}
+        >
+          SAFE PICK
+        </Box>
+
+        {/* Deep / Premium */}
         {options.map(o => {
           const active = value === o.value;
           return (
@@ -217,6 +241,24 @@ function ModelPicker({ value, onChange, t }) {
           );
         })}
       </Box>
+
+      {/* Safe Pick descriptive text */}
+      {safeActive && (
+        <Box sx={{
+          fontFamily:  "'JetBrains Mono', monospace",
+          fontSize:    '10px',
+          color:       '#22c55e',
+          background:  'rgba(34,197,94,0.05)',
+          border:      '1px solid rgba(34,197,94,0.1)',
+          borderRadius:'3px',
+          padding:     '8px 12px',
+          marginTop:   '8px',
+        }}>
+          {lang === 'es'
+            ? 'H.E.X.A. evaluará TODOS los tipos de apuesta y te dará el que tenga mayor probabilidad de acierto.'
+            : 'H.E.X.A. will evaluate ALL bet types and give you the one with the highest probability of hitting.'}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -422,6 +464,7 @@ const BASE_COST = {
 const WEB_INTEL_COST = 3; // only for single game
 
 function calcCreditCost(mode, modelMode, webSearch) {
+  if (modelMode === 'safe') return 2;
   const base = BASE_COST[mode]?.[modelMode] ?? 1;
   const webBonus = (mode === 'single' && webSearch) ? WEB_INTEL_COST : 0;
   return base + webBonus;
@@ -429,12 +472,12 @@ function calcCreditCost(mode, modelMode, webSearch) {
 
 const ACTION_SANS = {
   en: {
-    single:  { deep: 'Single Deep Analysis', premium: 'Single Premium Analysis' },
-    parlay:  { deep: 'Parlay Deep Analysis',  premium: 'Parlay Premium Analysis'  },
+    single:  { deep: 'Single Deep Analysis', premium: 'Single Premium Analysis', safe: 'Safe Pick Analysis' },
+    parlay:  { deep: 'Parlay Deep Analysis',  premium: 'Parlay Premium Analysis',  safe: 'Safe Pick Analysis' },
   },
   es: {
-    single:  { deep: 'Análisis Single Deep', premium: 'Análisis Single Premium' },
-    parlay:  { deep: 'Análisis Parlay Deep',  premium: 'Análisis Parlay Premium'  },
+    single:  { deep: 'Análisis Single Deep', premium: 'Análisis Single Premium', safe: 'Análisis Safe Pick' },
+    parlay:  { deep: 'Análisis Parlay Deep',  premium: 'Análisis Parlay Premium',  safe: 'Análisis Safe Pick' },
   },
 };
 
@@ -608,7 +651,15 @@ export default function AnalysisPanel({
     try {
       let endpoint, body;
 
-      if (mode === 'single') {
+      if (modelMode === 'safe') {
+        const g = selectedGames[0];
+        endpoint = `${API_URL}/api/analyze/safe`;
+        body = {
+          gameId: g.gamePk,
+          date:   g.gameDate?.split('T')[0],
+          lang,
+        };
+      } else if (mode === 'single') {
         const g = selectedGames[0];
         endpoint = `${API_URL}/api/analyze/game`;
         body = {
@@ -699,7 +750,7 @@ export default function AnalysisPanel({
   function extractHexaData(response) {
     const isHexa = (obj) =>
       obj && typeof obj === 'object' &&
-      (obj.master_prediction || obj.parlay || obj.games);
+      (obj.master_prediction || obj.parlay || obj.games || obj.safe_pick);
 
     const tryParse = (str) => {
       try {
@@ -758,10 +809,13 @@ export default function AnalysisPanel({
           gap:          '18px',
         }}
       >
-        <BetTypeSelect value={betType} onChange={setBetType} t={t} />
+        {/* Bet type — hidden in safe mode (system decides) */}
+        {modelMode !== 'safe' && (
+          <BetTypeSelect value={betType} onChange={setBetType} t={t} />
+        )}
 
         {/* Model picker */}
-        <ModelPicker value={modelMode} onChange={setModelMode} t={t} />
+        <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} />
 
         {/* Parlay legs slider (only in parlay mode) */}
         {mode === 'parlay' && selectedGames.length >= 2 && (
@@ -774,8 +828,8 @@ export default function AnalysisPanel({
           />
         )}
 
-        {/* Web search toggle — single game only */}
-        {mode === 'single' && (
+        {/* Web search toggle — single game only, not in safe mode */}
+        {mode === 'single' && modelMode !== 'safe' && (
           <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
         )}
 
