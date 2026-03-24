@@ -67,7 +67,7 @@ async function deductCredits(req, res, cost) {
     return null;
   }
   // Admin account bypasses credit deduction
-  if (user.email === 'admin@hexa.com') return user;
+  if (user.email === 'cdanielrr@hotmail.com') return user;
   if (user.credits < cost) {
     res.status(403).json({ error: 'No credits remaining' });
     return null;
@@ -85,7 +85,7 @@ async function deductCredits(req, res, cost) {
  * Admin accounts are skipped (they were never charged).
  */
 async function refundCredits(userId, cost, email) {
-  if (email === 'admin@hexa.com') return;
+  if (email === 'cdanielrr@hotmail.com') return;
   try {
     await pool.query(
       'UPDATE users SET credits = credits + $1 WHERE id = $2',
@@ -100,7 +100,7 @@ async function refundCredits(userId, cost, email) {
 // ── Admin middleware ───────────────────────────────────────────────────────────
 
 function isAdmin(req, res, next) {
-  if (req.user.email !== 'admin@hexa.com') {
+  if (req.user.email !== 'cdanielrr@hotmail.com') {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -431,7 +431,7 @@ app.post('/api/analyze/chat', verifyToken, isAdmin, async (req, res) => {
 
 // GET /api/auth/is-admin — check if the authenticated user is admin
 app.get('/api/auth/is-admin', verifyToken, (req, res) => {
-  res.json({ isAdmin: req.user.email === 'admin@hexa.com' });
+  res.json({ isAdmin: req.user.email === 'cdanielrr@hotmail.com' });
 });
 
 // GET /api/savant/status
