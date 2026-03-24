@@ -242,12 +242,19 @@ function getFlagColor(flag) {
       text.includes('problemas') || text.includes('problems') ||
       text.includes('sin confirmar') || text.includes('unconfirmed') ||
       text.includes('riesgo') || text.includes('risk') ||
-      text.includes('no disponibles') || text.includes('mixtas')) {
+      text.includes('no disponibles') || text.includes('mixtas') ||
+      text.includes('disagrees') || text.includes('elevated to high') ||
+      text.includes('cannot be applied')) {
     return { color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.15)' };
   }
   if (text.includes('hot') || text.includes('streak') || text.includes('!') ||
       text.includes('caliente') || text.includes('racha') ||
-      text.includes('coherencia') || text.includes('coherence')) {
+      text.includes('coherencia') || text.includes('coherence') ||
+      text.includes('regression') || text.includes('regresión') ||
+      text.includes('jumped') || text.includes('increased') || text.includes('subió') ||
+      text.includes('bb/9') || text.includes('era') ||
+      text.includes('command') || text.includes('control') ||
+      text.includes('walk') || text.includes('bases on balls')) {
     return { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.15)' };
   }
   if (text.includes('%') || text.includes('elite') || text.includes('whiff') ||
