@@ -370,22 +370,22 @@ function MethodologyLink({ lang, onClick }) {
       component="button"
       onClick={onClick}
       sx={{
-        px:            '12px',
-        py:            '5px',
-        border:        `1px solid ${C.border}`,
-        borderRadius:  '2px',
-        bgcolor:       'transparent',
-        color:         C.textMuted,
-        fontFamily:    MONO,
-        fontSize:      '0.72rem',
+        px:            '16px',
+        py:            '6px',
+        border:        '1px solid rgba(249,115,22,0.3)',
+        borderRadius:  '3px',
+        bgcolor:       'rgba(249,115,22,0.1)',
+        color:         '#f97316',
+        fontFamily:    BARLOW,
+        fontSize:      '0.8rem',
         fontWeight:    700,
-        letterSpacing: '0.08em',
+        letterSpacing: '1.5px',
         textTransform: 'uppercase',
         cursor:        'pointer',
         whiteSpace:    'nowrap',
         flexShrink:    0,
-        transition:    'all 0.15s',
-        '&:hover':     { color: C.textSecondary, borderColor: C.border },
+        transition:    'all 0.2s ease',
+        '&:hover':     { bgcolor: 'rgba(249,115,22,0.18)', borderColor: 'rgba(249,115,22,0.5)' },
       }}
     >
       {label}

@@ -231,30 +231,47 @@ function SectionLabel({ children }) {
   );
 }
 
-function AlertFlagBadge({ flag }) {
-  const f = String(flag).toLowerCase();
-  let color, bg, border;
-  if (f.includes('hot') || f.includes('streak') || f.includes('!')) {
-    color = C.amber; bg = C.amberDim; border = C.amberLine;
-  } else if (f.includes('%') || f.includes('elite') || f.includes('whiff')) {
-    color = C.green; bg = C.greenDim; border = C.greenLine;
-  } else {
-    color = C.textMuted; bg = C.surfaceAlt; border = C.border;
+function getFlagColor(flag) {
+  const text = String(flag).toLowerCase();
+  if (text.includes('limitad') || text.includes('limited') ||
+      text.includes('no disponible') || text.includes('unavailable') ||
+      text.includes('no confiable') || text.includes('unreliable') ||
+      text.includes('spring training') ||
+      text.includes('mínima') || text.includes('minimal') ||
+      text.includes('reducida') || text.includes('reduced') ||
+      text.includes('problemas') || text.includes('problems') ||
+      text.includes('sin confirmar') || text.includes('unconfirmed') ||
+      text.includes('riesgo') || text.includes('risk') ||
+      text.includes('no disponibles') || text.includes('mixtas')) {
+    return { color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.15)' };
   }
+  if (text.includes('hot') || text.includes('streak') || text.includes('!') ||
+      text.includes('caliente') || text.includes('racha') ||
+      text.includes('coherencia') || text.includes('coherence')) {
+    return { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.15)' };
+  }
+  if (text.includes('%') || text.includes('elite') || text.includes('whiff') ||
+      text.includes('dominan') || text.includes('strong')) {
+    return { color: '#22c55e', bg: 'rgba(34,197,94,0.06)', border: 'rgba(34,197,94,0.12)' };
+  }
+  return { color: '#666', bg: '#1a1a1a', border: '#2a2a2a' };
+}
+
+function AlertFlagBadge({ flag }) {
+  const flagColors = getFlagColor(flag);
   return (
     <Box
       sx={{
         display:      'inline-flex',
         alignItems:   'center',
         gap:          '4px',
-        px:           '8px',
-        py:           '3px',
-        bgcolor:      bg,
-        border:       `1px solid ${border}`,
-        borderRadius: '2px',
         fontFamily:   MONO,
         fontSize:     '10px',
-        color,
+        color:        flagColors.color,
+        background:   flagColors.bg,
+        border:       `1px solid ${flagColors.border}`,
+        padding:      '3px 8px',
+        borderRadius: '2px',
         lineHeight:   1.4,
       }}
     >
@@ -937,19 +954,19 @@ function SingleGameResult({ hexa, t }) {
       {hexa.hexa_hunch && (
         <Box
           sx={{
-            borderLeft: `2px solid ${C.borderLight}`,
-            pl: '14px',
-            py: '4px',
+            borderLeft:   '3px solid #f97316',
+            background:   'rgba(249,115,22,0.04)',
+            padding:      '12px 16px',
+            borderRadius: '0',
           }}
         >
           <Typography
             sx={{
               fontFamily:    MONO,
               fontSize:      '10px',
-              fontWeight:    700,
-              color:         C.textDim,
-              textTransform: 'uppercase',
               letterSpacing: '2px',
+              color:         '#f97316',
+              textTransform: 'uppercase',
               mb:            '6px',
             }}
           >
@@ -958,10 +975,10 @@ function SingleGameResult({ hexa, t }) {
           <Typography
             sx={{
               fontFamily: SANS,
-              fontSize:   '12px',
-              color:      C.textMuted,
+              fontSize:   '13px',
+              color:      '#aaaaaa',
               fontStyle:  'italic',
-              lineHeight: 1.6,
+              lineHeight: 1.7,
             }}
           >
             ⬡ {hexa.hexa_hunch}
