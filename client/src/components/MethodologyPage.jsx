@@ -19,18 +19,18 @@ const DM     = '"DM Sans", system-ui, sans-serif';
 const MONO   = '"JetBrains Mono", "Fira Code", monospace';
 
 const C = {
-  bg:          '#04080F',
-  bgCard:      '#080D1A',
-  bgCardHover: '#0D1424',
-  border:      '#1A2540',
-  accent:      '#0066FF',
-  accentSec:   '#00D4FF',
-  accentFade:  'rgba(0,102,255,0.08)',
-  gold:        '#FFB800',
+  bg:          '#111111',
+  bgCard:      '#111111',
+  bgCardHover: '#111111',
+  border:      '#2a2a2a',
+  accent:      '#f97316',
+  accentSec:   '#f97316',
+  accentFade:  'rgba(249,115,22,0.08)',
+  gold:        '#f59e0b',
   textPrimary: '#E8EDF5',
-  textMuted:   '#5A7090',
-  textDim:     '#3D5070',
-  green:       '#00E676',
+  textMuted:   '#888888',
+  textDim:     '#555555',
+  green:       '#22c55e',
 };
 
 // ── Localised copy ────────────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ function ProcessStep({ num, label, body, isLast }) {
             left:     '19px',
             width:    '2px',
             bottom:   '-24px',
-            background: `linear-gradient(180deg, ${C.accent}60 0%, transparent 100%)`,
+            background: C.accent,
           }}
         />
       )}
@@ -491,7 +491,7 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
             height:    { xs: '32px', sm: '38px' },
             width:     'auto',
             userSelect:'none',
-            filter:    'drop-shadow(0 0 12px rgba(0,102,255,0.3))',
+            filter:    'none',
           }}
         />
       </Box>
@@ -499,7 +499,7 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
       {/* ── Hero ── */}
       <Box
         sx={{
-          background:  'radial-gradient(ellipse at 50% 0%, #0D1528 0%, #04080F 65%)',
+          background:  '#111111',
           borderBottom:`1px solid ${C.border}`,
           py:          { xs: 8, md: 12 },
           px:          { xs: 2, sm: 3 },
@@ -528,10 +528,7 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
             lineHeight:    1,
-            background:    'linear-gradient(135deg, #E8EDF5 0%, #0066FF 50%, #00D4FF 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
+            color:         '#E8EDF5',
             mb:            3,
           }}
         >
@@ -574,13 +571,13 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
 
       {/* ── Signal Hierarchy ── */}
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '6rem 2rem' }}>
-        <div style={{ marginBottom: '0.75rem', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#00d4ff' }}>
+        <div style={{ marginBottom: '0.75rem', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#f97316' }}>
           {lang === 'es' ? '02 — JERARQUÍA DE SEÑALES' : '02 — SIGNAL HIERARCHY'}
         </div>
         <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', color: '#fff', lineHeight: 1.1, marginBottom: '1rem' }}>
           {lang === 'es' ? <>Cuando los datos se contradicen,<br/>H.E.X.A. sabe cuál manda.</> : <>When data conflicts,<br/>H.E.X.A. knows which signal wins.</>}
         </h2>
-        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: 'rgba(232,237,244,0.5)', maxWidth: 600, marginBottom: '3rem' }}>
+        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: '#888888', maxWidth: 600, marginBottom: '3rem' }}>
           {lang === 'es' ? 'No todas las señales pesan igual. Este es el orden de prioridad que resuelve conflictos entre datos.' : 'Not all signals carry equal weight. This is the priority order that resolves data conflicts.'}
         </p>
         <div style={{ display: 'flex', gap: '3rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -588,32 +585,32 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
             {SIGNAL_HIERARCHY.map((h, i) => (
               <div key={i} onClick={() => setActiveLevel(i)} style={{
                 display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem',
-                borderRadius: 8, cursor: 'pointer', border: '1px solid transparent',
-                background: activeLevel === i ? '#0f2035' : 'transparent',
-                borderColor: activeLevel === i ? 'rgba(0,212,255,0.12)' : 'transparent',
+                borderRadius: 3, cursor: 'pointer', border: '1px solid transparent',
+                background: activeLevel === i ? '#1c1c1c' : 'transparent',
+                borderColor: activeLevel === i ? '#2a2a2a' : 'transparent',
                 transition: 'all 0.3s ease',
               }}>
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.5rem', color: activeLevel === i ? '#00d4ff' : 'rgba(232,237,244,0.15)', minWidth: 36, transition: 'color 0.3s ease' }}>{h.level}</span>
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '0.9rem', letterSpacing: 1.5, color: activeLevel === i ? '#fff' : 'rgba(232,237,244,0.5)', transition: 'color 0.3s ease' }}>{h.name}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.5rem', color: activeLevel === i ? '#f97316' : '#333333', minWidth: 36, transition: 'color 0.3s ease' }}>{h.level}</span>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '0.9rem', letterSpacing: 1.5, color: activeLevel === i ? '#fff' : '#888888', transition: 'color 0.3s ease' }}>{h.name}</span>
               </div>
             ))}
           </div>
-          <div style={{ flex: 1, background: '#0f2035', border: '1px solid rgba(0,212,255,0.12)', borderRadius: 12, padding: '2.5rem', position: 'relative', overflow: 'hidden', minHeight: 240, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 280 }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, width: 3, height: '100%', background: 'linear-gradient(to bottom, #00d4ff, transparent)' }} />
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 3, textTransform: 'uppercase', color: '#00d4ff', marginBottom: '0.75rem' }}>
+          <div style={{ flex: 1, background: '#1c1c1c', border: '1px solid #2a2a2a', borderRadius: 4, padding: '2.5rem', position: 'relative', overflow: 'hidden', minHeight: 240, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 280 }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, width: 3, height: '100%', background: '#f97316' }} />
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 3, textTransform: 'uppercase', color: '#f97316', marginBottom: '0.75rem' }}>
               {lang === 'es' ? 'PRIORIDAD' : 'PRIORITY'} {SIGNAL_HIERARCHY[activeLevel].level}
             </div>
             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.8rem', color: '#fff', marginBottom: '1rem' }}>
               {SIGNAL_HIERARCHY[activeLevel].name}
             </div>
-            <p style={{ fontSize: '0.95rem', lineHeight: 1.8, color: 'rgba(232,237,244,0.6)', maxWidth: 480 }}>
+            <p style={{ fontSize: '0.95rem', lineHeight: 1.8, color: '#aaaaaa', maxWidth: 480 }}>
               {lang === 'es' ? SIGNAL_HIERARCHY[activeLevel].desc : SIGNAL_HIERARCHY[activeLevel].descEn}
             </p>
             <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1, height: 4, background: 'rgba(232,237,244,0.08)', borderRadius: 4, overflow: 'hidden', maxWidth: 200 }}>
-                <div style={{ height: '100%', width: `${SIGNAL_HIERARCHY[activeLevel].weight}%`, background: 'linear-gradient(90deg, #00d4ff, #f0c040)', borderRadius: 4, transition: 'width 0.6s ease' }} />
+              <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden', maxWidth: 200 }}>
+                <div style={{ height: '100%', width: `${SIGNAL_HIERARCHY[activeLevel].weight}%`, background: '#f97316', borderRadius: 2, transition: 'width 0.6s ease' }} />
               </div>
-              <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '0.8rem', color: 'rgba(232,237,244,0.35)', letterSpacing: 1 }}>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.8rem', color: '#555555', letterSpacing: 1 }}>
                 {lang === 'es' ? 'PESO RELATIVO' : 'RELATIVE WEIGHT'}
               </span>
             </div>
@@ -626,62 +623,62 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
 
       {/* ── Data Integrity ── */}
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '6rem 2rem' }}>
-        <div style={{ marginBottom: '0.75rem', fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#00d4ff' }}>
+        <div style={{ marginBottom: '0.75rem', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#f97316' }}>
           {lang === 'es' ? '03 — INTEGRIDAD DE DATOS' : '03 — DATA INTEGRITY'}
         </div>
         <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', color: '#fff', lineHeight: 1.1, marginBottom: '1rem' }}>
           {lang === 'es' ? <>Si los datos son incompletos,<br/>la confianza baja. Siempre.</> : <>If data is incomplete,<br/>confidence drops. Always.</>}
         </h2>
-        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: 'rgba(232,237,244,0.5)', maxWidth: 600, marginBottom: '3rem' }}>
+        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: '#888888', maxWidth: 600, marginBottom: '3rem' }}>
           {lang === 'es'
             ? 'Antes de cada análisis, H.E.X.A. calcula un score de calidad de datos (0-100) que determina qué tipos de apuesta están disponibles y cuánto se penaliza la confianza. Sin teatro.'
             : 'Before every analysis, H.E.X.A. calculates a data quality score (0-100) that determines which bet types are available and how much confidence is penalized. No theater.'}
         </p>
-        <div style={{ background: '#0f2035', border: '1px solid rgba(0,212,255,0.12)', borderRadius: 16, padding: '3rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 1, background: 'rgba(0,212,255,0.12)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: '#1c1c1c', border: '1px solid #2a2a2a', borderRadius: 4, padding: '3rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 1, background: '#2a2a2a', borderRadius: 3, overflow: 'hidden' }}>
             {/* FULL */}
-            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#4ade80', marginBottom: '0.5rem' }}>80-100</div>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#22c55e', marginBottom: '0.5rem' }}>80-100</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
                 {lang === 'es' ? 'ANÁLISIS COMPLETO' : 'FULL ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
                 {lang === 'es'
                   ? 'Todos los datos disponibles. Todos los tipos de apuesta habilitados. Máxima confianza.'
                   : 'All data available. All bet types enabled. Maximum confidence.'}
               </p>
             </div>
             {/* STANDARD */}
-            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#00d4ff', marginBottom: '0.5rem' }}>60-79</div>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#f97316', marginBottom: '0.5rem' }}>60-79</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
                 {lang === 'es' ? 'ANÁLISIS ESTÁNDAR' : 'STANDARD ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
                 {lang === 'es'
                   ? 'Props solo con datos Statcast confirmados del jugador. Confianza ajustada.'
                   : 'Props only with confirmed player Statcast data. Adjusted confidence.'}
               </p>
             </div>
             {/* LIMITED */}
-            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#f0c040', marginBottom: '0.5rem' }}>40-59</div>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#f59e0b', marginBottom: '0.5rem' }}>40-59</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
                 {lang === 'es' ? 'ANÁLISIS LIMITADO' : 'LIMITED ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
                 {lang === 'es'
                   ? 'Solo Moneyline y Over/Under. Confianza penalizada -15%. Riesgo elevado.'
                   : 'Moneyline and Over/Under only. Confidence penalized -15%. Elevated risk.'}
               </p>
             </div>
             {/* MINIMAL */}
-            <div style={{ background: '#0a1628', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.6rem', color: '#f87171', marginBottom: '0.5rem' }}>0-39</div>
-              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(232,237,244,0.5)', marginBottom: '0.75rem' }}>
+            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#f87171', marginBottom: '0.5rem' }}>0-39</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
                 {lang === 'es' ? 'ANÁLISIS MÍNIMO' : 'MINIMAL ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: 'rgba(232,237,244,0.4)' }}>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
                 {lang === 'es'
                   ? 'Solo Moneyline. Confianza -25%. Riesgo alto obligatorio. Máxima transparencia.'
                   : 'Moneyline only. Confidence -25%. High risk mandatory. Maximum transparency.'}
