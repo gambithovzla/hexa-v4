@@ -427,7 +427,7 @@ function SectionTitle({ children }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function MethodologyPage({ lang = 'en', onBack }) {
+export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
   const t = COPY[lang] ?? COPY.en;
   const [activeLevel, setActiveLevel] = useState(0);
 
@@ -494,6 +494,33 @@ export default function MethodologyPage({ lang = 'en', onBack }) {
             filter:    'none',
           }}
         />
+
+        {/* Spacer */}
+        <Box sx={{ flex: 1 }} />
+
+        {/* Language toggle */}
+        {onToggleLang && (
+          <Box
+            component="button"
+            onClick={onToggleLang}
+            sx={{
+              background:    '#1c1c1c',
+              border:        '1px solid #2a2a2a',
+              color:         '#888',
+              padding:       '6px 12px',
+              borderRadius:  '3px',
+              fontFamily:    MONO,
+              fontWeight:    500,
+              fontSize:      '11px',
+              letterSpacing: '1px',
+              cursor:        'pointer',
+              flexShrink:    0,
+              '&:hover':     { color: '#aaa', borderColor: '#3a3a3a' },
+            }}
+          >
+            {lang === 'es' ? 'EN' : 'ES'}
+          </Box>
+        )}
       </Box>
 
       {/* ── Hero ── */}

@@ -83,7 +83,7 @@ export default function App() {
     return (
       <ThemeProvider theme={muiTheme}>
         <CssBaseline />
-        <MethodologyPage lang={lang} onBack={() => setShowMethodology(false)} />
+        <MethodologyPage lang={lang} onBack={() => setShowMethodology(false)} onToggleLang={() => setLang(prev => prev === 'es' ? 'en' : 'es')} />
       </ThemeProvider>
     );
   }
