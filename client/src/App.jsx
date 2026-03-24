@@ -24,10 +24,9 @@ import BankrollTracker      from './components/BankrollTracker';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
 import useHistory           from './hooks/useHistory';
+import { C, MONO } from './theme';
 
 const muiTheme = createTheme(themeConfig);
-
-const MONO = '"JetBrains Mono", "Fira Code", monospace';
 
 // Two-column layout used on game / parlay tabs
 const TAB_LAYOUT = {
@@ -47,7 +46,7 @@ function AppFooter() {
         mt:         6,
         py:         '14px',
         px:         3,
-        borderTop:  '1px solid #1e293b',
+        borderTop:  `1px solid ${C.border}`,
         textAlign:  'center',
       }}
     >
@@ -55,7 +54,7 @@ function AppFooter() {
         sx={{
           fontFamily: MONO,
           fontSize:   '11px',
-          color:      '#475569',
+          color:      C.textDim,
           userSelect: 'none',
         }}
       >
@@ -95,7 +94,7 @@ export default function App() {
       <Box
         sx={{
           minHeight:       '100vh',
-          bgcolor:         '#0a0e17',
+          bgcolor:         C.bg,
           display:         'flex',
           flexDirection:   'column',
         }}

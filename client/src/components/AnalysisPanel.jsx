@@ -14,31 +14,9 @@ import { Box, Typography, Switch, Slider } from '@mui/material';
 import ResultCard from './ResultCard';
 import AuthModal from './AuthModal';
 import { useAuth } from '../store/authStore';
+import { C, BARLOW, MONO, SANS } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// ── Design tokens ────────────────────────────────────────────────────────────
-const C = {
-  bg:          '#04080F',
-  bgSec:       '#080D1A',
-  cardBg:      '#0D1424',
-  cardBorder:  '#1A2540',
-  accent:      '#0066FF',
-  accentSec:   '#00D4FF',
-  accentDim:   'rgba(0,102,255,0.08)',
-  accentLine:  'rgba(0,102,255,0.25)',
-  textPrimary: '#E8EDF5',
-  textMuted:   '#5A7090',
-  green:       '#00E676',
-  red:         '#FF3D57',
-  amber:       '#FFB800',
-  blue:        '#0066FF',
-  overlay:     'rgba(4,8,15,0.85)',
-};
-
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
-const MONO   = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL  = '"DM Sans", system-ui, sans-serif';
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
@@ -128,12 +106,12 @@ function SectionLabel({ children }) {
   return (
     <Typography
       sx={{
-        fontFamily:    BARLOW,
-        fontSize:      '0.7rem',
+        fontFamily:    MONO,
+        fontSize:      '10px',
         fontWeight:    700,
-        color:         C.textMuted,
+        color:         C.textDim,
         textTransform: 'uppercase',
-        letterSpacing: '0.12em',
+        letterSpacing: '2px',
         mb:            '8px',
         display:       'flex',
         alignItems:    'center',
@@ -141,8 +119,8 @@ function SectionLabel({ children }) {
         '&::before': {
           content:      '""',
           display:      'inline-block',
-          width:        '6px',
-          height:       '6px',
+          width:        '5px',
+          height:       '5px',
           borderRadius: '50%',
           bgcolor:      C.accent,
           flexShrink:   0,
@@ -174,12 +152,12 @@ function BetTypeSelect({ value, onChange, t }) {
         onChange={e => onChange(e.target.value)}
         style={{
           width:             '100%',
-          background:        C.bgSec,
-          border:            `1px solid ${C.cardBorder}`,
+          background:        C.surfaceAlt,
+          border:            `1px solid ${C.border}`,
           borderRadius:      '2px',
           color:             C.textPrimary,
-          fontFamily:        LABEL,
-          fontSize:          '0.8rem',
+          fontFamily:        MONO,
+          fontSize:          '11px',
           padding:           '8px 10px',
           cursor:            'pointer',
           outline:           'none',
@@ -199,21 +177,6 @@ function BetTypeSelect({ value, onChange, t }) {
   );
 }
 
-const MODEL_CFG = {
-  deep: {
-    gradient: 'linear-gradient(135deg, #6B21A8 0%, #9333EA 100%)',
-    glow:     'rgba(147,51,234,0.4)',
-    dim:      'rgba(107,33,168,0.12)',
-    color:    '#C084FC',
-  },
-  premium: {
-    gradient: 'linear-gradient(135deg, #B45309 0%, #F59E0B 100%)',
-    glow:     'rgba(245,158,11,0.4)',
-    dim:      'rgba(180,83,9,0.12)',
-    color:    '#FCD34D',
-  },
-};
-
 function ModelPicker({ value, onChange, t }) {
   const options = [
     { value: 'deep',    label: t.modelSelect.deep    },
@@ -223,10 +186,9 @@ function ModelPicker({ value, onChange, t }) {
   return (
     <Box>
       <SectionLabel>{t.modelSelect.label}</SectionLabel>
-      <Box sx={{ display: 'flex', gap: '6px' }}>
+      <Box sx={{ display: 'flex', gap: '4px' }}>
         {options.map(o => {
           const active = value === o.value;
-          const cfg    = MODEL_CFG[o.value];
           return (
             <Box
               key={o.value}
@@ -236,24 +198,18 @@ function ModelPicker({ value, onChange, t }) {
                 flex:          1,
                 py:            '7px',
                 px:            '4px',
-                border:        `1px solid ${active ? cfg.color + '70' : C.cardBorder}`,
+                border:        `1px solid ${active ? C.accentLine : C.border}`,
                 borderRadius:  '2px',
-                background:    active ? cfg.gradient : 'transparent',
-                color:         active ? '#ffffff' : C.textMuted,
-                fontFamily:    BARLOW,
-                fontSize:      '0.75rem',
+                background:    active ? C.accentDim : 'transparent',
+                color:         active ? C.accent : C.textMuted,
+                fontFamily:    MONO,
+                fontSize:      '10px',
                 fontWeight:    700,
-                letterSpacing: '0.06em',
+                letterSpacing: '1px',
                 textTransform: 'uppercase',
                 cursor:        'pointer',
                 transition:    'all 0.15s',
-                boxShadow:     active ? `0 0 16px ${cfg.glow}, inset 0 1px 0 rgba(255,255,255,0.1)` : 'none',
-                textShadow:    active ? `0 0 12px ${cfg.color}` : 'none',
-                '&:hover':     {
-                  borderColor: cfg.color + '60',
-                  color:       active ? '#ffffff' : C.textPrimary,
-                  boxShadow:   `0 0 10px ${cfg.glow}`,
-                },
+                '&:hover':     { color: active ? C.accent : C.textSecondary },
               }}
             >
               {o.label}
@@ -269,10 +225,10 @@ function WebSearchToggle({ value, onChange, t }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <Box>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.8rem', color: C.textPrimary, fontWeight: 600 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textSecondary, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>
           {t.webSearch}
         </Typography>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: C.textMuted }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.65rem', color: C.textMuted }}>
           Live news &amp; injury data
         </Typography>
       </Box>
@@ -308,8 +264,8 @@ function ParlayLegsSlider({ value, min, max, onChange, t }) {
         sx={{
           color: C.accent,
           '& .MuiSlider-thumb': { bgcolor: C.accent, width: 14, height: 14 },
-          '& .MuiSlider-rail':  { bgcolor: C.cardBorder },
-          '& .MuiSlider-mark':  { bgcolor: C.cardBorder },
+          '& .MuiSlider-rail':  { bgcolor: C.border },
+          '& .MuiSlider-mark':  { bgcolor: C.border },
           '& .MuiSlider-markActive': { bgcolor: C.accent },
         }}
       />
@@ -324,17 +280,17 @@ function OracleSpinner({ t }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 7, gap: '20px' }}>
       <Box
         sx={{
-          width: 52,
-          height: 52,
+          width: 36,
+          height: 36,
           borderRadius: '50%',
-          border: `3px solid ${C.cardBorder}`,
-          borderTopColor: C.accentSec,
+          border: `2px solid ${C.border}`,
+          borderTopColor: C.accent,
           '@keyframes oracleSpin': { to: { transform: 'rotate(360deg)' } },
           animation: 'oracleSpin 0.75s linear infinite',
         }}
       />
       <Box sx={{ textAlign: 'center' }}>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.textMuted, mb: '4px' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', letterSpacing: '2px', color: C.textMuted, textTransform: 'uppercase', mb: '4px' }}>
           {t.analyzing}
         </Typography>
         <Box sx={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
@@ -364,8 +320,8 @@ function ErrorDisplay({ error, onRetry, t }) {
   return (
     <Box
       sx={{
-        bgcolor: 'rgba(255,61,87,0.06)',
-        border: `1px solid rgba(255,61,87,0.28)`,
+        bgcolor: C.redDim,
+        border: `1px solid ${C.redLine}`,
         borderRadius: '2px',
         p: '20px',
         display: 'flex',
@@ -375,7 +331,7 @@ function ErrorDisplay({ error, onRetry, t }) {
         textAlign: 'center',
       }}
     >
-      <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.red, fontWeight: 600 }}>
+      <Typography sx={{ fontFamily: SANS, fontSize: '0.875rem', color: C.red, fontWeight: 600 }}>
         {t.error}
       </Typography>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textMuted }}>
@@ -423,7 +379,7 @@ function EmptyState({ mode, canAnalyze, t }) {
       <Typography sx={{ fontSize: '2rem', lineHeight: 1 }}>⚾</Typography>
       <Typography
         sx={{
-          fontFamily: LABEL,
+          fontFamily: SANS,
           fontSize: '0.82rem',
           color: C.textMuted,
           textAlign: 'center',
@@ -450,7 +406,7 @@ function NoCreditsMessage({ lang }) {
         textAlign:    'center',
       }}
     >
-      <Typography sx={{ fontFamily: LABEL, fontSize: '0.85rem', color: C.red, fontWeight: 600 }}>
+      <Typography sx={{ fontFamily: SANS, fontSize: '0.85rem', color: C.red, fontWeight: 600 }}>
         {isEs ? 'Sin créditos — próximamente recarga' : 'No credits remaining — top-up coming soon'}
       </Typography>
     </Box>
@@ -471,7 +427,7 @@ function calcCreditCost(mode, modelMode, webSearch) {
   return base + webBonus;
 }
 
-const ACTION_LABEL = {
+const ACTION_SANS = {
   en: {
     single:  { deep: 'Single Deep Analysis', premium: 'Single Premium Analysis' },
     parlay:  { deep: 'Parlay Deep Analysis',  premium: 'Parlay Premium Analysis'  },
@@ -488,14 +444,14 @@ function CreditCostIndicator({ cost, userCredits, isAuthenticated, lang, mode, m
   const isEs        = lang === 'es';
   const credits     = isAuthenticated ? (userCredits ?? 0) : null;
   const hasEnough   = credits === null || credits >= cost;
-  const actionLabel = ACTION_LABEL[isEs ? 'es' : 'en']?.[mode]?.[modelMode] ?? '';
+  const actionLabel = ACTION_SANS[isEs ? 'es' : 'en']?.[mode]?.[modelMode] ?? '';
 
   return (
     <Box
       sx={{
         p:            '12px 14px',
-        bgcolor:      hasEnough ? 'rgba(0,102,255,0.05)' : 'rgba(255,61,87,0.06)',
-        border:       `1px solid ${hasEnough ? C.accentLine : 'rgba(255,61,87,0.3)'}`,
+        bgcolor:      hasEnough ? C.accentDim : C.redDim,
+        border:       `1px solid ${hasEnough ? C.accentLine : C.redLine}`,
         borderRadius: '2px',
         display:      'flex',
         flexDirection:'column',
@@ -511,7 +467,7 @@ function CreditCostIndicator({ cost, userCredits, isAuthenticated, lang, mode, m
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <Typography component="span" sx={{ fontSize: '0.75rem' }}>⚡</Typography>
-          <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.9rem', fontWeight: 700, color: hasEnough ? C.accentSec : C.red }}>
+          <Typography component="span" sx={{ fontFamily: MONO, fontSize: '0.9rem', fontWeight: 700, color: hasEnough ? C.accent : C.red }}>
             {cost}
           </Typography>
           <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '0.68rem', color: C.textMuted, letterSpacing: '0.06em' }}>
@@ -552,33 +508,18 @@ function RunButton({ canAnalyze, loading, onClick, t }) {
       sx={{
         width:         '100%',
         py:            '14px',
-        border:        `1px solid ${active ? C.accentSec + '80' : C.cardBorder}`,
-        borderRadius:  '2px',
-        background:    active
-          ? `linear-gradient(135deg, ${C.accent} 0%, ${C.accentSec} 100%)`
-          : C.cardBg,
-        color:         active ? '#ffffff' : C.textMuted,
+        border:        'none',
+        borderRadius:  '3px',
+        background:    active ? C.accent : C.border,
+        color:         active ? '#111111' : C.textMuted,
         fontFamily:    BARLOW,
-        fontSize:      '15px',
-        fontWeight:    800,
+        fontSize:      '13px',
+        fontWeight:    700,
         cursor:        active ? 'pointer' : 'not-allowed',
-        letterSpacing: '0.1em',
+        letterSpacing: '1px',
         textTransform: 'uppercase',
-        transition:    'all 0.2s',
-        boxShadow:     active
-          ? '0 0 30px rgba(0,102,255,0.5), 0 4px 15px rgba(0,0,0,0.3)'
-          : 'none',
-        '@keyframes runButtonPulse': {
-          '0%, 100%': { boxShadow: '0 0 0 0 rgba(0,102,255,0)' },
-          '50%':      { boxShadow: '0 0 14px rgba(0,102,255,0.18)' },
-        },
-        animation: !active ? 'runButtonPulse 3s ease-in-out infinite' : 'none',
-        '&:hover':  active
-          ? {
-              transform: 'scale(1.01) translateY(-1px)',
-              boxShadow: '0 0 50px rgba(0,102,255,0.65), 0 0 25px rgba(0,212,255,0.3), 0 6px 20px rgba(0,0,0,0.35)',
-            }
-          : {},
+        transition:    'opacity 0.15s',
+        '&:hover':     active ? { opacity: 0.88 } : {},
       }}
     >
       {loading ? t.analyzing : t.runOracle}
@@ -808,15 +749,13 @@ export default function AnalysisPanel({
       {/* ── Controls card ── */}
       <Box
         sx={{
-          bgcolor:      C.cardBg,
-          border:       `1px solid ${C.cardBorder}`,
-          borderLeft:   `1px solid ${C.cardBorder}`,
-          borderRadius: '2px',
+          bgcolor:      C.surface,
+          border:       `1px solid ${C.border}`,
+          borderRadius: '4px',
           p:            '20px',
           display:      'flex',
           flexDirection:'column',
           gap:          '18px',
-          boxShadow:    'inset 3px 0 12px rgba(0,102,255,0.12), inset 0 0 40px rgba(0,102,255,0.02)',
         }}
       >
         <BetTypeSelect value={betType} onChange={setBetType} t={t} />
@@ -899,19 +838,19 @@ export default function AnalysisPanel({
       {lineupDialogOpen && (
         <Box sx={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          bgcolor: 'rgba(4,8,15,0.88)',
+          bgcolor: 'rgba(17,17,17,0.92)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <Box sx={{
             position: 'relative', zIndex: 10000,
-            bgcolor: C.cardBg, border: `1px solid ${C.amber}44`,
-            borderLeft: `4px solid ${C.amber}`,
+            bgcolor: C.surface, border: `1px solid ${C.amberLine}`,
+            borderLeft: `3px solid ${C.amber}`,
             borderRadius: '4px', p: '28px', maxWidth: '420px', width: '90%',
           }}>
             <Typography sx={{ fontFamily: BARLOW, fontSize: '0.9rem', fontWeight: 700, color: C.amber, textTransform: 'uppercase', letterSpacing: '0.1em', mb: '12px' }}>
               {t.lineupDialog.title}
             </Typography>
-            <Typography sx={{ fontFamily: LABEL, fontSize: '0.83rem', color: C.textPrimary, lineHeight: 1.65, mb: '24px' }}>
+            <Typography sx={{ fontFamily: SANS, fontSize: '0.83rem', color: C.textPrimary, lineHeight: 1.65, mb: '24px' }}>
               {t.lineupDialog.body(unconfirmedGames.length, selectedGames.length)}
             </Typography>
             <Box sx={{ display: 'flex', gap: '10px' }}>
@@ -921,8 +860,8 @@ export default function AnalysisPanel({
                 sx={{
                   flex: 1, py: '10px', fontFamily: BARLOW, fontSize: '0.8rem', fontWeight: 700,
                   textTransform: 'uppercase', letterSpacing: '0.08em',
-                  bgcolor: C.accent, color: '#fff', border: 'none', borderRadius: '2px', cursor: 'pointer',
-                  '&:hover': { bgcolor: '#0052cc' },
+                  bgcolor: C.accent, color: '#111111', border: 'none', borderRadius: '2px', cursor: 'pointer',
+                  '&:hover': { opacity: 0.88 },
                 }}
               >
                 {t.lineupDialog.continue}
@@ -933,7 +872,7 @@ export default function AnalysisPanel({
                 sx={{
                   flex: 1, py: '10px', fontFamily: BARLOW, fontSize: '0.8rem', fontWeight: 700,
                   textTransform: 'uppercase', letterSpacing: '0.08em',
-                  bgcolor: 'transparent', color: C.textMuted, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', cursor: 'pointer',
+                  bgcolor: C.surfaceAlt, color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: '2px', cursor: 'pointer',
                   '&:hover': { color: C.textPrimary },
                 }}
               >

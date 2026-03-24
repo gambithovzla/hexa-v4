@@ -9,22 +9,9 @@
 
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
+import { C, BARLOW, MONO, SANS } from '../theme';
 
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
-const DM     = '"DM Sans", system-ui, sans-serif';
-const MONO   = '"JetBrains Mono", "Fira Code", monospace';
-
-const C = {
-  bg:          '#0a1628',
-  cardBg:      '#0d1f38',
-  cardBorder:  '#1a3050',
-  accent:      '#4fc3f7',
-  accentDim:   'rgba(79,195,247,0.08)',
-  accentLine:  'rgba(79,195,247,0.25)',
-  textPrimary: '#E8EDF5',
-  textMuted:   '#5A7090',
-  green:       '#00E676',
-};
+const DM = SANS;
 
 const PLANS = [
   {
@@ -67,8 +54,8 @@ function PlanCard({ plan, lang }) {
         display:       'flex',
         flexDirection: 'column',
         p:             '20px 18px',
-        bgcolor:       C.cardBg,
-        border:        `1px solid ${plan.highlight ? C.accent : C.cardBorder}`,
+        bgcolor:       C.surface,
+        border:        `1px solid ${plan.highlight ? C.accent : C.border}`,
         borderRadius:  0,
         position:      'relative',
         minWidth:      0,
@@ -127,7 +114,7 @@ function PlanCard({ plan, lang }) {
           mt:             'auto',
           px:             '12px',
           py:             '8px',
-          border:         `1px solid ${plan.highlight ? C.accent : C.cardBorder}`,
+          border:         `1px solid ${plan.highlight ? C.accent : C.border}`,
           borderRadius:   0,
           bgcolor:        plan.highlight ? C.accentDim : 'transparent',
           color:          plan.highlight ? C.accent : C.textPrimary,
@@ -182,12 +169,12 @@ export default function PricingModal({ onClose, lang = 'es' }) {
           maxHeight: '90vh',
           overflowY: 'auto',
           bgcolor:   C.bg,
-          border:    `1px solid ${C.cardBorder}`,
+          border:    `1px solid ${C.border}`,
           boxShadow: '0 0 60px rgba(79,195,247,0.1), 0 24px 48px rgba(0,0,0,0.6)',
         }}
       >
         {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', px: '24px', pt: '20px', pb: '16px', borderBottom: `1px solid ${C.cardBorder}` }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', px: '24px', pt: '20px', pb: '16px', borderBottom: `1px solid ${C.border}` }}>
           <Box sx={{ flex: 1 }}>
             <Typography sx={{ fontFamily: BARLOW, fontSize: '1.1rem', fontWeight: 800, color: C.textPrimary, textTransform: 'uppercase', letterSpacing: '0.15em' }}>
               {isEs ? '⚡ Créditos H.E.X.A.' : '⚡ H.E.X.A. Credits'}
@@ -214,7 +201,7 @@ export default function PricingModal({ onClose, lang = 'es' }) {
               justifyContent: 'center',
               width:          '28px',
               height:         '28px',
-              border:         `1px solid ${C.cardBorder}`,
+              border:         `1px solid ${C.border}`,
               borderRadius:   0,
               bgcolor:        'transparent',
               color:          C.textMuted,
@@ -235,7 +222,7 @@ export default function PricingModal({ onClose, lang = 'es' }) {
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
             gap:                 '1px',
             p:                   '24px',
-            bgcolor:             C.cardBorder,
+            bgcolor:             C.border,
           }}
         >
           {PLANS.map(plan => (
