@@ -395,7 +395,7 @@ function MethodologyLink({ lang, onClick }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology }) {
+export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, isAdmin = false, onOracleChat }) {
   return (
     <Box
       component="header"
@@ -439,6 +439,34 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Auth button / user pill */}
         <AuthButton lang={lang} />
+
+        {/* Oracle Chat button — admin only */}
+        {isAdmin && (
+          <Box
+            component="button"
+            onClick={onOracleChat}
+            sx={{
+              px:            '16px',
+              py:            '6px',
+              border:        '1px solid rgba(249,115,22,0.4)',
+              borderRadius:  '3px',
+              bgcolor:       'rgba(249,115,22,0.15)',
+              color:         '#f97316',
+              fontFamily:    MONO,
+              fontWeight:    500,
+              fontSize:      '10px',
+              letterSpacing: '1.5px',
+              textTransform: 'uppercase',
+              cursor:        'pointer',
+              whiteSpace:    'nowrap',
+              flexShrink:    0,
+              transition:    'all 0.2s ease',
+              '&:hover':     { bgcolor: 'rgba(249,115,22,0.25)', borderColor: 'rgba(249,115,22,0.6)' },
+            }}
+          >
+            ORACLE CHAT
+          </Box>
+        )}
 
         {/* Methodology link */}
         <MethodologyLink lang={lang} onClick={onMethodology} />
