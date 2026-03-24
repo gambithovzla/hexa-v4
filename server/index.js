@@ -379,6 +379,39 @@ app.post('/api/analyze/safe', verifyToken, async (req, res) => {
   }
 });
 
+// POST /api/admin/grant-credits — Manually add credits to a user (admin only)
+app.post('/api/admin/grant-credits', verifyToken, isAdmin, async (req, res) => {
+  const { email, amount } = req.body;
+
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    return res.status(400).json({ error: 'email is required' });
+  }
+  if (amount === undefined || amount === null) {
+    return res.status(400).json({ error: 'amount is required' });
+  }
+  const parsedAmount = Number(amount);
+  if (!Number.isInteger(parsedAmount) || parsedAmount === 0) {
+    return res.status(400).json({ error: 'amount must be a non-zero integer' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      'UPDATE users SET credits = credits + $2 WHERE email = $1 RETURNING credits',
+      [email.toLowerCase().trim(), parsedAmount]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: `User with email '${email}' not found` });
+    }
+
+    console.log(`[Admin] Granted ${parsedAmount} credits to ${email}. New balance: ${rows[0].credits}`);
+    res.json({ success: true, email: email.toLowerCase().trim(), credits: rows[0].credits });
+  } catch (err) {
+    console.error('[Admin] grant-credits error:', err.message);
+    res.status(500).json({ error: 'Failed to update credits', details: err.message });
+  }
+});
+
 // POST /api/analyze/chat — Direct chat with Oracle (admin only, no credits)
 app.post('/api/analyze/chat', verifyToken, isAdmin, async (req, res) => {
   const { gameId, question, conversationHistory = [], lang = 'en', date } = req.body;
