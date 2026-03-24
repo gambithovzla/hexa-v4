@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
-import { analyzeGame, analyzeParlay } from './oracle.js';
+import { analyzeGame, analyzeParlay, analyzeSafe } from './oracle.js';
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
 import { getCacheStatus, refreshCache, getPitcherStatcast, getBatterStatcast } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
@@ -307,6 +307,64 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
       ? { ...analysis.data, legOdds: legOddsArr.some(Boolean) ? legOddsArr : undefined }
       : null;
     res.json({ success: true, data: responseData, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/analyze/safe — Safe Pick mode (highest probability pick across all bet types)
+app.post('/api/analyze/safe', verifyToken, async (req, res) => {
+  const { gameId, lang = 'en', date } = req.body;
+  const resolvedDate = date || new Date().toISOString().split('T')[0];
+  const cost = 2; // Same as deep single
+
+  try {
+    let games    = await getTodayGames(resolvedDate);
+    let gameData = games.find(g => String(g.gamePk) === String(gameId));
+
+    if (!gameData) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (todayStr !== resolvedDate) {
+        const retryGames = await getTodayGames(todayStr);
+        gameData = retryGames.find(g => String(g.gamePk) === String(gameId));
+        if (gameData) games = retryGames;
+      }
+    }
+
+    if (!gameData) return res.status(404).json({ success: false, error: `Partido ${gameId} no encontrado` });
+
+    let matchedOdds = null;
+    try {
+      const allOdds = await getGameOdds();
+      matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+    } catch { /* odds are optional */ }
+
+    const updatedUser = await deductCredits(req, res, cost);
+    if (!updatedUser) return;
+
+    let analysis;
+    try {
+      const contextString = await buildContext(gameData, matchedOdds);
+      analysis = await analyzeSafe({ contextString, lang });
+    } catch (err) {
+      await refundCredits(updatedUser.id, cost, updatedUser.email);
+      const isTimeout = err.message === 'TIMEOUT';
+      return res.status(500).json({
+        success: false,
+        error: isTimeout
+          ? 'El análisis tardó demasiado. Créditos reembolsados. Por favor reintenta.'
+          : 'Análisis fallido. Tus créditos han sido reembolsados.',
+      });
+    }
+
+    res.json({
+      success: true,
+      data:    analysis.data,
+      parseError: analysis.parseError,
+      rawText: analysis.rawText,
+      credits: updatedUser.credits,
+      mode:    'safe',
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

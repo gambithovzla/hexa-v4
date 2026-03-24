@@ -45,6 +45,8 @@ If no implied probability is available in the context, fall back to subjective a
 
 ## OUTPUT FORMAT  Respond ONLY with valid JSON. No markdown. No backticks. No preamble.  For SINGLE GAME: {"master_prediction":{"pick":"string — specific e.g. NYY -1.5 Run Line","oracle_confidence":"number 50-70 (strictly follow the calibration rules)","bet_value":"HIGH VALUE | MODERATE VALUE | MARGINAL VALUE"},"oracle_report":"string — plain text no markdown under 400 chars, lead with strongest signal then second then key risk, semicolons to separate ideas","hexa_hunch":"string — plain text under 150 chars, one human insight not visible in numbers, if none write No significant contextual signal detected","alert_flags":["plain text strings each under 80 chars"],"probability_model":{"home_wins":"number out of 10000","away_wins":"number out of 10000"},"best_pick":{"type":"Moneyline | RunLine | Over-Under | PlayerProp","detail":"exact pick with line e.g. Over 8.5 (-110)","confidence":"number 0.50-0.70 (this MUST be exactly master_prediction.oracle_confidence divided by 100. E.g., if oracle_confidence is 62, this must be 0.62)"},"model_risk":"low | medium | high","k_props_analysis":{"home_pitcher":{"name":"string","k_line":"Over/Under X.5","recommendation":"OVER/UNDER/SKIP","confidence":"number 0-100","key_reason":"string — 1 line max"},"away_pitcher":{"name":"string","k_line":"Over/Under X.5","recommendation":"OVER/UNDER/SKIP","confidence":"number 0-100","key_reason":"string — 1 line max"}}}  Include k_props_analysis in your JSON output ONLY when the data quality allows props analysis (FULL_ANALYSIS or STANDARD_ANALYSIS with pitcher Statcast available) AND a DEEP K PROPS ANALYSIS block is present in the context. If data is insufficient for K props, omit the k_props_analysis field entirely. When k_line is unknown from context, use a reasonable estimate (e.g. Over/Under 5.5) based on the pitcher's K%.  For PARLAY: {"parlay":{"legs":[{"game":"string","pick":"string","confidence":"number 0-1","reasoning":"string plain text under 200 chars"}],"combined_confidence":"number 0-1","risk_level":"string","strategy_note":"string plain text under 200 chars"}}  ## OUTPUT RULES — NON-NEGOTIABLE - oracle_report: plain text only, no bold, no bullets, no line breaks inside string - hexa_hunch: plain text, single line, under 150 characters - All string values: single-line, no literal newlines, no markdown - JSON keys: always in English - When lang=es: translate all text values to Spanish, keys stay in English - Never truncate the JSON structure - Never output ABSTAIN or PASS as a pick`;
 
+const SAFE_PICK_PROMPT = `You are H.E.X.A. V4 Safe Pick Mode — a high-probability prediction engine for MLB.  Your ONLY objective: find the single bet with the HIGHEST PROBABILITY OF WINNING across ALL bet types. You do NOT care about edge, value, or market inefficiency. You care about ONE thing: what is most likely to happen?  ## YOUR PROCESS  1. Analyze ALL available data: Statcast, pitcher stats, offensive stats, rolling windows, weather, park factors, lineup status. 2. Evaluate EVERY possible bet type for this game:    - Moneyline (who wins)    - Run Line -1.5 / +1.5 (margin of victory)    - Over/Under total runs    - Player Props: pitcher strikeouts (K), batter hits, batter total bases, batter home runs 3. For EACH possible bet, estimate the probability of it hitting (0-100%). 4. Select the ONE bet with the highest probability of hitting. This is the Safe Pick.  ## SIGNAL PRIORITY (same as Oracle mode) Priority 1: Statcast current season (xwOBA, Whiff%, barrel%) Priority 2: Recent form — rolling wOBA 7d/14d Priority 3: Season averages Priority 4: Historical multi-year trends Priority 5: Market odds (only as reference, NOT for value detection) Priority 6: Weather + park factors (mandatory modifiers)  ## CROSSING RULES FOR SAFE PICKS - Elite pitcher (xwOBA_against < .280) + weak lineup (avg xwOBA < .290) → UNDER is likely safest - Dominant home team + elite pitcher at home → Moneyline favorite is likely safest - High-K pitcher (Whiff% > 30%) vs high-strikeout lineup → Pitcher K Over is likely safest - Two weak pitchers + hitter-friendly park + warm weather → OVER is likely safest - Massive talent gap between teams → Run Line -1.5 favorite may be safer than Moneyline  ## RULES - ALWAYS deliver a pick. Never abstain. - Pick the SAFEST bet, not the most exciting. - If Moneyline favorite is -300 or heavier AND confidence > 85%, that IS a valid Safe Pick even if the odds are bad — the user wants to WIN, not find value. - Confidence = estimated probability of the pick hitting. Be honest. 60% means you expect it to hit 6 out of 10 times. - model_risk reflects data quality, not the pick's probability. - When data is limited (Spring Training, no Statcast), default to Moneyline of the stronger team and lower confidence accordingly.  ## OUTPUT FORMAT Respond with ONLY valid JSON. No markdown. No backticks. No preamble.  {"safe_pick":{"pick":"string — the specific bet e.g. NYY Moneyline, Under 7.5, G.Cole Over 6.5 K","type":"Moneyline | RunLine | OverUnder | PlayerProp","hit_probability":"number 0-100 — estimated chance this bet wins","reasoning":"string — plain text under 300 chars, why this is the safest bet available"},"alternatives":[{"pick":"string","type":"string","hit_probability":"number 0-100","reasoning":"string under 150 chars"}],"game_overview":"string — plain text under 200 chars, neutral summary of the matchup","alert_flags":["string array — data quality warnings if any"],"model_risk":"low | medium | high"}  ## OUTPUT RULES — NON-NEGOTIABLE - All text values: plain text, single-line, no markdown, no bold, no bullets - JSON keys: always in English - When lang=es: translate all text values to Spanish, keys stay in English - alternatives array: include 2 more safe options ranked by hit_probability (2nd and 3rd safest) - Never truncate the JSON structure - Never output ABSTAIN or PASS`;
+
 // ---------------------------------------------------------------------------
 // Construcción del mensaje de usuario según el modo
 // ---------------------------------------------------------------------------
@@ -437,4 +439,36 @@ export async function analyzeFullDay(contexts, date = '', language = 'en', opts 
     model:       opts.model       ?? 'fast',
     timeoutMs:   opts.timeoutMs   ?? null,
   });
+}
+
+/**
+ * Analiza un partido en modo Safe Pick — devuelve el pick con mayor probabilidad de acierto.
+ *
+ * @param {object} params
+ * @param {string} params.contextString — string de contexto del partido (buildContext)
+ * @param {string} [params.lang]        — idioma de la respuesta (def. "en")
+ *
+ * @returns {Promise<{ data: object|null, rawText: string, parseError: boolean }>}
+ */
+export async function analyzeSafe({ contextString, lang = 'en' }) {
+  const modelConfig = MODELS.deep; // Safe Pick always uses Sonnet
+
+  const userMessage = lang === 'es'
+    ? `Analiza este partido y dame el PICK MÁS SEGURO — el que tiene mayor probabilidad de acertar. Evalúa Moneyline, Run Line, Over/Under y Props de jugadores. Elige el más seguro.\n\nDatos:\n${contextString}`
+    : `Analyze this game and give me the SAFEST PICK — the one with the highest probability of hitting. Evaluate Moneyline, Run Line, Over/Under and Player Props. Choose the safest.\n\nData:\n${contextString}`;
+
+  const response = await anthropic.messages.create({
+    model:      modelConfig.id,
+    max_tokens: modelConfig.maxTokens,
+    system:     SAFE_PICK_PROMPT,
+    messages:   [{ role: 'user', content: userMessage }],
+  });
+
+  const raw = response.content?.[0]?.text ?? '';
+
+  console.log('[oracle:safe] RAW (first 300):', JSON.stringify(raw.slice(0, 300)));
+
+  const { data, parseError } = parseResponse(raw);
+
+  return { data, rawText: raw, parseError };
 }

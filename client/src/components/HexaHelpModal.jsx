@@ -99,6 +99,14 @@ function TabModes({ lang }) {
   const isEs = lang === 'es';
   const modes = [
     {
+      icon: '🛡️',
+      title: 'SAFE PICK',
+      cost: isEs ? '2 créditos (siempre Deep)' : '2 credits (always Deep)',
+      description: isEs
+        ? 'H.E.X.A. evalúa TODOS los tipos de apuesta (Moneyline, Run Line, Over/Under, Props) y entrega el pick con mayor probabilidad de acierto. Sin importar edge ni value.'
+        : 'H.E.X.A. evaluates ALL bet types (Moneyline, Run Line, Over/Under, Props) and delivers the pick with the highest probability of hitting. Ignores edge and value.',
+    },
+    {
       icon: '🧠',
       title: 'SINGLE DEEP',
       cost: isEs ? '2 créditos' : '2 credits',
