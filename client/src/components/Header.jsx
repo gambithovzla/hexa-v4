@@ -367,6 +367,7 @@ function HelpButton({ lang }) {
 
 function GuideButton({ lang }) {
   const [open, setOpen] = useState(false);
+  const label = lang === 'es' ? '[ GUÍA ]' : '[ GUIDE ]';
   return (
     <>
       <Box
@@ -376,24 +377,24 @@ function GuideButton({ lang }) {
           px:            '16px',
           py:            '6px',
           border:        open
-            ? `1px solid ${C.accentLine}`
-            : `1px solid ${C.border}`,
+            ? '1px solid rgba(249,115,22,0.5)'
+            : '1px solid rgba(249,115,22,0.3)',
           borderRadius:  '3px',
-          bgcolor:       open ? C.accentDim : 'transparent',
-          color:         open ? C.accent : C.textMuted,
-          fontFamily:    MONO,
-          fontSize:      '0.7rem',
+          bgcolor:       open ? 'rgba(249,115,22,0.18)' : 'rgba(249,115,22,0.1)',
+          color:         '#f97316',
+          fontFamily:    BARLOW,
+          fontSize:      '0.8rem',
           fontWeight:    700,
-          letterSpacing: '0.06em',
+          letterSpacing: '1.5px',
           textTransform: 'uppercase',
           cursor:        'pointer',
           whiteSpace:    'nowrap',
           flexShrink:    0,
-          transition:    'all 0.15s',
-          '&:hover':     { color: C.accent, borderColor: C.accentLine, bgcolor: C.accentDim },
+          transition:    'all 0.2s ease',
+          '&:hover':     { bgcolor: 'rgba(249,115,22,0.18)', borderColor: 'rgba(249,115,22,0.5)' },
         }}
       >
-        [ GUIDE ]
+        {label}
       </Box>
       <TerminalGuide open={open} onClose={() => setOpen(false)} lang={lang} />
     </>
