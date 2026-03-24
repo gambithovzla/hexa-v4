@@ -7,8 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
+import { C, BARLOW, MONO } from '../theme';
 
 const MESSAGES_ES = [
   'Consultando Statcast...',
@@ -53,7 +52,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
         flexDirection:   'column',
         alignItems:      'center',
         justifyContent:  'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.92)',
+        backgroundColor: 'rgba(17,17,17,0.92)',
         pointerEvents:   'all',
         userSelect:      'none',
         gap:             '28px',
@@ -78,7 +77,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
             height: 'auto',
             display: 'block',
             // Fallback glow when image fails to load
-            filter: 'drop-shadow(0 0 24px rgba(0,102,255,0.5))',
+            filter: `drop-shadow(0 0 20px ${C.accentLine})`,
           }}
           onError={e => { e.target.style.display = 'none'; }}
         />
@@ -91,7 +90,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
           fontFamily:    BARLOW,
           fontSize:      '18px',
           fontWeight:    600,
-          color:         '#4fc3f7',
+          color:         C.accent,
           letterSpacing: '2px',
           textTransform: 'uppercase',
           textAlign:     'center',
@@ -111,7 +110,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
         sx={{
           width:        '260px',
           height:       '2px',
-          bgcolor:      'rgba(79,195,247,0.15)',
+          bgcolor:      C.border,
           borderRadius: '1px',
           overflow:     'hidden',
           position:     'relative',
@@ -125,7 +124,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
             height:       '100%',
             width:        '45%',
             borderRadius: '1px',
-            background:   'linear-gradient(90deg, transparent 0%, #4fc3f7 50%, transparent 100%)',
+            background:   `linear-gradient(90deg, transparent 0%, ${C.accent} 50%, transparent 100%)`,
             '@keyframes hexaProgress': {
               '0%':   { transform: 'translateX(-100%)' },
               '100%': { transform: 'translateX(320%)' },

@@ -15,33 +15,7 @@ import useBankroll from '../hooks/useBankroll';
 import { useAuth } from '../store/authStore';
 import en from '../i18n/en.json';
 import es from '../i18n/es.json';
-
-// ── Design tokens ────────────────────────────────────────────────────────────
-const C = {
-  bg:         '#04080F',
-  bgSec:      '#080D1A',
-  cardBg:     '#0D1424',
-  cardBgL:    '#111C30',
-  cardBorder: '#1A2540',
-  accent:     '#0066FF',
-  accentSec:  '#00D4FF',
-  accentDim:  'rgba(0,102,255,0.08)',
-  accentLine: 'rgba(0,102,255,0.25)',
-  textPrimary:'#E8EDF5',
-  textMuted:  '#5A7090',
-  green:      '#00E676',
-  greenDim:   'rgba(0,230,118,0.08)',
-  red:        '#FF3D57',
-  redDim:     'rgba(255,61,87,0.08)',
-  amber:      '#FFB800',
-  amberDim:   'rgba(255,184,0,0.08)',
-  blue:       '#0066FF',
-  blueDim:    'rgba(0,102,255,0.08)',
-};
-
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
-const MONO   = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL  = '"DM Sans", system-ui, sans-serif';
+import { C, BARLOW, MONO, SANS } from '../theme';
 
 const TRANSLATIONS = { en, es };
 
@@ -51,7 +25,7 @@ const TRANSLATIONS = { en, es };
 
 function SectionLabel({ children }) {
   return (
-    <Typography sx={{ fontFamily: BARLOW, fontSize: '0.65rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.12em', mb: '6px' }}>
+    <Typography sx={{ fontFamily: MONO, fontSize: '10px', fontWeight: 700, color: C.textDim, textTransform: 'uppercase', letterSpacing: '2px', mb: '6px' }}>
       {children}
     </Typography>
   );
@@ -59,14 +33,14 @@ function SectionLabel({ children }) {
 
 function StatCard({ value, label, color, sub }) {
   return (
-    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '14px 10px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-      <Typography sx={{ fontFamily: MONO, fontSize: { xs: '1.3rem', sm: '1.6rem' }, fontWeight: 700, color, lineHeight: 1 }}>
+    <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '4px', p: '14px 10px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+      <Typography sx={{ fontFamily: BARLOW, fontSize: { xs: '1.3rem', sm: '1.6rem' }, fontWeight: 800, color, lineHeight: 1 }}>
         {value}
       </Typography>
       {sub && (
         <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted }}>{sub}</Typography>
       )}
-      <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '10px', fontWeight: 700, color: C.textDim, textTransform: 'uppercase', letterSpacing: '1px' }}>
         {label}
       </Typography>
     </Box>
@@ -80,31 +54,30 @@ function StatCard({ value, label, color, sub }) {
 function resultBorderColor(result) {
   if (result === 'win')  return C.green;
   if (result === 'loss') return C.red;
-  return C.cardBorder;
+  return C.border;
 }
 
 function resultBadgeSx(result) {
-  if (result === 'win')  return { bgcolor: C.greenDim, border: `1px solid rgba(0,230,118,0.3)`, color: C.green };
-  if (result === 'loss') return { bgcolor: C.redDim,   border: `1px solid rgba(255,61,87,0.3)`,  color: C.red   };
-  return                        { bgcolor: C.amberDim, border: `1px solid rgba(255,184,0,0.3)`,  color: C.amber };
+  if (result === 'win')  return { bgcolor: C.greenDim, border: `1px solid ${C.greenLine}`, color: C.green };
+  if (result === 'loss') return { bgcolor: C.redDim,   border: `1px solid ${C.redLine}`,   color: C.red   };
+  return                        { bgcolor: C.amberDim, border: `1px solid ${C.amberLine}`,  color: C.amber };
 }
 
 function MiniConfBar({ value }) {
   const num   = Math.min(100, Math.max(0, Number(value) || 0));
-  const color = num >= 75 ? C.green : num >= 50 ? C.amber : C.red;
   return (
-    <Box sx={{ height: 4, bgcolor: `${color}22`, borderRadius: '2px', overflow: 'hidden', width: 80 }}>
-      <Box sx={{ height: '100%', width: `${num}%`, background: `linear-gradient(90deg, ${C.accent}, ${C.accentSec})`, borderRadius: '2px' }} />
+    <Box sx={{ height: 3, bgcolor: C.border, borderRadius: '1px', overflow: 'hidden', width: 80 }}>
+      <Box sx={{ height: '100%', width: `${num}%`, bgcolor: C.accent, borderRadius: '1px' }} />
     </Box>
   );
 }
 
 function ModeBadge({ mode }) {
   const colors = {
-    single:  { bg: C.blueDim,  border: `rgba(0,102,255,0.3)`,  text: C.accentSec },
-    parlay:  { bg: C.amberDim, border: `rgba(255,184,0,0.3)`,  text: C.amber },
-    fullday: { bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.3)', text: '#a78bfa' },
-    fullDay: { bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.3)', text: '#a78bfa' },
+    single:  { bg: C.accentDim, border: C.accentLine, text: C.accent },
+    parlay:  { bg: C.amberDim,  border: C.amberLine,  text: C.amber  },
+    fullday: { bg: C.surfaceAlt, border: C.border,    text: C.textSecondary },
+    fullDay: { bg: C.surfaceAlt, border: C.border,    text: C.textSecondary },
   };
   const cfg = colors[mode] ?? colors.single;
   return (
@@ -125,10 +98,10 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
   })();
 
   return (
-    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderLeft: `3px solid ${borderColor}`, borderRadius: '0 2px 2px 0', p: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${borderColor}`, borderRadius: '0 4px 4px 0', p: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <ModeBadge mode={entry.mode} />
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: C.textMuted, flex: 1 }}>{dateStr}</Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, flex: 1 }}>{dateStr}</Typography>
         <Box sx={{ ...badgeSx, px: '8px', py: '2px', borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
           {resultLabel}
         </Box>
@@ -141,12 +114,12 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
           ✕
         </Box>
       </Box>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.9rem', fontWeight: 700, color: C.textPrimary, lineHeight: 1.3 }}>
+      <Typography sx={{ fontFamily: BARLOW, fontSize: '1rem', fontWeight: 700, color: C.textPrimary, lineHeight: 1.3 }}>
         {entry.matchup}
       </Typography>
       {entry.pick && (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.78rem', color: C.accentSec, fontWeight: 600, flex: 1 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.78rem', color: C.textSecondary, fontWeight: 600, flex: 1 }}>
             {entry.pick}
           </Typography>
           {entry.confidence > 0 && (
@@ -171,7 +144,7 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
 
 function MarkBtn({ label, color, dim, onClick }) {
   return (
-    <Box component="button" onClick={onClick} sx={{ px: '14px', py: '6px', border: `1px solid ${color}66`, borderRadius: '2px', bgcolor: dim, color, fontFamily: BARLOW, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.15s', '&:hover': { bgcolor: `${color}25`, borderColor: color } }}>
+    <Box component="button" onClick={onClick} sx={{ px: '10px', py: '4px', border: `1px solid ${color}55`, borderRadius: '2px', bgcolor: dim, color, fontFamily: MONO, fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.15s', '&:hover': { opacity: 0.85 } }}>
       {label}
     </Box>
   );
@@ -200,7 +173,7 @@ function AnalisisTab({ lang }) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 10, gap: '16px', minHeight: 300 }}>
         <Typography sx={{ fontSize: '2rem', lineHeight: 1 }}>📋</Typography>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 1.7 }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 1.7 }}>
           Inicia sesión para ver tu historial de picks.
         </Typography>
       </Box>
@@ -215,14 +188,14 @@ function AnalisisTab({ lang }) {
         <StatCard value={stats.wins}    label={t.history.wins}       color={C.green}       />
         <StatCard value={stats.losses}  label={t.history.losses}     color={C.red}         />
         <StatCard value={stats.pending} label={t.history.pending}    color={C.amber}       />
-        <StatCard value={`${stats.winRate}%`} label={t.history.winRate} color={C.accentSec} />
+        <StatCard value={`${stats.winRate}%`} label={t.history.winRate} color={C.accent} />
       </Box>
 
       {/* Pick list */}
       {history.length === 0 ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10, gap: '14px', minHeight: 260 }}>
           <Typography sx={{ fontSize: '2.5rem', lineHeight: 1 }}>📋</Typography>
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 320, lineHeight: 1.7 }}>{t.history.empty}</Typography>
+          <Typography sx={{ fontFamily: SANS, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 320, lineHeight: 1.7 }}>{t.history.empty}</Typography>
         </Box>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -234,8 +207,8 @@ function AnalisisTab({ lang }) {
 
       {/* Clear footer */}
       {history.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: '8px', borderTop: `1px solid ${C.cardBorder}` }}>
-          <Box component="button" onClick={handleClearClick} sx={{ px: '18px', py: '8px', border: `1px solid ${confirming ? C.red : C.cardBorder}`, borderRadius: '2px', bgcolor: confirming ? C.redDim : 'transparent', color: confirming ? C.red : C.textMuted, fontFamily: BARLOW, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: '8px', borderTop: `1px solid ${C.border}` }}>
+          <Box component="button" onClick={handleClearClick} sx={{ px: '18px', py: '8px', border: `1px solid ${confirming ? C.red : C.border}`, borderRadius: '2px', bgcolor: confirming ? C.redDim : 'transparent', color: confirming ? C.red : C.textMuted, fontFamily: BARLOW, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}>
             {confirming ? t.history.confirmClear : t.history.clearHistory}
           </Box>
         </Box>
@@ -317,12 +290,12 @@ function BankrollChart({ points, initialBankroll }) {
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }}>
         <defs>
           <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stopColor="#0066FF" />
-            <stop offset="100%" stopColor="#00D4FF" />
+            <stop offset="0%"   stopColor={C.accent} />
+            <stop offset="100%" stopColor={C.accent} />
           </linearGradient>
           <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#0066FF" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#0066FF" stopOpacity="0"    />
+            <stop offset="0%"   stopColor={C.accent} stopOpacity="0.12" />
+            <stop offset="100%" stopColor={C.accent} stopOpacity="0"    />
           </linearGradient>
         </defs>
 
@@ -332,8 +305,8 @@ function BankrollChart({ points, initialBankroll }) {
           const val = maxVal - t * range;
           return (
             <g key={i}>
-              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="#1A2540" strokeWidth="1" />
-              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fill="#5A7090" fontSize="8" fontFamily="JetBrains Mono, monospace">
+              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke={C.border} strokeWidth="1" />
+              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fill={C.textMuted} fontSize="8" fontFamily="JetBrains Mono, monospace">
                 ${Math.round(val)}
               </text>
             </g>
@@ -342,7 +315,7 @@ function BankrollChart({ points, initialBankroll }) {
 
         {/* Initial bankroll reference line */}
         {refY >= PAD.top && refY <= PAD.top + innerH && (
-          <line x1={PAD.left} y1={refY} x2={W - PAD.right} y2={refY} stroke="#5A7090" strokeWidth="1" strokeDasharray="4,3" />
+          <line x1={PAD.left} y1={refY} x2={W - PAD.right} y2={refY} stroke={C.textMuted} strokeWidth="1" strokeDasharray="4,3" />
         )}
 
         {/* Area fill */}
@@ -356,7 +329,7 @@ function BankrollChart({ points, initialBankroll }) {
 
         {/* Dots */}
         {points.map((p, i) => (
-          <circle key={i} cx={scaleX(i)} cy={scaleY(p.value)} r={3} fill={p.value >= initialBankroll ? '#00E676' : '#FF3D57'} />
+          <circle key={i} cx={scaleX(i)} cy={scaleY(p.value)} r={3} fill={p.value >= initialBankroll ? C.green : C.red} />
         ))}
       </svg>
     </Box>
@@ -391,10 +364,10 @@ function AddBetForm({ onAdd }) {
 
   const inputSx = {
     background:   C.bgSec,
-    border:       `1px solid ${C.cardBorder}`,
+    border:       `1px solid ${C.border}`,
     borderRadius: '2px',
     color:        C.textPrimary,
-    fontFamily:   LABEL,
+    fontFamily:   SANS,
     fontSize:     '0.8rem',
     padding:      '7px 10px',
     outline:      'none',
@@ -403,7 +376,7 @@ function AddBetForm({ onAdd }) {
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <Box component="form" onSubmit={handleSubmit} sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', p: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <SectionLabel>Registrar Apuesta</SectionLabel>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: '10px' }}>
@@ -430,9 +403,9 @@ function AddBetForm({ onAdd }) {
         <input style={inputSx} placeholder="Opcional…" value={form.notes} onChange={e => set('notes', e.target.value)} />
       </Box>
 
-      {err && <Typography sx={{ fontFamily: LABEL, fontSize: '0.72rem', color: C.red }}>{err}</Typography>}
+      {err && <Typography sx={{ fontFamily: SANS, fontSize: '0.72rem', color: C.red }}>{err}</Typography>}
 
-      <Box component="button" type="submit" disabled={busy} sx={{ alignSelf: 'flex-start', px: '20px', py: '9px', border: `1px solid ${C.accent}`, borderRadius: '2px', background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentSec} 100%)`, color: '#fff', fontFamily: BARLOW, fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, transition: 'all 0.15s' }}>
+      <Box component="button" type="submit" disabled={busy} sx={{ alignSelf: 'flex-start', px: '20px', py: '9px', border: `1px solid ${C.accent}`, borderRadius: '2px', background: C.accent, color: '#111111', fontFamily: BARLOW, fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, transition: 'all 0.15s' }}>
         {busy ? 'Registrando…' : '+ Registrar Apuesta'}
       </Box>
     </Box>
@@ -442,10 +415,10 @@ function AddBetForm({ onAdd }) {
 // Bet result badge
 function ResultBadge({ result }) {
   const cfg = result === 'won'
-    ? { label: 'GANADA',   color: C.green, dim: C.greenDim, border: 'rgba(0,230,118,0.3)' }
+    ? { label: 'GANADA',   color: C.green, dim: C.greenDim, border: C.greenLine }
     : result === 'lost'
-    ? { label: 'PERDIDA',  color: C.red,   dim: C.redDim,   border: 'rgba(255,61,87,0.3)' }
-    : { label: 'PENDIENTE', color: C.amber, dim: C.amberDim, border: 'rgba(255,184,0,0.3)' };
+    ? { label: 'PERDIDA',  color: C.red,   dim: C.redDim,   border: C.redLine   }
+    : { label: 'PENDIENTE', color: C.amber, dim: C.amberDim, border: C.amberLine };
 
   return (
     <Box component="span" sx={{ display: 'inline-block', px: '8px', py: '2px', bgcolor: cfg.dim, border: `1px solid ${cfg.border}`, borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.6rem', fontWeight: 700, color: cfg.color, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
@@ -461,7 +434,7 @@ function BetsTable({ bets, onUpdateResult, onDelete }) {
   if (sorted.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 5 }}>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.82rem', color: C.textMuted }}>Sin apuestas registradas aún.</Typography>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.82rem', color: C.textMuted }}>Sin apuestas registradas aún.</Typography>
       </Box>
     );
   }
@@ -471,19 +444,19 @@ function BetsTable({ bets, onUpdateResult, onDelete }) {
       {sorted.map(bet => {
         const dateStr = (() => { try { return new Date(bet.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
         return (
-          <Box key={bet.id} sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderLeft: `3px solid ${bet.result === 'won' ? C.green : bet.result === 'lost' ? C.red : C.cardBorder}`, borderRadius: '0 2px 2px 0', p: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Box key={bet.id} sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${bet.result === 'won' ? C.green : bet.result === 'lost' ? C.red : C.border}`, borderRadius: '0 2px 2px 0', p: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {/* Top row */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, flexShrink: 0 }}>{dateStr}</Typography>
               <Typography sx={{ fontFamily: MONO, fontSize: '0.82rem', fontWeight: 700, color: C.textPrimary, flex: 1 }}>{bet.matchup}</Typography>
               <ResultBadge result={bet.result} />
               {bet.source === 'hexa' && (
-                <Box component="span" sx={{ px: '6px', py: '1px', bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.56rem', fontWeight: 700, color: C.accentSec, letterSpacing: '0.08em' }}>HEXA</Box>
+                <Box component="span" sx={{ px: '6px', py: '1px', bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px', fontFamily: MONO, fontSize: '9px', fontWeight: 700, color: C.accent, letterSpacing: '1px' }}>HEXA</Box>
               )}
             </Box>
 
             {/* Pick row */}
-            <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.accentSec }}>{bet.pick}</Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textSecondary }}>{bet.pick}</Typography>
 
             {/* Stats row */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
@@ -500,7 +473,7 @@ function BetsTable({ bets, onUpdateResult, onDelete }) {
                 <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 700, color: C.green }}>+{fmtMoney(bet.potentialWin)}</Typography>
               </Box>
               {bet.notes && (
-                <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: C.textMuted, fontStyle: 'italic', flex: 1 }}>{bet.notes}</Typography>
+                <Typography sx={{ fontFamily: SANS, fontSize: '0.65rem', color: C.textMuted, fontStyle: 'italic', flex: 1 }}>{bet.notes}</Typography>
               )}
             </Box>
 
@@ -513,7 +486,7 @@ function BetsTable({ bets, onUpdateResult, onDelete }) {
                 <ActionBtn label="✗ Perdida" color={C.red} dim={C.redDim} border="rgba(255,61,87,0.3)" onClick={() => onUpdateResult(bet.id, 'lost')} />
               )}
               {bet.result !== 'pending' && (
-                <ActionBtn label="↺ Pendiente" color={C.textMuted} dim="transparent" border={C.cardBorder} onClick={() => onUpdateResult(bet.id, 'pending')} />
+                <ActionBtn label="↺ Pendiente" color={C.textMuted} dim={C.surfaceAlt} border={C.border} onClick={() => onUpdateResult(bet.id, 'pending')} />
               )}
               <Box sx={{ ml: 'auto' }}>
                 <ActionBtn label="🗑" color={C.red} dim="transparent" border="transparent" onClick={() => onDelete(bet.id)} />
@@ -545,7 +518,7 @@ function BancaTab() {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 10, gap: '16px', minHeight: 300 }}>
         <Typography sx={{ fontSize: '2rem', lineHeight: 1 }}>💰</Typography>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 1.7 }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 280, lineHeight: 1.7 }}>
           Inicia sesión para usar el Bankroll Tracker.
         </Typography>
       </Box>
@@ -579,7 +552,7 @@ function BancaTab() {
           <Typography sx={{ fontFamily: BARLOW, fontSize: '1.4rem', fontWeight: 800, color: C.textPrimary, letterSpacing: '0.1em', textTransform: 'uppercase', mb: '6px' }}>
             Define tu Banca Inicial
           </Typography>
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.82rem', color: C.textMuted, maxWidth: 300, lineHeight: 1.7 }}>
+          <Typography sx={{ fontFamily: SANS, fontSize: '0.82rem', color: C.textMuted, maxWidth: 300, lineHeight: 1.7 }}>
             Establece el monto de tu bankroll para empezar a rastrear tus apuestas y calcular tu ROI.
           </Typography>
         </Box>
@@ -594,11 +567,11 @@ function BancaTab() {
               placeholder="1000.00"
               value={setupVal}
               onChange={e => setSetupVal(e.target.value)}
-              style={{ width: '100%', background: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', color: C.textPrimary, fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, padding: '12px 16px 12px 28px', outline: 'none', colorScheme: 'dark', textAlign: 'center' }}
+              style={{ width: '100%', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', color: C.textPrimary, fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, padding: '12px 16px 12px 28px', outline: 'none', colorScheme: 'dark', textAlign: 'center' }}
             />
           </Box>
-          {setupErr && <Typography sx={{ fontFamily: LABEL, fontSize: '0.72rem', color: C.red }}>{setupErr}</Typography>}
-          <Box component="button" type="submit" disabled={setupBusy} sx={{ width: '100%', py: '12px', border: `1px solid ${C.accent}`, borderRadius: '2px', background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentSec} 100%)`, color: '#fff', fontFamily: BARLOW, fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: setupBusy ? 'default' : 'pointer', opacity: setupBusy ? 0.6 : 1 }}>
+          {setupErr && <Typography sx={{ fontFamily: SANS, fontSize: '0.72rem', color: C.red }}>{setupErr}</Typography>}
+          <Box component="button" type="submit" disabled={setupBusy} sx={{ width: '100%', py: '12px', border: `1px solid ${C.accent}`, borderRadius: '2px', background: C.accent, color: '#111111', fontFamily: BARLOW, fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: setupBusy ? 'default' : 'pointer', opacity: setupBusy ? 0.6 : 1 }}>
             {setupBusy ? 'Configurando…' : 'Comenzar'}
           </Box>
         </Box>
@@ -626,7 +599,7 @@ function BancaTab() {
         <StatCard value={fmtMoney(currentBankroll)} label="Banca Actual"  color={bankrollColor} />
         <StatCard value={(netGain >= 0 ? '+' : '') + fmtMoney(netGain)} label="Ganancia Neta" color={bankrollColor} />
         <StatCard value={`${roi}%`} label="ROI" color={Number(roi) >= 0 ? C.green : C.red} sub={`desde ${fmtMoney(initialBankroll)}`} />
-        <StatCard value={streak} label="Racha Actual" color={C.accentSec} />
+        <StatCard value={streak} label="Racha Actual" color={C.accent} />
       </Box>
 
       {/* Second stats row */}
@@ -634,12 +607,12 @@ function BancaTab() {
         <StatCard value={total}       label="Apostadas"  color={C.textPrimary} />
         <StatCard value={won}         label="Ganadas"    color={C.green} />
         <StatCard value={lost}        label="Perdidas"   color={C.red} />
-        <StatCard value={`${winRate}%`} label="Win Rate" color={C.accentSec} />
+        <StatCard value={`${winRate}%`} label="Win Rate" color={C.accent} />
       </Box>
 
       {/* Bankroll chart */}
       {curve.length >= 2 && (
-        <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '14px' }}>
+        <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', p: '14px' }}>
           <SectionLabel>Evolución de Banca</SectionLabel>
           <BankrollChart points={curve} initialBankroll={initialBankroll} />
         </Box>
@@ -649,7 +622,7 @@ function BancaTab() {
       <AddBetForm onAdd={addBet} />
 
       {/* Bets table */}
-      <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', p: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <SectionLabel>Historial de Apuestas</SectionLabel>
         <BetsTable bets={bets} onUpdateResult={updateBetResult} onDelete={deleteBet} />
       </Box>

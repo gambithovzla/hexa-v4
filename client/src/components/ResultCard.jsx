@@ -10,35 +10,9 @@
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
+import { C, BARLOW, MONO, SANS } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// ── Design tokens ────────────────────────────────────────────────────────────
-const C = {
-  bg:          '#04080F',
-  bgSec:       '#080D1A',
-  cardBg:      '#0D1424',
-  cardBgLight: '#111C30',
-  cardBorder:  '#1A2540',
-  accent:      '#0066FF',
-  accentSec:   '#00D4FF',
-  accentDim:   'rgba(0,102,255,0.08)',
-  accentLine:  'rgba(0,102,255,0.25)',
-  textPrimary: '#E8EDF5',
-  textMuted:   '#5A7090',
-  green:       '#00E676',
-  greenDim:    'rgba(0,230,118,0.08)',
-  red:         '#FF3D57',
-  redDim:      'rgba(255,61,87,0.08)',
-  blue:        '#0066FF',
-  blueDim:     'rgba(0,102,255,0.08)',
-  amber:       '#FFB800',
-  gold:        '#FFB800',
-};
-
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
-const MONO   = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL  = '"DM Sans", system-ui, sans-serif';
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
@@ -143,12 +117,12 @@ function DisclaimerBlock({ title, body, accentColor }) {
         <Typography sx={{ fontFamily: BARLOW, fontSize: '0.67rem', fontWeight: 700, color: accentColor, textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'left' }}>
           {title}
         </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: '#4a6580', flexShrink: 0 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, flexShrink: 0 }}>
           {open ? '▲' : '▼'}
         </Typography>
       </Box>
       {open && (
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.73rem', color: '#4a6580', lineHeight: 1.65, px: '12px', pb: '10px' }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.73rem', color: C.textMuted, lineHeight: 1.65, px: '12px', pb: '10px' }}>
           {body}
         </Typography>
       )}
@@ -160,8 +134,8 @@ function Disclaimers({ t }) {
   const d = t.disclaimers;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', mt: '4px' }}>
-      <DisclaimerBlock title={d.humanTitle}  body={d.humanBody}  accentColor="#FFB800" />
-      <DisclaimerBlock title={d.lineupTitle} body={d.lineupBody} accentColor="#00D4FF" />
+      <DisclaimerBlock title={d.humanTitle}  body={d.humanBody}  accentColor={C.amber} />
+      <DisclaimerBlock title={d.lineupTitle} body={d.lineupBody} accentColor={C.accent} />
     </Box>
   );
 }
@@ -170,27 +144,27 @@ function Disclaimers({ t }) {
 
 function ConfidenceBar({ value }) {
   const num = Math.min(100, Math.max(0, Number(value) || 0));
-  // >70%: cyan glow, 50-70%: blue glow, <50%: orange glow
-  const glowColor  = num >= 70 ? C.accentSec : num >= 50 ? C.accent : '#FF9800';
-  const glowRadius = num >= 70 ? '12px' : '8px';
+  const circ = 94.2;
   return (
-    <Box sx={{ height: 6, bgcolor: C.cardBorder, borderRadius: '2px', overflow: 'visible', position: 'relative' }}>
-      <Box
-        sx={{
-          height:          '100%',
-          width:           `${num}%`,
-          background:      `linear-gradient(90deg, ${C.accent} 0%, ${C.accentSec} 100%)`,
-          borderRadius:    '2px',
-          transformOrigin: 'left center',
-          boxShadow:       `0 0 ${glowRadius} ${glowColor}AA, 0 0 ${glowRadius} ${glowColor}60`,
-          '@keyframes confGrow': {
-            from: { transform: 'scaleX(0)' },
-            to:   { transform: 'scaleX(1)' },
-          },
-          animation: 'confGrow 0.9s cubic-bezier(0.34, 1.4, 0.64, 1) forwards',
-        }}
-      />
-    </Box>
+    <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
+      <svg viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)', width: 36, height: 36 }}>
+        <circle cx="18" cy="18" r="15" fill="none" stroke={C.border} strokeWidth="3" />
+        <circle
+          cx="18" cy="18" r="15" fill="none"
+          stroke={C.accent} strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={circ - (circ * num / 100)}
+        />
+      </svg>
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: MONO, fontWeight: 500, fontSize: '9px', color: C.accent,
+      }}>
+        {num}
+      </div>
+    </div>
   );
 }
 
@@ -198,9 +172,9 @@ function RiskBadge({ risk, t }) {
   if (!risk) return null;
   const key = String(risk).toLowerCase();
   const map = {
-    low:    { color: C.green, label: t.risk.low    ?? 'LOW'    },
-    medium: { color: C.amber, label: t.risk.medium ?? 'MEDIUM' },
-    high:   { color: C.red,   label: t.risk.high   ?? 'HIGH'   },
+    low:    { color: C.green, bg: C.greenDim, border: C.greenLine, label: t.risk.low    ?? 'LOW'    },
+    medium: { color: C.amber, bg: C.amberDim, border: C.amberLine, label: t.risk.medium ?? 'MEDIUM' },
+    high:   { color: C.red,   bg: C.redDim,   border: C.redLine,   label: t.risk.high   ?? 'HIGH'   },
   };
   const cfg = map[key] ?? map.medium;
   return (
@@ -211,13 +185,13 @@ function RiskBadge({ risk, t }) {
         px:            '8px',
         py:            '2px',
         borderRadius:  '2px',
-        bgcolor:       `${cfg.color}18`,
-        border:        `1px solid ${cfg.color}44`,
-        fontFamily:    BARLOW,
-        fontSize:      '0.62rem',
+        bgcolor:       cfg.bg,
+        border:        `1px solid ${cfg.border}`,
+        fontFamily:    MONO,
+        fontSize:      '9px',
         fontWeight:    700,
         color:         cfg.color,
-        letterSpacing: '0.1em',
+        letterSpacing: '1px',
         textTransform: 'uppercase',
         flexShrink:    0,
       }}
@@ -231,12 +205,12 @@ function SectionLabel({ children }) {
   return (
     <Typography
       sx={{
-        fontFamily:    BARLOW,
-        fontSize:      '0.7rem',
+        fontFamily:    MONO,
+        fontSize:      '10px',
         fontWeight:    700,
-        color:         C.textMuted,
+        color:         C.textDim,
         textTransform: 'uppercase',
-        letterSpacing: '0.12em',
+        letterSpacing: '2px',
         mb:            '6px',
         display:       'flex',
         alignItems:    'center',
@@ -244,8 +218,8 @@ function SectionLabel({ children }) {
         '&::before': {
           content:      '""',
           display:      'inline-block',
-          width:        '6px',
-          height:       '6px',
+          width:        '5px',
+          height:       '5px',
           borderRadius: '50%',
           bgcolor:      C.accent,
           flexShrink:   0,
@@ -258,25 +232,33 @@ function SectionLabel({ children }) {
 }
 
 function AlertFlagBadge({ flag }) {
+  const f = String(flag).toLowerCase();
+  let color, bg, border;
+  if (f.includes('hot') || f.includes('streak') || f.includes('!')) {
+    color = C.amber; bg = C.amberDim; border = C.amberLine;
+  } else if (f.includes('%') || f.includes('elite') || f.includes('whiff')) {
+    color = C.green; bg = C.greenDim; border = C.greenLine;
+  } else {
+    color = C.textMuted; bg = C.surfaceAlt; border = C.border;
+  }
   return (
     <Box
       sx={{
         display:      'inline-flex',
         alignItems:   'center',
-        gap:          '5px',
-        px:           '10px',
-        py:           '4px',
-        bgcolor:      'rgba(255,61,87,0.06)',
-        border:       `1px solid rgba(255,61,87,0.2)`,
-        borderLeft:   `3px solid ${C.red}`,
-        borderRadius: '100px',
+        gap:          '4px',
+        px:           '8px',
+        py:           '3px',
+        bgcolor:      bg,
+        border:       `1px solid ${border}`,
+        borderRadius: '2px',
         fontFamily:   MONO,
-        fontSize:     '0.62rem',
-        color:        C.red,
+        fontSize:     '10px',
+        color,
         lineHeight:   1.4,
       }}
     >
-      ⚠ {flag}
+      {flag}
     </Box>
   );
 }
@@ -363,17 +345,17 @@ function getEstimatedOdds() {
 
 function OddsCell({ label, home, away }) {
   return (
-    <Box sx={{ bgcolor: C.bgSec, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '8px 6px', textAlign: 'center' }}>
+    <Box sx={{ bgcolor: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: '2px', p: '8px 6px', textAlign: 'center' }}>
       <Typography
-        sx={{ fontFamily: LABEL, fontSize: '0.53rem', fontWeight: 700, color: C.textMuted,
-          textTransform: 'uppercase', letterSpacing: '0.05em', mb: '5px' }}
+        sx={{ fontFamily: MONO, fontSize: '9px', fontWeight: 700, color: C.textDim,
+          textTransform: 'uppercase', letterSpacing: '1px', mb: '5px' }}
       >
         {label}
       </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.green, mb: '2px' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.textPrimary, mb: '2px' }}>
         H: {home}
       </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.blue }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.textSecondary }}>
         A: {away}
       </Typography>
     </Box>
@@ -385,7 +367,7 @@ function OddsCell({ label, home, away }) {
 function PayoutRow({ label, stake, profit, total }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px', mb: '5px' }}>
-      <Typography sx={{ fontFamily: LABEL, fontSize: '0.58rem', fontWeight: 700, color: C.textMuted, minWidth: '82px', flexShrink: 0 }}>
+      <Typography sx={{ fontFamily: SANS, fontSize: '0.58rem', fontWeight: 700, color: C.textMuted, minWidth: '82px', flexShrink: 0 }}>
         {label}
       </Typography>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.textPrimary }}>${stake}</Typography>
@@ -418,9 +400,9 @@ function LegOddsLine({ leg, oddsObj, t }) {
     : (isEs ? 'Momio'      : 'Odds');
 
   return (
-    <Box sx={{ mt: '8px', pt: '6px', borderTop: `1px solid ${C.cardBorder}60`, display: 'flex', alignItems: 'center', gap: '5px' }}>
+    <Box sx={{ mt: '8px', pt: '6px', borderTop: `1px solid ${C.border}60`, display: 'flex', alignItems: 'center', gap: '5px' }}>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, lineHeight: 1 }}>📊</Typography>
-      <Typography sx={{ fontFamily: LABEL, fontSize: '0.58rem', color: C.textMuted, flexShrink: 0 }}>
+      <Typography sx={{ fontFamily: SANS, fontSize: '0.58rem', color: C.textMuted, flexShrink: 0 }}>
         {label}:
       </Typography>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.accent }}>
@@ -462,7 +444,7 @@ function OddsPanel({ odds, hexa, t }) {
   const bpPayout = bpOdds != null ? calcPayout(stake, bpOdds) : null;
 
   return (
-    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '16px' }}>
+    <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', p: '16px' }}>
       {/* Header + format toggle */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
         <SectionLabel>{t.odds.title}</SectionLabel>
@@ -472,7 +454,7 @@ function OddsPanel({ odds, hexa, t }) {
           sx={{
             px: '9px', py: '3px',
             bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px',
-            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accentSec, cursor: 'pointer',
+            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.textSecondary, cursor: 'pointer',
           }}
         >
           {decimal ? 'US | ●DEC' : '●US | DEC'}
@@ -499,9 +481,9 @@ function OddsPanel({ odds, hexa, t }) {
       </Box>
 
       {/* Bet calculator */}
-      <Box sx={{ borderTop: `1px solid ${C.cardBorder}`, pt: '12px' }}>
+      <Box sx={{ borderTop: `1px solid ${C.border}`, pt: '12px' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '10px' }}>
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
+          <Typography sx={{ fontFamily: SANS, fontSize: '0.6rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
             {t.odds.betAmount}
           </Typography>
           <Box
@@ -511,8 +493,8 @@ function OddsPanel({ odds, hexa, t }) {
             value={stake}
             onChange={e => setStake(e.target.value)}
             sx={{
-              width: '72px', bgcolor: C.bg, border: `1px solid ${C.cardBorder}`,
-              borderRadius: '4px', color: C.textPrimary, fontFamily: MONO,
+              width: '72px', bgcolor: C.bg, border: `1px solid ${C.border}`,
+              borderRadius: '2px', color: C.textPrimary, fontFamily: MONO,
               fontSize: '0.78rem', px: '8px', py: '4px', outline: 'none',
               '&:focus': { borderColor: C.accent },
             }}
@@ -565,7 +547,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
   const payout = calcPayout(stake, combinedAmerican);
 
   return (
-    <Box sx={{ bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px', p: '16px' }}>
+    <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', p: '16px' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
         <SectionLabel>{t.odds.parlayOdds}</SectionLabel>
         <Box
@@ -574,7 +556,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
           sx={{
             px: '9px', py: '3px',
             bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px',
-            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.accentSec, cursor: 'pointer',
+            fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, color: C.textSecondary, cursor: 'pointer',
           }}
         >
           {decimal ? 'US | ●DEC' : '●US | DEC'}
@@ -583,7 +565,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
 
       {/* Combined odds display */}
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', mb: hasEstimated ? '6px' : '12px' }}>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.62rem', color: C.textMuted, flexShrink: 0 }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.62rem', color: C.textMuted, flexShrink: 0 }}>
           {t.odds.combined}
         </Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '1.05rem', fontWeight: 700, color: C.accent }}>
@@ -599,15 +581,15 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
 
       {/* Estimated odds notice */}
       {hasEstimated && (
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', color: C.textMuted, fontStyle: 'italic', opacity: 0.7, mb: '12px' }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.6rem', color: C.textMuted, fontStyle: 'italic', opacity: 0.7, mb: '12px' }}>
           {t.odds.estimated}
         </Typography>
       )}
 
       {/* Calculator */}
-      <Box sx={{ borderTop: `1px solid ${C.cardBorder}`, pt: '12px' }}>
+      <Box sx={{ borderTop: `1px solid ${C.border}`, pt: '12px' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '10px' }}>
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
+          <Typography sx={{ fontFamily: SANS, fontSize: '0.6rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flexShrink: 0 }}>
             {t.odds.betAmount}
           </Typography>
           <Box
@@ -617,8 +599,8 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
             value={stake}
             onChange={e => setStake(e.target.value)}
             sx={{
-              width: '72px', bgcolor: C.bg, border: `1px solid ${C.cardBorder}`,
-              borderRadius: '4px', color: C.textPrimary, fontFamily: MONO,
+              width: '72px', bgcolor: C.bg, border: `1px solid ${C.border}`,
+              borderRadius: '2px', color: C.textPrimary, fontFamily: MONO,
               fontSize: '0.78rem', px: '8px', py: '4px', outline: 'none',
               '&:focus': { borderColor: C.accent },
             }}
@@ -683,11 +665,11 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
   }
 
   const inputSx = {
-    background:   '#0a0e17',
-    border:       '1px solid #1e293b',
-    borderRadius: '4px',
-    color:        '#f1f5f9',
-    fontFamily:   '"JetBrains Mono", monospace',
+    background:   C.bg,
+    border:       `1px solid ${C.border}`,
+    borderRadius: '2px',
+    color:        C.textPrimary,
+    fontFamily:   MONO,
     fontSize:     '0.82rem',
     padding:      '6px 10px',
     outline:      'none',
@@ -698,8 +680,8 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
   return (
     <Box sx={{ mt: '12px' }}>
       {success ? (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px', px: '12px', py: '6px', bgcolor: '#22c55e15', border: '1px solid #22c55e44', borderRadius: '4px' }}>
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.72rem', fontWeight: 700, color: '#22c55e' }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px', px: '12px', py: '6px', bgcolor: C.greenDim, border: `1px solid ${C.greenLine}`, borderRadius: '2px' }}>
+          <Typography sx={{ fontFamily: SANS, fontSize: '0.72rem', fontWeight: 700, color: C.green }}>
             ✓ Apuesta registrada en tu banca
           </Typography>
         </Box>
@@ -710,16 +692,17 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
           sx={{
             display: 'inline-flex', alignItems: 'center', gap: '5px',
             px: '12px', py: '5px',
-            bgcolor: 'transparent',
-            border: '1px solid #3b82f666',
-            borderRadius: '4px',
-            color: '#3b82f6',
-            fontFamily: LABEL,
-            fontSize: '0.68rem',
+            bgcolor: C.surfaceAlt,
+            border: `1px solid ${C.border}`,
+            borderRadius: '3px',
+            color: C.accent,
+            fontFamily: BARLOW,
+            fontSize: '12px',
             fontWeight: 700,
+            letterSpacing: '2px',
             cursor: 'pointer',
             transition: 'all 0.15s',
-            '&:hover': { bgcolor: '#3b82f610', borderColor: '#3b82f6' },
+            '&:hover': { bgcolor: C.accentDim, borderColor: C.accentLine },
           }}
         >
           + AGREGAR A BANCA
@@ -730,12 +713,12 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
           onSubmit={handleSubmit}
           sx={{
             display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px',
-            bgcolor: '#0a0e17', border: '1px solid #1e293b', borderRadius: '6px',
+            bgcolor: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: '3px',
             p: '10px 12px',
           }}
         >
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: '#94a3b8', flexShrink: 0 }}>
-            Stake:
+          <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted, flexShrink: 0 }}>
+            STAKE:
           </Typography>
           <input
             type="number"
@@ -747,39 +730,39 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
             onChange={e => setStake(e.target.value)}
             style={inputSx}
           />
-          <Typography sx={{ fontFamily: LABEL, fontSize: '0.6rem', color: '#475569', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-            Pick: <span style={{ color: '#94a3b8', marginLeft: '4px' }}>{pick}</span>
+          <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            PICK: <span style={{ color: C.textSecondary, marginLeft: '4px' }}>{pick}</span>
             {kellySuggestion && (
               <Box
                 component="span"
                 onClick={() => setStake(String(kellySuggestion))}
                 sx={{
                   ml: '8px', px: '6px', py: '2px',
-                  borderRadius: '4px',
-                  border: '1px solid rgba(232,213,163,0.3)',
-                  background: 'rgba(232,213,163,0.08)',
-                  color: '#e8d5a3',
+                  borderRadius: '2px',
+                  border: `1px solid ${C.greenLine}`,
+                  background: C.greenDim,
+                  color: C.green,
                   fontSize: '0.68rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   userSelect: 'none',
-                  '&:hover': { background: 'rgba(232,213,163,0.15)' },
+                  '&:hover': { background: C.greenDim },
                 }}
               >
                 Kelly: ${kellySuggestion}
               </Box>
             )}
           </Typography>
-          <Typography sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.65rem', color: '#94a3b8', flexShrink: 0 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textMuted, flexShrink: 0 }}>
             {odds > 0 ? `+${odds}` : odds}
           </Typography>
-          {err && <Typography sx={{ fontFamily: LABEL, fontSize: '0.65rem', color: '#ef4444', width: '100%' }}>{err}</Typography>}
+          {err && <Typography sx={{ fontFamily: SANS, fontSize: '0.65rem', color: C.red, width: '100%' }}>{err}</Typography>}
           <Box sx={{ display: 'flex', gap: '6px', ml: 'auto', flexShrink: 0 }}>
             <Box
               component="button"
               type="button"
               onClick={() => { setOpen(false); setErr(''); setStake(''); }}
-              sx={{ px: '10px', py: '4px', bgcolor: 'transparent', border: '1px solid #1e293b', borderRadius: '4px', color: '#64748b', fontFamily: LABEL, fontSize: '0.68rem', cursor: 'pointer' }}
+              sx={{ px: '10px', py: '4px', bgcolor: 'transparent', border: `1px solid ${C.border}`, borderRadius: '2px', color: C.textMuted, fontFamily: MONO, fontSize: '0.68rem', cursor: 'pointer' }}
             >
               Cancelar
             </Box>
@@ -787,7 +770,7 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
               component="button"
               type="submit"
               disabled={busy}
-              sx={{ px: '12px', py: '4px', bgcolor: '#3b82f6', border: 'none', borderRadius: '4px', color: '#fff', fontFamily: LABEL, fontSize: '0.68rem', fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+              sx={{ px: '12px', py: '4px', bgcolor: C.accent, border: 'none', borderRadius: '2px', color: '#fff', fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
             >
               {busy ? '…' : 'Registrar'}
             </Box>
@@ -812,32 +795,21 @@ function ProbabilityBar({ homeWins, awayWins, t }) {
       <Box
         sx={{
           display: 'flex',
-          height: 10,
-          borderRadius: '5px',
+          height: 3,
+          borderRadius: '1px',
           overflow: 'hidden',
+          bgcolor: C.border,
           mb: '6px',
         }}
       >
-        <Box
-          sx={{
-            width: `${awayPct}%`,
-            bgcolor: C.blue,
-            transition: 'width 0.6s ease',
-          }}
-        />
-        <Box
-          sx={{
-            width: `${homePct}%`,
-            bgcolor: C.green,
-            transition: 'width 0.6s ease',
-          }}
-        />
+        <Box sx={{ width: `${awayPct}%`, bgcolor: C.textDim, transition: 'width 0.6s ease' }} />
+        <Box sx={{ width: `${homePct}%`, bgcolor: C.accent, transition: 'width 0.6s ease' }} />
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.blue, fontWeight: 700 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
           {t.away} {awayPct}%
         </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.green, fontWeight: 700 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textPrimary }}>
           {t.home} {homePct}%
         </Typography>
       </Box>
@@ -858,74 +830,81 @@ function SingleGameResult({ hexa, t }) {
       {/* ── Master Pick ── */}
       <Box
         sx={{
-          border:       `1px solid ${C.accentLine}`,
-          borderLeft:   `4px solid ${C.accentSec}`,
-          borderRadius: '2px',
-          background:   `linear-gradient(135deg, rgba(0,102,255,0.09) 0%, #0D1424 50%, #111827 100%)`,
-          boxShadow:    'inset 0 0 30px rgba(0,102,255,0.04), 0 0 20px rgba(0,102,255,0.06)',
+          background:   C.bg,
+          border:       `1px solid ${C.border}`,
+          borderRadius: '4px',
           p:            '20px',
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
           <Typography
             sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '0.72rem',
+              fontFamily:    MONO,
+              fontSize:      '10px',
               fontWeight:    700,
-              color:         C.accentSec,
+              color:         C.accent,
               textTransform: 'uppercase',
-              letterSpacing: '0.14em',
+              letterSpacing: '2px',
             }}
           >
-            ◆ {t.masterPick}
+            {t.masterPick}
           </Typography>
           <RiskBadge risk={hexa.model_risk} t={t} />
         </Box>
 
         <Typography
           sx={{
-            fontFamily: MONO,
-            fontSize: '1.05rem',
-            fontWeight: 700,
-            color: C.textPrimary,
-            lineHeight: 1.4,
-            mb: '6px',
+            fontFamily:    BARLOW,
+            fontSize:      '28px',
+            fontWeight:    800,
+            color:         C.textPrimary,
+            lineHeight:    1.2,
+            letterSpacing: '-0.5px',
+            mb:            '8px',
           }}
         >
           {mp.pick ?? '—'}
         </Typography>
 
         {mp.bet_value && (
-          <Typography
+          <Box
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.75rem',
-              color: C.textMuted,
-              mb: '14px',
+              display:      'inline-block',
+              bgcolor:      C.accentDim,
+              border:       `1px solid ${C.accentLine}`,
+              borderRadius: '3px',
+              px:           '14px',
+              py:           '8px',
+              mb:           '14px',
             }}
           >
-            {mp.bet_value}
-          </Typography>
+            <Typography sx={{ fontFamily: BARLOW, fontWeight: 800, fontSize: '14px', color: C.accent, letterSpacing: '1px' }}>
+              {mp.bet_value}
+            </Typography>
+          </Box>
         )}
 
-        <SectionLabel>{t.confidence}</SectionLabel>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Box sx={{ flex: 1 }}>
-            <ConfidenceBar value={confidence} />
+        <Box
+          sx={{
+            display:      'flex',
+            alignItems:   'center',
+            gap:          '10px',
+            bgcolor:      C.surfaceAlt,
+            border:       `1px solid ${C.border}`,
+            borderRadius: '3px',
+            px:           '12px',
+            py:           '8px',
+          }}
+        >
+          <ConfidenceBar value={confidence} />
+          <Box>
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, letterSpacing: '1px', textTransform: 'uppercase' }}>
+              {t.confidence}
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.82rem', fontWeight: 700, color: confColor }}>
+              {confidence}%
+            </Typography>
           </Box>
-          <Typography
-            sx={{
-              fontFamily: MONO,
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              color: confColor,
-              flexShrink: 0,
-              minWidth: '36px',
-              textAlign: 'right',
-            }}
-          >
-            {confidence}%
-          </Typography>
         </Box>
 
         {/* ── AGREGAR A BANCA ── */}
@@ -939,14 +918,14 @@ function SingleGameResult({ hexa, t }) {
 
       {/* ── Oracle Report ── */}
       {hexa.oracle_report && (
-        <Box>
+        <Box sx={{ borderBottom: `1px solid ${C.border}`, pb: '16px' }}>
           <SectionLabel>{t.oracleReport}</SectionLabel>
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.82rem',
-              color: C.textPrimary,
-              lineHeight: 1.75,
+              fontFamily: SANS,
+              fontSize:   '13px',
+              color:      C.textSecondary,
+              lineHeight: 1.8,
             }}
           >
             {hexa.oracle_report}
@@ -958,36 +937,34 @@ function SingleGameResult({ hexa, t }) {
       {hexa.hexa_hunch && (
         <Box
           sx={{
-            borderLeft: `3px solid ${C.accent}`,
-            pl: '16px',
-            py: '6px',
-            bgcolor: C.accentDim,
-            borderRadius: '0 6px 6px 0',
+            borderLeft: `2px solid ${C.borderLight}`,
+            pl: '14px',
+            py: '4px',
           }}
         >
           <Typography
             sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '0.65rem',
+              fontFamily:    MONO,
+              fontSize:      '10px',
               fontWeight:    700,
-              color:         C.accentSec,
+              color:         C.textDim,
               textTransform: 'uppercase',
-              letterSpacing: '0.12em',
+              letterSpacing: '2px',
               mb:            '6px',
             }}
           >
-            🧠 {t.hexaHunch}
+            {t.hexaHunch}
           </Typography>
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.8rem',
-              color: C.textMuted,
-              fontStyle: 'italic',
-              lineHeight: 1.65,
+              fontFamily: SANS,
+              fontSize:   '12px',
+              color:      C.textMuted,
+              fontStyle:  'italic',
+              lineHeight: 1.6,
             }}
           >
-            {hexa.hexa_hunch}
+            ⬡ {hexa.hexa_hunch}
           </Typography>
         </Box>
       )}
@@ -1008,10 +985,10 @@ function SingleGameResult({ hexa, t }) {
       {pm && (
         <Box
           sx={{
-            bgcolor: C.cardBg,
-            border: `1px solid ${C.cardBorder}`,
-            borderRadius: '8px',
-            p: '16px',
+            bgcolor: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: '3px',
+            p: '14px',
           }}
         >
           <SectionLabel>{t.probabilityModel}</SectionLabel>
@@ -1023,50 +1000,21 @@ function SingleGameResult({ hexa, t }) {
       {bp && (
         <Box
           sx={{
-            bgcolor: C.cardBg,
-            border: `1px solid ${C.cardBorder}`,
-            borderRadius: '8px',
-            p: '16px',
+            bgcolor:      C.surfaceAlt,
+            border:       `1px solid ${C.border}`,
+            borderRadius: '3px',
+            p:            '10px 12px',
           }}
         >
-          <SectionLabel>{t.bestPick}</SectionLabel>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '8px' }}>
-            <Box
-              sx={{
-                px:           '8px',
-                py:           '3px',
-                bgcolor:      C.blueDim,
-                border:       `1px solid ${C.blue}44`,
-                borderRadius: '2px',
-                fontFamily:   BARLOW,
-                fontSize:     '0.68rem',
-                fontWeight:   700,
-                color:        C.accentSec,
-                letterSpacing:'0.06em',
-                textTransform:'uppercase',
-              }}
-            >
-              {bp.type}
-            </Box>
-            <Typography
-              sx={{
-                fontFamily: MONO,
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: Number(bp.confidence) >= 0.75 ? C.green : C.amber,
-              }}
-            >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '6px' }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.textDim, letterSpacing: '1px', textTransform: 'uppercase' }}>
+              {t.bestPick} · {bp.type}
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: '11px', fontWeight: 700, color: C.accent }}>
               {Math.round(Number(bp.confidence) * 100)}%
             </Typography>
           </Box>
-          <Typography
-            sx={{
-              fontFamily: MONO,
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              color: C.textPrimary,
-            }}
-          >
+          <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '14px', color: C.textSecondary }}>
             {bp.detail}
           </Typography>
         </Box>
@@ -1095,46 +1043,41 @@ function ParlayResult({ hexa, t }) {
       {/* ── Header ── */}
       <Box
         sx={{
-          border:       `1px solid ${C.accentLine}`,
-          borderLeft:   `4px solid ${C.accentSec}`,
-          borderRadius: '2px',
-          background:   `linear-gradient(135deg, rgba(0,102,255,0.09) 0%, #0D1424 50%, #111827 100%)`,
-          boxShadow:    'inset 0 0 30px rgba(0,102,255,0.04), 0 0 20px rgba(0,102,255,0.06)',
+          background:   C.bg,
+          border:       `1px solid ${C.border}`,
+          borderRadius: '4px',
           p:            '20px',
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '14px' }}>
           <Typography
             sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '0.72rem',
+              fontFamily:    MONO,
+              fontSize:      '10px',
               fontWeight:    700,
-              color:         C.accentSec,
+              color:         C.accent,
               textTransform: 'uppercase',
-              letterSpacing: '0.14em',
+              letterSpacing: '2px',
             }}
           >
-            ◆ {t.combinedConf}
+            {t.combinedConf}
           </Typography>
-          {p.risk_level && (
-            <RiskBadge risk={p.risk_level} t={t} />
-          )}
+          {p.risk_level && <RiskBadge risk={p.risk_level} t={t} />}
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Box sx={{ flex: 1 }}>
-            <ConfidenceBar value={confPct} />
-          </Box>
-          <Typography
-            sx={{
-              fontFamily: MONO,
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              color: confColor,
-              flexShrink: 0,
-              minWidth: '40px',
-              textAlign: 'right',
-            }}
-          >
+        <Box
+          sx={{
+            display:      'flex',
+            alignItems:   'center',
+            gap:          '10px',
+            bgcolor:      C.surfaceAlt,
+            border:       `1px solid ${C.border}`,
+            borderRadius: '3px',
+            px:           '12px',
+            py:           '8px',
+          }}
+        >
+          <ConfidenceBar value={confPct} />
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.85rem', fontWeight: 700, color: confColor }}>
             {confPct}%
           </Typography>
         </Box>
@@ -1150,19 +1093,20 @@ function ParlayResult({ hexa, t }) {
           <Box
             key={i}
             sx={{
-              bgcolor:      C.cardBg,
-              border:       `1px solid ${C.cardBorder}`,
+              bgcolor:      C.surface,
+              border:       `1px solid ${C.border}`,
               borderLeft:   `3px solid ${C.accent}`,
-              borderRadius: '0 2px 2px 0',
+              borderRadius: '0 4px 4px 0',
               p:            '14px 16px',
             }}
           >
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '6px' }}>
               <Typography
                 sx={{
-                  fontFamily: LABEL,
-                  fontSize: '0.65rem',
-                  color: C.textMuted,
+                  fontFamily: MONO,
+                  fontSize:   '10px',
+                  color:      C.textDim,
+                  letterSpacing: '1px',
                 }}
               >
                 {t.leg} {i + 1} — {leg.game}
@@ -1195,7 +1139,7 @@ function ParlayResult({ hexa, t }) {
             {leg.reasoning && (
               <Typography
                 sx={{
-                  fontFamily: LABEL,
+                  fontFamily: SANS,
                   fontSize: '0.73rem',
                   color: C.textMuted,
                   lineHeight: 1.6,
@@ -1222,7 +1166,7 @@ function ParlayResult({ hexa, t }) {
         >
           <Typography
             sx={{
-              fontFamily: LABEL,
+              fontFamily: SANS,
               fontSize: '0.78rem',
               color: C.textMuted,
               fontStyle: 'italic',
@@ -1251,9 +1195,9 @@ function FullDayGameRow({ game, t }) {
   return (
     <Box
       sx={{
-        bgcolor: C.cardBg,
-        border: `1px solid ${C.cardBorder}`,
-        borderRadius: '8px',
+        bgcolor: C.surface,
+        border: `1px solid ${C.border}`,
+        borderRadius: '4px',
         p: '16px',
       }}
     >
@@ -1317,7 +1261,7 @@ function FullDayGameRow({ game, t }) {
       {game.oracle_report && (
         <Typography
           sx={{
-            fontFamily: LABEL,
+            fontFamily: SANS,
             fontSize: '0.75rem',
             color: C.textMuted,
             lineHeight: 1.6,
@@ -1352,32 +1296,31 @@ function FullDayResult({ hexa, t }) {
       {hexa.day_summary && (
         <Box
           sx={{
-            border:       `1px solid ${C.cardBorder}`,
-            borderLeft:   `4px solid ${C.accent}`,
-            borderRadius: '2px',
-            background:   `linear-gradient(135deg, rgba(0,102,255,0.07) 0%, ${C.cardBgLight} 60%)`,
+            background:   C.bg,
+            border:       `1px solid ${C.border}`,
+            borderRadius: '4px',
             p:            '20px',
           }}
         >
           <Typography
             sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '0.72rem',
+              fontFamily:    MONO,
+              fontSize:      '10px',
               fontWeight:    700,
-              color:         C.accentSec,
+              color:         C.accent,
               textTransform: 'uppercase',
-              letterSpacing: '0.14em',
+              letterSpacing: '2px',
               mb: '10px',
             }}
           >
-            ◆ {t.daySummary}
+            {t.daySummary}
           </Typography>
           <Typography
             sx={{
-              fontFamily: LABEL,
-              fontSize: '0.85rem',
-              color: C.textPrimary,
-              lineHeight: 1.75,
+              fontFamily: SANS,
+              fontSize: '13px',
+              color: C.textSecondary,
+              lineHeight: 1.8,
             }}
           >
             {hexa.day_summary}
@@ -1400,7 +1343,7 @@ export default function ResultCard({ data, lang = 'en' }) {
 
   if (!data) {
     return (
-      <Typography sx={{ fontFamily: LABEL, fontSize: '0.82rem', color: C.textMuted }}>
+      <Typography sx={{ fontFamily: SANS, fontSize: '0.82rem', color: C.textMuted }}>
         {t.noData}
       </Typography>
     );
@@ -1425,9 +1368,9 @@ export default function ResultCard({ data, lang = 'en' }) {
   return (
     <Box
       sx={{
-        bgcolor: C.cardBg,
-        border: `1px solid ${C.cardBorder}`,
-        borderRadius: '8px',
+        bgcolor: C.surface,
+        border: `1px solid ${C.border}`,
+        borderRadius: '4px',
         p: 2,
       }}
     >

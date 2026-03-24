@@ -10,26 +10,7 @@
 
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
-
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
-const MONO   = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL  = '"DM Sans", system-ui, sans-serif';
-
-const C = {
-  bg:          '#04080F',
-  bgSec:       '#080D1A',
-  cardBg:      '#0D1424',
-  cardBorder:  '#1A2540',
-  accent:      '#0066FF',
-  accentSec:   '#00D4FF',
-  accentDim:   'rgba(0,102,255,0.08)',
-  accentLine:  'rgba(0,102,255,0.25)',
-  textPrimary: '#E8EDF5',
-  textMuted:   '#5A7090',
-  green:       '#00E676',
-  red:         '#FF3D57',
-  amber:       '#FFB800',
-};
+import { C, BARLOW, MONO, SANS } from '../theme';
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -39,8 +20,8 @@ function ModeCard({ icon, title, cost, description }) {
       display:      'flex',
       gap:          '12px',
       p:            '14px 16px',
-      bgcolor:      C.cardBg,
-      border:       `1px solid ${C.cardBorder}`,
+      bgcolor:      C.surface,
+      border:       `1px solid ${C.border}`,
       borderLeft:   `3px solid ${C.accent}`,
       borderRadius: '2px',
     }}>
@@ -50,11 +31,11 @@ function ModeCard({ icon, title, cost, description }) {
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.9rem', fontWeight: 800, color: C.textPrimary, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {title}
           </Typography>
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.accentSec }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: C.accent }}>
             {cost}
           </Typography>
         </Box>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.78rem', color: C.textMuted, lineHeight: 1.65 }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.78rem', color: C.textMuted, lineHeight: 1.65 }}>
           {description}
         </Typography>
       </Box>
@@ -71,14 +52,14 @@ function CreditPlanRow({ plan, credits, price, highlight }) {
       px:          '12px',
       py:          '10px',
       bgcolor:     highlight ? C.accentDim : 'transparent',
-      border:      `1px solid ${highlight ? C.accentLine : C.cardBorder}`,
+      border:      `1px solid ${highlight ? C.accentLine : C.border}`,
       borderRadius:'2px',
       alignItems:  'center',
     }}>
-      <Typography sx={{ fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: highlight ? 800 : 600, color: highlight ? C.accentSec : C.textPrimary, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <Typography sx={{ fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: highlight ? 800 : 600, color: highlight ? C.accent : C.textPrimary, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {plan}
       </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 700, color: C.accentSec, textAlign: 'center' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 700, color: C.accent, textAlign: 'center' }}>
         {credits}
       </Typography>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textMuted, textAlign: 'right' }}>
@@ -94,17 +75,17 @@ function DataSourceCard({ icon, title, description }) {
       display:      'flex',
       gap:          '10px',
       p:            '12px 14px',
-      bgcolor:      C.cardBg,
-      border:       `1px solid ${C.cardBorder}`,
-      borderLeft:   `3px solid ${C.accentSec}`,
+      bgcolor:      C.surface,
+      border:       `1px solid ${C.border}`,
+      borderLeft:   `3px solid ${C.accent}`,
       borderRadius: '2px',
     }}>
       <Typography sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0, mt: '2px' }}>{icon}</Typography>
       <Box>
-        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.82rem', fontWeight: 800, color: C.accentSec, textTransform: 'uppercase', letterSpacing: '0.06em', mb: '3px' }}>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.82rem', fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.06em', mb: '3px' }}>
           {title}
         </Typography>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.75rem', color: C.textMuted, lineHeight: 1.6 }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textMuted, lineHeight: 1.6 }}>
           {description}
         </Typography>
       </Box>
@@ -182,7 +163,7 @@ function TabCredits({ lang }) {
       </Typography>
 
       {/* Table header */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', px: '12px', pb: '6px', borderBottom: `1px solid ${C.cardBorder}` }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', px: '12px', pb: '6px', borderBottom: `1px solid ${C.border}` }}>
         {[isEs ? 'Plan' : 'Plan', isEs ? 'Créditos' : 'Credits', isEs ? 'Precio' : 'Price'].map((h, i) => (
           <Typography key={i} sx={{ fontFamily: BARLOW, fontSize: '0.65rem', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: i === 2 ? 'right' : i === 1 ? 'center' : 'left' }}>
             {h}
@@ -197,7 +178,7 @@ function TabCredits({ lang }) {
 
       {/* Note */}
       <Box sx={{ p: '12px 14px', bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px' }}>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.75rem', color: C.textMuted, lineHeight: 1.65 }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textMuted, lineHeight: 1.65 }}>
           {isEs
             ? 'Los créditos nunca vencen. Úsalos cuando quieras, en los análisis que quieras.'
             : 'Credits never expire. Use them whenever you want, on whatever analyses you want.'}
@@ -205,8 +186,8 @@ function TabCredits({ lang }) {
       </Box>
 
       {/* Example */}
-      <Box sx={{ p: '14px 16px', bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderLeft: `3px solid ${C.accent}`, borderRadius: '2px' }}>
-        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: 800, color: C.accentSec, textTransform: 'uppercase', letterSpacing: '0.08em', mb: '8px' }}>
+      <Box sx={{ p: '14px 16px', bgcolor: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.accent}`, borderRadius: '2px' }}>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.08em', mb: '8px' }}>
           {isEs ? 'Ejemplo: Con 50 créditos (HEXA All-Star) puedes hacer:' : 'Example: With 50 credits (HEXA All-Star) you can run:'}
         </Typography>
         {[
@@ -217,7 +198,7 @@ function TabCredits({ lang }) {
         ].map((line, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
             <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: C.accent, flexShrink: 0 }} />
-            <Typography sx={{ fontFamily: LABEL, fontSize: '0.75rem', color: C.textMuted }}>{line}</Typography>
+            <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textMuted }}>{line}</Typography>
           </Box>
         ))}
       </Box>
@@ -261,8 +242,8 @@ function TabOracle({ lang }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Intro */}
-      <Box sx={{ p: '14px 16px', bgcolor: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: '2px' }}>
-        <Typography sx={{ fontFamily: LABEL, fontSize: '0.82rem', color: C.textPrimary, lineHeight: 1.75 }}>
+      <Box sx={{ p: '14px 16px', bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px' }}>
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.82rem', color: C.textPrimary, lineHeight: 1.75 }}>
           {isEs
             ? 'H.E.X.A. (Hybrid Expert X-Analysis) es un motor de análisis deportivo que combina múltiples fuentes de datos para generar picks con respaldo estadístico:'
             : 'H.E.X.A. (Hybrid Expert X-Analysis) is a sports analysis engine that combines multiple data sources to generate statistically-backed picks:'}
@@ -276,7 +257,7 @@ function TabOracle({ lang }) {
 
       {/* Conclusion */}
       <Box sx={{ p: '12px 16px', bgcolor: 'rgba(0,212,255,0.06)', border: `1px solid rgba(0,212,255,0.2)`, borderRadius: '2px', textAlign: 'center' }}>
-        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.88rem', fontWeight: 800, color: C.accentSec, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.88rem', fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
           {isEs
             ? 'El resultado: picks respaldados por estadísticas, no por intuición.'
             : 'The result: statistically-backed picks, not gut feelings.'}
@@ -330,13 +311,13 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
           display:       'flex',
           flexDirection: 'column',
           bgcolor:       C.bg,
-          border:        `1px solid ${C.cardBorder}`,
+          border:        `1px solid ${C.border}`,
           borderRadius:  '4px',
-          boxShadow:     '0 0 60px rgba(0,102,255,0.2), 0 24px 48px rgba(0,0,0,0.6)',
+          boxShadow:     '0 24px 48px rgba(0,0,0,0.6)',
         }}
       >
         {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', px: '20px', pt: '18px', pb: '14px', borderBottom: `1px solid ${C.cardBorder}`, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', px: '20px', pt: '18px', pb: '14px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
           <Box sx={{ flex: 1 }}>
             <Typography sx={{ fontFamily: BARLOW, fontSize: '1.05rem', fontWeight: 800, color: C.textPrimary, textTransform: 'uppercase', letterSpacing: '0.15em' }}>
               {isEs ? '¿Cómo funciona H.E.X.A.?' : 'How does H.E.X.A. work?'}
@@ -355,7 +336,7 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
               justifyContent: 'center',
               width:          '28px',
               height:         '28px',
-              border:         `1px solid ${C.cardBorder}`,
+              border:         `1px solid ${C.border}`,
               borderRadius:   '2px',
               bgcolor:        'transparent',
               color:          C.textMuted,
@@ -371,7 +352,7 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
         </Box>
 
         {/* Tab bar */}
-        <Box sx={{ display: 'flex', borderBottom: `1px solid ${C.cardBorder}`, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
           {tabs.map((tab, i) => (
             <Box
               key={i}
@@ -381,9 +362,9 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
                 flex:          1,
                 py:            '10px',
                 border:        'none',
-                borderBottom:  activeTab === i ? `2px solid ${C.accentSec}` : '2px solid transparent',
-                bgcolor:       activeTab === i ? 'rgba(0,102,255,0.06)' : 'transparent',
-                color:         activeTab === i ? C.accentSec : C.textMuted,
+                borderBottom:  activeTab === i ? `2px solid ${C.accent}` : '2px solid transparent',
+                bgcolor:       activeTab === i ? C.accentDim : 'transparent',
+                color:         activeTab === i ? C.accent : C.textMuted,
                 fontFamily:    BARLOW,
                 fontSize:      '0.75rem',
                 fontWeight:    700,
@@ -391,7 +372,7 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
                 letterSpacing: '0.08em',
                 cursor:        'pointer',
                 transition:    'all 0.15s',
-                '&:hover':     { color: activeTab === i ? C.accentSec : C.textPrimary },
+                '&:hover':     { color: activeTab === i ? C.accent : C.textPrimary },
               }}
             >
               {tab.label}
@@ -400,7 +381,7 @@ export default function HexaHelpModal({ open, onClose, lang = 'en' }) {
         </Box>
 
         {/* Tab content */}
-        <Box sx={{ p: '20px', scrollbarWidth: 'thin', scrollbarColor: `${C.cardBorder} ${C.bgSec}` }}>
+        <Box sx={{ p: '20px', scrollbarWidth: 'thin', scrollbarColor: `${C.border} ${C.surfaceAlt}` }}>
           {activeTab === 0 && <TabModes   lang={lang} />}
           {activeTab === 1 && <TabCredits lang={lang} />}
           {activeTab === 2 && <TabOracle  lang={lang} />}
