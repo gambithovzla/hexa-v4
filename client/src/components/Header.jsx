@@ -16,6 +16,7 @@ import AuthModal from './AuthModal';
 import HexaHelpModal from './HexaHelpModal';
 import PricingModal from './PricingModal';
 import AdminCreditPanel from './AdminCreditPanel';
+import TerminalGuide from './TerminalGuide';
 import { useAuth } from '../store/authStore';
 import { C, BARLOW, MONO } from '../theme';
 
@@ -362,6 +363,43 @@ function HelpButton({ lang }) {
   );
 }
 
+// ── Guide button ──────────────────────────────────────────────────────────────
+
+function GuideButton({ lang }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Box
+        component="button"
+        onClick={() => setOpen(v => !v)}
+        sx={{
+          px:            '16px',
+          py:            '6px',
+          border:        open
+            ? `1px solid ${C.accentLine}`
+            : `1px solid ${C.border}`,
+          borderRadius:  '3px',
+          bgcolor:       open ? C.accentDim : 'transparent',
+          color:         open ? C.accent : C.textMuted,
+          fontFamily:    MONO,
+          fontSize:      '0.7rem',
+          fontWeight:    700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          cursor:        'pointer',
+          whiteSpace:    'nowrap',
+          flexShrink:    0,
+          transition:    'all 0.15s',
+          '&:hover':     { color: C.accent, borderColor: C.accentLine, bgcolor: C.accentDim },
+        }}
+      >
+        [ GUIDE ]
+      </Box>
+      <TerminalGuide open={open} onClose={() => setOpen(false)} lang={lang} />
+    </>
+  );
+}
+
 // ── Methodology link ──────────────────────────────────────────────────────────
 
 function MethodologyLink({ lang, onClick }) {
@@ -510,6 +548,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             )}
           </Box>
         )}
+
+        {/* Guide button */}
+        <GuideButton lang={lang} />
 
         {/* Methodology link */}
         <MethodologyLink lang={lang} onClick={onMethodology} />
