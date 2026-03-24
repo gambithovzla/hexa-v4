@@ -16,26 +16,9 @@ import AuthModal from './AuthModal';
 import HexaHelpModal from './HexaHelpModal';
 import PricingModal from './PricingModal';
 import { useAuth } from '../store/authStore';
+import { C, BARLOW, MONO } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
-const DM     = '"DM Sans", system-ui, sans-serif';
-const MONO   = '"JetBrains Mono", "Fira Code", monospace';
-
-const C = {
-  bg:         '#04080F',
-  bgSec:      '#080D1A',
-  border:     '#1A2540',
-  accent:     '#0066FF',
-  accentSec:  '#00D4FF',
-  accentFade: 'rgba(0,102,255,0.06)',
-  textPrimary:'#E8EDF5',
-  textMuted:  '#5A7090',
-  gold:       '#FFB800',
-};
 
 const SUBTITLE = {
   en: 'The MLB Sports Oracle',
@@ -136,7 +119,7 @@ function StatcastBadge({ lang }) {
         sx={{
           fontFamily:    MONO,
           fontSize:      '0.52rem',
-          color:         hasData ? '#5A7090' : '#FF3D5780',
+          color:         hasData ? C.textMuted : `${C.red}80`,
           letterSpacing: '0.08em',
           userSelect:    'none',
           whiteSpace:    'nowrap',
@@ -158,7 +141,7 @@ function StatcastBadge({ lang }) {
           p:              0,
           border:         'none',
           bgcolor:        'transparent',
-          color:          C.textMuted,
+          color:          C.textTertiary,
           cursor:         spinning ? 'default' : 'pointer',
           opacity:        hovered ? 0.7 : 0,
           transition:     'opacity 0.15s',
@@ -195,9 +178,9 @@ function AuthButton({ lang }) {
           sx={{
             px:            '14px',
             py:            '5px',
-            border:        `1px solid ${C.accent}`,
+            border:        `1px solid ${C.accentLine}`,
             borderRadius:  '2px',
-            bgcolor:       C.accentFade,
+            bgcolor:       C.accentDim,
             color:         C.accent,
             fontFamily:    BARLOW,
             fontSize:      '0.75rem',
@@ -208,7 +191,7 @@ function AuthButton({ lang }) {
             whiteSpace:    'nowrap',
             flexShrink:    0,
             transition:    'all 0.15s',
-            '&:hover':     { bgcolor: 'rgba(0,102,255,0.12)', color: C.accentSec },
+            '&:hover':     { bgcolor: C.accentDim, borderColor: C.accent, color: C.accent },
           }}
         >
           {isEs ? 'Iniciar sesión' : 'Sign In'}
@@ -235,7 +218,7 @@ function AuthButton({ lang }) {
           py:           '4px',
           border:       `1px solid ${C.border}`,
           borderRadius: '2px',
-          bgcolor:      '#080D1A',
+          bgcolor:      C.bg,
         }}
       >
         <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, userSelect: 'none' }}>
@@ -255,10 +238,10 @@ function AuthButton({ lang }) {
         sx={{
           px:            '10px',
           py:            '4px',
-          border:        `1px solid rgba(79,195,247,0.35)`,
+          border:        `1px solid ${C.accentLine}`,
           borderRadius:  '2px',
-          bgcolor:       'rgba(79,195,247,0.06)',
-          color:         '#4fc3f7',
+          bgcolor:       C.accentDim,
+          color:         C.accent,
           fontFamily:    BARLOW,
           fontSize:      '0.72rem',
           fontWeight:    700,
@@ -268,7 +251,7 @@ function AuthButton({ lang }) {
           flexShrink:    0,
           whiteSpace:    'nowrap',
           transition:    'all 0.15s',
-          '&:hover':     { bgcolor: 'rgba(79,195,247,0.12)', borderColor: '#4fc3f7' },
+          '&:hover':     { bgcolor: C.accentDim, borderColor: C.accent },
         }}
       >
         ⚡ {isEs ? 'Créditos' : 'Credits'}
@@ -291,7 +274,7 @@ function AuthButton({ lang }) {
           cursor:         'pointer',
           fontSize:       '0.8rem',
           borderRadius:   '2px',
-          '&:hover':      { color: C.textPrimary, bgcolor: C.border },
+          '&:hover':      { color: C.textSecondary, bgcolor: C.border },
         }}
       >
         ⏏
@@ -317,12 +300,10 @@ function TabButton({ tab, active, lang, onClick, disabled = false }) {
         alignItems:    'center',
         px:            '22px',
         py:            '12px',
-        background:    active
-          ? 'linear-gradient(180deg, #0066FF 0%, #0044CC 100%)'
-          : 'transparent',
+        background:    active ? C.accentDim : 'transparent',
         border:        'none',
-        borderBottom:  active ? 'none' : `2px solid #1A2540`,
-        color:         active ? '#ffffff' : C.textMuted,
+        borderBottom:  active ? `2px solid ${C.accent}` : `2px solid transparent`,
+        color:         active ? C.accent : C.textMuted,
         fontFamily:    BARLOW,
         fontSize:      '0.82rem',
         fontWeight:    700,
@@ -333,15 +314,9 @@ function TabButton({ tab, active, lang, onClick, disabled = false }) {
         opacity:       disabled && !active ? 0.4 : 1,
         transition:    'all 0.15s',
         flexShrink:    0,
-        boxShadow:     active
-          ? '0 4px 12px rgba(0,102,255,0.4)'
-          : 'inset 0 -2px 4px rgba(0,0,0,0.25)',
-        borderRadius:  active ? '2px 2px 0 0' : '0',
         '&:hover': {
-          color:      active ? '#ffffff' : C.textPrimary,
-          background: active
-            ? 'linear-gradient(180deg, #0066FF 0%, #0044CC 100%)'
-            : 'rgba(255,255,255,0.03)',
+          color:      active ? C.accent : C.textSecondary,
+          background: active ? C.accentDim : 'transparent',
         },
       }}
     >
@@ -376,7 +351,7 @@ function HelpButton({ lang }) {
           cursor:         'pointer',
           flexShrink:     0,
           transition:     'all 0.15s',
-          '&:hover':      { color: C.accentSec, borderColor: C.accent, bgcolor: C.accentFade },
+          '&:hover':      { color: C.accent, borderColor: C.accentLine, bgcolor: C.accentDim },
         }}
       >
         ?
@@ -401,7 +376,7 @@ function MethodologyLink({ lang, onClick }) {
         borderRadius:  '2px',
         bgcolor:       'transparent',
         color:         C.textMuted,
-        fontFamily:    BARLOW,
+        fontFamily:    MONO,
         fontSize:      '0.72rem',
         fontWeight:    700,
         letterSpacing: '0.08em',
@@ -410,7 +385,7 @@ function MethodologyLink({ lang, onClick }) {
         whiteSpace:    'nowrap',
         flexShrink:    0,
         transition:    'all 0.15s',
-        '&:hover':     { color: C.accentSec, borderColor: C.accent, bgcolor: C.accentFade },
+        '&:hover':     { color: C.textSecondary, borderColor: C.border },
       }}
     >
       {label}
@@ -425,22 +400,11 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
     <Box
       component="header"
       sx={{
-        position:   'sticky',
-        top:        0,
-        zIndex:     1000,
-        background: 'radial-gradient(ellipse at 50% 0%, #0D1528 0%, #04080F 70%)',
-        backdropFilter:      'blur(12px)',
-        WebkitBackdropFilter:'blur(12px)',
-        // Gradient border bottom via pseudo-element
-        '&::after': {
-          content:    '""',
-          position:   'absolute',
-          bottom:     0,
-          left:       0,
-          right:      0,
-          height:     '2px',
-          background: 'linear-gradient(90deg, transparent 0%, #0066FF 30%, #00D4FF 70%, transparent 100%)',
-        },
+        position:     'sticky',
+        top:          0,
+        zIndex:       1000,
+        background:   C.surface,
+        borderBottom: `1px solid ${C.border}`,
       }}
     >
       {/* ── Top row: logo + subtitle + controls (target: ~44px of the 72px) ── */}
@@ -466,7 +430,6 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
               width:     'auto',
               display:   'block',
               userSelect:'none',
-              filter:    'drop-shadow(0 0 16px rgba(0,102,255,0.35))',
             }}
           />
         </Box>
