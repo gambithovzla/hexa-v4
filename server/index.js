@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
-import { analyzeGame, analyzeParlay, analyzeSafe } from './oracle.js';
+import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat } from './oracle.js';
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
 import { getCacheStatus, refreshCache, getPitcherStatcast, getBatterStatcast } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
@@ -95,6 +95,15 @@ async function refundCredits(userId, cost, email) {
   } catch (err) {
     console.error(`[Credits] Refund failed for user ${userId}:`, err.message);
   }
+}
+
+// ── Admin middleware ───────────────────────────────────────────────────────────
+
+function isAdmin(req, res, next) {
+  if (req.user.email !== 'admin@hexa.com') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
 }
 
 // GET /api/games?date=YYYY-MM-DD
@@ -368,6 +377,61 @@ app.post('/api/analyze/safe', verifyToken, async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// POST /api/analyze/chat — Direct chat with Oracle (admin only, no credits)
+app.post('/api/analyze/chat', verifyToken, isAdmin, async (req, res) => {
+  const { gameId, question, conversationHistory = [], lang = 'en', date } = req.body;
+
+  if (!question || !question.trim()) {
+    return res.status(400).json({ error: 'Question is required' });
+  }
+
+  try {
+    const resolvedDate = date || new Date().toISOString().split('T')[0];
+    let games    = await getTodayGames(resolvedDate);
+    let gameData = games.find(g => String(g.gamePk) === String(gameId));
+
+    if (!gameData) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (todayStr !== resolvedDate) {
+        const retryGames = await getTodayGames(todayStr);
+        gameData = retryGames.find(g => String(g.gamePk) === String(gameId));
+        if (gameData) games = retryGames;
+      }
+    }
+
+    if (!gameData) return res.status(404).json({ success: false, error: `Partido ${gameId} no encontrado` });
+
+    let matchedOdds = null;
+    try {
+      const allOdds = await getGameOdds();
+      matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+    } catch { /* odds are optional */ }
+
+    const contextString = await buildContext(gameData, matchedOdds);
+
+    const answer = await analyzeChat({
+      contextString,
+      question: question.trim(),
+      conversationHistory,
+      lang,
+    });
+
+    res.json({
+      success: true,
+      answer,
+      mode: 'chat',
+    });
+  } catch (err) {
+    console.error('[Oracle Chat] Error:', err);
+    res.status(500).json({ error: 'Chat failed', details: err.message });
+  }
+});
+
+// GET /api/auth/is-admin — check if the authenticated user is admin
+app.get('/api/auth/is-admin', verifyToken, (req, res) => {
+  res.json({ isAdmin: req.user.email === 'admin@hexa.com' });
 });
 
 // GET /api/savant/status

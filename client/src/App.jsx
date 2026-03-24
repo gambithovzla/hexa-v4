@@ -13,7 +13,7 @@
  *   on each tab visit so it always reads the latest localStorage snapshot.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, Typography } from '@mui/material';
 import { theme as themeConfig } from './styles/theme';
 import Header               from './components/Header';
@@ -23,8 +23,11 @@ import HistoryPanel         from './components/HistoryPanel';
 import BankrollTracker      from './components/BankrollTracker';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
+import OracleChat          from './components/OracleChat';
 import useHistory           from './hooks/useHistory';
 import { C, MONO } from './theme';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const muiTheme = createTheme(themeConfig);
 
@@ -73,10 +76,30 @@ export default function App() {
   const [parlayGames,       setParlayGames]       = useState([]);
   const [isAnalyzing,       setIsAnalyzing]       = useState(false);
   const [showMethodology,   setShowMethodology]   = useState(false);
+  const [showOracleChat,    setShowOracleChat]    = useState(false);
+  const [isAdmin,           setIsAdmin]           = useState(false);
+
+  // Check admin status on mount
+  useEffect(() => {
+    const token = localStorage.getItem('hexa_token');
+    if (token) {
+      fetch(`${API_URL}/api/auth/is-admin`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(data => setIsAdmin(data.isAdmin || false))
+        .catch(() => setIsAdmin(false));
+    }
+  }, []);
 
   // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
   // HistoryPanel reads history via its own hook instance (remounts each visit).
   const { addPick } = useHistory();
+
+  // Render Oracle Chat as a full-page takeover (admin only)
+  if (showOracleChat) {
+    return <OracleChat lang={lang} onBack={() => setShowOracleChat(false)} />;
+  }
 
   // Render Methodology as a full-page takeover (no tab, no header)
   if (showMethodology) {
@@ -110,6 +133,8 @@ export default function App() {
           onTabChange={isAnalyzing ? () => {} : setActiveTab}
           disabled={isAnalyzing}
           onMethodology={() => setShowMethodology(true)}
+          isAdmin={isAdmin}
+          onOracleChat={() => setShowOracleChat(true)}
         />
 
         {/* ── Main content ── */}
