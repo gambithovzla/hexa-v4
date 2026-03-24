@@ -224,6 +224,9 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
   // Games that have started/ended cannot be selected at all
   const blocked = status !== 'scheduled';
 
+  const awayColor = MLB_COLORS[away] ?? '#666';
+  const homeColor = MLB_COLORS[home] ?? '#666';
+
   const leftBorderColor = isSelected ? C.accent : status === 'live' ? C.amber : 'transparent';
 
   return (
