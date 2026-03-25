@@ -78,6 +78,7 @@ function ModeBadge({ mode }) {
     parlay:  { bg: C.amberDim,  border: C.amberLine,  text: C.amber  },
     fullday: { bg: C.surfaceAlt, border: C.border,    text: C.textSecondary },
     fullDay: { bg: C.surfaceAlt, border: C.border,    text: C.textSecondary },
+    safe:    { bg: C.greenDim,   border: C.greenLine,  text: C.green  },
   };
   const cfg = colors[mode] ?? colors.single;
   return (
@@ -118,18 +119,23 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
         {entry.matchup}
       </Typography>
       {entry.pick && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.78rem', color: C.textSecondary, fontWeight: 600, flex: 1 }}>
-            {entry.pick}
+        <Box sx={{ bgcolor: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: '4px', p: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '9px', fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '2px' }}>
+            PICK SUGERIDO
           </Typography>
-          {entry.confidence > 0 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-              <MiniConfBar value={entry.confidence} />
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: entry.confidence >= 75 ? C.green : entry.confidence >= 50 ? C.amber : C.red, minWidth: '34px', textAlign: 'right' }}>
-                {entry.confidence}%
-              </Typography>
-            </Box>
-          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <Typography sx={{ fontFamily: BARLOW, fontSize: '0.95rem', color: C.textPrimary, fontWeight: 700, flex: 1 }}>
+              {entry.pick}
+            </Typography>
+            {entry.confidence > 0 && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                <MiniConfBar value={entry.confidence} />
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: entry.confidence >= 75 ? C.green : entry.confidence >= 50 ? C.amber : C.red, minWidth: '34px', textAlign: 'right' }}>
+                  {entry.confidence}%
+                </Typography>
+              </Box>
+            )}
+          </Box>
         </Box>
       )}
       {entry.result === 'pending' && (
