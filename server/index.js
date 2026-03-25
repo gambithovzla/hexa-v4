@@ -191,6 +191,18 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
     const updatedUser = await deductCredits(req, res, cost);
     if (!updatedUser) return;
 
+    // Fetch user bankroll for Kelly Criterion calculation
+    let userBankroll = null;
+    try {
+      const brResult = await pool.query(
+        'SELECT current_bankroll FROM bankroll WHERE user_id = $1',
+        [req.user.id]
+      );
+      if (brResult.rows.length > 0) {
+        userBankroll = parseFloat(brResult.rows[0].current_bankroll);
+      }
+    } catch { /* bankroll is optional — never block the analysis */ }
+
     let analysis;
     try {
       const context = await buildContext(gameData, matchedOdds);
@@ -241,6 +253,7 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
         mode: 'single', lang: resolvedLang, webSearch, model, timeoutMs: 90000,
         statcastData,
         mlbApiData: gameData,
+        userBankroll,
       });
     } catch (err) {
       await refundCredits(updatedUser.id, cost, updatedUser.email);

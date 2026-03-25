@@ -1100,6 +1100,44 @@ function SingleGameResult({ hexa, t }) {
         </Box>
       )}
 
+      {/* ── Kelly Recommendation ── */}
+      {hexa.kelly_recommendation && (
+        <Box
+          sx={{
+            background:   'rgba(34,197,94,0.06)',
+            border:       '1px solid rgba(34,197,94,0.25)',
+            borderLeft:   '3px solid #22c55e',
+            borderRadius: '0 4px 4px 0',
+            p:            '14px 16px',
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily:    'monospace',
+              fontSize:      '10px',
+              fontWeight:    700,
+              color:         '#22c55e',
+              textTransform: 'uppercase',
+              letterSpacing: '2px',
+              mb:            '8px',
+            }}
+          >
+            KELLY CRITERION
+          </Typography>
+          <Typography
+            sx={{
+              fontFamily: 'system-ui, sans-serif',
+              fontSize:   '14px',
+              fontWeight: 700,
+              color:      '#e5e5e5',
+              lineHeight: 1.5,
+            }}
+          >
+            {hexa.kelly_recommendation}
+          </Typography>
+        </Box>
+      )}
+
       {/* ── H.E.X.A. Hunch ── */}
       {hexa.hexa_hunch && (
         <Box
