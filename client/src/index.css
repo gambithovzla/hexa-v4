@@ -1,48 +1,165 @@
-/* ── H.E.X.A. V4 — Global Styles ─────────────────────────────────────────── */
+/* ── H.E.X.A. V4 — Sci-Fi Global Design System ────────────────────────────── */
 
-/* CSS custom properties */
+/* ── CSS Custom Properties ─────────────────────────────────────────────────── */
 :root {
-  --bg-primary:   #04080F;
-  --bg-secondary: #080D1A;
-  --bg-card:      #0D1424;
-  --border:       #1A2540;
-  --accent:       #0066FF;
-  --accent-2:     #00D4FF;
-  --text-primary: #E8EDF5;
-  --text-muted:   #5A7090;
-  --success:      #00E676;
-  --warning:      #FF9800;
-  --danger:       #FF3D57;
+  /* Backgrounds — absolute black foundation */
+  --bg-primary:   #000000;
+  --bg-secondary: #050508;
+  --bg-card:      #07090E;
+  --bg-elevated:  #0A0D14;
+
+  /* Neon Accent Palette */
+  --neon-cyan:        #00D9FF;   /* Electric Cyan — data/technical labels */
+  --neon-cyan-dim:    rgba(0, 217, 255, 0.08);
+  --neon-cyan-line:   rgba(0, 217, 255, 0.25);
+  --neon-cyan-glow:   0 0 8px rgba(0, 217, 255, 0.55), 0 0 20px rgba(0, 217, 255, 0.2);
+
+  --neon-orange:      #FF6600;   /* Neon Orange — primary actions / alerts */
+  --neon-orange-dim:  rgba(255, 102, 0, 0.08);
+  --neon-orange-line: rgba(255, 102, 0, 0.3);
+  --neon-orange-glow: 0 0 8px rgba(255, 102, 0, 0.65), 0 0 20px rgba(255, 102, 0, 0.25);
+
+  --neon-green:       #00FF88;   /* Neon Green — success / Safe Picks */
+  --neon-green-dim:   rgba(0, 255, 136, 0.08);
+  --neon-green-line:  rgba(0, 255, 136, 0.25);
+  --neon-green-glow:  0 0 8px rgba(0, 255, 136, 0.55), 0 0 20px rgba(0, 255, 136, 0.2);
+
+  /* Legacy alias compatibility */
+  --accent:       var(--neon-orange);
+  --accent-2:     var(--neon-cyan);
+  --success:      var(--neon-green);
+  --warning:      #FF9900;
+  --danger:       #FF2244;
   --gold:         #FFB800;
+
+  /* Borders */
+  --border:       rgba(0, 217, 255, 0.2);
+  --border-light: rgba(0, 217, 255, 0.1);
+
+  /* Text */
+  --text-primary: #E8F4FF;
+  --text-muted:   rgba(0, 217, 255, 0.5);
+
+  /* Typography — monospaced terminal stack */
+  --font-mono:    'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace;
+  --font-display: 'Orbitron', 'Share Tech Mono', monospace;
 }
 
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
+/* ── Base ──────────────────────────────────────────────────────────────────── */
 html, body {
   margin:      0;
   padding:     0;
-  background:  #111111;
-  color:       #e0e0e0;
-  font-family: 'DM Sans', system-ui, sans-serif;
+  background:  #000000;
+  color:       var(--text-primary);
+  font-family: var(--font-mono);
+  font-size:   14px;
+  line-height: 1.6;
   -webkit-font-smoothing:  antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* body baseline */
 body {
   min-height: 100vh;
+  /* Subtle scanline texture */
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 217, 255, 0.012) 2px,
+    rgba(0, 217, 255, 0.012) 4px
+  );
 }
 
-/* Thin dark scrollbars — webkit */
-::-webkit-scrollbar       { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #111111; }
-::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(249,115,22,0.35); }
+/* ── Scrollbars ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #000000; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 217, 255, 0.2);
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 217, 255, 0.5);
+  box-shadow: var(--neon-cyan-glow);
+}
 
-/* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a2a #111111;
+  scrollbar-color: rgba(0, 217, 255, 0.2) #000000;
+}
+
+/* ── Global Component Overrides ────────────────────────────────────────────── */
+
+/* --- Buttons ---------------------------------------------------------------- */
+button, [role="button"] {
+  font-family:    var(--font-mono) !important;
+  letter-spacing: 0.08em;
+}
+
+/* --- Inputs ----------------------------------------------------------------- */
+input, textarea, select {
+  font-family:      var(--font-mono) !important;
+  background:       #000000;
+  border:           1px solid var(--neon-cyan-line);
+  color:            var(--text-primary);
+  letter-spacing:   0.04em;
+  transition:       border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus, textarea:focus {
+  outline:          none;
+  border-color:     var(--neon-cyan);
+  box-shadow:       var(--neon-cyan-glow);
+}
+
+/* --- Cards / Panels --------------------------------------------------------- */
+.hexa-card {
+  background:    var(--bg-card);
+  border:        1px solid var(--neon-cyan-line);
+  border-radius: 0;
+  box-shadow:    inset 0 0 40px rgba(0, 0, 0, 0.8);
+  position:      relative;
+  overflow:      hidden;
+}
+
+/* Corner bracket accent */
+.hexa-card::before {
+  content:      '';
+  position:     absolute;
+  top:          0;
+  left:         0;
+  width:        12px;
+  height:       12px;
+  border-top:   2px solid var(--neon-cyan);
+  border-left:  2px solid var(--neon-cyan);
+}
+
+.hexa-card::after {
+  content:      '';
+  position:     absolute;
+  bottom:       0;
+  right:        0;
+  width:        12px;
+  height:       12px;
+  border-bottom: 2px solid var(--neon-orange);
+  border-right:  2px solid var(--neon-orange);
+}
+
+/* ── Neon Text Utilities ───────────────────────────────────────────────────── */
+.text-cyan   { color: var(--neon-cyan); }
+.text-orange { color: var(--neon-orange); }
+.text-green  { color: var(--neon-green); }
+
+.glow-cyan   { text-shadow: 0 0 8px var(--neon-cyan), 0 0 20px rgba(0,217,255,0.4); }
+.glow-orange { text-shadow: 0 0 8px var(--neon-orange), 0 0 20px rgba(255,102,0,0.4); }
+.glow-green  { text-shadow: 0 0 8px var(--neon-green), 0 0 20px rgba(0,255,136,0.4); }
+
+/* ── Selection ─────────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(0, 217, 255, 0.25);
+  color:      #ffffff;
 }
