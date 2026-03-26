@@ -1,10 +1,10 @@
 /**
- * AuthModal.jsx — Login / Register modal for H.E.X.A. V4
+ * AuthModal.jsx — H.E.X.A. V4 | Secure Access Portal
  *
  * Props:
- *   open     — boolean
- *   onClose  — () => void
- *   lang     — 'en' | 'es'
+ *   open       — boolean
+ *   onClose    — () => void
+ *   lang       — 'en' | 'es'
  *   defaultTab — 'login' | 'register'  (optional)
  */
 
@@ -12,55 +12,132 @@ import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
 
-// ── Design tokens (match Header / AnalysisPanel) ──────────────────────────────
-const C = {
-  bg:          '#0a0e17',
-  overlay:     'rgba(0,0,0,0.75)',
-  cardBg:      '#111827',
-  cardBorder:  '#1e293b',
-  accent:      '#f59e0b',
-  accentDim:   '#f59e0b18',
-  textPrimary: '#f1f5f9',
-  textMuted:   '#94a3b8',
-  red:         '#ef4444',
+// ── Sci-Fi Design Tokens (aligned with Phase A global system) ─────────────────
+const NC = {
+  bg:          '#000000',
+  surface:     '#07090E',
+  cyan:        '#00D9FF',
+  cyanDim:     'rgba(0, 217, 255, 0.07)',
+  cyanLine:    'rgba(0, 217, 255, 0.25)',
+  cyanGlow:    '0 0 8px rgba(0,217,255,0.55), 0 0 20px rgba(0,217,255,0.2)',
+  orange:      '#FF6600',
+  orangeDim:   'rgba(255, 102, 0, 0.1)',
+  orangeLine:  'rgba(255, 102, 0, 0.3)',
+  orangeGlow:  '0 0 8px rgba(255,102,0,0.65), 0 0 20px rgba(255,102,0,0.25)',
+  green:       '#00FF88',
+  red:         '#FF2244',
+  redDim:      'rgba(255, 34, 68, 0.07)',
+  redLine:     'rgba(255, 34, 68, 0.25)',
+  textPrimary: '#E8F4FF',
+  textMuted:   'rgba(0, 217, 255, 0.5)',
+  textDim:     'rgba(0, 217, 255, 0.3)',
 };
 
-const MONO  = '"JetBrains Mono", "Fira Code", monospace';
-const LABEL = '"Outfit", "Inter", system-ui, sans-serif';
+const MONO    = "'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace";
+const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
   en: {
     login:         'Login',
     register:      'Register',
-    email:         'Email',
-    password:      'Password',
-    submitLogin:   'Sign In',
-    submitReg:     'Create Account',
-    loading:       'Please wait…',
-    switchToReg:   "Don't have an account? Register",
-    switchToLogin: 'Already have an account? Login',
+    email:         'User ID // Email',
+    password:      'Auth Key // Password',
+    submitLogin:   'Authenticate',
+    submitReg:     'Create Access',
+    loading:       'Verifying…',
+    switchToReg:   "No account? → Register",
+    switchToLogin: 'Have access? → Login',
     close:         'Close',
+    bootLine1:     'Establishing secure connection…',
+    bootLine2:     'H.E.X.A. SECURE ACCESS PORTAL',
+    bootLineEs1:   'Estableciendo conexión segura…',
+    bootLineEs2:   'PORTAL DE ACCESO SEGURO H.E.X.A.',
   },
   es: {
     login:         'Iniciar sesión',
     register:      'Registrarse',
-    email:         'Correo electrónico',
-    password:      'Contraseña',
-    submitLogin:   'Entrar',
-    submitReg:     'Crear Cuenta',
-    loading:       'Espera…',
-    switchToReg:   '¿No tienes cuenta? Regístrate',
-    switchToLogin: '¿Ya tienes cuenta? Inicia sesión',
+    email:         'ID Usuario // Email',
+    password:      'Clave Auth // Contraseña',
+    submitLogin:   'Autenticar',
+    submitReg:     'Crear Acceso',
+    loading:       'Verificando…',
+    switchToReg:   '¿Sin cuenta? → Registrarse',
+    switchToLogin: '¿Ya tienes acceso? → Login',
     close:         'Cerrar',
+    bootLine1:     'Estableciendo conexión segura…',
+    bootLine2:     'PORTAL DE ACCESO SEGURO H.E.X.A.',
+    bootLineEs1:   'Establishing secure connection…',
+    bootLineEs2:   'H.E.X.A. SECURE ACCESS PORTAL',
   },
 };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Boot sequence text component ──────────────────────────────────────────────
+function BootHeader({ lang }) {
+  const isEs = lang === 'es';
+  const line1 = isEs ? 'Estableciendo conexión segura…' : 'Establishing secure connection…';
+  const line2 = isEs ? 'PORTAL DE ACCESO H.E.X.A.' : 'H.E.X.A. SECURE ACCESS PORTAL';
 
+  return (
+    <Box sx={{ mb: '24px' }}>
+      {/* Terminal ID line */}
+      <Typography sx={{
+        fontFamily:    MONO,
+        fontSize:      '7px',
+        color:         NC.textDim,
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+        mb:            '8px',
+      }}>
+        // SYS_INIT · PROTOCOL_AUTH_V4
+      </Typography>
+
+      {/* Animated boot line */}
+      <Typography sx={{
+        fontFamily:    MONO,
+        fontSize:      '9px',
+        color:         NC.cyan,
+        letterSpacing: '1.5px',
+        mb:            '10px',
+        '@keyframes bootBlink': {
+          '0%, 49%':  { opacity: 1 },
+          '50%, 100%': { opacity: 0 },
+        },
+        '&::after': {
+          content:   '"_"',
+          display:   'inline-block',
+          animation: 'bootBlink 1s step-end infinite',
+          color:     NC.cyan,
+          ml:        '2px',
+        },
+      }}>
+        {line1}
+      </Typography>
+
+      {/* Main portal title — Orbitron */}
+      <Typography sx={{
+        fontFamily:    DISPLAY,
+        fontSize:      '14px',
+        color:         NC.textPrimary,
+        letterSpacing: '3px',
+        textShadow:    `0 0 12px rgba(0,217,255,0.35)`,
+        lineHeight:    1.2,
+      }}>
+        {line2}
+      </Typography>
+    </Box>
+  );
+}
+
+// ── Tab bar ───────────────────────────────────────────────────────────────────
 function TabBar({ tab, setTab, t }) {
   return (
-    <Box sx={{ display: 'flex', borderBottom: `1px solid ${C.cardBorder}`, mb: '24px' }}>
+    <Box sx={{
+      display:      'flex',
+      borderBottom: `1px solid ${NC.cyanLine}`,
+      mb:           '24px',
+      gap:          '2px',
+    }}>
       {['login', 'register'].map(key => {
         const active = tab === key;
         return (
@@ -69,18 +146,20 @@ function TabBar({ tab, setTab, t }) {
             component="button"
             onClick={() => setTab(key)}
             sx={{
-              flex: 1,
-              py: '12px',
-              border: 'none',
-              borderBottom: active ? `2px solid ${C.accent}` : '2px solid transparent',
-              bgcolor: 'transparent',
-              color: active ? C.accent : C.textMuted,
-              fontFamily: LABEL,
-              fontSize: '0.85rem',
-              fontWeight: active ? 700 : 500,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              '&:hover': { color: active ? C.accent : C.textPrimary },
+              flex:          1,
+              py:            '10px',
+              border:        'none',
+              borderBottom:  `2px solid ${active ? NC.cyan : 'transparent'}`,
+              bgcolor:       active ? NC.cyanDim : 'transparent',
+              color:         active ? NC.cyan : NC.textMuted,
+              fontFamily:    MONO,
+              fontSize:      '9px',
+              letterSpacing: '3px',
+              textTransform: 'uppercase',
+              cursor:        'pointer',
+              transition:    'all 0.2s',
+              boxShadow:     active ? `0 2px 8px rgba(0,217,255,0.3)` : 'none',
+              '&:hover':     { color: active ? NC.cyan : NC.textPrimary },
             }}
           >
             {key === 'login' ? t.login : t.register}
@@ -91,10 +170,19 @@ function TabBar({ tab, setTab, t }) {
   );
 }
 
+// ── Neon input field ──────────────────────────────────────────────────────────
 function InputField({ label, type, value, onChange, disabled }) {
+  const [focused, setFocused] = useState(false);
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <Typography sx={{ fontFamily: LABEL, fontSize: '0.72rem', fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+      <Typography sx={{
+        fontFamily:    MONO,
+        fontSize:      '7px',
+        color:         focused ? NC.cyan : NC.textMuted,
+        textTransform: 'uppercase',
+        letterSpacing: '3px',
+        transition:    'color 0.2s',
+      }}>
         {label}
       </Typography>
       <input
@@ -102,19 +190,24 @@ function InputField({ label, type, value, onChange, disabled }) {
         value={value}
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         style={{
-          background:   C.cardBorder,
-          border:       `1px solid #2d3f55`,
-          borderRadius: '7px',
-          color:        C.textPrimary,
-          fontFamily:   LABEL,
-          fontSize:     '0.875rem',
-          padding:      '10px 12px',
+          background:   NC.cyanDim,
+          border:       `1px solid ${focused ? NC.cyan : NC.cyanLine}`,
+          borderRadius: '0',
+          color:        NC.textPrimary,
+          fontFamily:   MONO,
+          fontSize:     '12px',
+          letterSpacing:'0.06em',
+          padding:      '10px 14px',
           outline:      'none',
           width:        '100%',
           boxSizing:    'border-box',
           colorScheme:  'dark',
           opacity:      disabled ? 0.5 : 1,
+          boxShadow:    focused ? NC.cyanGlow : 'none',
+          transition:   'border-color 0.2s, box-shadow 0.2s',
         }}
       />
     </Box>
@@ -122,7 +215,6 @@ function InputField({ label, type, value, onChange, disabled }) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-
 export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'login' }) {
   const t = L[lang] ?? L.en;
   const { login, register } = useAuth();
@@ -133,7 +225,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
 
-  // Reset form when modal opens or tab changes
+  // Reset form on open / tab change
   useEffect(() => {
     if (open) {
       setTab(defaultTab);
@@ -144,9 +236,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     }
   }, [open, defaultTab]);
 
-  useEffect(() => {
-    setError('');
-  }, [tab]);
+  useEffect(() => { setError(''); }, [tab]);
 
   if (!open) return null;
 
@@ -155,55 +245,75 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     setError('');
     setLoading(true);
     try {
-      if (tab === 'login') {
-        await login(email, password);
-      } else {
-        await register(email, password);
-      }
+      if (tab === 'login') await login(email, password);
+      else                 await register(email, password);
       onClose();
     } catch (err) {
-      setError(err.message ?? 'Something went wrong');
+      setError(err.message ?? 'Authentication failed');
     } finally {
       setLoading(false);
     }
   }
 
-  // Close on backdrop click
   function handleBackdropClick(e) {
     if (e.target === e.currentTarget) onClose();
   }
+
+  const canSubmit = !loading && email && password;
 
   return (
     <Box
       onClick={handleBackdropClick}
       sx={{
         position:        'fixed',
-        top:             0,
-        left:            0,
-        right:           0,
-        bottom:          0,
+        inset:           0,
         width:           '100vw',
         height:          '100vh',
         display:         'flex',
         alignItems:      'center',
         justifyContent:  'center',
-        backgroundColor: 'rgba(0,0,0,0.8)',
+        backgroundColor: 'rgba(0,0,0,0.88)',
+        backdropFilter:  'blur(4px)',
         zIndex:          9999,
+        px:              '16px',
       }}
     >
+      {/* ── Card ── */}
       <Box
         sx={{
           position:     'relative',
           zIndex:       10000,
           width:        '100%',
-          maxWidth:     '400px',
+          maxWidth:     '420px',
           maxHeight:    '90vh',
           overflowY:    'auto',
-          bgcolor:      C.cardBg,
-          border:       `1px solid ${C.cardBorder}`,
-          borderRadius: '14px',
-          p:            '28px',
-          boxShadow:    `0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px ${C.cardBorder}`,
+          bgcolor:      NC.surface,
+          border:       `1px solid ${NC.cyanLine}`,
+          borderRadius: '0',
+          p:            { xs: '24px 20px', sm: '32px 28px' },
+          boxShadow:    `0 0 40px rgba(0,0,0,0.9), 0 0 60px rgba(0,217,255,0.08)`,
+
+          /* Corner brackets */
+          '&::before': {
+            content:    '""',
+            position:   'absolute',
+            top:        0,
+            left:       0,
+            width:      '16px',
+            height:     '16px',
+            borderTop:  `2px solid ${NC.cyan}`,
+            borderLeft: `2px solid ${NC.cyan}`,
+          },
+          '&::after': {
+            content:      '""',
+            position:     'absolute',
+            bottom:       0,
+            right:        0,
+            width:        '16px',
+            height:       '16px',
+            borderBottom: `2px solid ${NC.orange}`,
+            borderRight:  `2px solid ${NC.orange}`,
+          },
         }}
       >
         {/* Close button */}
@@ -212,42 +322,30 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
           onClick={onClose}
           title={t.close}
           sx={{
-            position:  'absolute',
-            top:       '14px',
-            right:     '14px',
-            width:     '28px',
-            height:    '28px',
-            border:    'none',
-            bgcolor:   'transparent',
-            color:     C.textMuted,
-            fontSize:  '1rem',
-            cursor:    'pointer',
-            display:   'flex',
-            alignItems: 'center',
+            position:       'absolute',
+            top:            '12px',
+            right:          '12px',
+            width:          '24px',
+            height:         '24px',
+            border:         `1px solid ${NC.cyanLine}`,
+            bgcolor:        'transparent',
+            color:          NC.textMuted,
+            fontFamily:     MONO,
+            fontSize:       '10px',
+            cursor:         'pointer',
+            display:        'flex',
+            alignItems:     'center',
             justifyContent: 'center',
-            borderRadius: '6px',
-            '&:hover': { color: C.textPrimary, bgcolor: '#1e293b' },
+            borderRadius:   '0',
+            transition:     'all 0.15s',
+            '&:hover':      { color: NC.cyan, borderColor: NC.cyan, boxShadow: NC.cyanGlow },
           }}
         >
           ✕
         </Box>
 
-        {/* Logo */}
-        <Typography
-          sx={{
-            fontFamily: MONO,
-            fontSize:   '1.1rem',
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor:  'transparent',
-            backgroundClip: 'text',
-            mb: '20px',
-            userSelect: 'none',
-          }}
-        >
-          ◆ H.E.X.A. V4
-        </Typography>
+        {/* Boot sequence header */}
+        <BootHeader lang={lang} />
 
         {/* Tab bar */}
         <TabBar tab={tab} setTab={setTab} t={t} />
@@ -259,17 +357,26 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
 
           {/* Error */}
           {error && (
-            <Box
-              sx={{
-                bgcolor:      '#ef444412',
-                border:       `1px solid ${C.red}44`,
-                borderRadius: '7px',
-                px:           '12px',
-                py:           '8px',
-              }}
-            >
-              <Typography sx={{ fontFamily: LABEL, fontSize: '0.78rem', color: C.red }}>
-                {error}
+            <Box sx={{
+              bgcolor:      NC.redDim,
+              border:       `1px solid ${NC.redLine}`,
+              borderRadius: '0',
+              px:           '12px',
+              py:           '8px',
+              position:     'relative',
+              '&::before': {
+                content:    '""',
+                position:   'absolute',
+                top:        0,
+                left:       0,
+                width:      '6px',
+                height:     '6px',
+                borderTop:  `1px solid ${NC.red}`,
+                borderLeft: `1px solid ${NC.red}`,
+              },
+            }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.red, letterSpacing: '0.04em' }}>
+                ⚠ {error}
               </Typography>
             </Box>
           )}
@@ -278,25 +385,27 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
           <Box
             component="button"
             type="submit"
-            disabled={loading || !email || !password}
+            disabled={!canSubmit}
             sx={{
-              mt:           '4px',
-              py:           '12px',
-              border:       'none',
-              borderRadius: '8px',
-              background:   (loading || !email || !password)
-                ? C.cardBorder
-                : `linear-gradient(135deg, ${C.accent} 0%, #d97706 100%)`,
-              color:        (loading || !email || !password) ? C.textMuted : '#0a0e17',
-              fontFamily:   LABEL,
-              fontSize:     '0.875rem',
-              fontWeight:   700,
-              cursor:       (loading || !email || !password) ? 'not-allowed' : 'pointer',
-              letterSpacing:'0.02em',
-              transition:   'all 0.2s',
-              '&:hover':    (!loading && email && password)
-                ? { transform: 'translateY(-1px)', boxShadow: `0 4px 20px ${C.accent}44` }
-                : {},
+              mt:            '4px',
+              py:            '13px',
+              border:        `1px solid ${canSubmit ? NC.orange : NC.cyanLine}`,
+              borderRadius:  '0',
+              background:    canSubmit ? NC.orangeDim : 'transparent',
+              color:         canSubmit ? NC.orange : NC.textDim,
+              fontFamily:    MONO,
+              fontSize:      '10px',
+              letterSpacing: '4px',
+              textTransform: 'uppercase',
+              cursor:        canSubmit ? 'pointer' : 'not-allowed',
+              boxShadow:     canSubmit ? NC.orangeGlow : 'none',
+              transition:    'all 0.2s',
+              '@keyframes authPulse': {
+                '0%, 100%': { boxShadow: '0 0 6px rgba(255,102,0,0.3)' },
+                '50%':      { boxShadow: '0 0 18px rgba(255,102,0,0.8), 0 0 36px rgba(255,102,0,0.2)' },
+              },
+              animation:     canSubmit ? 'authPulse 2s ease-in-out infinite' : 'none',
+              '&:hover':     canSubmit ? { background: 'rgba(255,102,0,0.2)', color: '#ffffff' } : {},
             }}
           >
             {loading ? t.loading : (tab === 'login' ? t.submitLogin : t.submitReg)}
@@ -306,13 +415,14 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
           <Typography
             onClick={() => setTab(tab === 'login' ? 'register' : 'login')}
             sx={{
-              fontFamily: LABEL,
-              fontSize:   '0.75rem',
-              color:      C.textMuted,
-              textAlign:  'center',
-              cursor:     'pointer',
-              '&:hover':  { color: C.accent },
-              transition: 'color 0.15s',
+              fontFamily:    MONO,
+              fontSize:      '9px',
+              color:         NC.textMuted,
+              textAlign:     'center',
+              cursor:        'pointer',
+              letterSpacing: '0.06em',
+              '&:hover':     { color: NC.cyan },
+              transition:    'color 0.2s',
             }}
           >
             {tab === 'login' ? t.switchToReg : t.switchToLogin}

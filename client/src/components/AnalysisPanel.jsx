@@ -105,30 +105,114 @@ const L = {
 function SectionLabel({ children }) {
   return (
     <Typography
+      component="div"
       sx={{
         fontFamily:    MONO,
-        fontSize:      '10px',
-        fontWeight:    700,
-        color:         C.textDim,
+        fontSize:      '8px',
+        color:         C.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: '2px',
+        letterSpacing: '3px',
         mb:            '8px',
         display:       'flex',
         alignItems:    'center',
-        gap:           '6px',
-        '&::before': {
-          content:      '""',
-          display:      'inline-block',
-          width:        '5px',
-          height:       '5px',
-          borderRadius: '50%',
-          bgcolor:      C.accent,
-          flexShrink:   0,
-        },
+        gap:           '4px',
       }}
     >
+      <span style={{ color: C.cyan, opacity: 0.7 }}>[ </span>
       {children}
+      <span style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
     </Typography>
+  );
+}
+
+// ── MatchupHeader — Sci-Fi team duel display ──────────────────────────────────
+
+function MatchupHeader({ games, mode }) {
+  if (!games || games.length === 0) return null;
+
+  if (mode === 'parlay') {
+    return (
+      <Box sx={{ borderBottom: `1px solid ${C.cyanLine}`, pb: '12px' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textMuted, letterSpacing: '3px', textTransform: 'uppercase', mb: '8px' }}>
+          // PARLAY_SEQUENCE · {games.length}_LEGS_SELECTED
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {games.map((g, i) => {
+            const a = g.teams?.away?.abbreviation ?? '???';
+            const h = g.teams?.home?.abbreviation ?? '???';
+            return (
+              <Box key={i} sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: C.cyan, opacity: 0.5, fontFamily: MONO, fontSize: '12px' }}>[</span>
+                <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '14px', color: C.cyan, letterSpacing: '2px' }}>{a}</Typography>
+                <Typography component="span" sx={{ fontFamily: MONO, fontSize: '9px', color: C.textMuted }}>@</Typography>
+                <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '14px', color: C.accent, letterSpacing: '2px' }}>{h}</Typography>
+                <span style={{ color: C.accent, opacity: 0.5, fontFamily: MONO, fontSize: '12px' }}>]</span>
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+    );
+  }
+
+  const g = games[0];
+  const away = g.teams?.away?.abbreviation ?? '???';
+  const home = g.teams?.home?.abbreviation ?? '???';
+  const awayFull = g.teams?.away?.name ?? away;
+  const homeFull = g.teams?.home?.name ?? home;
+  const gameDate = g.gameDate
+    ? new Date(g.gameDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    : '';
+  const gameTime = g.gameDate
+    ? new Date(g.gameDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '';
+
+  return (
+    <Box sx={{ borderBottom: `1px solid ${C.cyanLine}`, pb: '14px', position: 'relative' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textMuted, letterSpacing: '3px', textTransform: 'uppercase', mb: '8px' }}>
+        // MATCH_SELECTED · {gameDate} {gameTime}
+      </Typography>
+
+      {/* Duel row with angular cyan/orange brackets */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <Typography component="span" sx={{ fontFamily: MONO, fontSize: '14px', color: C.cyan, opacity: 0.5 }}>[</Typography>
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography component="span" sx={{
+            fontFamily:  BARLOW,
+            fontSize:    '24px',
+            color:       C.cyan,
+            letterSpacing: '3px',
+            textShadow:  `0 0 12px rgba(0,217,255,0.5)`,
+          }}>
+            {away}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textMuted, letterSpacing: '1px', mt: '-2px' }}>
+            {awayFull.toUpperCase()}
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mx: '6px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.textMuted, letterSpacing: '2px' }}>VS</Typography>
+          <Box sx={{ width: '20px', height: '1px', background: `linear-gradient(90deg, ${C.cyan}, ${C.accent})`, mt: '2px' }} />
+        </Box>
+
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography component="span" sx={{
+            fontFamily:  BARLOW,
+            fontSize:    '24px',
+            color:       C.accent,
+            letterSpacing: '3px',
+            textShadow:  `0 0 12px rgba(255,102,0,0.5)`,
+          }}>
+            {home}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textMuted, letterSpacing: '1px', mt: '-2px' }}>
+            {homeFull.toUpperCase()}
+          </Typography>
+        </Box>
+        <Typography component="span" sx={{ fontFamily: MONO, fontSize: '14px', color: C.accent, opacity: 0.5 }}>]</Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -152,18 +236,19 @@ function BetTypeSelect({ value, onChange, t }) {
         onChange={e => onChange(e.target.value)}
         style={{
           width:             '100%',
-          background:        C.surfaceAlt,
-          border:            `1px solid ${C.border}`,
-          borderRadius:      '2px',
-          color:             C.textPrimary,
+          background:        '#000000',
+          border:            '1px solid rgba(0, 217, 255, 0.22)',
+          borderRadius:      '0',
+          color:             '#E8F4FF',
           fontFamily:        MONO,
-          fontSize:          '11px',
+          fontSize:          '10px',
+          letterSpacing:     '0.08em',
           padding:           '8px 10px',
           cursor:            'pointer',
           outline:           'none',
           colorScheme:       'dark',
           appearance:        'none',
-          backgroundImage:   `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%235A7090' d='M6 8L0 0h12z'/%3E%3C/svg%3E")`,
+          backgroundImage:   `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2300D9FF' d='M5 6L0 0h10z'/%3E%3C/svg%3E")`,
           backgroundRepeat:  'no-repeat',
           backgroundPosition:'right 10px center',
           paddingRight:      '28px',
@@ -194,17 +279,18 @@ function ModelPicker({ value, onChange, t, lang }) {
           onClick={() => onChange('safe')}
           sx={{
             flex:          1,
-            border:        `1px solid ${safeActive ? 'rgba(34,197,94,0.3)' : '#2a2a2a'}`,
-            borderRadius:  '3px',
-            background:    safeActive ? 'rgba(34,197,94,0.1)' : 'transparent',
-            color:         safeActive ? '#22c55e' : '#666',
-            fontFamily:    "'Barlow Condensed', sans-serif",
-            fontWeight:    700,
-            fontSize:      '11px',
-            letterSpacing: '1.5px',
-            padding:       '6px 14px',
+            border:        `1px solid ${safeActive ? C.greenLine : C.borderLight}`,
+            borderRadius:  '0',
+            background:    safeActive ? C.greenDim : 'transparent',
+            color:         safeActive ? C.green : C.textDim,
+            fontFamily:    MONO,
+            fontSize:      '9px',
+            letterSpacing: '2px',
+            padding:       '7px 14px',
             cursor:        'pointer',
-            transition:    'all 0.15s',
+            transition:    'all 0.2s',
+            boxShadow:     safeActive ? C.greenGlow : 'none',
+            textTransform: 'uppercase',
           }}
         >
           SAFE PICK
@@ -222,18 +308,18 @@ function ModelPicker({ value, onChange, t, lang }) {
                 flex:          1,
                 py:            '7px',
                 px:            '4px',
-                border:        `1px solid ${active ? C.accentLine : C.border}`,
-                borderRadius:  '2px',
+                border:        `1px solid ${active ? C.accentLine : C.borderLight}`,
+                borderRadius:  '0',
                 background:    active ? C.accentDim : 'transparent',
                 color:         active ? C.accent : C.textMuted,
                 fontFamily:    MONO,
-                fontSize:      '10px',
-                fontWeight:    700,
-                letterSpacing: '1px',
+                fontSize:      '9px',
+                letterSpacing: '1.5px',
                 textTransform: 'uppercase',
                 cursor:        'pointer',
-                transition:    'all 0.15s',
-                '&:hover':     { color: active ? C.accent : C.textSecondary },
+                transition:    'all 0.2s',
+                boxShadow:     active ? C.accentGlow : 'none',
+                '&:hover':     { color: active ? C.accent : C.cyan, borderColor: active ? C.accentLine : C.cyanLine },
               }}
             >
               {o.label}
@@ -245,14 +331,16 @@ function ModelPicker({ value, onChange, t, lang }) {
       {/* Safe Pick descriptive text */}
       {safeActive && (
         <Box sx={{
-          fontFamily:  "'JetBrains Mono', monospace",
-          fontSize:    '10px',
-          color:       '#22c55e',
-          background:  'rgba(34,197,94,0.05)',
-          border:      '1px solid rgba(34,197,94,0.1)',
-          borderRadius:'3px',
-          padding:     '8px 12px',
-          marginTop:   '8px',
+          fontFamily:    MONO,
+          fontSize:      '9px',
+          letterSpacing: '0.04em',
+          color:         C.green,
+          background:    C.greenDim,
+          border:        `1px solid ${C.greenLine}`,
+          borderRadius:  '0',
+          padding:       '8px 12px',
+          marginTop:     '8px',
+          boxShadow:     C.greenGlow,
         }}>
           {lang === 'es'
             ? 'H.E.X.A. evaluará TODOS los tipos de apuesta y te dará el que tenga mayor probabilidad de acierto.'
@@ -551,18 +639,23 @@ function RunButton({ canAnalyze, loading, onClick, t }) {
       sx={{
         width:         '100%',
         py:            '14px',
-        border:        'none',
-        borderRadius:  '3px',
-        background:    active ? C.accent : C.border,
-        color:         active ? '#111111' : C.textMuted,
-        fontFamily:    BARLOW,
-        fontSize:      '13px',
-        fontWeight:    700,
+        border:        `1px solid ${active ? C.accent : C.borderLight}`,
+        borderRadius:  '0',
+        background:    active ? 'rgba(255,102,0,0.12)' : 'transparent',
+        color:         active ? C.accent : C.textMuted,
+        fontFamily:    MONO,
+        fontSize:      '10px',
         cursor:        active ? 'pointer' : 'not-allowed',
-        letterSpacing: '1px',
+        letterSpacing: '4px',
         textTransform: 'uppercase',
-        transition:    'opacity 0.15s',
-        '&:hover':     active ? { opacity: 0.88 } : {},
+        transition:    'all 0.2s',
+        boxShadow:     active ? C.accentGlow : 'none',
+        '@keyframes runPulse': {
+          '0%, 100%': { boxShadow: '0 0 8px rgba(255,102,0,0.35)' },
+          '50%':      { boxShadow: '0 0 22px rgba(255,102,0,0.8), 0 0 44px rgba(255,102,0,0.25)' },
+        },
+        animation:     active ? 'runPulse 2.2s ease-in-out infinite' : 'none',
+        '&:hover':     active ? { background: 'rgba(255,102,0,0.22)', color: '#ffffff' } : {},
       }}
     >
       {loading ? t.analyzing : t.runOracle}
@@ -802,13 +895,39 @@ export default function AnalysisPanel({
         sx={{
           bgcolor:      C.surface,
           border:       `1px solid ${C.border}`,
-          borderRadius: '4px',
+          borderRadius: '0',
           p:            '20px',
           display:      'flex',
           flexDirection:'column',
           gap:          '18px',
+          position:     'relative',
+          '&::before': {
+            content:    '""',
+            position:   'absolute',
+            top:        0,
+            left:       0,
+            width:      '14px',
+            height:     '14px',
+            borderTop:  `2px solid ${C.cyan}`,
+            borderLeft: `2px solid ${C.cyan}`,
+          },
+          '&::after': {
+            content:      '""',
+            position:     'absolute',
+            bottom:       0,
+            right:        0,
+            width:        '14px',
+            height:       '14px',
+            borderBottom: `2px solid ${C.accent}`,
+            borderRight:  `2px solid ${C.accent}`,
+          },
         }}
       >
+        {/* Matchup header — shows selected game(s) in sci-fi duel format */}
+        {selectedGames.length > 0 && (
+          <MatchupHeader games={selectedGames} mode={mode} />
+        )}
+
         {/* Bet type — hidden in safe mode (system decides) */}
         {modelMode !== 'safe' && (
           <BetTypeSelect value={betType} onChange={setBetType} t={t} />
