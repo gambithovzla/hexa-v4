@@ -22,24 +22,24 @@ function ResultBadge({ result }) {
   const map = {
     won:     { label: "WON",     bg: C.greenDim,  color: C.green,  border: C.greenLine  },
     lost:    { label: "LOST",    bg: C.redDim,    color: C.red,    border: C.redLine    },
-    pending: { label: "PENDING", bg: C.amberDim,  color: C.amber,  border: C.amberLine  },
+    pending: { label: "PENDING", bg: C.cyanDim,   color: C.cyan,   border: C.cyanLine   },
   };
   const s = map[result] || map.pending;
   return (
     <span style={{
       background: s.bg, color: s.color,
       border: `1px solid ${s.border}`,
-      borderRadius: 4, padding: "2px 8px",
-      fontSize: 11, fontWeight: 700, letterSpacing: 1
+      borderRadius: 0, padding: "2px 8px",
+      fontFamily: MONO, fontSize: 9, letterSpacing: 2, textTransform: "uppercase",
     }}>{s.label}</span>
   );
 }
 // ── Oracle Pick Badge (pick_result from picks table) ─────────────────
 function OraclePickBadge({ pickResult }) {
   const map = {
-    win:     { label: "ORACLE WIN",  bg: C.greenDim,  color: C.green,  border: C.greenLine  },
-    loss:    { label: "ORACLE LOSS", bg: C.redDim,    color: C.red,    border: C.redLine    },
-    pending: { label: "PENDIENTE",   bg: C.amberDim,  color: C.amber,  border: C.amberLine  },
+    win:     { label: "ORACLE_WIN",  bg: C.greenDim,  color: C.green,  border: C.greenLine  },
+    loss:    { label: "ORACLE_LOSS", bg: C.redDim,    color: C.red,    border: C.redLine    },
+    pending: { label: "PENDING",     bg: C.cyanDim,   color: C.cyan,   border: C.cyanLine   },
     push:    { label: "PUSH",        bg: C.accentDim, color: C.accent, border: C.accentLine },
   };
   const s = map[pickResult] || map.pending;
@@ -47,8 +47,8 @@ function OraclePickBadge({ pickResult }) {
     <span style={{
       background: s.bg, color: s.color,
       border: `1px solid ${s.border}`,
-      borderRadius: 4, padding: "2px 7px",
-      fontSize: 10, fontWeight: 700, letterSpacing: 1
+      borderRadius: 0, padding: "2px 7px",
+      fontFamily: MONO, fontSize: 9, letterSpacing: 2, textTransform: "uppercase",
     }}>{s.label}</span>
   );
 }
@@ -84,49 +84,52 @@ function OracleROIPanel({ bets }) {
     <div style={{
       background: C.surface,
       border: `1px solid ${C.border}`,
-      borderRadius: 4, padding: 16, marginBottom: 20
+      borderRadius: 0, padding: 16, marginBottom: 20,
+      position: "relative",
     }}>
+      <div style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 3, marginBottom: 10, textTransform: "uppercase" }}>
+        // H.E.X.A. ORACLE ROI TRACKER
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-        <span style={{ fontSize: 15 }}>🤖</span>
-        <span style={{ color: C.amber, fontWeight: 700, fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase" }}>
-          H.E.X.A. Oracle ROI
+        <span style={{ color: C.amber, fontFamily: MONO, fontSize: 10, letterSpacing: 2, textTransform: "uppercase" }}>
+          [ ORACLE PERFORMANCE ]
         </span>
-        <span style={{ color: C.textGhost, fontSize: 11, marginLeft: "auto" }}>
-          {oracleBets.length} apuesta{oracleBets.length !== 1 ? "s" : ""} vinculada{oracleBets.length !== 1 ? "s" : ""}
+        <span style={{ color: C.textMuted, fontFamily: MONO, fontSize: 9, marginLeft: "auto" }}>
+          {oracleBets.length} BETS_LINKED
         </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
         <div style={{
-          background: C.bg, borderRadius: 8, padding: "12px 14px",
-          border: `1px solid ${roiPositive ? C.greenLine : C.redLine}`
+          background: C.bg, borderRadius: 0, padding: "12px 14px",
+          border: `1px solid ${roiPositive ? C.greenLine : C.redLine}`,
         }}>
-          <div style={{ color: C.textDim, fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>ROI Oracle</div>
-          <div style={{ color: roiPositive ? C.green : C.red, fontSize: 20, fontWeight: 700 }}>
+          <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 8, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>ROI</div>
+          <div style={{ color: roiPositive ? C.green : C.red, fontSize: 20, fontFamily: BARLOW, textShadow: `0 0 10px ${roiPositive ? C.green : C.red}44` }}>
             {roiPositive ? "+" : ""}{roi}%
           </div>
         </div>
         <div style={{
-          background: C.bg, borderRadius: 8, padding: "12px 14px",
-          border: `1px solid ${totalProfit >= 0 ? C.greenLine : C.redLine}`
+          background: C.bg, borderRadius: 0, padding: "12px 14px",
+          border: `1px solid ${totalProfit >= 0 ? C.greenLine : C.redLine}`,
         }}>
-          <div style={{ color: C.textDim, fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Profit Neto</div>
-          <div style={{ color: totalProfit >= 0 ? C.green : C.red, fontSize: 18, fontWeight: 700 }}>
+          <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 8, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>PROFIT</div>
+          <div style={{ color: totalProfit >= 0 ? C.green : C.red, fontSize: 16, fontFamily: BARLOW }}>
             {totalProfit >= 0 ? "+" : ""}{formatMoney(totalProfit)}
           </div>
         </div>
-        <div style={{ background: C.bg, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
-          <div style={{ color: C.textDim, fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Récord</div>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>
+        <div style={{ background: C.bg, borderRadius: 0, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+          <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 8, textTransform: "uppercase", letterSpacing: 2, marginBottom: 6 }}>W / L / P</div>
+          <div style={{ fontFamily: MONO, fontSize: 12 }}>
             <span style={{ color: C.green }}>{wins}W</span>
-            <span style={{ color: C.border, margin: "0 3px" }}>·</span>
+            <span style={{ color: C.textDim, margin: "0 3px" }}>·</span>
             <span style={{ color: C.red }}>{losses}L</span>
-            <span style={{ color: C.border, margin: "0 3px" }}>·</span>
+            <span style={{ color: C.textDim, margin: "0 3px" }}>·</span>
             <span style={{ color: C.textSecondary }}>{pushes}P</span>
           </div>
         </div>
-        <div style={{ background: C.bg, borderRadius: 8, padding: "12px 14px", border: `1px solid ${C.border}` }}>
-          <div style={{ color: C.textDim, fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Win Rate</div>
-          <div style={{ color: parseFloat(winRate) >= 55 ? C.green : C.amber, fontSize: 20, fontWeight: 700 }}>
+        <div style={{ background: C.bg, borderRadius: 0, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+          <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 8, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>WIN%</div>
+          <div style={{ color: parseFloat(winRate) >= 55 ? C.green : C.amber, fontSize: 20, fontFamily: BARLOW, textShadow: `0 0 10px ${parseFloat(winRate) >= 55 ? C.green : C.amber}44` }}>
             {winRate}%
           </div>
         </div>
@@ -187,9 +190,9 @@ function SetupBankroll({ onSetup }) {
   };
   return (
     <div style={{ textAlign: "center", padding: "60px 20px" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>💰</div>
-      <h2 style={{ color: C.amber, marginBottom: 8, fontSize: 20 }}>Configura tu Bankroll</h2>
-      <p style={{ color: C.textMuted, fontSize: 13, marginBottom: 28 }}>
+      <div style={{ fontFamily: MONO, fontSize: 11, color: C.cyan, letterSpacing: 3, marginBottom: 16, opacity: 0.6 }}>// BANKROLL_INIT_SEQUENCE</div>
+      <div style={{ fontFamily: BARLOW, fontSize: 18, color: C.textPrimary, marginBottom: 8, letterSpacing: 3, textTransform: "uppercase" }}>[ Configura tu Bankroll ]</div>
+      <p style={{ fontFamily: MONO, fontSize: 11, color: C.textMuted, marginBottom: 28, letterSpacing: 1 }}>
         Define tu bankroll inicial para comenzar a trackear tus apuestas
       </p>
       <div style={{ display: "flex", gap: 8, justifyContent: "center", maxWidth: 300, margin: "0 auto" }}>
@@ -199,22 +202,26 @@ function SetupBankroll({ onSetup }) {
           value={amount}
           onChange={e => setAmount(e.target.value)}
           style={{
-            flex: 1, padding: "10px 14px", borderRadius: 8,
-            border: `1px solid ${C.border}`, background: C.surfaceAlt,
-            color: C.textPrimary, fontSize: 15, outline: "none"
+            flex: 1, padding: "10px 14px", borderRadius: 0,
+            border: `1px solid rgba(0,217,255,0.25)`,
+            background: "rgba(0,217,255,0.04)",
+            color: C.textPrimary, fontSize: 13,
+            fontFamily: MONO, outline: "none", letterSpacing: "0.04em",
           }}
         />
         <button
           onClick={handleSetup}
           disabled={loading || !amount}
           style={{
-            padding: "10px 20px", borderRadius: 8,
-            background: loading ? C.border : C.amber,
-            color: "#111111", fontWeight: 700,
-            border: "none", cursor: loading ? "not-allowed" : "pointer",
-            fontSize: 14
+            padding: "10px 20px", borderRadius: 0,
+            background: loading ? "transparent" : "rgba(255,102,0,0.12)",
+            color: loading ? C.textMuted : C.accent,
+            border: `1px solid ${loading ? C.border : C.accentLine}`,
+            cursor: loading ? "not-allowed" : "pointer",
+            fontSize: 10, fontFamily: MONO, letterSpacing: 3, textTransform: "uppercase",
+            boxShadow: loading ? "none" : C.accentGlow,
           }}
-        >{loading ? "..." : "Guardar"}</button>
+        >{loading ? "..." : "[ GUARDAR ]"}</button>
       </div>
     </div>
   );
@@ -254,71 +261,108 @@ function AddBetForm({ onAdd, currentBankroll }) {
   };
   if (!open) return (
     <button onClick={() => setOpen(true)} style={{
-      width: "100%", padding: "12px", borderRadius: 8,
-      border: `1px dashed ${C.border}`, background: "transparent",
-      color: C.textMuted, cursor: "pointer", fontSize: 13,
-      marginBottom: 16, transition: "all 0.2s"
-    }}>+ Registrar apuesta manual</button>
+      width: "100%", padding: "11px", borderRadius: 0,
+      border: `1px dashed ${C.cyanLine}`, background: "transparent",
+      color: C.textMuted, cursor: "pointer",
+      fontFamily: MONO, fontSize: 9, letterSpacing: 3, textTransform: "uppercase",
+      marginBottom: 16, transition: "all 0.2s",
+    }}>+ REGISTER_MANUAL_BET</button>
   );
   const potentialWin = calcPotentialWin(form.stake, form.odds);
   return (
     <div style={{
-      background: C.surface, border: `1px solid ${C.border}`,
-      borderRadius: 10, padding: 16, marginBottom: 16
+      background: C.surface, border: `1px solid ${C.cyanLine}`,
+      borderRadius: 0, padding: 16, marginBottom: 16,
+      position: "relative",
     }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-        <input placeholder="Matchup (ej: NYY vs BOS)" value={form.matchup}
-          onChange={e => set("matchup", e.target.value)} style={inputStyle} />
-        <input placeholder="Pick (ej: NYY -1.5)" value={form.pick}
-          onChange={e => set("pick", e.target.value)} style={inputStyle} />
-        <input placeholder="Odds (ej: -110)" type="number" value={form.odds}
-          onChange={e => set("odds", e.target.value)}
-          onBlur={fetchKelly} style={inputStyle} />
-        <div style={{ position: "relative" }}>
-          <input placeholder="Stake ($)" type="number" value={form.stake}
-            onChange={e => set("stake", e.target.value)} style={inputStyle} />
-          {kellyStake && (
-            <button onClick={() => set("stake", kellyStake)} style={{
-              position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-              background: C.amberDim, border: `1px solid ${C.amberLine}`,
-              color: C.amber, fontSize: 10, borderRadius: 4,
-              padding: "2px 5px", cursor: "pointer"
-            }}>Kelly: ${kellyStake}</button>
-          )}
+      {/* Corner brackets */}
+      <div style={{ position: "absolute", top: 0, left: 0, width: 12, height: 12,
+        borderTop: `2px solid ${C.cyan}`, borderLeft: `2px solid ${C.cyan}` }} />
+      <div style={{ position: "absolute", bottom: 0, right: 0, width: 12, height: 12,
+        borderBottom: `2px solid ${C.accent}`, borderRight: `2px solid ${C.accent}` }} />
+
+      {/* Header */}
+      <div style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 3, marginBottom: 12, textTransform: "uppercase" }}>
+        // BET_REGISTRATION_CONSOLE
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 2, textTransform: "uppercase" }}>MATCHUP</label>
+          <input placeholder="NYY vs BOS" value={form.matchup}
+            onChange={e => set("matchup", e.target.value)} style={inputStyle} />
         </div>
-        <input placeholder="Confianza Oracle % (opcional)" type="number" value={form.confidence || ""}
-          onChange={e => set("confidence", e.target.value)}
-          onBlur={fetchKelly} style={inputStyle} />
-        <select value={form.source} onChange={e => set("source", e.target.value)} style={inputStyle}>
-          <option value="manual">Manual</option>
-          <option value="hexa">Oracle (HEXA)</option>
-        </select>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 2, textTransform: "uppercase" }}>PICK</label>
+          <input placeholder="NYY -1.5" value={form.pick}
+            onChange={e => set("pick", e.target.value)} style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 2, textTransform: "uppercase" }}>ODDS</label>
+          <input placeholder="-110" type="number" value={form.odds}
+            onChange={e => set("odds", e.target.value)}
+            onBlur={fetchKelly} style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 2, textTransform: "uppercase" }}>STAKE ($)</label>
+          <div style={{ position: "relative" }}>
+            <input placeholder="100" type="number" value={form.stake}
+              onChange={e => set("stake", e.target.value)} style={inputStyle} />
+            {kellyStake && (
+              <button onClick={() => set("stake", kellyStake)} style={{
+                position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                background: C.accentDim, border: `1px solid ${C.accentLine}`,
+                color: C.accent, fontSize: 8, borderRadius: 0,
+                padding: "2px 5px", cursor: "pointer", fontFamily: MONO, letterSpacing: 1,
+              }}>K:${kellyStake}</button>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 2, textTransform: "uppercase" }}>CONFIDENCE % (opt)</label>
+          <input placeholder="Oracle %" type="number" value={form.confidence || ""}
+            onChange={e => set("confidence", e.target.value)}
+            onBlur={fetchKelly} style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 2, textTransform: "uppercase" }}>SOURCE</label>
+          <select value={form.source} onChange={e => set("source", e.target.value)} style={inputStyle}>
+            <option value="manual">Manual</option>
+            <option value="hexa">Oracle (HEXA)</option>
+          </select>
+        </div>
       </div>
       {form.stake && form.odds && (
-        <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 10 }}>
-          Ganancia potencial: <span style={{ color: C.green }}>{formatMoney(potentialWin)}</span>
-          {" · "}Riesgo: <span style={{ color: C.red }}>{formatMoney(form.stake)}</span>
+        <div style={{ fontFamily: MONO, fontSize: 9, color: C.textMuted, marginBottom: 12, letterSpacing: 1, borderTop: `1px solid ${C.cyanLine}`, paddingTop: 8 }}>
+          WIN: <span style={{ color: C.green }}>{formatMoney(potentialWin)}</span>
+          {" ·· "}RISK: <span style={{ color: C.red }}>{formatMoney(form.stake)}</span>
         </div>
       )}
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={handleSubmit} disabled={loading} style={{
-          flex: 1, padding: "9px", borderRadius: 7,
-          background: loading ? C.border : C.amber,
-          color: "#111111", fontWeight: 700, border: "none",
-          cursor: loading ? "not-allowed" : "pointer", fontSize: 13
-        }}>{loading ? "Guardando..." : "Registrar apuesta"}</button>
+          flex: 1, padding: "10px", borderRadius: 0,
+          background: loading ? "transparent" : C.accentDim,
+          color: loading ? C.textMuted : C.accent,
+          border: `1px solid ${loading ? C.border : C.accentLine}`,
+          cursor: loading ? "not-allowed" : "pointer",
+          fontFamily: MONO, fontSize: 9, letterSpacing: 3, textTransform: "uppercase",
+          boxShadow: loading ? "none" : C.accentGlow,
+        }}>{loading ? "SAVING..." : "[ REGISTER_BET ]"}</button>
         <button onClick={() => setOpen(false)} style={{
-          padding: "9px 14px", borderRadius: 7, background: "transparent",
-          border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", fontSize: 13
-        }}>Cancelar</button>
+          padding: "10px 16px", borderRadius: 0, background: "transparent",
+          border: `1px solid ${C.cyanLine}`, color: C.textMuted, cursor: "pointer",
+          fontFamily: MONO, fontSize: 9, letterSpacing: 2,
+        }}>CANCEL</button>
       </div>
     </div>
   );
 }
 const inputStyle = {
-  width: "100%", padding: "9px 12px", borderRadius: 7,
-  border: `1px solid ${C.border}`, background: C.bg,
-  color: C.textSecondary, fontSize: 13, outline: "none", boxSizing: "border-box"
+  width: "100%", padding: "9px 12px", borderRadius: 0,
+  border: `1px solid ${C.cyanLine}`, background: `rgba(0,217,255,0.04)`,
+  color: C.textPrimary, fontFamily: MONO, fontSize: 12,
+  letterSpacing: "0.04em", outline: "none", boxSizing: "border-box",
+  colorScheme: "dark",
 };
 // ── Componente principal ──────────────────────────────────────────────
 export default function BankrollTracker({ lang = "es" }) {
@@ -384,14 +428,15 @@ export default function BankrollTracker({ lang = "es" }) {
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "16px 0" }}>
       {/* Nav interno */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: C.bg, borderRadius: 8, padding: 4 }}>
+      <div style={{ display: "flex", gap: 2, marginBottom: 20, borderBottom: `1px solid ${C.cyanLine}` }}>
         {views.map(v => (
           <button key={v} onClick={() => setActiveView(v)} style={{
-            flex: 1, padding: "8px 4px", borderRadius: 6, border: "none",
-            background: activeView === v ? C.border : "transparent",
-            color: activeView === v ? C.amber : C.textDim,
-            cursor: "pointer", fontSize: 12, fontWeight: activeView === v ? 700 : 400,
-            transition: "all 0.15s"
+            flex: 1, padding: "9px 4px", border: "none", borderBottom: `2px solid ${activeView === v ? C.cyan : "transparent"}`,
+            background: activeView === v ? C.cyanDim : "transparent",
+            color: activeView === v ? C.cyan : C.textMuted,
+            cursor: "pointer", fontFamily: MONO, fontSize: 8, letterSpacing: 2, textTransform: "uppercase",
+            boxShadow: activeView === v ? `0 2px 8px rgba(0,217,255,0.25)` : "none",
+            transition: "all 0.15s",
           }}>{viewLabels[v]}</button>
         ))}
       </div>
@@ -400,21 +445,24 @@ export default function BankrollTracker({ lang = "es" }) {
         <div>
           {/* Oracle ROI Panel — arriba del todo */}
           <OracleROIPanel bets={bets} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, padding: "14px 16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 }}>
+            {/* Bankroll actual card */}
+            <div style={{ background: C.surface, border: `1px solid ${C.accentLine}`, borderRadius: 0, padding: "12px 14px", position: "relative" }}>
+              <div style={{ position: "absolute", top: 0, left: 0, width: 8, height: 8, borderTop: `1px solid ${C.accent}`, borderLeft: `1px solid ${C.accent}` }} />
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <div style={{ color: C.textDim, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>Bankroll actual</div>
+                <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, textTransform: "uppercase", letterSpacing: 2 }}>BANKROLL</div>
                 <button onClick={() => { setEditingBankroll(!editingBankroll); setEditAmount(initialBankroll); }} style={{
-                  background: "transparent", border: `1px solid ${C.border}`, color: C.amber, cursor: "pointer", fontSize: 13, padding: "2px 6px", borderRadius: 4
-                }}>✏️</button>
+                  background: "transparent", border: `1px solid ${C.cyanLine}`, color: C.cyan, cursor: "pointer",
+                  fontFamily: MONO, fontSize: 8, padding: "2px 5px", borderRadius: 0,
+                }}>EDIT</button>
               </div>
               {editingBankroll ? (
-                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 6 }}>
                   <input
                     type="number"
                     value={editAmount}
                     onChange={e => setEditAmount(e.target.value)}
-                    style={{ width: "80px", padding: "4px 8px", borderRadius: 5, border: `1px solid ${C.border}`, background: C.bg, color: C.textPrimary, fontSize: 13, outline: "none" }}
+                    style={{ width: "70px", padding: "4px 8px", borderRadius: 0, border: `1px solid ${C.cyanLine}`, background: C.bg, color: C.textPrimary, fontFamily: MONO, fontSize: 12, outline: "none" }}
                   />
                   <button
                     onClick={async () => {
@@ -427,42 +475,42 @@ export default function BankrollTracker({ lang = "es" }) {
                       await fetchStats();
                     }}
                     disabled={editLoading}
-                    style={{ padding: "4px 8px", borderRadius: 5, background: C.amber, color: "#111111", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700 }}
-                  >{editLoading ? "..." : "✓"}</button>
+                    style={{ padding: "4px 8px", borderRadius: 0, background: C.accentDim, color: C.accent, border: `1px solid ${C.accentLine}`, cursor: "pointer", fontFamily: MONO, fontSize: 8 }}
+                  >{editLoading ? "…" : "OK"}</button>
                   <button onClick={() => setEditingBankroll(false)} style={{
-                    padding: "4px 8px", borderRadius: 5, background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", fontSize: 11
+                    padding: "4px 6px", borderRadius: 0, background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", fontFamily: MONO, fontSize: 8,
                   }}>✕</button>
                 </div>
               ) : (
-                <div style={{ color: C.amber, fontSize: 20, fontWeight: 700 }}>{formatMoney(currentBankroll)}</div>
+                <div style={{ color: C.accent, fontSize: 22, fontFamily: BARLOW, textShadow: `0 0 12px ${C.accent}55` }}>{formatMoney(currentBankroll)}</div>
               )}
             </div>
             {[
-              { label: "P&L total", value: (isPositive ? "+" : "") + formatMoney(profitLoss), color: isPositive ? C.green : C.red },
-              { label: "ROI", value: (stats?.general?.roi ?? 0) + "%", color: isPositive ? C.green : C.red },
+              { label: "P&L TOTAL", value: (isPositive ? "+" : "") + formatMoney(profitLoss), color: isPositive ? C.green : C.red, border: isPositive ? C.greenLine : C.redLine },
+              { label: "ROI", value: (stats?.general?.roi ?? 0) + "%", color: isPositive ? C.green : C.red, border: isPositive ? C.greenLine : C.redLine },
             ].map(c => (
-              <div key={c.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, padding: "14px 16px" }}>
-                <div style={{ color: C.textDim, fontSize: 11, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>{c.label}</div>
-                <div style={{ color: c.color, fontSize: 20, fontWeight: 700 }}>{c.value}</div>
+              <div key={c.label} style={{ background: C.surface, border: `1px solid ${c.border}`, borderRadius: 0, padding: "12px 14px" }}>
+                <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>{c.label}</div>
+                <div style={{ color: c.color, fontSize: 22, fontFamily: BARLOW, textShadow: `0 0 10px ${c.color}44` }}>{c.value}</div>
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8, marginBottom: 20 }}>
             {[
-              { label: "Win Rate", value: (stats?.general?.winRate ?? 0) + "%", color: C.amber },
-              { label: "Ganadas", value: stats?.general?.wins ?? 0, color: C.green },
-              { label: "Perdidas", value: stats?.general?.losses ?? 0, color: C.red },
+              { label: "WIN_RATE", value: (stats?.general?.winRate ?? 0) + "%", color: C.cyan, border: C.cyanLine },
+              { label: "WON", value: stats?.general?.wins ?? 0, color: C.green, border: C.greenLine },
+              { label: "LOST", value: stats?.general?.losses ?? 0, color: C.red, border: C.redLine },
             ].map(c => (
-              <div key={c.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, padding: "14px 16px" }}>
-                <div style={{ color: C.textDim, fontSize: 11, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>{c.label}</div>
-                <div style={{ color: c.color, fontSize: 20, fontWeight: 700 }}>{c.value}</div>
+              <div key={c.label} style={{ background: C.surface, border: `1px solid ${c.border}`, borderRadius: 0, padding: "12px 14px" }}>
+                <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>{c.label}</div>
+                <div style={{ color: c.color, fontSize: 22, fontFamily: BARLOW, textShadow: `0 0 10px ${c.color}44` }}>{c.value}</div>
               </div>
             ))}
           </div>
           <AddBetForm onAdd={handleAddBet} currentBankroll={currentBankroll} />
           {/* Últimas 5 apuestas */}
-          <div style={{ color: C.textDim, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-            Últimas apuestas
+          <div style={{ fontFamily: MONO, color: C.cyan, fontSize: 8, textTransform: "uppercase", letterSpacing: 3, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: C.textDim }}>[</span> RECENT_BETS <span style={{ color: C.textDim }}>]</span>
           </div>
           {bets.slice(0, 5).map(bet => (
             <BetRow key={bet.id} bet={bet} onUpdate={handleUpdateResult} onDelete={handleDelete} />
@@ -472,15 +520,20 @@ export default function BankrollTracker({ lang = "es" }) {
       {/* ── HISTORIAL ── */}
       {activeView === "history" && (
         <div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-            {["all", "pending", "won", "lost"].map(f => (
-              <button key={f} onClick={() => setFilterResult(f)} style={{
-                padding: "5px 12px", borderRadius: 6, border: "1px solid",
-                borderColor: filterResult === f ? C.amber : C.border,
-                background: filterResult === f ? C.amberDim : "transparent",
-                color: filterResult === f ? C.amber : C.textDim,
-                cursor: "pointer", fontSize: 12
-              }}>{f === "all" ? "Todas" : f === "pending" ? "Pendientes" : f === "won" ? "Ganadas" : "Perdidas"}</button>
+          <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+            {[
+              { key: "all",     label: "ALL" },
+              { key: "pending", label: "PENDING" },
+              { key: "won",     label: "WON" },
+              { key: "lost",    label: "LOST" },
+            ].map(f => (
+              <button key={f.key} onClick={() => setFilterResult(f.key)} style={{
+                padding: "6px 12px", borderRadius: 0, border: `1px solid ${filterResult === f.key ? C.cyan : C.border}`,
+                background: filterResult === f.key ? C.cyanDim : "transparent",
+                color: filterResult === f.key ? C.cyan : C.textMuted,
+                cursor: "pointer", fontFamily: MONO, fontSize: 8, letterSpacing: 2,
+                boxShadow: filterResult === f.key ? `0 0 8px rgba(0,217,255,0.25)` : "none",
+              }}>{f.label}</button>
             ))}
           </div>
           <AddBetForm onAdd={handleAddBet} currentBankroll={currentBankroll} />
@@ -496,60 +549,64 @@ export default function BankrollTracker({ lang = "es" }) {
       {activeView === "stats" && (
         <div>
           {statsLoading
-            ? <div style={{ color: C.textDim, textAlign: "center", padding: 40 }}>Calculando estadísticas...</div>
+            ? <div style={{ fontFamily: MONO, color: C.textMuted, textAlign: "center", padding: 40, fontSize: 10, letterSpacing: 3 }}>// COMPUTING_STATS…</div>
             : stats ? (
               <div>
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, marginBottom: 12 }}>
-                  <div style={{ color: C.amber, fontWeight: 700, marginBottom: 12, fontSize: 13 }}>Rendimiento por fuente</div>
+                <div style={{ background: C.surface, border: `1px solid ${C.cyanLine}`, borderRadius: 0, padding: 16, marginBottom: 10, position: "relative" }}>
+                  <div style={{ position: "absolute", top: 0, left: 0, width: 10, height: 10, borderTop: `1px solid ${C.cyan}`, borderLeft: `1px solid ${C.cyan}` }} />
+                  <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12 }}>// SOURCE_PERFORMANCE</div>
                   {stats.bySource.length === 0
-                    ? <div style={{ color: C.textGhost, fontSize: 13 }}>Sin datos suficientes</div>
+                    ? <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 10 }}>NO_DATA</div>
                     : stats.bySource.map(s => (
                       <div key={s.source} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.borderLight}` }}>
                         <div>
-                          <span style={{ color: C.textSecondary, fontSize: 13, textTransform: "capitalize" }}>{s.source === "hexa" ? "🤖 Oracle (HEXA)" : "✍️ Manual"}</span>
-                          <span style={{ color: C.textDim, fontSize: 11, marginLeft: 8 }}>{s.total} apuestas</span>
+                          <span style={{ color: C.textPrimary, fontFamily: MONO, fontSize: 10, letterSpacing: 1 }}>{s.source === "hexa" ? "ORACLE_HEXA" : "MANUAL_INPUT"}</span>
+                          <span style={{ color: C.textMuted, fontFamily: MONO, fontSize: 8, marginLeft: 8 }}>{s.total} BETS</span>
                         </div>
-                        <div style={{ color: parseFloat(s.win_rate) >= 55 ? C.green : C.amber, fontWeight: 700 }}>
+                        <div style={{ color: parseFloat(s.win_rate) >= 55 ? C.green : C.cyan, fontFamily: MONO, fontSize: 11, letterSpacing: 1 }}>
                           {s.win_rate ?? "—"}% WR
                         </div>
                       </div>
                     ))
                   }
                 </div>
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16 }}>
-                  <div style={{ color: C.amber, fontWeight: 700, marginBottom: 12, fontSize: 13 }}>Resumen general</div>
+                <div style={{ background: C.surface, border: `1px solid ${C.cyanLine}`, borderRadius: 0, padding: 16 }}>
+                  <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12 }}>// GENERAL_SUMMARY</div>
                   {[
-                    { label: "Total apuestas", value: stats.general.total },
-                    { label: "Pendientes", value: stats.general.pending, color: C.amber },
-                    { label: "Win Rate (settled)", value: stats.general.winRate + "%", color: stats.general.winRate >= 55 ? C.green : C.amber },
-                    { label: "Profit total", value: formatMoney(stats.general.totalProfit), color: stats.general.totalProfit >= 0 ? C.green : C.red },
-                    { label: "ROI", value: stats.general.roi + "%", color: stats.general.roi >= 0 ? C.green : C.red },
+                    { label: "TOTAL_BETS",    value: stats.general.total,                                          color: C.textPrimary },
+                    { label: "PENDING",        value: stats.general.pending,                                        color: C.cyan },
+                    { label: "WIN_RATE",       value: stats.general.winRate + "%",                                  color: stats.general.winRate >= 55 ? C.green : C.cyan },
+                    { label: "PROFIT",         value: formatMoney(stats.general.totalProfit),                       color: stats.general.totalProfit >= 0 ? C.green : C.red },
+                    { label: "ROI",            value: stats.general.roi + "%",                                      color: stats.general.roi >= 0 ? C.green : C.red },
                   ].map(row => (
                     <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${C.borderLight}` }}>
-                      <span style={{ color: C.textMuted, fontSize: 13 }}>{row.label}</span>
-                      <span style={{ color: row.color || C.textSecondary, fontWeight: 600, fontSize: 13 }}>{row.value}</span>
+                      <span style={{ color: C.textMuted, fontFamily: MONO, fontSize: 9, letterSpacing: 1 }}>{row.label}</span>
+                      <span style={{ color: row.color, fontFamily: MONO, fontSize: 11 }}>{row.value}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            ) : <div style={{ color: C.textGhost, textAlign: "center", padding: 40 }}>Sin datos disponibles</div>
+            ) : <div style={{ fontFamily: MONO, color: C.textMuted, textAlign: "center", padding: 40, fontSize: 10, letterSpacing: 2 }}>NO_DATA_AVAILABLE</div>
           }
         </div>
       )}
       {/* ── GRÁFICA ── */}
       {activeView === "chart" && (
         <div>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ color: C.amber, fontWeight: 700, fontSize: 13 }}>Evolución del Bankroll</div>
-              <div style={{ color: isPositive ? C.green : C.red, fontWeight: 700, fontSize: 15 }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.cyanLine}`, borderRadius: 0, padding: 16, position: "relative" }}>
+            <div style={{ position: "absolute", top: 0, left: 0, width: 10, height: 10, borderTop: `1px solid ${C.cyan}`, borderLeft: `1px solid ${C.cyan}` }} />
+            <div style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderBottom: `1px solid ${C.accent}`, borderRight: `1px solid ${C.accent}` }} />
+            <div style={{ fontFamily: MONO, fontSize: 7, color: C.textMuted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 4 }}>// BANKROLL_EVOLUTION_CHART</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontFamily: BARLOW, color: C.textPrimary, fontSize: 12, letterSpacing: 3, textTransform: "uppercase" }}>[ BANKROLL CURVE ]</div>
+              <div style={{ color: isPositive ? C.green : C.red, fontFamily: MONO, fontSize: 12, letterSpacing: 1, textShadow: `0 0 8px ${isPositive ? C.green : C.red}66` }}>
                 {isPositive ? "▲" : "▼"} {formatMoney(Math.abs(profitLoss))}
               </div>
             </div>
             <BankrollChart history={stats?.bankrollHistory || []} initial={initialBankroll} />
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-              <span style={{ color: C.textGhost, fontSize: 11 }}>Inicial: {formatMoney(initialBankroll)}</span>
-              <span style={{ color: C.textGhost, fontSize: 11 }}>Actual: {formatMoney(currentBankroll)}</span>
+              <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 8, letterSpacing: 1 }}>INIT: {formatMoney(initialBankroll)}</span>
+              <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 8, letterSpacing: 1 }}>CURRENT: {formatMoney(currentBankroll)}</span>
             </div>
           </div>
         </div>
@@ -575,27 +632,39 @@ function BetRow({ bet, onUpdate, onDelete }) {
   const hasOraclePick = bet.pick_id != null;
   const borderColor = hasOraclePick
     ? (PICK_RESULT_BORDER[bet.pick_result] || PICK_RESULT_BORDER.pending)
-    : C.surfaceAlt;
+    : C.border;
+  const dateStr = bet.created_at
+    ? new Date(bet.created_at).toISOString().slice(0, 10)
+    : "—";
   return (
     <div style={{
       background: C.bg,
       border: `1px solid ${borderColor}`,
-      borderRadius: 8, padding: "12px 14px", marginBottom: 8,
-      borderLeft: hasOraclePick ? `3px solid ${borderColor.replace("28", "99")}` : undefined,
+      borderRadius: 0, padding: "12px 14px", marginBottom: 6,
+      position: "relative",
+      borderLeft: hasOraclePick ? `3px solid ${borderColor}` : `1px solid ${borderColor}`,
     }}>
+      {/* Corner bracket bottom-right */}
+      <div style={{ position: "absolute", bottom: 0, right: 0, width: 8, height: 8,
+        borderBottom: `1px solid ${borderColor}`, borderRight: `1px solid ${borderColor}` }} />
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: C.textSecondary, fontSize: 13, fontWeight: 600 }}>{bet.pick}</div>
-          <div style={{ color: C.textDim, fontSize: 11, marginTop: 2 }}>{bet.matchup}</div>
-          {/* Oracle pick info — only if linked to a pick */}
+          {/* Terminal date */}
+          <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, letterSpacing: 2, marginBottom: 4 }}>
+            LOG // {dateStr}{bet.source === "hexa" ? " · ORACLE" : " · MANUAL"}
+          </div>
+          <div style={{ color: C.textPrimary, fontFamily: MONO, fontSize: 12, letterSpacing: "0.04em" }}>{bet.pick}</div>
+          <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 9, marginTop: 2, letterSpacing: 1 }}>{bet.matchup}</div>
+          {/* Oracle pick info */}
           {hasOraclePick && (bet.oracle_pick || bet.pick_result) && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
               {bet.oracle_pick && (
                 <span style={{
-                  color: C.accent, fontSize: 11, background: C.accentDim,
-                  border: `1px solid ${C.accentLine}`, borderRadius: 2, padding: "1px 6px"
+                  color: C.accent, fontFamily: MONO, fontSize: 8, background: C.accentDim,
+                  border: `1px solid ${C.accentLine}`, borderRadius: 0, padding: "1px 6px", letterSpacing: 1,
                 }}>
-                  🤖 {bet.oracle_pick}
+                  ORACLE: {bet.oracle_pick}
                 </span>
               )}
               {bet.pick_result && <OraclePickBadge pickResult={bet.pick_result} />}
@@ -606,31 +675,32 @@ function BetRow({ bet, onUpdate, onDelete }) {
           <ResultBadge result={bet.result} />
         </div>
       </div>
-      <div style={{ display: "flex", gap: 16, marginBottom: bet.result === "pending" ? 10 : 6 }}>
-        <span style={{ color: C.textMuted, fontSize: 12 }}>Stake: <span style={{ color: C.textSecondary }}>${bet.stake}</span></span>
-        <span style={{ color: C.textMuted, fontSize: 12 }}>Odds: <span style={{ color: C.textSecondary }}>{bet.odds > 0 ? "+" : ""}{bet.odds}</span></span>
-        <span style={{ color: C.textMuted, fontSize: 12 }}>Win: <span style={{ color: C.green }}>{formatMoney(potentialWin)}</span></span>
-        {bet.source === "hexa" && !hasOraclePick && (
-          <span style={{ color: C.textGhost, fontSize: 11 }}>🤖 Oracle</span>
-        )}
+      {/* Data row */}
+      <div style={{ display: "flex", gap: 14, marginBottom: bet.result === "pending" ? 10 : 6, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 9 }}>STAKE: <span style={{ color: C.textPrimary }}>${bet.stake}</span></span>
+        <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 9 }}>ODDS: <span style={{ color: C.cyan }}>{bet.odds > 0 ? "+" : ""}{bet.odds}</span></span>
+        <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 9 }}>WIN: <span style={{ color: C.green }}>{formatMoney(potentialWin)}</span></span>
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         {bet.result === "pending" && (
           <>
             <button onClick={() => handleResult("won")} disabled={updating} style={{
-              padding: "4px 12px", borderRadius: 2, border: `1px solid ${C.greenLine}`,
-              background: C.greenDim, color: C.green, cursor: "pointer", fontSize: 11, fontWeight: 700
+              padding: "4px 12px", borderRadius: 0, border: `1px solid ${C.greenLine}`,
+              background: C.greenDim, color: C.green, cursor: "pointer",
+              fontFamily: MONO, fontSize: 8, letterSpacing: 2,
             }}>✓ WON</button>
             <button onClick={() => handleResult("lost")} disabled={updating} style={{
-              padding: "4px 12px", borderRadius: 2, border: `1px solid ${C.redLine}`,
-              background: C.redDim, color: C.red, cursor: "pointer", fontSize: 11, fontWeight: 700
+              padding: "4px 12px", borderRadius: 0, border: `1px solid ${C.redLine}`,
+              background: C.redDim, color: C.red, cursor: "pointer",
+              fontFamily: MONO, fontSize: 8, letterSpacing: 2,
             }}>✗ LOST</button>
           </>
         )}
         <button onClick={() => onDelete(bet.id)} style={{
-          padding: "5px 12px", borderRadius: 2, border: `1px solid ${C.redLine}`,
-          background: C.redDim, color: C.red, cursor: "pointer", fontSize: 13, marginLeft: "auto", fontWeight: 700
-        }}>🗑</button>
+          padding: "4px 10px", borderRadius: 0, border: `1px solid ${C.redLine}`,
+          background: C.redDim, color: C.red, cursor: "pointer",
+          fontFamily: MONO, fontSize: 8, letterSpacing: 1, marginLeft: "auto",
+        }}>DEL</button>
       </div>
     </div>
   );

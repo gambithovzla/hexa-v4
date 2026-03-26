@@ -25,22 +25,27 @@ const TRANSLATIONS = { en, es };
 
 function SectionLabel({ children }) {
   return (
-    <Typography sx={{ fontFamily: MONO, fontSize: '10px', fontWeight: 700, color: C.textDim, textTransform: 'uppercase', letterSpacing: '2px', mb: '6px' }}>
+    <Typography component="div" sx={{ fontFamily: MONO, fontSize: '8px', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '3px', mb: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <span style={{ color: C.cyan, opacity: 0.7 }}>[ </span>
       {children}
+      <span style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
     </Typography>
   );
 }
 
 function StatCard({ value, label, color, sub }) {
   return (
-    <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '4px', p: '14px 10px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-      <Typography sx={{ fontFamily: BARLOW, fontSize: { xs: '1.3rem', sm: '1.6rem' }, fontWeight: 800, color, lineHeight: 1 }}>
+    <Box sx={{
+      bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '0',
+      p: '12px 8px', textAlign: 'center', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', gap: '4px', position: 'relative',
+      '&::before': { content: '""', position: 'absolute', top: 0, left: 0, width: '6px', height: '6px', borderTop: `1px solid ${C.cyan}`, borderLeft: `1px solid ${C.cyan}` },
+    }}>
+      <Typography sx={{ fontFamily: BARLOW, fontSize: { xs: '1.2rem', sm: '1.5rem' }, color, lineHeight: 1, textShadow: `0 0 12px ${color}44` }}>
         {value}
       </Typography>
-      {sub && (
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted }}>{sub}</Typography>
-      )}
-      <Typography sx={{ fontFamily: MONO, fontSize: '10px', fontWeight: 700, color: C.textDim, textTransform: 'uppercase', letterSpacing: '1px' }}>
+      {sub && <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>{sub}</Typography>}
+      <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textDim, textTransform: 'uppercase', letterSpacing: '2px' }}>
         {label}
       </Typography>
     </Box>
@@ -64,10 +69,11 @@ function resultBadgeSx(result) {
 }
 
 function MiniConfBar({ value }) {
-  const num   = Math.min(100, Math.max(0, Number(value) || 0));
+  const num = Math.min(100, Math.max(0, Number(value) || 0));
+  const barColor = num >= 75 ? C.green : num >= 50 ? C.cyan : C.accent;
   return (
-    <Box sx={{ height: 3, bgcolor: C.border, borderRadius: '1px', overflow: 'hidden', width: 80 }}>
-      <Box sx={{ height: '100%', width: `${num}%`, bgcolor: C.accent, borderRadius: '1px' }} />
+    <Box sx={{ height: '4px', bgcolor: 'rgba(0,217,255,0.08)', border: `1px solid rgba(0,217,255,0.12)`, width: 80 }}>
+      <Box sx={{ height: '100%', width: `${num}%`, background: barColor, boxShadow: `0 0 6px ${barColor}80` }} />
     </Box>
   );
 }
@@ -82,7 +88,7 @@ function ModeBadge({ mode }) {
   };
   const cfg = colors[mode] ?? colors.single;
   return (
-    <Box component="span" sx={{ display: 'inline-block', px: '7px', py: '2px', bgcolor: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.6rem', fontWeight: 700, color: cfg.text, textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>
+    <Box component="span" sx={{ display: 'inline-block', px: '7px', py: '2px', bgcolor: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: '0', fontFamily: MONO, fontSize: '7px', color: cfg.text, textTransform: 'uppercase', letterSpacing: '2px', flexShrink: 0 }}>
       {mode}
     </Box>
   );
@@ -93,44 +99,61 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
   const badgeSx     = resultBadgeSx(entry.result);
   const resultLabel = t.history.result?.[entry.result] ?? entry.result.toUpperCase();
 
+  // Terminal date format: LOG // 2026-03-27 · 19:05
   const dateStr = (() => {
-    try { return new Date(entry.date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+    try {
+      const d = new Date(entry.date);
+      const datepart = d.toISOString().slice(0, 10);
+      const timepart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `LOG // ${datepart} · ${timepart}`;
+    }
     catch { return entry.date ?? ''; }
   })();
 
   return (
-    <Box sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${borderColor}`, borderRadius: '0 4px 4px 0', p: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    <Box sx={{
+      bgcolor: C.surface, border: `1px solid ${C.border}`,
+      borderLeft: `2px solid ${borderColor}`, borderRadius: '0',
+      p: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px',
+      position: 'relative',
+      '&::after': { content: '""', position: 'absolute', bottom: 0, right: 0, width: '8px', height: '8px', borderBottom: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` },
+    }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <ModeBadge mode={entry.mode} />
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, flex: 1 }}>{dateStr}</Typography>
-        <Box sx={{ ...badgeSx, px: '8px', py: '2px', borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: C.textMuted, flex: 1, letterSpacing: '0.06em' }}>{dateStr}</Typography>
+        <Box sx={{ ...badgeSx, px: '8px', py: '2px', borderRadius: '0', fontFamily: MONO, fontSize: '8px', textTransform: 'uppercase', letterSpacing: '2px', flexShrink: 0 }}>
           {resultLabel}
         </Box>
         <Box
           component="button"
           onClick={() => onDelete(entry.id)}
           title="Eliminar pick"
-          sx={{ ml: '4px', px: '6px', py: '2px', border: `1px solid transparent`, borderRadius: '2px', bgcolor: 'transparent', color: C.textMuted, fontFamily: BARLOW, fontSize: '0.75rem', lineHeight: 1, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0, '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}
+          sx={{ ml: '4px', px: '6px', py: '2px', border: `1px solid transparent`, borderRadius: '0', bgcolor: 'transparent', color: C.textMuted, fontFamily: MONO, fontSize: '0.7rem', lineHeight: 1, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0, '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}
         >
           ✕
         </Box>
       </Box>
-      <Typography sx={{ fontFamily: BARLOW, fontSize: '1rem', fontWeight: 700, color: C.textPrimary, lineHeight: 1.3 }}>
+      <Typography sx={{ fontFamily: BARLOW, fontSize: '1rem', color: C.textPrimary, letterSpacing: '1px', lineHeight: 1.3 }}>
         {entry.matchup}
       </Typography>
       {entry.pick && (
-        <Box sx={{ bgcolor: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: '4px', p: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: '9px', fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '2px' }}>
-            PICK SUGERIDO
+        <Box sx={{
+          background: C.accentDim, border: `1px solid ${C.accentLine}`,
+          borderTop: `2px solid ${C.accent}`, borderRadius: '0',
+          p: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px',
+          boxShadow: C.accentGlow,
+        }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.accent, textTransform: 'uppercase', letterSpacing: '3px', textShadow: `0 0 8px rgba(255,102,0,0.5)` }}>
+            BEST_PICK // ORACLE_OUTPUT
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-            <Typography sx={{ fontFamily: BARLOW, fontSize: '0.95rem', color: C.textPrimary, fontWeight: 700, flex: 1 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '12px', color: C.textPrimary, flex: 1, letterSpacing: '0.05em' }}>
               {entry.pick}
             </Typography>
             {entry.confidence > 0 && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                 <MiniConfBar value={entry.confidence} />
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700, color: entry.confidence >= 75 ? C.green : entry.confidence >= 50 ? C.amber : C.red, minWidth: '34px', textAlign: 'right' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: entry.confidence >= 75 ? C.green : entry.confidence >= 50 ? C.amber : C.red, minWidth: '34px', textAlign: 'right' }}>
                   {entry.confidence}%
                 </Typography>
               </Box>
