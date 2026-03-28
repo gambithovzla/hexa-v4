@@ -8,9 +8,16 @@
  *   lang    — 'en' | 'es'
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
+
+const ANIM_CSS = `
+@keyframes revealUp { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
+@keyframes glowPulse { 0%,100% { border-left-color: rgba(255,102,0,0.3) } 50% { border-left-color: rgba(255,102,0,0.9) } }
+@keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0 } }
+@media (prefers-reduced-motion:reduce) { * { animation:none!important } }
+`;
 
 // ── Content data ──────────────────────────────────────────────────────────────
 
@@ -390,7 +397,15 @@ function ContentArea({ tabId, lang }) {
       {/* Body — flows naturally, parent handles scroll */}
       <Box sx={{ px: '32px', py: '28px' }}>
         {data.sections.map((section, i) => (
-          <Section key={i} {...section} />
+          <Box
+            key={i}
+            style={section.highlight
+              ? { borderLeft: '3px solid', animation: `revealUp 0.4s ease ${i * 0.15}s both, glowPulse 3s ease infinite` }
+              : { animation: `revealUp 0.4s ease ${i * 0.15}s both` }
+            }
+          >
+            <Section {...section} />
+          </Box>
         ))}
       </Box>
     </Box>
@@ -401,6 +416,19 @@ function ContentArea({ tabId, lang }) {
 
 export default function TerminalGuide({ open, onClose, lang = 'en' }) {
   const [activeTab, setActiveTab] = useState('oracle');
+  const [booted, setBooted] = useState(false);
+  const [bootLines, setBootLines] = useState([]);
+
+  useEffect(() => {
+    if (!open) { setBooted(false); setBootLines([]); return; }
+    const lines = ['> INITIALIZING H.E.X.A. GUIDE...', '> LOADING DOCUMENTATION...', '> SYSTEM READY'];
+    let i = 0;
+    const t = setInterval(() => {
+      if (i < lines.length) { setBootLines(prev => [...prev, lines[i]]); i++; }
+      else { clearInterval(t); setTimeout(() => setBooted(true), 300); }
+    }, 250);
+    return () => clearInterval(t);
+  }, [open]);
 
   if (!open) return null;
 
@@ -422,6 +450,7 @@ export default function TerminalGuide({ open, onClose, lang = 'en' }) {
         flexDirection: 'column',
       }}
     >
+      <style>{ANIM_CSS}</style>
       {/* ── Top bar ── */}
       <Box
         sx={{
@@ -496,8 +525,19 @@ export default function TerminalGuide({ open, onClose, lang = 'en' }) {
         </Box>
       </Box>
 
+      {/* ── Boot sequence ── */}
+      {!booted && (
+        <Box sx={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', p:4 }}>
+          {bootLines.map((line, i) => (
+            <Typography key={i} sx={{ fontFamily:MONO, fontSize:'0.75rem', color: i === bootLines.length-1 ? C.accent : C.textMuted, mb:'6px' }}>
+              {line}<span style={{ animation:'blink 1s infinite' }}>_</span>
+            </Typography>
+          ))}
+        </Box>
+      )}
+
       {/* ── Body: sidebar + content ── */}
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      {booted && <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Sidebar */}
         <Box
           sx={{
@@ -570,7 +610,7 @@ export default function TerminalGuide({ open, onClose, lang = 'en' }) {
         <Box sx={{ flex: 1, bgcolor: C.bg }}>
           <ContentArea tabId={activeTab} lang={lang} />
         </Box>
-      </Box>
+      </Box>}
     </Box>
   );
 }
