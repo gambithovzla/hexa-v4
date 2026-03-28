@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -25,7 +27,28 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url)); // eslint-disabl
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// ── Security: HTTP headers ─────────────────────────────────────────────────────
+app.use(helmet());
+
+// ── CORS: strict origin ────────────────────────────────────────────────────────
+app.use(cors({
+  origin: 'https://hexaoracle.lat',
+  credentials: true,
+}));
+
+// ── Rate limiting: 100 req / 15 min per IP (webhooks exempt) ──────────────────
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) =>
+    req.path.startsWith('/api/lemon/webhook') ||
+    req.path.startsWith('/api/bmc/webhook'),
+});
+app.use(limiter);
+
+// ── Body parsers (raw must come before json for webhook routes) ────────────────
 app.use('/api/lemon/webhook', express.raw({ type: 'application/json' }));
 app.use('/api/bmc/webhook',   express.raw({ type: 'application/json' }));
 app.use(express.json());
