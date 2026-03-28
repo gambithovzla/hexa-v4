@@ -24,6 +24,15 @@ dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url)); // eslint-disable-line no-unused-vars
 
+// ── Safe error helper — never leak internal details to client ──────────────
+function safeError(err) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[H.E.X.A. Error]', err.message, err.stack?.split('\n')[1]);
+    return 'Internal server error';
+  }
+  return err.message;
+}
+
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
@@ -141,7 +150,7 @@ app.get('/api/games', async (req, res) => {
     const games = await getTodayGames(date);
     res.json({ success: true, data: games });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -151,7 +160,7 @@ app.get('/api/odds/today', async (req, res) => {
     const odds = await getGameOdds();
     res.json({ success: true, data: odds });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -161,17 +170,17 @@ app.get('/api/teams', async (req, res) => {
     const teams = await getTeams();
     res.json({ success: true, data: teams });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // GET /api/games/:gameId/context  — devuelve el contexto en texto plano
-app.get('/api/games/:gameId/context', async (req, res) => {
+app.get('/api/games/:gameId/context', verifyToken, async (req, res) => {
   try {
     const context = await buildContextById(req.params.gameId);
     res.json({ success: true, data: context });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -297,7 +306,7 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
     const responseData = analysis.data ? { ...analysis.data, odds: matchedOdds ?? undefined } : null;
     res.json({ success: true, data: responseData, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -358,7 +367,7 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
       : null;
     res.json({ success: true, data: responseData, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -416,7 +425,7 @@ app.post('/api/analyze/safe', verifyToken, async (req, res) => {
       mode:    'safe',
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -449,7 +458,7 @@ app.post('/api/admin/grant-credits', verifyToken, isAdmin, async (req, res) => {
     res.json({ success: true, email: email.toLowerCase().trim(), credits: rows[0].credits });
   } catch (err) {
     console.error('[Admin] grant-credits error:', err.message);
-    res.status(500).json({ error: 'Failed to update credits', details: err.message });
+    res.status(500).json({ error: 'Failed to update credits', details: safeError(err) });
   }
 });
 
@@ -499,7 +508,7 @@ app.post('/api/analyze/chat', verifyToken, isAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('[Oracle Chat] Error:', err);
-    res.status(500).json({ error: 'Chat failed', details: err.message });
+    res.status(500).json({ error: 'Chat failed', details: safeError(err) });
   }
 });
 
@@ -513,17 +522,17 @@ app.get('/api/savant/status', (_req, res) => {
   try {
     res.json({ success: true, data: getCacheStatus() });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // POST /api/savant/refresh
-app.post('/api/savant/refresh', async (_req, res) => {
+app.post('/api/savant/refresh', verifyToken, isAdmin, async (_req, res) => {
   try {
     await refreshCache();
     res.json({ success: true, data: getCacheStatus() });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -533,7 +542,7 @@ app.get('/api/picks/resolve', verifyToken, async (_req, res) => {
     const summary = await resolvePendingPicks();
     res.json({ success: true, data: summary });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -571,7 +580,7 @@ app.post('/api/picks', verifyToken, async (req, res) => {
     );
     res.json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -657,7 +666,7 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -670,7 +679,7 @@ app.get('/api/picks', verifyToken, async (req, res) => {
     );
     res.json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -685,7 +694,7 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
     if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
     res.json({ success: true, data: rows[0] });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -699,7 +708,7 @@ app.delete('/api/picks/:id', verifyToken, async (req, res) => {
     if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
     res.json({ success: true, id: rows[0].id });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -709,7 +718,7 @@ app.delete('/api/picks', verifyToken, async (req, res) => {
     await pool.query('DELETE FROM picks WHERE user_id = $1', [req.user.id]);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -726,7 +735,7 @@ app.get('/api/odds/movement', verifyToken, async (req, res) => {
     }
     res.json({ success: true, data: movement });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
