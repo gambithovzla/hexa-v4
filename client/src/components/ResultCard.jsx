@@ -1720,6 +1720,74 @@ export default function ResultCard({ data, lang = 'en' }) {
     );
   }
 
+  // ── Safe Pick Multi-Game (safe_multi mode) ───────────────────────────────────
+  if (data?.mode === 'safe_multi' && data?.results) {
+    return (
+      <Box>
+        {/* Summary */}
+        <Box sx={{ mb: '16px', p: '12px', bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '3px', mb: '6px' }}>
+            [ SAFE_PICK_MULTI // {data.summary?.analyzed ?? data.results.length} {lang === 'es' ? 'PARTIDOS ANALIZADOS' : 'GAMES ANALYZED'} ]
+          </Typography>
+        </Box>
+
+        {/* Individual safe picks */}
+        {data.results.map((r, i) => {
+          if (r.error) {
+            return (
+              <Box key={i} sx={{ mb: '10px', p: '12px', bgcolor: C.surface, border: '1px solid rgba(255,34,68,0.3)', borderRadius: '2px' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.textPrimary }}>{r.matchup ?? `Game ${i + 1}`}</Typography>
+                <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: '#FF2244', mt: '4px' }}>Error: {r.error}</Typography>
+              </Box>
+            );
+          }
+
+          const sp = r.data?.safe_pick;
+          if (!sp) return null;
+
+          const conf = Math.min(100, Math.max(0, Number(sp.hit_probability) || 0));
+          const confColor = conf >= 62 ? C.green : conf >= 55 ? C.amber : C.red;
+
+          return (
+            <Box key={i} sx={{ mb: '10px', p: '14px', bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px' }}>
+              {/* Matchup header */}
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.8rem', fontWeight: 700, color: C.textPrimary, mb: '8px' }}>
+                {r.matchup}
+              </Typography>
+
+              {/* Pick */}
+              <Box sx={{ bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px', p: '10px 12px', mb: '8px' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.85rem', fontWeight: 700, color: C.accent }}>
+                  {sp.pick}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, mt: '2px' }}>
+                  {sp.type}
+                </Typography>
+              </Box>
+
+              {/* Confidence bar */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '8px' }}>
+                <Box sx={{ flex: 1, height: '4px', bgcolor: C.border, borderRadius: '2px', overflow: 'hidden' }}>
+                  <Box sx={{ width: `${conf}%`, height: '100%', bgcolor: confColor, borderRadius: '2px' }} />
+                </Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700, color: confColor, minWidth: '30px' }}>
+                  {conf}%
+                </Typography>
+              </Box>
+
+              {/* Reasoning */}
+              {sp.reasoning && (
+                <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textSecondary, lineHeight: 1.6 }}>
+                  {sp.reasoning}
+                </Typography>
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+    );
+  }
+
   // Safe Pick
   if (data.safe_pick) {
     return <SafePickResult data={data} lang={lang} t={t} />;
