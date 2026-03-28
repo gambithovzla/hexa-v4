@@ -837,13 +837,18 @@ export default function AnalysisPanel({
       if (json.data?.mode === 'safe_multi' && json.data?.results) {
         for (const r of json.data.results) {
           if (r.data && !r.error) {
+            // Find the matching game object for this result
+            const matchedGame = selectedGames.find(g => String(g.gamePk) === String(r.gameId));
             onSave?.({
               type: 'safe',
-              games: selectedGames.filter(g => String(g.gamePk) === String(r.gameId)),
+              // Pass the game as a single-element array so extractMatchup treats it like a single game
+              games: matchedGame ? [matchedGame] : [],
               result: r.data,
               date: new Date().toISOString(),
               model: 'deep',
               language: lang,
+              // Override matchup directly from the server response so it always works
+              _matchupOverride: r.matchup,
             });
           }
         }

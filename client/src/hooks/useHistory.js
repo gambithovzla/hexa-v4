@@ -46,13 +46,16 @@ function save(entries) {
 // ── Payload extraction helpers ────────────────────────────────────────────────
 
 function extractMatchup(payload) {
+  // Direct override from safe_multi or batch scan
+  if (payload._matchupOverride) return payload._matchupOverride;
+
   const mode  = payload.type ?? 'single';
   const games = payload.games ?? [];
 
-  if (mode === 'single' && games.length > 0) {
+  if ((mode === 'single' || mode === 'safe') && games.length > 0) {
     const g    = games[0];
-    const away = g?.teams?.away?.name ?? 'Away';
-    const home = g?.teams?.home?.name ?? 'Home';
+    const away = g?.teams?.away?.abbreviation ?? g?.teams?.away?.name ?? 'Away';
+    const home = g?.teams?.home?.abbreviation ?? g?.teams?.home?.name ?? 'Home';
     return `${away} @ ${home}`;
   }
 
