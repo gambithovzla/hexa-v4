@@ -923,6 +923,86 @@ app.get('/api/picks/resolve', verifyToken, async (_req, res) => {
   }
 });
 
+// POST /api/picks/resolve-game — Resolve picks for a specific finished game
+app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
+  try {
+    const { gamePk } = req.body;
+    if (!gamePk) return res.status(400).json({ success: false, error: 'gamePk required' });
+
+    // Get final game data
+    const liveData = await getLiveGameData(gamePk);
+    if (liveData.status !== 'final') {
+      return res.json({ success: false, error: 'Game not finished yet', status: liveData.status });
+    }
+
+    const homeTeam = liveData.home?.abbreviation ?? '';
+    const awayTeam = liveData.away?.abbreviation ?? '';
+    const homeName = liveData.home?.name ?? '';
+    const awayName = liveData.away?.name ?? '';
+    const homeScore = liveData.home?.score ?? 0;
+    const awayScore = liveData.away?.score ?? 0;
+    const totalRuns = homeScore + awayScore;
+
+    // Find pending picks that match this game
+    const { rows: pendingPicks } = await pool.query(
+      `SELECT id, pick, matchup FROM picks WHERE result = 'pending'`
+    );
+
+    let resolved = 0;
+    for (const pick of pendingPicks) {
+      const matchup = (pick.matchup ?? '').toLowerCase();
+      const isThisGame = matchup.includes(homeTeam.toLowerCase()) || matchup.includes(awayTeam.toLowerCase()) ||
+                         matchup.includes(homeName.toLowerCase()) || matchup.includes(awayName.toLowerCase());
+      if (!isThisGame) continue;
+
+      const pickStr = (pick.pick ?? '').toLowerCase();
+      let result = null;
+
+      // Over/Under
+      const ouMatch = pickStr.match(/^(over|under|más\s+de|menos\s+de)\s+(\d+\.?\d*)/i);
+      if (ouMatch) {
+        const dir = ouMatch[1].toLowerCase().startsWith('o') || ouMatch[1].toLowerCase().startsWith('m') ? 'over' : 'under';
+        const line = parseFloat(ouMatch[2]);
+        if (dir === 'over') result = totalRuns > line ? 'won' : totalRuns < line ? 'lost' : 'push';
+        else result = totalRuns < line ? 'won' : totalRuns > line ? 'lost' : 'push';
+      }
+
+      // Moneyline
+      if (!result && pickStr.match(/\bml\b|moneyline|a ganar/i)) {
+        const teamInPick = pickStr.replace(/\s*(ml|moneyline|a ganar).*$/i, '').trim();
+        const isHome = homeTeam.toLowerCase() === teamInPick || homeName.toLowerCase().includes(teamInPick);
+        const isAway = awayTeam.toLowerCase() === teamInPick || awayName.toLowerCase().includes(teamInPick);
+        if (isHome) result = homeScore > awayScore ? 'won' : homeScore < awayScore ? 'lost' : 'push';
+        else if (isAway) result = awayScore > homeScore ? 'won' : awayScore < homeScore ? 'lost' : 'push';
+      }
+
+      // Run Line
+      if (!result) {
+        const rlMatch = pickStr.match(/^(.+?)\s+([+-]?\d+\.?\d*)\s*(?:run\s*line|rl)?/i);
+        if (rlMatch && (rlMatch[2].includes('+') || rlMatch[2].includes('-') || rlMatch[2].includes('1.5'))) {
+          const teamInPick = rlMatch[1].trim().toLowerCase();
+          const spread = parseFloat(rlMatch[2]);
+          const isHome = homeTeam.toLowerCase() === teamInPick || homeName.toLowerCase().includes(teamInPick);
+          const myScore = isHome ? homeScore : awayScore;
+          const oppScore = isHome ? awayScore : homeScore;
+          const adjusted = myScore + spread;
+          result = adjusted > oppScore ? 'won' : adjusted < oppScore ? 'lost' : 'push';
+        }
+      }
+
+      if (result) {
+        await pool.query(`UPDATE picks SET result = $1 WHERE id = $2`, [result, pick.id]);
+        resolved++;
+        console.log(`[auto-resolve] Pick ${pick.id} "${pick.pick}" → ${result} (${awayTeam} ${awayScore} - ${homeTeam} ${homeScore})`);
+      }
+    }
+
+    res.json({ success: true, resolved, totalRuns, homeScore, awayScore });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // POST /api/picks — guarda un pick en el historial
 app.post('/api/picks', verifyToken, async (req, res) => {
   try {
