@@ -695,6 +695,21 @@ export default function LiveTracker({ lang = 'en' }) {
       const liveJson = await liveRes.json();
       if (liveJson.success) setLiveGames(liveJson.data);
 
+      // Auto-resolve picks for games that just finished
+      if (token && liveJson?.data) {
+        for (const game of liveJson.data) {
+          if (game.status === 'final') {
+            try {
+              await fetch(`${API_URL}/api/picks/resolve-game`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ gamePk: game.gamePk }),
+              });
+            } catch (e) { /* silent */ }
+          }
+        }
+      }
+
       // 4. Fetch pick progress (authenticated only)
       if (token) {
         try {

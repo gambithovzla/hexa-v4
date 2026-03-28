@@ -202,11 +202,27 @@ function MarkBtn({ label, color, dim, onClick }) {
 
 function AnalisisTab({ lang }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
-  const { isAuthenticated } = useAuth();
-  const { history, markResult, deletePick, clearHistory, getStats } = useHistory();
+  const { isAuthenticated, token } = useAuth();
+  const { history, markResult, deletePick, clearHistory, getStats, loadHistory } = useHistory();
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const stats = getStats();
   const [confirming, setConfirming] = useState(false);
   const confirmTimeout = useRef(null);
+
+  async function resolveAllPicks() {
+    try {
+      const res = await fetch(`${API_URL}/api/picks/resolve`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Reload picks
+        loadHistory();
+      }
+    } catch (e) {
+      console.error('Resolve error:', e);
+    }
+  }
 
   async function handleClearClick() {
     if (!confirming) {
@@ -258,7 +274,28 @@ function AnalisisTab({ lang }) {
 
       {/* Clear footer */}
       {history.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: '8px', borderTop: `1px solid ${C.border}` }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', pt: '8px', borderTop: `1px solid ${C.border}` }}>
+          <Box
+            component="button"
+            onClick={resolveAllPicks}
+            sx={{
+              px: '14px', py: '6px',
+              border: `1px solid ${C.accentLine || C.border}`,
+              borderRadius: '2px',
+              bgcolor: 'transparent',
+              color: C.accent,
+              fontFamily: MONO,
+              fontSize: '0.6rem',
+              fontWeight: 700,
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              '&:hover': { bgcolor: C.accentDim || 'rgba(0,217,255,0.08)', borderColor: C.accent },
+            }}
+          >
+            {lang === 'es' ? '⟳ RESOLVER PICKS' : '⟳ RESOLVE PICKS'}
+          </Box>
           <Box component="button" onClick={handleClearClick} sx={{ px: '18px', py: '8px', border: `1px solid ${confirming ? C.red : C.border}`, borderRadius: '2px', bgcolor: confirming ? C.redDim : 'transparent', color: confirming ? C.red : C.textMuted, fontFamily: BARLOW, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}>
             {confirming ? t.history.confirmClear : t.history.clearHistory}
           </Box>

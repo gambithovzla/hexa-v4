@@ -17,7 +17,7 @@
  *   }
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../store/authStore';
 
 const STORAGE_KEY = 'hexa_history';
@@ -132,7 +132,7 @@ export default function useHistory() {
   const [history, setHistory] = useState([]);
 
   // Load history on mount / when auth state changes
-  useEffect(() => {
+  const loadHistory = useCallback(() => {
     if (!isAuthenticated || !token) {
       setHistory(load());
       return;
@@ -147,6 +147,8 @@ export default function useHistory() {
       })
       .catch(() => {});
   }, [token, isAuthenticated]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
 
   // ── addPick ────────────────────────────────────────────────────────────────
 
@@ -302,5 +304,5 @@ export default function useHistory() {
     return { total, wins, losses, pushes, pending, winRate };
   }
 
-  return { history, addPick, markResult, deletePick, clearHistory, getStats };
+  return { history, addPick, markResult, deletePick, clearHistory, getStats, loadHistory };
 }
