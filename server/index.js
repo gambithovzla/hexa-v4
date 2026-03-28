@@ -28,14 +28,14 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
-// ── Security: HTTP headers ─────────────────────────────────────────────────────
-app.use(helmet());
-
-// ── CORS: strict origin ────────────────────────────────────────────────────────
+// ── CORS: strict origin (must be first) ───────────────────────────────────────
 app.use(cors({
   origin: ['https://hexaoracle.lat', 'http://localhost:5173', /\.vercel\.app$/],
   credentials: true,
 }));
+
+// ── Security: HTTP headers ─────────────────────────────────────────────────────
+app.use(helmet());
 
 // ── Rate limiting: 100 req / 15 min per IP (webhooks exempt) ──────────────────
 const limiter = rateLimit({
