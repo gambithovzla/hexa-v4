@@ -132,13 +132,13 @@ function OutsDisplay({ outs, label }) {
 // ── Scoreboard ────────────────────────────────────────────────────────────────
 
 function Scoreboard({ game, lang }) {
-  const { linescore, awayTeam, homeTeam } = game;
-  if (!linescore) return null;
+  const { innings: gameInnings, away, home, situation } = game;
+  if (!gameInnings && !away) return null;
 
   const t          = T[lang] || T.en;
-  const innings    = linescore.innings || [];
+  const innings    = gameInnings || [];
   const totalInns  = Math.max(9, innings.length);
-  const currentInn = linescore.currentInning || 0;
+  const currentInn = situation?.inning || 0;
 
   const awayRow = Array.from({ length: totalInns }, (_, i) => innings[i]?.away?.runs ?? (i < innings.length ? 0 : ''));
   const homeRow = Array.from({ length: totalInns }, (_, i) => innings[i]?.home?.runs ?? (i < innings.length ? 0 : ''));
@@ -185,8 +185,8 @@ function Scoreboard({ game, lang }) {
         </thead>
         <tbody>
           {[
-            { label: awayTeam?.abbreviation || 'AWY', row: awayRow, rhe: linescore.teams?.away },
-            { label: homeTeam?.abbreviation || 'HOM', row: homeRow, rhe: linescore.teams?.home },
+            { label: away?.abbreviation || 'AWY', row: awayRow, rhe: away },
+            { label: home?.abbreviation || 'HOM', row: homeRow, rhe: home },
           ].map(({ label, row, rhe }) => (
             <tr key={label}>
               <Box
@@ -211,7 +211,7 @@ function Scoreboard({ game, lang }) {
                 </Box>
               ))}
               <Box component="td" sx={{ ...cellSx, py: '4px', borderLeft: `1px solid ${C.border}`, px: '8px', color: C.accent, fontWeight: 700 }}>
-                {rhe?.runs ?? 0}
+                {rhe?.score ?? 0}
               </Box>
               <Box component="td" sx={{ ...cellSx, py: '4px', px: '8px', color: C.textSecondary }}>
                 {rhe?.hits ?? 0}
@@ -233,15 +233,13 @@ function RecentPlaysFeed({ plays, lang }) {
   const t = T[lang] || T.en;
   if (!plays || plays.length === 0) return null;
 
-  const last5 = [...plays].slice(-5).reverse();
+  const last5 = [...plays].slice(0, 5);
 
-  function playColor(desc) {
-    const d = (desc || '').toLowerCase();
-    if (d.includes('home run') || d.includes('homer')) return C.accent;
-    if (d.includes('strikeout') || d.includes('strikes out')) return C.red;
-    if (d.includes('walk') || d.includes('hit by pitch')) return C.green;
-    return C.textSecondary;
-  }
+  const eventColors = {
+    Strikeout: C.red, 'Strikeout Swinging': C.red, 'Strikeout Looking': C.red,
+    'Home Run': C.accent, Single: C.cyan, Double: C.cyan, Triple: C.cyan,
+    Walk: C.green, 'Hit By Pitch': C.green,
+  };
 
   return (
     <Box>
@@ -250,10 +248,10 @@ function RecentPlaysFeed({ plays, lang }) {
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
         {last5.map((play, i) => {
-          const isScoring = play.about?.isScoringPlay;
-          const half      = play.about?.halfInning === 'top' ? t.top : t.bot;
-          const inn       = play.about?.inning || '?';
-          const desc      = play.result?.description || play.result?.event || '—';
+          const isScoring = play.isScoring;
+          const half      = (play.halfInning === 'top' || play.halfInning === 'Top') ? '▲' : '▼';
+          const inn       = play.inning || '?';
+          const eventColor = eventColors[play.event] || C.textSecondary;
 
           return (
             <Box
@@ -263,18 +261,21 @@ function RecentPlaysFeed({ plays, lang }) {
                 gap:      '8px',
                 px:       '8px',
                 py:       '3px',
-                bgcolor:  isScoring ? `${C.accent}10` : i === 0 ? C.cyanDim : 'transparent',
-                borderLeft: `2px solid ${isScoring ? C.accent : i === 0 ? C.cyan : 'transparent'}`,
+                bgcolor:  isScoring ? `${C.green}10` : i === 0 ? C.cyanDim : 'transparent',
+                borderLeft: `2px solid ${isScoring ? C.green : i === 0 ? C.cyan : 'transparent'}`,
               }}
             >
               <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {half}{inn}
               </Typography>
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: playColor(desc), lineHeight: 1.4, wordBreak: 'break-word' }}>
-                {desc}
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textPrimary, lineHeight: 1.4, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {play.batter}:
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: eventColor, fontWeight: 600, lineHeight: 1.4 }}>
+                {play.event}
               </Typography>
               {isScoring && (
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.accent, flexShrink: 0, alignSelf: 'center' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.green, flexShrink: 0, alignSelf: 'center' }}>
                   ⚡
                 </Typography>
               )}
@@ -359,19 +360,19 @@ function LiveGameCard({ game, picks, lang }) {
   const [expanded, setExpanded] = useState(true);
   const t = T[lang] || T.en;
 
-  const { linescore, situation, plays, awayTeam, homeTeam } = game;
+  const { situation, recentPlays } = game;
 
-  const inningHalf = linescore?.isTopInning ? t.top : t.bot;
-  const inningNum  = linescore?.currentInning || 0;
-  const outs       = situation?.outs ?? linescore?.outs ?? 0;
+  const inningHalf = situation?.halfInning === 'Top' ? t.top : t.bot;
+  const inningNum  = situation?.inning ?? 0;
+  const outs       = situation?.outs ?? 0;
   const balls      = situation?.balls ?? 0;
   const strikes    = situation?.strikes ?? 0;
-  const batter     = situation?.batter?.fullName || '—';
-  const pitcher    = situation?.pitcher?.fullName || '—';
+  const batter     = situation?.currentBatter?.name ?? '—';
+  const pitcher    = situation?.currentPitcher?.name ?? '—';
   const runners    = situation?.runners || {};
 
-  const awayRuns = linescore?.teams?.away?.runs ?? 0;
-  const homeRuns = linescore?.teams?.home?.runs ?? 0;
+  const awayRuns = game.away?.score ?? 0;
+  const homeRuns = game.home?.score ?? 0;
 
   const gamePicks = picks?.filter(p => p.gamePk === game.gamePk) || [];
 
@@ -401,7 +402,7 @@ function LiveGameCard({ game, picks, lang }) {
         {/* Teams */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.95rem', letterSpacing: '0.15em', color: C.textSecondary }}>
-            {awayTeam?.abbreviation || 'AWY'}
+            {game.away?.abbreviation || 'AWY'}
           </Typography>
           <Typography sx={{ fontFamily: MONO, fontSize: '1.1rem', color: C.textPrimary, fontWeight: 700, mx: '4px' }}>
             {awayRuns}
@@ -411,7 +412,7 @@ function LiveGameCard({ game, picks, lang }) {
             {homeRuns}
           </Typography>
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.95rem', letterSpacing: '0.15em', color: C.textSecondary }}>
-            {homeTeam?.abbreviation || 'HOM'}
+            {game.home?.abbreviation || 'HOM'}
           </Typography>
         </Box>
 
@@ -479,8 +480,8 @@ function LiveGameCard({ game, picks, lang }) {
           </Box>
 
           {/* Recent plays */}
-          {plays && plays.length > 0 && (
-            <RecentPlaysFeed plays={plays} lang={lang} />
+          {recentPlays && recentPlays.length > 0 && (
+            <RecentPlaysFeed plays={recentPlays} lang={lang} />
           )}
 
           {/* Pick progress bars */}
