@@ -19,6 +19,7 @@ import { handleBMCWebhook } from './bmc-webhook.js';
 import { resolvePendingPicks } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames } from './live-feed.js';
+import { parseLivePick, calculatePickProgress } from './pick-tracker.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 
 dotenv.config();
@@ -797,6 +798,80 @@ app.get('/api/games/:gamePk/live', async (req, res) => {
   try {
     const data = await getLiveGameData(req.params.gamePk);
     res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/picks/live-progress — Calculate live progress for user's pending picks
+app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get user's pending picks
+    const { rows: pendingPicks } = await pool.query(
+      `SELECT id, matchup, pick, oracle_confidence, type, created_at
+       FROM picks
+       WHERE user_id = $1 AND result = 'pending'
+       ORDER BY created_at DESC
+       LIMIT 20`,
+      [userId]
+    );
+
+    if (pendingPicks.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // Get today's games to find gamePks
+    const today = new Date().toISOString().split('T')[0];
+    const games = await getTodayGames(today);
+
+    // Match each pick to a live game and calculate progress
+    const results = [];
+
+    for (const pick of pendingPicks) {
+      // Try to find the game this pick belongs to
+      const matchedGame = games.find(g => {
+        const homeAbbr = g.teams?.home?.abbreviation?.toLowerCase() ?? '';
+        const awayAbbr = g.teams?.away?.abbreviation?.toLowerCase() ?? '';
+        const homeName = g.teams?.home?.name?.toLowerCase() ?? '';
+        const awayName = g.teams?.away?.name?.toLowerCase() ?? '';
+        const matchup = (pick.matchup ?? '').toLowerCase();
+        return matchup.includes(homeAbbr) || matchup.includes(awayAbbr) ||
+               matchup.includes(homeName) || matchup.includes(awayName);
+      });
+
+      if (!matchedGame) {
+        results.push({ pickId: pick.id, pick: pick.pick, matchup: pick.matchup, progress: null, status: 'no_game_found' });
+        continue;
+      }
+
+      const gameStatus = matchedGame.status?.simplified ?? 'scheduled';
+      if (gameStatus === 'scheduled') {
+        results.push({ pickId: pick.id, pick: pick.pick, matchup: pick.matchup, gamePk: matchedGame.gamePk, progress: null, status: 'not_started' });
+        continue;
+      }
+
+      // Game is live or final — fetch live data and calculate progress
+      try {
+        const liveData = await getLiveGameData(matchedGame.gamePk);
+        const parsed = parseLivePick(pick.pick);
+        const progress = calculatePickProgress(parsed, liveData);
+
+        results.push({
+          pickId: pick.id,
+          pick: pick.pick,
+          matchup: pick.matchup,
+          gamePk: matchedGame.gamePk,
+          confidence: pick.oracle_confidence,
+          ...progress,
+        });
+      } catch (err) {
+        results.push({ pickId: pick.id, pick: pick.pick, matchup: pick.matchup, gamePk: matchedGame.gamePk, progress: null, status: 'fetch_error', error: err.message });
+      }
+    }
+
+    res.json({ success: true, data: results });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
