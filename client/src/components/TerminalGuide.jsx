@@ -425,7 +425,7 @@ export default function TerminalGuide({ open, onClose, lang = 'en' }) {
         position:        'fixed',
         inset:           0,
         zIndex:          9000,
-        bgcolor:         'rgba(0,0,0,0.75)',
+        bgcolor:         '#000000',
         display:         'flex',
         alignItems:      'center',
         justifyContent:  'center',
