@@ -30,7 +30,7 @@ const PORT = process.env.PORT || 3000;
 
 // ── CORS: strict origin (must be first) ───────────────────────────────────────
 app.use(cors({
-  origin: ['https://hexaoracle.lat', 'http://localhost:5173', /\.vercel\.app$/],
+  origin: ['https://hexaoracle.lat', 'https://www.hexaoracle.lat', 'http://localhost:5173', /\.vercel\.app$/],
   credentials: true,
 }));
 
