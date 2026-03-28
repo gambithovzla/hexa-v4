@@ -25,7 +25,7 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url)); // eslint-disable-line no-unused-vars
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // ── Security: HTTP headers ─────────────────────────────────────────────────────
 app.use(helmet());
@@ -729,8 +729,8 @@ app.get('/api/odds/movement', verifyToken, async (req, res) => {
 runMigrations()
   .then(() => seedAdminUser())
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Hexa-v4 server running on http://localhost:${PORT}`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Hexa-v4 server running on http://0.0.0.0:${PORT}`);
 
       // ── Statcast cache warm-up (non-blocking, delayed 30s) ──────────────
       console.log('[H.E.X.A.] Statcast cache warm-up programado en 30s...');
