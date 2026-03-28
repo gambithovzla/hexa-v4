@@ -35,7 +35,11 @@ app.use(cors({
 }));
 
 // ── Security: HTTP headers ─────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 
 // ── Rate limiting: 100 req / 15 min per IP (webhooks exempt) ──────────────────
 const limiter = rateLimit({
