@@ -230,7 +230,8 @@ export async function seedAdminUser() {
   );
   if (rows.length > 0) return;
 
-  const passwordHash = await bcrypt.hash('hexa2025admin', 10);
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'hexa2025admin';
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
   await pool.query(
     `INSERT INTO users (id, email, password_hash, credits)
      VALUES ($1, $2, $3, $4)`,
