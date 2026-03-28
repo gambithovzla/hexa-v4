@@ -59,7 +59,15 @@ function StatcastBadge({ lang }) {
     if (spinning) return;
     setSpinning(true);
     try {
-      const res = await fetch(`${API_URL}/api/savant/refresh`, { method: 'POST' });
+      const token = localStorage.getItem('hexa_token');
+      const res = await fetch(`${API_URL}/api/savant/refresh`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.status === 403 || res.status === 401) {
+        // Non-admin users can't force refresh — silent fail, auto-refresh handles it
+        return;
+      }
       if (res.ok) {
         const json = await res.json();
         if (json.success) setStatus(json.data);

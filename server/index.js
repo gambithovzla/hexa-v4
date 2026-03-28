@@ -45,7 +45,18 @@ app.use(cors({
 
 // ── Security: HTTP headers ─────────────────────────────────────────────────────
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'"],
+      styleSrc:   ["'self'", "'unsafe-inline'"],
+      imgSrc:     ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://hexaoracle.lat", "https://www.hexaoracle.lat", "https://hexa-v4-production.up.railway.app"],
+      fontSrc:    ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com"],
+      objectSrc:  ["'none'"],
+      frameSrc:   ["'none'"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
@@ -62,10 +73,19 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// ── Strict rate limiting for analysis endpoints (consume Anthropic API) ───────
+const analysisLimiter = rateLimit({
+  windowMs: 60 * 1000,   // 1 minute window
+  max: 10,               // max 10 analysis requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many analysis requests. Please wait a moment.' },
+});
+
 // ── Body parsers (raw must come before json for webhook routes) ────────────────
 app.use('/api/lemon/webhook', express.raw({ type: 'application/json' }));
 app.use('/api/bmc/webhook',   express.raw({ type: 'application/json' }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth',      authRouter);
@@ -185,7 +205,7 @@ app.get('/api/games/:gameId/context', verifyToken, async (req, res) => {
 });
 
 // POST /api/analyze/game  — requires auth, costs 1 (fast) or 2 (deep) + 3 if webSearch
-app.post('/api/analyze/game', verifyToken, async (req, res) => {
+app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => {
   const {
     gameId,
     language    = 'en',
@@ -196,6 +216,10 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
     model       = 'fast',
   } = req.body;
   const date         = req.body.date || new Date().toISOString().split('T')[0];
+  // Input validation
+  if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
+  if (model && !['fast', 'deep'].includes(model)) return res.status(400).json({ success: false, error: 'Invalid model' });
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'Invalid date format' });
   const resolvedLang = lang ?? language;
   const cost         = calcServerCost('single', model, webSearch);
 
@@ -311,7 +335,7 @@ app.post('/api/analyze/game', verifyToken, async (req, res) => {
 });
 
 // POST /api/analyze/parlay  — requires auth, costs 4 (fast) or 8 (deep) credits
-app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
+app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) => {
   const {
     gameIds,
     language    = 'en',
@@ -323,6 +347,10 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
     model       = 'fast',
   } = req.body;
   const date         = req.body.date || new Date().toISOString().split('T')[0];
+  // Input validation
+  if (!gameIds || !Array.isArray(gameIds) || gameIds.length === 0) return res.status(400).json({ success: false, error: 'gameIds array is required' });
+  if (gameIds.length > 10) return res.status(400).json({ success: false, error: 'Maximum 10 games per parlay' });
+  if (model && !['fast', 'deep'].includes(model)) return res.status(400).json({ success: false, error: 'Invalid model' });
   const resolvedLang = lang ?? language;
   const cost         = calcServerCost('parlay', model, false);
 
@@ -372,9 +400,11 @@ app.post('/api/analyze/parlay', verifyToken, async (req, res) => {
 });
 
 // POST /api/analyze/safe — Safe Pick mode (highest probability pick across all bet types)
-app.post('/api/analyze/safe', verifyToken, async (req, res) => {
+app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => {
   const { gameId, lang = 'en', date } = req.body;
   const resolvedDate = date || new Date().toISOString().split('T')[0];
+  // Input validation
+  if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
   const cost = 2; // Same as deep single
 
   try {
@@ -463,7 +493,7 @@ app.post('/api/admin/grant-credits', verifyToken, isAdmin, async (req, res) => {
 });
 
 // POST /api/analyze/chat — Direct chat with Oracle (admin only, no credits)
-app.post('/api/analyze/chat', verifyToken, isAdmin, async (req, res) => {
+app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
   const { gameId, question, conversationHistory = [], lang = 'en', date } = req.body;
 
   if (!question || !question.trim()) {
