@@ -163,6 +163,24 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
           </Box>
         </Box>
       )}
+      {/* Kelly recommendation */}
+      {entry.kelly_recommendation && (
+        <Box sx={{
+          mt: '8px', p: '8px 10px',
+          bgcolor: C.accentDim,
+          border: `1px solid ${C.accentLine}`,
+          borderRadius: '2px',
+        }}>
+          <Typography sx={{
+            fontFamily: MONO,
+            fontSize: '0.65rem',
+            color: C.accent,
+            letterSpacing: '0.03em',
+          }}>
+            {entry.kelly_recommendation}
+          </Typography>
+        </Box>
+      )}
       {entry.result === 'pending' && (
         <Box sx={{ display: 'flex', gap: '8px', pt: '2px', flexWrap: 'wrap' }}>
           <MarkBtn label={`✓ ${t.history.markWin}`}  color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />

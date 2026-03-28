@@ -832,14 +832,34 @@ export default function AnalysisPanel({
 
       // Success path
       setResult(json);
-      onSave?.({
-        type:     mode,
-        games:    selectedGames,
-        result:   json.data,
-        date:     new Date().toISOString(),
-        model:    modelMode,
-        language: lang,
-      });
+
+      // For safe_multi mode, save each individual pick to history
+      if (json.data?.mode === 'safe_multi' && json.data?.results) {
+        for (const r of json.data.results) {
+          if (r.data && !r.error) {
+            onSave?.({
+              type: 'safe',
+              games: selectedGames.filter(g => String(g.gamePk) === String(r.gameId)),
+              result: r.data,
+              date: new Date().toISOString(),
+              model: 'deep',
+              language: lang,
+            });
+          }
+        }
+      }
+
+      // Don't save via the generic path for safe_multi (individual saves handled above)
+      if (json.data?.mode !== 'safe_multi') {
+        onSave?.({
+          type:     mode,
+          games:    selectedGames,
+          result:   json.data,
+          date:     new Date().toISOString(),
+          model:    modelMode,
+          language: lang,
+        });
+      }
     } catch (e) {
       setError(e.message ?? 'Network error');
     } finally {
