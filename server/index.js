@@ -18,6 +18,7 @@ import lemonRouter from './lemon.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
 import { resolvePendingPicks } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
+import { getLiveGameData, getMultipleLiveGames } from './live-feed.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 
 dotenv.config();
@@ -789,6 +790,33 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
 // GET /api/auth/is-admin — check if the authenticated user is admin
 app.get('/api/auth/is-admin', verifyToken, (req, res) => {
   res.json({ isAdmin: req.user.email === 'cdanielrr@hotmail.com' });
+});
+
+// GET /api/games/:gamePk/live — Live game feed (GUMBO) with normalized data
+app.get('/api/games/:gamePk/live', async (req, res) => {
+  try {
+    const data = await getLiveGameData(req.params.gamePk);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/games/live — Live data for multiple games at once
+app.post('/api/games/live', async (req, res) => {
+  try {
+    const { gamePks } = req.body;
+    if (!gamePks || !Array.isArray(gamePks) || gamePks.length === 0) {
+      return res.status(400).json({ success: false, error: 'gamePks array is required' });
+    }
+    if (gamePks.length > 20) {
+      return res.status(400).json({ success: false, error: 'Maximum 20 games per request' });
+    }
+    const data = await getMultipleLiveGames(gamePks);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
 });
 
 // GET /api/savant/status
