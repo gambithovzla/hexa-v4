@@ -60,7 +60,7 @@ const ENDPOINTS = {
   sprintSpeed:       'https://baseballsavant.mlb.com/leaderboard/sprint_speed?year=2025&position=&team=&min=10&csv=true',
   battedBallBatter:  'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=batter&min=q&csv=true',
   battedBallPitcher: 'https://baseballsavant.mlb.com/leaderboard/batted-ball?year=2025&type=pitcher&min=q&csv=true',
-  parkFactors:       [], // Savant park factors endpoint deprecated — using hardcoded values in context-builder.js
+  parkFactors:       'https://baseballsavant.mlb.com/leaderboard/statcast-park-factors?type=year&year=2025&batSide=&stat=index_wOBA&condition=All&rolling=3&csv=true',
   catcherFraming:    'https://baseballsavant.mlb.com/leaderboard/catcher_framing?year=2025&team=&min=q&csv=true',
   fieldingOAA:       'https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielder&year=2025&team=&csv=true',
   yearToYearBatter:  [
@@ -327,6 +327,15 @@ async function loadAll() {
     const endpoint = ENDPOINTS[key];
     if (Array.isArray(endpoint) && endpoint.length === 0) {
       return Promise.resolve({ rows: [], yearsLoaded: [] });
+    }
+    if (key === 'parkFactors') {
+      // Fixed rolling-3-year URL — fetch once, not per-season
+      return fetchCSV(endpoint)
+        .then(rows => ({ rows, yearsLoaded: [2025] }))
+        .catch(err => {
+          console.warn(`[savant] parkFactors: ${err.message}`);
+          return { rows: [], yearsLoaded: [] };
+        });
     }
     return fetchMultiYear(endpoint, years, key);
   });
@@ -617,21 +626,21 @@ export async function getParkFactor(teamName) {
 
   const q = norm(teamName);
   const row = _cache.parkFactors.find(r => {
-    const abbr  = norm(r['team_abbrev'] ?? r['team'] ?? r['abbreviation'] ?? '');
-    const full  = norm(r['team_full']   ?? r['name']  ?? r['team_name']   ?? '');
-    const venue = norm(r['venue_name']  ?? r['park']  ?? '');
+    const abbr  = norm(r['team_abbrev'] ?? r['team_abbr'] ?? r['team']      ?? r['abbreviation'] ?? '');
+    const full  = norm(r['team_name']   ?? r['team_full'] ?? r['name']      ?? '');
+    const venue = norm(r['venue_name']  ?? r['venue']     ?? r['park']      ?? '');
     return abbr === q || full.includes(q) || q.includes(abbr) || venue.includes(q);
   }) ?? null;
 
   if (!row) return null;
 
   return {
-    team:                 row['team_abbrev']    ?? row['team']         ?? teamName,
-    venue_name:           row['venue_name']     ?? row['park']         ?? null,
-    park_factor_overall:  parseFloat(row['park_factor']    ?? row['pf']    ?? row['factor'] ?? '') || null,
-    park_factor_R:        parseFloat(row['park_factor_r']  ?? row['pfr']   ?? row['r']      ?? '') || null,
-    park_factor_HR:       parseFloat(row['park_factor_hr'] ?? row['pfhr']  ?? row['hr']     ?? '') || null,
-    park_factor_H:        parseFloat(row['park_factor_h']  ?? row['pfh']   ?? row['h']      ?? '') || null,
+    team:                 row['team_abbrev']  ?? row['team_abbr']   ?? row['team']         ?? teamName,
+    venue_name:           row['venue_name']   ?? row['venue']       ?? row['park']         ?? null,
+    park_factor_overall:  parseFloat(row['index_wOBA']    ?? row['park_factor']  ?? row['pf']    ?? row['factor'] ?? '') || null,
+    park_factor_R:        parseFloat(row['index_R']       ?? row['park_factor_r']  ?? row['pfr'] ?? row['r']      ?? '') || null,
+    park_factor_HR:       parseFloat(row['index_HR']      ?? row['park_factor_hr'] ?? row['pfhr'] ?? row['hr']    ?? '') || null,
+    park_factor_H:        parseFloat(row['index_H']       ?? row['park_factor_h']  ?? row['pfh']  ?? row['h']     ?? '') || null,
   };
 }
 
