@@ -452,10 +452,13 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
   return (
     <Box
       sx={{
-        minHeight:     '100vh',
-        bgcolor:       C.bg,
-        display:       'flex',
-        flexDirection: 'column',
+        minHeight:       '100vh',
+        width:           '100%',
+        backgroundColor: '#000000',
+        display:         'flex',
+        flexDirection:   'column',
+        position:        'relative',
+        zIndex:          0,
       }}
     >
       {/* ── Minimal top bar ── */}
