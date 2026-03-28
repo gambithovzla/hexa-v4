@@ -745,13 +745,22 @@ export default function AnalysisPanel({
       let endpoint, body;
 
       if (modelMode === 'safe') {
-        const g = selectedGames[0];
         endpoint = `${API_URL}/api/analyze/safe`;
-        body = {
-          gameId: g.gamePk,
-          date:   g.gameDate?.split('T')[0],
-          lang,
-        };
+        if (mode === 'parlay' && selectedGames.length > 1) {
+          // Multi-game safe pick: send all gameIds
+          body = {
+            gameIds: selectedGames.map(g => g.gamePk),
+            date:    selectedGames[0]?.gameDate?.split('T')[0],
+            lang,
+          };
+        } else {
+          const g = selectedGames[0];
+          body = {
+            gameId: g.gamePk,
+            date:   g.gameDate?.split('T')[0],
+            lang,
+          };
+        }
       } else if (mode === 'single') {
         const g = selectedGames[0];
         endpoint = `${API_URL}/api/analyze/game`;

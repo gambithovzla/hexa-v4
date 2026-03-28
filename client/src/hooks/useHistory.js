@@ -57,7 +57,14 @@ function extractMatchup(payload) {
   }
 
   if (mode === 'parlay') {
-    return `${games.length}-Leg Parlay`;
+    const gameNames = games.map(g => {
+      const away = g?.teams?.away?.abbreviation ?? g?.teams?.away?.name ?? '';
+      const home = g?.teams?.home?.abbreviation ?? g?.teams?.home?.name ?? '';
+      return away && home ? `${away}@${home}` : '';
+    }).filter(Boolean);
+    return gameNames.length > 0
+      ? `Parlay: ${gameNames.join(', ')}`
+      : `${games.length}-Leg Parlay`;
   }
 
   const date = (payload.date ?? new Date().toISOString()).split('T')[0];
@@ -82,7 +89,12 @@ function extractPickAndConfidence(hexaData) {
   if (hexaData.parlay) {
     const p    = hexaData.parlay;
     const legs = p.legs ?? [];
-    const pick = legs.map(l => l.pick).filter(Boolean).join(' ＋ ');
+    const pick = legs.map(l => {
+      const game = l.game ?? l.matchup ?? '';
+      const pickText = l.pick ?? '';
+      // Include game name with pick so history shows which game each pick belongs to
+      return game ? `${game}: ${pickText}` : pickText;
+    }).filter(Boolean).join(' ＋ ');
     const raw  = Number(p.combined_confidence) || 0;
     const conf = raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
     return { pick: pick || `${legs.length} legs`, confidence: conf };
@@ -99,13 +111,14 @@ function extractPickAndConfidence(hexaData) {
 
 function dbRowToEntry(row) {
   return {
-    id:         row.id,
-    date:       row.created_at,
-    matchup:    row.matchup,
-    mode:       row.type,
-    pick:       row.pick,
-    confidence: row.oracle_confidence ?? 0,
-    result:     row.result ?? 'pending',
+    id:                  row.id,
+    date:                row.created_at,
+    matchup:             row.matchup,
+    mode:                row.type,
+    pick:                row.pick,
+    confidence:          row.oracle_confidence ?? 0,
+    result:              row.result ?? 'pending',
+    kelly_recommendation: row.kelly_recommendation ?? null,
   };
 }
 
@@ -177,6 +190,7 @@ export default function useHistory() {
       best_pick:         mp.best_pick ?? (sp ? { type: sp.type, detail: sp.pick, confidence: sp.hit_probability / 100 } : {}) ?? {},
       model:             payload.model ?? null,
       language:          payload.language ?? 'en',
+      kelly_recommendation: hexaData?.kelly_recommendation ?? null,
     };
 
     try {
