@@ -1720,24 +1720,46 @@ export default function ResultCard({ data, lang = 'en' }) {
     );
   }
 
-  // ── Safe Pick Multi-Game (safe_multi mode) ───────────────────────────────────
+  // ── Safe Pick Multi-Game (parlay safe mode) ────────────────────────────────
   if (data?.mode === 'safe_multi' && data?.results) {
     return (
       <Box>
-        {/* Summary */}
-        <Box sx={{ mb: '16px', p: '12px', bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '3px', mb: '6px' }}>
-            [ SAFE_PICK_MULTI // {data.summary?.analyzed ?? data.results.length} {lang === 'es' ? 'PARTIDOS ANALIZADOS' : 'GAMES ANALYZED'} ]
+        {/* Summary header */}
+        <Box sx={{
+          mb: '16px', p: '14px',
+          bgcolor: C.surface,
+          border: `1px solid ${C.border}`,
+          borderRadius: '2px',
+        }}>
+          <Typography sx={{
+            fontFamily: MONO, fontSize: '8px', color: C.accent,
+            textTransform: 'uppercase', letterSpacing: '3px', mb: '4px',
+          }}>
+            [ SAFE_PICK_SCAN // {data.summary?.analyzed ?? data.results.length} {lang === 'es' ? 'PARTIDOS' : 'GAMES'} ]
+          </Typography>
+          <Typography sx={{
+            fontFamily: SANS, fontSize: '0.75rem', color: C.textSecondary,
+          }}>
+            {lang === 'es'
+              ? `${data.summary?.analyzed ?? data.results.length} partidos analizados — 1 pick seguro por partido`
+              : `${data.summary?.analyzed ?? data.results.length} games analyzed — 1 safe pick per game`}
           </Typography>
         </Box>
 
-        {/* Individual safe picks */}
+        {/* Individual safe pick cards */}
         {data.results.map((r, i) => {
           if (r.error) {
             return (
-              <Box key={i} sx={{ mb: '10px', p: '12px', bgcolor: C.surface, border: '1px solid rgba(255,34,68,0.3)', borderRadius: '2px' }}>
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.textPrimary }}>{r.matchup ?? `Game ${i + 1}`}</Typography>
-                <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: '#FF2244', mt: '4px' }}>Error: {r.error}</Typography>
+              <Box key={i} sx={{
+                mb: '12px', p: '14px', bgcolor: C.surface,
+                border: '1px solid rgba(255,34,68,0.3)', borderRadius: '2px',
+              }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.85rem', fontWeight: 700, color: C.textPrimary }}>
+                  {r.matchup ?? `Game ${i + 1}`}
+                </Typography>
+                <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: '#FF2244', mt: '4px' }}>
+                  Error: {r.error}
+                </Typography>
               </Box>
             );
           }
@@ -1747,40 +1769,137 @@ export default function ResultCard({ data, lang = 'en' }) {
 
           const conf = Math.min(100, Math.max(0, Number(sp.hit_probability) || 0));
           const confColor = conf >= 62 ? C.green : conf >= 55 ? C.amber : C.red;
+          const alerts = r.data?.alert_flags ?? [];
+          const alts = r.data?.alternatives ?? [];
 
           return (
-            <Box key={i} sx={{ mb: '10px', p: '14px', bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px' }}>
+            <Box key={i} sx={{
+              mb: '12px', bgcolor: C.surface,
+              border: `1px solid ${C.border}`, borderRadius: '2px',
+              overflow: 'hidden',
+            }}>
               {/* Matchup header */}
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.8rem', fontWeight: 700, color: C.textPrimary, mb: '8px' }}>
-                {r.matchup}
-              </Typography>
-
-              {/* Pick */}
-              <Box sx={{ bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`, borderRadius: '2px', p: '10px 12px', mb: '8px' }}>
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.85rem', fontWeight: 700, color: C.accent }}>
-                  {sp.pick}
+              <Box sx={{
+                p: '12px 14px',
+                borderBottom: `1px solid ${C.border}`,
+                bgcolor: C.surfaceAlt,
+              }}>
+                <Typography sx={{
+                  fontFamily: MONO, fontSize: '0.85rem', fontWeight: 700, color: C.textPrimary,
+                }}>
+                  {r.matchup}
                 </Typography>
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, mt: '2px' }}>
-                  {sp.type}
-                </Typography>
+                {r.data?.game_overview && (
+                  <Typography sx={{
+                    fontFamily: SANS, fontSize: '0.7rem', color: C.textMuted, mt: '4px', lineHeight: 1.5,
+                  }}>
+                    {r.data.game_overview}
+                  </Typography>
+                )}
               </Box>
 
-              {/* Confidence bar */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '8px' }}>
-                <Box sx={{ flex: 1, height: '4px', bgcolor: C.border, borderRadius: '2px', overflow: 'hidden' }}>
-                  <Box sx={{ width: `${conf}%`, height: '100%', bgcolor: confColor, borderRadius: '2px' }} />
+              <Box sx={{ p: '14px' }}>
+                {/* Main pick */}
+                <Box sx={{
+                  bgcolor: C.accentDim, border: `1px solid ${C.accentLine}`,
+                  borderRadius: '2px', p: '10px 12px', mb: '10px',
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                      <Typography sx={{
+                        fontFamily: MONO, fontSize: '0.55rem', color: C.accent,
+                        textTransform: 'uppercase', letterSpacing: '2px', mb: '4px',
+                      }}>
+                        SAFE PICK
+                      </Typography>
+                      <Typography sx={{
+                        fontFamily: MONO, fontSize: '0.9rem', fontWeight: 700, color: C.accent,
+                      }}>
+                        {sp.pick}
+                      </Typography>
+                      <Typography sx={{
+                        fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, mt: '2px',
+                      }}>
+                        {sp.type}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography sx={{
+                        fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, color: confColor,
+                      }}>
+                        {conf}%
+                      </Typography>
+                      <Typography sx={{
+                        fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted,
+                        textTransform: 'uppercase', letterSpacing: '1px',
+                      }}>
+                        {lang === 'es' ? 'PROBABILIDAD' : 'HIT PROB'}
+                      </Typography>
+                    </Box>
+                  </Box>
                 </Box>
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700, color: confColor, minWidth: '30px' }}>
-                  {conf}%
-                </Typography>
-              </Box>
 
-              {/* Reasoning */}
-              {sp.reasoning && (
-                <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textSecondary, lineHeight: 1.6 }}>
-                  {sp.reasoning}
-                </Typography>
-              )}
+                {/* Confidence bar */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mb: '10px' }}>
+                  <Box sx={{ flex: 1, height: '4px', bgcolor: C.border, borderRadius: '2px', overflow: 'hidden' }}>
+                    <Box sx={{ width: `${conf}%`, height: '100%', bgcolor: confColor, borderRadius: '2px', transition: 'width 0.5s ease' }} />
+                  </Box>
+                </Box>
+
+                {/* Reasoning */}
+                {sp.reasoning && (
+                  <Typography sx={{
+                    fontFamily: SANS, fontSize: '0.75rem', color: C.textSecondary,
+                    lineHeight: 1.7, mb: '10px',
+                  }}>
+                    {sp.reasoning}
+                  </Typography>
+                )}
+
+                {/* Alternatives */}
+                {alts.length > 0 && (
+                  <Box sx={{ mt: '8px', pt: '8px', borderTop: `1px solid ${C.border}` }}>
+                    <Typography sx={{
+                      fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted,
+                      textTransform: 'uppercase', letterSpacing: '2px', mb: '6px',
+                    }}>
+                      {lang === 'es' ? 'OTRAS OPCIONES SEGURAS' : 'OTHER SAFE OPTIONS'}
+                    </Typography>
+                    {alts.map((alt, j) => (
+                      <Box key={j} sx={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        py: '4px',
+                      }}>
+                        <Typography sx={{ fontFamily: SANS, fontSize: '0.72rem', color: C.textSecondary }}>
+                          {alt.pick} ({alt.type})
+                        </Typography>
+                        <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700, color: C.textMuted }}>
+                          {alt.hit_probability}%
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+
+                {/* Alert flags */}
+                {alerts.length > 0 && (
+                  <Box sx={{ mt: '8px', pt: '8px', borderTop: `1px solid ${C.border}` }}>
+                    <Typography sx={{
+                      fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted,
+                      textTransform: 'uppercase', letterSpacing: '2px', mb: '4px',
+                    }}>
+                      ALERTS
+                    </Typography>
+                    {alerts.map((flag, j) => (
+                      <Typography key={j} sx={{
+                        fontFamily: SANS, fontSize: '0.65rem', color: C.textMuted, mb: '2px',
+                      }}>
+                        • {flag}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </Box>
             </Box>
           );
         })}
