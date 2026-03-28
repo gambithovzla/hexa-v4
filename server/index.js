@@ -32,14 +32,14 @@ app.use(helmet());
 
 // ── CORS: strict origin ────────────────────────────────────────────────────────
 app.use(cors({
-  origin: 'https://hexaoracle.lat',
+  origin: ['https://hexaoracle.lat', 'http://localhost:5173', /\.vercel\.app$/],
   credentials: true,
 }));
 
 // ── Rate limiting: 100 req / 15 min per IP (webhooks exempt) ──────────────────
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) =>
