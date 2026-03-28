@@ -9,9 +9,59 @@
  *   onBack — () => void  (returns user to main app)
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
 import { C as GC, BARLOW as GB, MONO as GM } from '../theme';
+
+const METHODOLOGY_CSS = `
+@keyframes slideReveal { from { opacity:0; transform:translateY(24px) } to { opacity:1; transform:translateY(0) } }
+@keyframes expandLine { from { width:0 } to { width:100% } }
+@keyframes numberGlow { 0%,100% { text-shadow:0 0 0 rgba(0,217,255,0) } 50% { text-shadow:0 0 20px rgba(0,217,255,0.5) } }
+@keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+@keyframes float { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-8px) } }
+@media (prefers-reduced-motion:reduce) { * { animation:none!important; transition:none!important } }
+`;
+
+function useInView(ref) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!ref.current) return;
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } }, { threshold: 0.15 });
+    obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+  return visible;
+}
+
+function useCounter(end, duration, enabled) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    const start = Date.now();
+    const tick = () => {
+      const p = Math.min((Date.now() - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(end * eased));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [enabled]);
+  return val;
+}
+
+function AnimatedSection({ children, delay = 0 }) {
+  const ref = useRef(null);
+  const visible = useInView(ref);
+  return (
+    <div ref={ref} style={{
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateY(0)' : 'translateY(24px)',
+      transition: `opacity 0.5s ease ${delay}s, transform 0.5s ease ${delay}s`,
+    }}>
+      {children}
+    </div>
+  );
+}
 
 // ── Sci-Fi design tokens (aligned with Phase A/B/C global system) ─────────────
 
@@ -443,6 +493,23 @@ function SectionTitle({ children }) {
   );
 }
 
+function HeroCounter({ lang }) {
+  const ref = useRef(null);
+  const visible = useInView(ref);
+  const count = useCounter(26000, 2000, visible);
+  return (
+    <Box ref={ref} sx={{ textAlign:'center' }}>
+      <Typography sx={{ fontFamily:MONO, fontSize:'2.5rem', fontWeight:700, color:C.accent, animation: visible ? 'numberGlow 2s ease' : 'none' }}>
+        {count.toLocaleString()}+
+      </Typography>
+      <Typography sx={{ fontFamily:MONO, fontSize:'0.65rem', color:C.textMuted, letterSpacing:'4px', textTransform:'uppercase', mt:'8px' }}>
+        {lang === 'es' ? 'VARIABLES STATCAST ANALIZADAS EN TIEMPO REAL' : 'STATCAST VARIABLES ANALYZED IN REAL-TIME'}
+      </Typography>
+      <Box sx={{ width:'100%', maxWidth:'300px', height:'1px', bgcolor:C.accent, mx:'auto', mt:'16px', animation: visible ? 'expandLine 1s ease forwards' : 'none' }} />
+    </Box>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
@@ -458,9 +525,23 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         display:         'flex',
         flexDirection:   'column',
         position:        'relative',
+        overflow:        'hidden',
         zIndex:          0,
       }}
     >
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} style={{
+          position:'absolute',
+          width: 2, height: 2,
+          borderRadius: '50%',
+          background: 'rgba(0,217,255,0.06)',
+          left: `${(i * 8.3) % 100}%`,
+          top: `${(i * 13.7 + 5) % 90}%`,
+          animation: `float ${6 + (i % 4)}s ease-in-out infinite ${i * 0.5}s`,
+          pointerEvents: 'none',
+        }} />
+      ))}
+      <style>{METHODOLOGY_CSS}</style>
       {/* ── Minimal top bar ── */}
       <Box
         component="header"
@@ -613,6 +694,9 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         >
           {t.heroSub}
         </Typography>
+        <Box sx={{ mt: '40px' }}>
+          <HeroCounter lang={lang} />
+        </Box>
       </Box>
 
       {/* ── Six Signal Engines ── */}
@@ -626,8 +710,10 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
             gap:                 2,
           }}
         >
-          {t.pillars.map(p => (
-            <PillarCard key={p.label} icon={p.icon} label={p.label} body={p.body} />
+          {t.pillars.map((p, i) => (
+            <AnimatedSection key={p.label} delay={i * 0.1}>
+              <PillarCard icon={p.icon} label={p.label} body={p.body} />
+            </AnimatedSection>
           ))}
         </Box>
       </Section>
@@ -649,7 +735,8 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ flex: '0 0 280px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             {SIGNAL_HIERARCHY.map((h, i) => (
-              <div key={i} onClick={() => setActiveLevel(i)} style={{
+              <AnimatedSection key={i} delay={i * 0.1}>
+              <div onClick={() => setActiveLevel(i)} style={{
                 display: 'flex', alignItems: 'center', gap: '1rem', padding: '10px 14px',
                 borderRadius: 0, cursor: 'pointer',
                 border: `1px solid ${activeLevel === i ? GC.accentLine : 'transparent'}`,
@@ -659,6 +746,7 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
                 <span style={{ fontFamily: GM, fontSize: '1rem', color: activeLevel === i ? GC.accent : GC.textMuted, minWidth: 30, transition: 'color 0.2s', textShadow: activeLevel === i ? `0 0 8px ${GC.accent}88` : 'none' }}>{h.level}</span>
                 <span style={{ fontFamily: GB, fontSize: '0.78rem', letterSpacing: 2, textTransform: 'uppercase', color: activeLevel === i ? GC.textPrimary : GC.textMuted, transition: 'color 0.2s' }}>{h.name}</span>
               </div>
+              </AnimatedSection>
             ))}
           </div>
           <div style={{ flex: 1, background: GC.surface, border: `1px solid ${GC.cyanLine}`, borderRadius: 0, padding: '2.5rem', position: 'relative', overflow: 'hidden', minHeight: 240, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 280 }}>
@@ -767,13 +855,14 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         <SectionTitle>{t.processTitle}</SectionTitle>
         <Box sx={{ maxWidth: 560 }}>
           {t.steps.map((step, i) => (
-            <ProcessStep
-              key={step.num}
-              num={step.num}
-              label={step.label}
-              body={step.body}
-              isLast={i === t.steps.length - 1}
-            />
+            <AnimatedSection key={step.num} delay={i * 0.1}>
+              <ProcessStep
+                num={step.num}
+                label={step.label}
+                body={step.body}
+                isLast={i === t.steps.length - 1}
+              />
+            </AnimatedSection>
           ))}
         </Box>
       </Section>
@@ -793,6 +882,9 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
             px:           3,
             maxWidth:     640,
             position:     'relative',
+            transition:   'transform 0.2s, box-shadow 0.2s',
+            cursor:       'pointer',
+            '&:hover':    { transform: 'translateY(-3px)', boxShadow: `0 4px 20px rgba(0,217,255,0.1)` },
             '&::before': {
               content:   '""',
               position:  'absolute',
@@ -803,8 +895,10 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
             },
           }}
         >
-          {t.edges.map(e => (
-            <EdgeItem key={e.label} label={e.label} body={e.body} />
+          {t.edges.map((e, i) => (
+            <AnimatedSection key={e.label} delay={i * 0.1}>
+              <EdgeItem label={e.label} body={e.body} />
+            </AnimatedSection>
           ))}
         </Box>
       </Section>
