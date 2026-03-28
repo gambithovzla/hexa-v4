@@ -492,6 +492,174 @@ app.post('/api/admin/grant-credits', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// POST /api/analyze/batch — Admin Batch Scan: analyze multiple games individually in parallel
+app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
+  const { gameIds, lang = 'es', date } = req.body;
+
+  // Input validation
+  if (!gameIds || !Array.isArray(gameIds) || gameIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'gameIds array is required' });
+  }
+  if (gameIds.length > 16) {
+    return res.status(400).json({ success: false, error: 'Maximum 16 games per batch scan' });
+  }
+
+  const resolvedDate = date || new Date().toISOString().split('T')[0];
+
+  try {
+    const games = await getTodayGames(resolvedDate);
+
+    let allOdds = [];
+    try { allOdds = await getGameOdds(); } catch { /* optional */ }
+
+    // Build context for each game
+    const gameContexts = await Promise.all(
+      gameIds.map(async (id) => {
+        const gameData = games.find(g => String(g.gamePk) === String(id));
+        if (!gameData) return { id, error: `Game ${id} not found` };
+
+        let matchedOdds = null;
+        try {
+          matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+        } catch { /* optional */ }
+
+        try {
+          const contextString = await buildContext(gameData, matchedOdds);
+          const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
+          const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
+          return {
+            id,
+            gameData,
+            contextString,
+            matchedOdds,
+            matchup: `${awayAbbr} @ ${homeAbbr}`,
+          };
+        } catch (err) {
+          return { id, error: `Context build failed: ${err.message}` };
+        }
+      })
+    );
+
+    // Analyze each game in parallel (single mode, deep model)
+    const results = await Promise.allSettled(
+      gameContexts.map(async (ctx) => {
+        if (ctx.error) return { matchup: `Game ${ctx.id}`, error: ctx.error };
+
+        try {
+          const analysis = await analyzeGame({
+            mode: 'single',
+            matchup: ctx.matchup,
+            context: ctx.contextString,
+            lang,
+            betType: 'all',
+            riskProfile: 'balanced',
+            webSearch: false,
+            model: 'deep',
+            timeoutMs: 120000,
+          });
+
+          return {
+            gameId: ctx.id,
+            matchup: ctx.matchup,
+            data: analysis.data,
+            rawText: analysis.rawText,
+            parseError: analysis.parseError,
+            odds: ctx.matchedOdds ?? undefined,
+          };
+        } catch (err) {
+          return {
+            gameId: ctx.id,
+            matchup: ctx.matchup,
+            error: err.message === 'TIMEOUT' ? 'Analysis timed out' : err.message,
+          };
+        }
+      })
+    );
+
+    // Process results and auto-save picks
+    const processedResults = [];
+
+    for (const result of results) {
+      const value = result.status === 'fulfilled' ? result.value : { error: result.reason?.message ?? 'Unknown error' };
+
+      if (value.error) {
+        processedResults.push(value);
+        continue;
+      }
+
+      // Auto-save pick to database
+      if (value.data && !value.parseError) {
+        try {
+          const d = value.data;
+          const mp = d.master_prediction ?? d.safe_pick ?? {};
+          const bp = d.best_pick ?? {};
+
+          const oddsAtPick = value.odds?.moneyline?.home ?? value.odds?.moneyline?.away ?? null;
+          const impliedProbAtPick = oddsAtPick != null
+            ? (oddsAtPick < 0
+                ? Math.abs(oddsAtPick) / (Math.abs(oddsAtPick) + 100)
+                : 100 / (oddsAtPick + 100))
+            : null;
+
+          const pickResult = await pool.query(
+            `INSERT INTO picks (user_id, type, matchup, pick, oracle_confidence, bet_value,
+             model_risk, oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
+             model, language, odds_at_pick, implied_prob_at_pick, odds_details)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+             RETURNING id`,
+            [
+              req.user.id,
+              'batch',
+              value.matchup,
+              mp.pick ?? bp.detail ?? null,
+              mp.oracle_confidence ?? null,
+              mp.bet_value ?? null,
+              d.model_risk ?? null,
+              d.oracle_report ?? null,
+              d.hexa_hunch ?? null,
+              JSON.stringify(d.alert_flags ?? []),
+              JSON.stringify(d.probability_model ?? {}),
+              JSON.stringify(d.best_pick ?? {}),
+              'deep',
+              lang,
+              oddsAtPick,
+              impliedProbAtPick,
+              JSON.stringify(value.odds ?? {}),
+            ]
+          );
+
+          value.pickId = pickResult.rows[0]?.id;
+        } catch (saveErr) {
+          console.error(`[Batch] Failed to save pick for ${value.matchup}:`, saveErr.message);
+        }
+      }
+
+      processedResults.push(value);
+    }
+
+    const successCount = processedResults.filter(r => r.data && !r.error).length;
+    const failCount = processedResults.filter(r => r.error).length;
+
+    console.log(`[Admin Batch] Completed: ${successCount} success, ${failCount} failed out of ${gameIds.length} games`);
+
+    res.json({
+      success: true,
+      data: {
+        results: processedResults,
+        summary: {
+          total: gameIds.length,
+          analyzed: successCount,
+          failed: failCount,
+          date: resolvedDate,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[Admin Batch] Error:', err);
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // POST /api/analyze/chat — Direct chat with Oracle (admin only, no credits)
 app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
   const { gameId, question, conversationHistory = [], lang = 'en', date } = req.body;
