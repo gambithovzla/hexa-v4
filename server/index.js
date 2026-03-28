@@ -25,6 +25,7 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url)); // eslint-disable-line no-unused-vars
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // ── Security: HTTP headers ─────────────────────────────────────────────────────
