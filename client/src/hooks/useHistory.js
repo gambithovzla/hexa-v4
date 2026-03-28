@@ -67,6 +67,12 @@ function extractMatchup(payload) {
 function extractPickAndConfidence(hexaData) {
   if (!hexaData) return { pick: '', confidence: 0 };
 
+  if (hexaData.safe_pick) {
+    const sp   = hexaData.safe_pick;
+    const conf = Math.min(100, Math.max(0, Number(sp.hit_probability) || 0));
+    return { pick: sp.pick ?? '', confidence: conf };
+  }
+
   if (hexaData.master_prediction) {
     const mp   = hexaData.master_prediction;
     const conf = Math.min(100, Math.max(0, Number(mp.oracle_confidence) || 0));
@@ -133,13 +139,15 @@ export default function useHistory() {
     const { pick, confidence } = extractPickAndConfidence(hexaData);
     const matchup              = extractMatchup(payload);
 
+    const isSafe = !!hexaData?.safe_pick;
+
     if (!isAuthenticated || !token) {
       // Anonymous: persist to localStorage
       const entry = {
         id:         Date.now(),
         date:       payload.date ?? new Date().toISOString(),
         matchup,
-        mode:       payload.type ?? 'single',
+        mode:       isSafe ? 'safe' : (payload.type ?? 'single'),
         pick,
         confidence,
         result:     'pending',
@@ -154,18 +162,19 @@ export default function useHistory() {
 
     // Authenticated: POST to API
     const mp = hexaData?.master_prediction ?? {};
+    const sp = hexaData?.safe_pick ?? null;
     const body = {
-      type:              payload.type ?? 'single',
+      type:              isSafe ? 'safe' : (payload.type ?? 'single'),
       matchup,
       pick,
       oracle_confidence: confidence,
       bet_value:         mp.bet_value ?? null,
-      model_risk:        mp.model_risk ?? mp.risk ?? null,
-      oracle_report:     mp.oracle_report ?? null,
+      model_risk:        mp.model_risk ?? mp.risk ?? (sp ? hexaData.model_risk : null) ?? null,
+      oracle_report:     mp.oracle_report ?? (sp ? sp.reasoning : null) ?? null,
       hexa_hunch:        mp.hexa_hunch ?? null,
-      alert_flags:       mp.alert_flags ?? [],
+      alert_flags:       mp.alert_flags ?? hexaData?.alert_flags ?? [],
       probability_model: mp.probability_model ?? hexaData?.probability_model ?? {},
-      best_pick:         mp.best_pick ?? {},
+      best_pick:         mp.best_pick ?? (sp ? { type: sp.type, detail: sp.pick, confidence: sp.hit_probability / 100 } : {}) ?? {},
       model:             payload.model ?? null,
       language:          payload.language ?? 'en',
     };
@@ -269,10 +278,11 @@ export default function useHistory() {
     const total    = history.length;
     const wins     = history.filter(e => e.result === 'win').length;
     const losses   = history.filter(e => e.result === 'loss').length;
+    const pushes   = history.filter(e => e.result === 'push').length;
     const pending  = history.filter(e => e.result === 'pending').length;
-    const resolved = wins + losses;
+    const resolved = wins + losses; // pushes excluded from win rate
     const winRate  = resolved > 0 ? Math.round((wins / resolved) * 100) : 0;
-    return { total, wins, losses, pending, winRate };
+    return { total, wins, losses, pushes, pending, winRate };
   }
 
   return { history, addPick, markResult, deletePick, clearHistory, getStats };

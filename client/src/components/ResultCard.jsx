@@ -151,22 +151,25 @@ function Disclaimers({ t }) {
 function ConfidenceBar({ value }) {
   const num = Math.min(100, Math.max(0, Number(value) || 0));
   const circ = 94.2;
+  const strokeColor = num >= 75 ? C.green : num >= 50 ? C.cyan : C.accent;
   return (
     <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
       <svg viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)', width: 36, height: 36 }}>
-        <circle cx="18" cy="18" r="15" fill="none" stroke={C.border} strokeWidth="3" />
+        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(0,217,255,0.08)" strokeWidth="2" />
         <circle
           cx="18" cy="18" r="15" fill="none"
-          stroke={C.accent} strokeWidth="3"
+          stroke={strokeColor} strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray={circ}
           strokeDashoffset={circ - (circ * num / 100)}
+          style={{ filter: `drop-shadow(0 0 3px ${strokeColor})` }}
         />
       </svg>
       <div style={{
         position: 'absolute', inset: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: MONO, fontWeight: 500, fontSize: '9px', color: C.accent,
+        fontFamily: MONO, fontSize: '9px', color: strokeColor,
+        textShadow: `0 0 6px ${strokeColor}`,
       }}>
         {num}
       </div>
@@ -210,29 +213,22 @@ function RiskBadge({ risk, t }) {
 function SectionLabel({ children }) {
   return (
     <Typography
+      component="div"
       sx={{
         fontFamily:    MONO,
-        fontSize:      '10px',
-        fontWeight:    700,
-        color:         C.textDim,
+        fontSize:      '8px',
+        color:         C.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: '2px',
-        mb:            '6px',
+        letterSpacing: '3px',
+        mb:            '8px',
         display:       'flex',
         alignItems:    'center',
-        gap:           '6px',
-        '&::before': {
-          content:      '""',
-          display:      'inline-block',
-          width:        '5px',
-          height:       '5px',
-          borderRadius: '50%',
-          bgcolor:      C.accent,
-          flexShrink:   0,
-        },
+        gap:           '4px',
       }}
     >
+      <span style={{ color: C.cyan, opacity: 0.7 }}>[ </span>
       {children}
+      <span style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
     </Typography>
   );
 }
@@ -821,28 +817,58 @@ function ProbabilityBar({ homeWins, awayWins, t }) {
   const awayPct = 100 - homePct;
 
   return (
-    <Box>
-      <Box
-        sx={{
-          display: 'flex',
-          height: 3,
-          borderRadius: '1px',
-          overflow: 'hidden',
-          bgcolor: C.border,
-          mb: '6px',
-        }}
-      >
-        <Box sx={{ width: `${awayPct}%`, bgcolor: C.textDim, transition: 'width 0.6s ease' }} />
-        <Box sx={{ width: `${homePct}%`, bgcolor: C.accent, transition: 'width 0.6s ease' }} />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+      {/* AWAY — Cyan neon bar */}
+      <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '5px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: C.cyan, letterSpacing: '3px', textTransform: 'uppercase' }}>
+            {t.away}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.cyan, textShadow: `0 0 6px ${C.cyan}` }}>
+            {awayPct}%
+          </Typography>
+        </Box>
+        <Box sx={{
+          position: 'relative', height: '5px',
+          background: 'rgba(0,217,255,0.07)',
+          border: '1px solid rgba(0,217,255,0.12)',
+        }}>
+          <Box sx={{
+            position: 'absolute', left: 0, top: 0, height: '100%',
+            width: `${awayPct}%`,
+            background: `linear-gradient(90deg, ${C.cyan}, rgba(0,217,255,0.5))`,
+            boxShadow: '0 0 8px rgba(0,217,255,0.7), 0 0 18px rgba(0,217,255,0.25)',
+            transition: 'width 0.9s ease',
+          }} />
+        </Box>
       </Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
-          {t.away} {awayPct}%
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textPrimary }}>
-          {t.home} {homePct}%
-        </Typography>
+
+      {/* HOME — Orange neon bar */}
+      <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '5px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: C.accent, letterSpacing: '3px', textTransform: 'uppercase' }}>
+            {t.home}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.accent, textShadow: `0 0 6px ${C.accent}` }}>
+            {homePct}%
+          </Typography>
+        </Box>
+        <Box sx={{
+          position: 'relative', height: '5px',
+          background: 'rgba(255,102,0,0.07)',
+          border: '1px solid rgba(255,102,0,0.12)',
+        }}>
+          <Box sx={{
+            position: 'absolute', left: 0, top: 0, height: '100%',
+            width: `${homePct}%`,
+            background: `linear-gradient(90deg, ${C.accent}, rgba(255,102,0,0.5))`,
+            boxShadow: '0 0 8px rgba(255,102,0,0.7), 0 0 18px rgba(255,102,0,0.25)',
+            transition: 'width 0.9s ease',
+          }} />
+        </Box>
       </Box>
+
     </Box>
   );
 }
@@ -850,103 +876,179 @@ function ProbabilityBar({ homeWins, awayWins, t }) {
 // ── Safe Pick Result ──────────────────────────────────────────────────────────
 
 function SafePickResult({ data, lang, t }) {
-  const sp       = data.safe_pick ?? {};
-  const alts     = data.alternatives ?? [];
-  const hitProb  = Number(sp.hit_probability) || 0;
-  const probColor = hitProb >= 75 ? '#22c55e' : hitProb >= 55 ? '#f59e0b' : '#ef4444';
+  const sp          = data.safe_pick ?? {};
+  const alts        = data.alternatives ?? [];
+  const hitProb     = Number(sp.hit_probability) || 0;
+  const probColor   = hitProb >= 75 ? C.green : hitProb >= 55 ? C.amber : C.red;
   const circumference = 125.6;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-      {/* SAFE PICK HEADER */}
+      {/* ── SAFE PICK SHIELD HEADER ── */}
       <Box sx={{
-        background:  '#111111',
-        border:      '1px solid #2a2a2a',
-        borderLeft:  '3px solid #22c55e',
-        borderRadius:'4px',
-        p:           '20px',
+        background:   C.greenDim,
+        border:       `1px solid ${C.greenLine}`,
+        borderRadius: '0',
+        p:            '20px',
+        position:     'relative',
+        boxShadow:    `inset 0 0 40px rgba(0,0,0,0.8), 0 0 2px rgba(0,255,136,0.15)`,
+        '&::before': {
+          content: '""', position: 'absolute', top: 0, left: 0,
+          width: '14px', height: '14px',
+          borderTop: `2px solid ${C.green}`, borderLeft: `2px solid ${C.green}`,
+        },
+        '&::after': {
+          content: '""', position: 'absolute', bottom: 0, right: 0,
+          width: '14px', height: '14px',
+          borderBottom: `2px solid ${C.green}`, borderRight: `2px solid ${C.green}`,
+        },
       }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '8px' }}>
+        {/* Shield icon + label */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: '16px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Animated neon green shield */}
+            <Box
+              sx={{
+                flexShrink: 0,
+                '@keyframes shieldPulse': {
+                  '0%, 100%': {
+                    filter:    'drop-shadow(0 0 4px rgba(0,255,136,0.6))',
+                    transform: 'scale(1)',
+                  },
+                  '50%': {
+                    filter:    'drop-shadow(0 0 14px rgba(0,255,136,1)) drop-shadow(0 0 28px rgba(0,255,136,0.35))',
+                    transform: 'scale(1.06)',
+                  },
+                },
+                animation: 'shieldPulse 2s ease-in-out infinite',
+              }}
+            >
+              <svg width="34" height="40" viewBox="0 0 34 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M17 2L3 8.5V21C3 29.5 9.5 37.5 17 39C24.5 37.5 31 29.5 31 21V8.5L17 2Z"
+                  stroke="#00FF88"
+                  strokeWidth="1.5"
+                  fill="rgba(0,255,136,0.08)"
+                />
+                <path
+                  d="M11 20.5L15 24.5L23 16.5"
+                  stroke="#00FF88"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Box>
+            <Box>
+              <Typography sx={{
+                fontFamily:    MONO,
+                fontSize:      '9px',
+                letterSpacing: '3px',
+                color:         C.green,
+                textTransform: 'uppercase',
+                textShadow:    `0 0 8px rgba(0,255,136,0.6)`,
+              }}>
+                {t.safePick ?? 'SAFE PICK'}
+              </Typography>
+              <Typography sx={{
+                fontFamily:    MONO,
+                fontSize:      '7px',
+                color:         C.textMuted,
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                mt:            '2px',
+              }}>
+                // ESCANEO_INTRAGAME ACTIVO
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Bet type badge */}
           <Typography sx={{
-            fontFamily: MONO, fontSize: '10px', fontWeight: 500,
-            letterSpacing: '2px', color: '#22c55e', textTransform: 'uppercase',
-          }}>
-            {t.safePick ?? 'SAFE PICK'}
-          </Typography>
-          <Typography sx={{
-            fontFamily: MONO, fontSize: '9px', letterSpacing: '1px',
-            color: probColor, background: `${probColor}15`,
-            border: `1px solid ${probColor}30`,
-            padding: '2px 8px', borderRadius: '2px',
+            fontFamily:    MONO,
+            fontSize:      '8px',
+            letterSpacing: '1px',
+            color:         probColor,
+            background:    `${probColor}18`,
+            border:        `1px solid ${probColor}40`,
+            padding:       '3px 10px',
+            borderRadius:  '0',
+            textTransform: 'uppercase',
+            textShadow:    `0 0 6px ${probColor}`,
           }}>
             {sp.type ?? 'ML'}
           </Typography>
         </Box>
 
-        {/* THE PICK */}
+        {/* THE PICK — Orbitron large */}
         <Typography sx={{
-          fontFamily: BARLOW, fontWeight: 800, fontSize: '28px',
-          color: '#ffffff', letterSpacing: '-0.5px', lineHeight: 1.1, mb: '12px',
+          fontFamily:    BARLOW,
+          fontWeight:    700,
+          fontSize:      '26px',
+          color:         '#ffffff',
+          letterSpacing: '2px',
+          lineHeight:    1.1,
+          mb:            '16px',
+          textShadow:    `0 0 16px rgba(0,255,136,0.25)`,
         }}>
           {sp.pick ?? '—'}
         </Typography>
 
-        {/* HIT PROBABILITY ring */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Box sx={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
-            <svg viewBox="0 0 48 48" style={{ transform: 'rotate(-90deg)', width: 48, height: 48 }}>
-              <circle cx="24" cy="24" r="20" fill="none" stroke="#2a2a2a" strokeWidth="4"/>
+        {/* HIT PROBABILITY ring + reasoning */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <Box sx={{ position: 'relative', width: 52, height: 52, flexShrink: 0 }}>
+            <svg viewBox="0 0 52 52" style={{ transform: 'rotate(-90deg)', width: 52, height: 52 }}>
+              <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(0,255,136,0.08)" strokeWidth="3"/>
               <circle
-                cx="24" cy="24" r="20" fill="none"
-                stroke={probColor} strokeWidth="4" strokeLinecap="round"
+                cx="26" cy="26" r="22" fill="none"
+                stroke={probColor} strokeWidth="3" strokeLinecap="round"
                 strokeDasharray={circumference}
                 strokeDashoffset={circumference - (circumference * hitProb / 100)}
+                style={{ filter: `drop-shadow(0 0 4px ${probColor})` }}
               />
             </svg>
             <Box sx={{
-              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontFamily: MONO, fontWeight: 500,
-              fontSize: '12px', color: probColor,
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: MONO, fontSize: '11px', color: probColor,
+              textShadow: `0 0 6px ${probColor}`,
             }}>
               {hitProb}%
             </Box>
           </Box>
           <Box>
-            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: '#666', letterSpacing: '1px' }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textMuted, letterSpacing: '2px', textTransform: 'uppercase', mb: '4px' }}>
               {t.hitProbability ?? 'HIT PROBABILITY'}
             </Typography>
-            <Typography sx={{ fontFamily: SANS, fontSize: '12px', color: '#888', mt: '2px', lineHeight: 1.4 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: C.textSecondary, lineHeight: 1.6 }}>
               {sp.reasoning ?? ''}
             </Typography>
           </Box>
         </Box>
       </Box>
 
-      {/* ALTERNATIVES */}
+      {/* ── ALTERNATIVES ── */}
       {alts.length > 0 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <Typography sx={{
-            fontFamily: MONO, fontSize: '10px', letterSpacing: '2px',
-            color: '#555', textTransform: 'uppercase', mb: '4px',
-          }}>
-            {t.otherSafeOptions ?? 'OTHER SAFE OPTIONS'}
-          </Typography>
+          <SectionLabel>{t.otherSafeOptions ?? 'OTHER SAFE OPTIONS'}</SectionLabel>
           {alts.map((alt, i) => (
             <Box key={i} sx={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '3px',
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: '0',
               p: '10px 12px',
             }}>
               <Box sx={{ flex: 1, minWidth: 0, mr: '12px' }}>
-                <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '14px', color: '#ccc' }}>
+                <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '14px', color: C.textPrimary, letterSpacing: '1px' }}>
                   {alt.pick}
                 </Typography>
-                <Typography sx={{ fontFamily: SANS, fontSize: '11px', color: '#666', mt: '2px' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted, mt: '3px', lineHeight: 1.5 }}>
                   {alt.reasoning}
                 </Typography>
               </Box>
-              <Typography sx={{ fontFamily: MONO, fontSize: '13px', fontWeight: 500, color: '#f59e0b', flexShrink: 0 }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: '13px', color: C.amber, flexShrink: 0, textShadow: `0 0 6px ${C.amber}` }}>
                 {alt.hit_probability}%
               </Typography>
             </Box>
@@ -954,16 +1056,16 @@ function SafePickResult({ data, lang, t }) {
         </Box>
       )}
 
-      {/* GAME OVERVIEW */}
+      {/* ── GAME OVERVIEW ── */}
       {data.game_overview && (
-        <Box sx={{ borderLeft: '2px solid #333', pl: '12px', py: '4px' }}>
-          <Typography sx={{ fontFamily: SANS, fontSize: '12px', color: '#777', fontStyle: 'italic' }}>
+        <Box sx={{ borderLeft: `2px solid ${C.cyanLine}`, pl: '12px', py: '4px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: C.textSecondary, lineHeight: 1.7 }}>
             {data.game_overview}
           </Typography>
         </Box>
       )}
 
-      {/* ALERT FLAGS */}
+      {/* ── ALERT FLAGS ── */}
       {data.alert_flags?.length > 0 && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
           {data.alert_flags.map((flag, i) => {
@@ -972,7 +1074,7 @@ function SafePickResult({ data, lang, t }) {
               <Typography key={i} sx={{
                 fontFamily: MONO, fontSize: '10px', color: fc.color,
                 background: fc.bg, border: `1px solid ${fc.border}`,
-                padding: '3px 8px', borderRadius: '2px',
+                padding: '3px 8px', borderRadius: '0', letterSpacing: '0.04em',
               }}>
                 {flag}
               </Typography>
@@ -999,8 +1101,29 @@ function SingleGameResult({ hexa, t }) {
         sx={{
           background:   C.bg,
           border:       `1px solid ${C.border}`,
-          borderRadius: '4px',
+          borderRadius: '0',
           p:            '20px',
+          position:     'relative',
+          '&::before': {
+            content:    '""',
+            position:   'absolute',
+            top:        0,
+            left:       0,
+            width:      '14px',
+            height:     '14px',
+            borderTop:  `2px solid ${C.cyan}`,
+            borderLeft: `2px solid ${C.cyan}`,
+          },
+          '&::after': {
+            content:      '""',
+            position:     'absolute',
+            bottom:       0,
+            right:        0,
+            width:        '14px',
+            height:       '14px',
+            borderBottom: `2px solid ${C.accent}`,
+            borderRight:  `2px solid ${C.accent}`,
+          },
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
@@ -1022,12 +1145,13 @@ function SingleGameResult({ hexa, t }) {
         <Typography
           sx={{
             fontFamily:    BARLOW,
-            fontSize:      '28px',
-            fontWeight:    800,
+            fontSize:      '24px',
+            fontWeight:    700,
             color:         C.textPrimary,
             lineHeight:    1.2,
-            letterSpacing: '-0.5px',
+            letterSpacing: '2px',
             mb:            '8px',
+            textShadow:    `0 0 20px rgba(255,102,0,0.2)`,
           }}
         >
           {mp.pick ?? '—'}
@@ -1100,12 +1224,71 @@ function SingleGameResult({ hexa, t }) {
         </Box>
       )}
 
+      {/* ── Kelly Recommendation ── */}
+      {hexa.kelly_recommendation && (
+        <Box
+          sx={{
+            background:   C.accentDim,
+            border:       `1px solid ${C.accentLine}`,
+            borderRadius: '0',
+            p:            '14px 16px',
+            position:     'relative',
+            boxShadow:    `inset 0 0 20px rgba(0,0,0,0.6), 0 0 1px rgba(255,102,0,0.25)`,
+            '&::before': {
+              content:    '""',
+              position:   'absolute',
+              top:        0,
+              left:       0,
+              width:      '10px',
+              height:     '10px',
+              borderTop:  `1px solid ${C.accent}`,
+              borderLeft: `1px solid ${C.accent}`,
+            },
+            '&::after': {
+              content:      '""',
+              position:     'absolute',
+              bottom:       0,
+              right:        0,
+              width:        '10px',
+              height:       '10px',
+              borderBottom: `1px solid ${C.accent}`,
+              borderRight:  `1px solid ${C.accent}`,
+            },
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily:    MONO,
+              fontSize:      '8px',
+              color:         C.accent,
+              textTransform: 'uppercase',
+              letterSpacing: '3px',
+              mb:            '10px',
+              textShadow:    `0 0 8px rgba(255,102,0,0.6)`,
+            }}
+          >
+            [ KELLY_CRITERION_OUTPUT ]
+          </Typography>
+          <Typography
+            sx={{
+              fontFamily:    MONO,
+              fontSize:      '12px',
+              color:         C.textPrimary,
+              lineHeight:    1.7,
+              letterSpacing: '0.03em',
+            }}
+          >
+            {hexa.kelly_recommendation}
+          </Typography>
+        </Box>
+      )}
+
       {/* ── H.E.X.A. Hunch ── */}
       {hexa.hexa_hunch && (
         <Box
           sx={{
-            borderLeft:   '3px solid #f97316',
-            background:   'rgba(249,115,22,0.04)',
+            borderLeft:   `2px solid ${C.cyanLine}`,
+            background:   C.cyanDim,
             padding:      '12px 16px',
             borderRadius: '0',
           }}
@@ -1113,22 +1296,23 @@ function SingleGameResult({ hexa, t }) {
           <Typography
             sx={{
               fontFamily:    MONO,
-              fontSize:      '10px',
-              letterSpacing: '2px',
-              color:         '#f97316',
+              fontSize:      '8px',
+              letterSpacing: '3px',
+              color:         C.cyan,
               textTransform: 'uppercase',
-              mb:            '6px',
+              mb:            '8px',
+              textShadow:    `0 0 6px rgba(0,217,255,0.5)`,
             }}
           >
-            {t.hexaHunch}
+            [ {t.hexaHunch} ]
           </Typography>
           <Typography
             sx={{
-              fontFamily: SANS,
-              fontSize:   '13px',
-              color:      '#aaaaaa',
-              fontStyle:  'italic',
-              lineHeight: 1.7,
+              fontFamily:    MONO,
+              fontSize:      '11px',
+              color:         C.textSecondary,
+              lineHeight:    1.7,
+              letterSpacing: '0.03em',
             }}
           >
             ⬡ {hexa.hexa_hunch}
@@ -1152,10 +1336,21 @@ function SingleGameResult({ hexa, t }) {
       {pm && (
         <Box
           sx={{
-            bgcolor: C.surface,
-            border: `1px solid ${C.border}`,
-            borderRadius: '3px',
-            p: '14px',
+            bgcolor:  C.surface,
+            border:   `1px solid ${C.border}`,
+            borderRadius: '0',
+            p:        '14px',
+            position: 'relative',
+            '&::before': {
+              content:    '""',
+              position:   'absolute',
+              top:        0,
+              left:       0,
+              width:      '8px',
+              height:     '8px',
+              borderTop:  `1px solid ${C.cyan}`,
+              borderLeft: `1px solid ${C.cyan}`,
+            },
           }}
         >
           <SectionLabel>{t.probabilityModel}</SectionLabel>
@@ -1167,21 +1362,30 @@ function SingleGameResult({ hexa, t }) {
       {bp && (
         <Box
           sx={{
-            bgcolor:      C.surfaceAlt,
-            border:       `1px solid ${C.border}`,
-            borderRadius: '3px',
-            p:            '10px 12px',
+            background:   C.accentDim,
+            border:       `1px solid ${C.accentLine}`,
+            borderTop:    `2px solid ${C.accent}`,
+            borderRadius: '0',
+            p:            '12px 14px',
+            boxShadow:    C.accentGlow,
           }}
         >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '6px' }}>
-            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.textDim, letterSpacing: '1px', textTransform: 'uppercase' }}>
-              {t.bestPick} · {bp.type}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '8px' }}>
+            <Typography sx={{
+              fontFamily:    MONO,
+              fontSize:      '8px',
+              color:         C.accent,
+              letterSpacing: '3px',
+              textTransform: 'uppercase',
+              textShadow:    `0 0 8px rgba(255,102,0,0.6)`,
+            }}>
+              BEST_PICK // {bp.type}
             </Typography>
-            <Typography sx={{ fontFamily: MONO, fontSize: '11px', fontWeight: 700, color: C.accent }}>
-              {Math.round(Number(bp.confidence) * 100)}%
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.amber }}>
+              CONF: {Math.round(Number(bp.confidence) * 100)}%
             </Typography>
           </Box>
-          <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '14px', color: C.textSecondary }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '13px', color: C.textPrimary, letterSpacing: '0.05em' }}>
             {bp.detail}
           </Typography>
         </Box>

@@ -11,26 +11,35 @@
 
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
+import { C as GC, BARLOW as GB, MONO as GM } from '../theme';
 
-// ── Fonts / colours ──────────────────────────────────────────────────────────
+// ── Sci-Fi design tokens (aligned with Phase A/B/C global system) ─────────────
 
-const BARLOW = '"Barlow Condensed", system-ui, sans-serif';
-const DM     = '"DM Sans", system-ui, sans-serif';
-const MONO   = '"JetBrains Mono", "Fira Code", monospace';
+const BARLOW = GB;
+const DM     = GM;
+const MONO   = GM;
 
 const C = {
-  bg:          '#111111',
-  bgCard:      '#111111',
-  bgCardHover: '#111111',
-  border:      '#2a2a2a',
-  accent:      '#f97316',
-  accentSec:   '#f97316',
-  accentFade:  'rgba(249,115,22,0.08)',
-  gold:        '#f59e0b',
-  textPrimary: '#E8EDF5',
-  textMuted:   '#888888',
-  textDim:     '#555555',
-  green:       '#22c55e',
+  bg:          GC.bg,
+  bgCard:      GC.surface,
+  bgCardHover: GC.elevated,
+  border:      GC.cyanLine,
+  accent:      GC.accent,
+  accentSec:   GC.accent,
+  accentFade:  GC.accentDim,
+  gold:        GC.cyan,
+  textPrimary: GC.textPrimary,
+  textMuted:   GC.textSecondary,
+  textDim:     GC.textMuted,
+  green:       GC.green,
+  cyan:        GC.cyan,
+  cyanLine:    GC.cyanLine,
+  cyanDim:     GC.cyanDim,
+  cyanGlow:    GC.cyanGlow,
+  accentLine:  GC.accentLine,
+  accentGlow:  GC.accentGlow,
+  greenLine:   GC.greenLine,
+  greenDim:    GC.greenDim,
 };
 
 // ── Localised copy ────────────────────────────────────────────────────────────
@@ -194,27 +203,37 @@ function PillarCard({ icon, label, body }) {
   return (
     <Box
       sx={{
-        p:            3,
-        border:       `1px solid ${C.border}`,
-        borderRadius: '4px',
+        p:            '20px 22px',
+        border:       `1px solid ${C.cyanLine}`,
+        borderRadius: 0,
         bgcolor:      C.bgCard,
         display:      'flex',
-        gap:          2,
-        transition:   'border-color 0.2s, background 0.2s',
+        gap:          '16px',
+        position:     'relative',
+        transition:   'border-color 0.2s, box-shadow 0.2s',
+        '&::before': {
+          content:   '""',
+          position:  'absolute',
+          top: 0, left: 0,
+          width: '10px', height: '10px',
+          borderTop:  `1px solid ${C.cyan}`,
+          borderLeft: `1px solid ${C.cyan}`,
+        },
         '&:hover': {
-          borderColor: C.accent,
-          bgcolor:     C.bgCardHover,
+          borderColor: C.cyan,
+          boxShadow:   `0 0 16px rgba(0,217,255,0.12)`,
         },
       }}
     >
       <Typography
         sx={{
           fontFamily: MONO,
-          fontSize:   '1.4rem',
-          color:      C.accentSec,
+          fontSize:   '1.3rem',
+          color:      C.accent,
           lineHeight: 1,
           flexShrink: 0,
           mt:         '2px',
+          textShadow: `0 0 10px ${C.accent}88`,
         }}
       >
         {icon}
@@ -223,22 +242,21 @@ function PillarCard({ icon, label, body }) {
         <Typography
           sx={{
             fontFamily:    BARLOW,
-            fontSize:      '1rem',
-            fontWeight:    700,
-            letterSpacing: '0.06em',
+            fontSize:      '0.85rem',
+            letterSpacing: '3px',
             textTransform: 'uppercase',
             color:         C.textPrimary,
-            mb:            '6px',
+            mb:            '8px',
           }}
         >
           {label}
         </Typography>
         <Typography
           sx={{
-            fontFamily: DM,
-            fontSize:   '0.875rem',
+            fontFamily: MONO,
+            fontSize:   '0.78rem',
             color:      C.textMuted,
-            lineHeight: 1.65,
+            lineHeight: 1.7,
           }}
         >
           {body}
@@ -250,41 +268,42 @@ function PillarCard({ icon, label, body }) {
 
 function ProcessStep({ num, label, body, isLast }) {
   return (
-    <Box sx={{ display: 'flex', gap: 3, position: 'relative' }}>
+    <Box sx={{ display: 'flex', gap: '20px', position: 'relative' }}>
       {/* Connector line */}
       {!isLast && (
         <Box
           sx={{
-            position: 'absolute',
-            top:      '36px',
-            left:     '19px',
-            width:    '2px',
-            bottom:   '-24px',
-            background: C.accent,
+            position:   'absolute',
+            top:        '36px',
+            left:       '17px',
+            width:      '1px',
+            bottom:     '-24px',
+            background: `linear-gradient(${C.cyan}, transparent)`,
           }}
         />
       )}
 
-      {/* Step number bubble */}
+      {/* Step number — square neon */}
       <Box
         sx={{
-          width:          '40px',
-          height:         '40px',
-          borderRadius:   '50%',
-          border:         `2px solid ${C.accent}`,
+          width:          '36px',
+          height:         '36px',
+          borderRadius:   0,
+          border:         `1px solid ${C.accentLine}`,
           bgcolor:        C.accentFade,
           display:        'flex',
           alignItems:     'center',
           justifyContent: 'center',
           flexShrink:     0,
+          boxShadow:      `0 0 8px rgba(255,102,0,0.25)`,
         }}
       >
         <Typography
           sx={{
             fontFamily: MONO,
-            fontSize:   '0.65rem',
-            color:      C.accentSec,
-            fontWeight: 700,
+            fontSize:   '0.6rem',
+            color:      C.accent,
+            letterSpacing: '1px',
           }}
         >
           {num}
@@ -296,22 +315,21 @@ function ProcessStep({ num, label, body, isLast }) {
         <Typography
           sx={{
             fontFamily:    BARLOW,
-            fontSize:      '1.05rem',
-            fontWeight:    700,
-            letterSpacing: '0.06em',
+            fontSize:      '0.85rem',
+            letterSpacing: '3px',
             textTransform: 'uppercase',
             color:         C.textPrimary,
-            mb:            '4px',
+            mb:            '6px',
           }}
         >
           {label}
         </Typography>
         <Typography
           sx={{
-            fontFamily: DM,
-            fontSize:   '0.875rem',
+            fontFamily: MONO,
+            fontSize:   '0.78rem',
             color:      C.textMuted,
-            lineHeight: 1.65,
+            lineHeight: 1.7,
           }}
         >
           {body}
@@ -326,41 +344,36 @@ function EdgeItem({ label, body }) {
     <Box
       sx={{
         display:      'flex',
-        gap:          2,
+        gap:          '14px',
         alignItems:   'flex-start',
-        py:           2,
-        borderBottom: `1px solid ${C.border}`,
+        py:           '14px',
+        borderBottom: `1px solid ${C.cyanLine}`,
         '&:last-child': { borderBottom: 'none' },
       }}
     >
-      <Box
-        sx={{
-          width:        '6px',
-          height:       '6px',
-          borderRadius: '50%',
-          bgcolor:      C.green,
-          flexShrink:   0,
-          mt:           '6px',
-        }}
-      />
+      {/* Neon green bracket indicator */}
+      <Box sx={{ flexShrink: 0, mt: '3px' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.green, lineHeight: 1, textShadow: `0 0 8px ${C.green}88` }}>▶</Typography>
+      </Box>
       <Box>
         <Typography
           sx={{
-            fontFamily: DM,
-            fontSize:   '0.875rem',
-            fontWeight: 700,
-            color:      C.textPrimary,
-            mb:         '2px',
+            fontFamily:    MONO,
+            fontSize:      '0.78rem',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            color:         C.textPrimary,
+            mb:            '4px',
           }}
         >
           {label}
         </Typography>
         <Typography
           sx={{
-            fontFamily: DM,
-            fontSize:   '0.85rem',
+            fontFamily: MONO,
+            fontSize:   '0.75rem',
             color:      C.textMuted,
-            lineHeight: 1.6,
+            lineHeight: 1.65,
           }}
         >
           {body}
@@ -394,14 +407,19 @@ function SectionLabel({ children }) {
     <Typography
       sx={{
         fontFamily:    MONO,
-        fontSize:      '0.65rem',
-        letterSpacing: '0.2em',
+        fontSize:      '0.6rem',
+        letterSpacing: '3px',
         textTransform: 'uppercase',
-        color:         C.accentSec,
-        mb:            1,
+        color:         C.textMuted,
+        mb:            '8px',
+        display:       'flex',
+        alignItems:    'center',
+        gap:           '6px',
       }}
     >
+      <span style={{ color: C.textDim }}>[</span>
       {children}
+      <span style={{ color: C.textDim }}>]</span>
     </Typography>
   );
 }
@@ -412,12 +430,12 @@ function SectionTitle({ children }) {
       component="h2"
       sx={{
         fontFamily:    BARLOW,
-        fontSize:      { xs: '1.8rem', md: '2.4rem' },
-        fontWeight:    700,
-        letterSpacing: '0.04em',
+        fontSize:      { xs: '1.5rem', md: '2rem' },
+        letterSpacing: '4px',
         textTransform: 'uppercase',
         color:         C.textPrimary,
         mb:            { xs: 3, md: 5 },
+        textShadow:    `0 0 20px rgba(0,217,255,0.2)`,
       }}
     >
       {children}
@@ -434,10 +452,13 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
   return (
     <Box
       sx={{
-        minHeight:     '100vh',
-        bgcolor:       C.bg,
-        display:       'flex',
-        flexDirection: 'column',
+        minHeight:       '100vh',
+        width:           '100%',
+        backgroundColor: '#000000',
+        display:         'flex',
+        flexDirection:   'column',
+        position:        'relative',
+        zIndex:          0,
       }}
     >
       {/* ── Minimal top bar ── */}
@@ -447,12 +468,14 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
           position:        'sticky',
           top:             0,
           zIndex:          1000,
-          bgcolor:         C.bg,
-          borderBottom:    `1px solid ${C.border}`,
+          bgcolor:         'rgba(0,0,0,0.97)',
+          backdropFilter:  'blur(8px)',
+          borderBottom:    `1px solid ${C.cyanLine}`,
+          boxShadow:       `0 1px 0 rgba(0,217,255,0.08)`,
           display:         'flex',
           alignItems:      'center',
           px:              { xs: 2, sm: 3 },
-          py:              '12px',
+          py:              '10px',
           gap:             3,
         }}
       >
@@ -464,19 +487,20 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
             display:       'inline-flex',
             alignItems:    'center',
             gap:           '6px',
-            px:            '14px',
+            px:            '12px',
             py:            '6px',
-            border:        `1px solid ${C.border}`,
-            borderRadius:  '2px',
+            border:        `1px solid ${C.cyanLine}`,
+            borderRadius:  0,
             bgcolor:       'transparent',
             color:         C.textMuted,
             fontFamily:    MONO,
-            fontSize:      '0.7rem',
-            letterSpacing: '0.06em',
+            fontSize:      '0.65rem',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
             cursor:        'pointer',
             flexShrink:    0,
             transition:    'all 0.15s',
-            '&:hover':     { color: C.textPrimary, borderColor: C.accent },
+            '&:hover':     { color: C.cyan, borderColor: C.cyan, boxShadow: C.cyanGlow },
           }}
         >
           {t.back}
@@ -504,18 +528,18 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
             component="button"
             onClick={onToggleLang}
             sx={{
-              background:    '#1c1c1c',
-              border:        '1px solid #2a2a2a',
-              color:         '#888',
+              background:    C.cyanDim,
+              border:        `1px solid ${C.cyanLine}`,
+              color:         C.cyan,
               padding:       '6px 12px',
-              borderRadius:  '3px',
+              borderRadius:  0,
               fontFamily:    MONO,
-              fontWeight:    500,
-              fontSize:      '11px',
-              letterSpacing: '1px',
+              fontSize:      '0.65rem',
+              letterSpacing: '2px',
               cursor:        'pointer',
               flexShrink:    0,
-              '&:hover':     { color: '#aaa', borderColor: '#3a3a3a' },
+              transition:    'all 0.15s',
+              '&:hover':     { boxShadow: C.cyanGlow },
             }}
           >
             {lang === 'es' ? 'EN' : 'ES'}
@@ -526,21 +550,36 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
       {/* ── Hero ── */}
       <Box
         sx={{
-          background:  '#111111',
-          borderBottom:`1px solid ${C.border}`,
+          background:  C.bg,
+          borderBottom:`1px solid ${C.cyanLine}`,
           py:          { xs: 8, md: 12 },
           px:          { xs: 2, sm: 3 },
           textAlign:   'center',
         }}
       >
+        {/* Terminal boot prefix */}
+        <Typography
+          sx={{
+            fontFamily:    MONO,
+            fontSize:      '0.6rem',
+            letterSpacing: '3px',
+            textTransform: 'uppercase',
+            color:         C.textMuted,
+            mb:            '10px',
+          }}
+        >
+          // H.E.X.A._SYSTEM_DOCS · ANALYTICAL_FRAMEWORK_v4
+        </Typography>
+
         <Typography
           sx={{
             fontFamily:    MONO,
             fontSize:      '0.65rem',
             letterSpacing: '0.25em',
             textTransform: 'uppercase',
-            color:         C.accentSec,
-            mb:            2,
+            color:         C.cyan,
+            mb:            '20px',
+            textShadow:    C.cyanGlow,
           }}
         >
           {t.heroEyebrow}
@@ -550,13 +589,13 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
           component="h1"
           sx={{
             fontFamily:    BARLOW,
-            fontSize:      { xs: '2.6rem', sm: '3.8rem', md: '5rem' },
-            fontWeight:    700,
-            letterSpacing: '0.04em',
+            fontSize:      { xs: '2.2rem', sm: '3.2rem', md: '4rem' },
+            letterSpacing: '6px',
             textTransform: 'uppercase',
             lineHeight:    1,
-            color:         '#E8EDF5',
-            mb:            3,
+            color:         C.textPrimary,
+            mb:            '24px',
+            textShadow:    `0 0 30px rgba(0,217,255,0.15)`,
           }}
         >
           {t.heroTitle}
@@ -564,11 +603,11 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
 
         <Typography
           sx={{
-            fontFamily: DM,
-            fontSize:   { xs: '0.95rem', md: '1.1rem' },
+            fontFamily: MONO,
+            fontSize:   { xs: '0.78rem', md: '0.85rem' },
             color:      C.textMuted,
-            lineHeight: 1.7,
-            maxWidth:   640,
+            lineHeight: 1.8,
+            maxWidth:   600,
             mx:         'auto',
           }}
         >
@@ -598,47 +637,50 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
 
       {/* ── Signal Hierarchy ── */}
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '6rem 2rem' }}>
-        <div style={{ marginBottom: '0.75rem', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#f97316' }}>
-          {lang === 'es' ? '02 — JERARQUÍA DE SEÑALES' : '02 — SIGNAL HIERARCHY'}
+        <div style={{ marginBottom: '0.75rem', fontFamily: GM, fontSize: '0.6rem', letterSpacing: 4, textTransform: 'uppercase', color: GC.textMuted }}>
+          <span style={{ color: GC.textDim }}>[ </span>{lang === 'es' ? '02 — JERARQUÍA DE SEÑALES' : '02 — SIGNAL HIERARCHY'}<span style={{ color: GC.textDim }}> ]</span>
         </div>
-        <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', color: '#fff', lineHeight: 1.1, marginBottom: '1rem' }}>
+        <h2 style={{ fontFamily: GB, fontSize: 'clamp(1.5rem, 4vw, 2.4rem)', color: GC.textPrimary, letterSpacing: 4, textTransform: 'uppercase', lineHeight: 1.1, marginBottom: '1rem', textShadow: '0 0 20px rgba(0,217,255,0.15)' }}>
           {lang === 'es' ? <>Cuando los datos se contradicen,<br/>H.E.X.A. sabe cuál manda.</> : <>When data conflicts,<br/>H.E.X.A. knows which signal wins.</>}
         </h2>
-        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: '#888888', maxWidth: 600, marginBottom: '3rem' }}>
+        <p style={{ fontFamily: GM, fontSize: '0.8rem', lineHeight: 1.8, color: GC.textMuted, maxWidth: 600, marginBottom: '3rem' }}>
           {lang === 'es' ? 'No todas las señales pesan igual. Este es el orden de prioridad que resuelve conflictos entre datos.' : 'Not all signals carry equal weight. This is the priority order that resolves data conflicts.'}
         </p>
-        <div style={{ display: 'flex', gap: '3rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ flex: '0 0 280px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             {SIGNAL_HIERARCHY.map((h, i) => (
               <div key={i} onClick={() => setActiveLevel(i)} style={{
-                display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem',
-                borderRadius: 3, cursor: 'pointer', border: '1px solid transparent',
-                background: activeLevel === i ? '#1c1c1c' : 'transparent',
-                borderColor: activeLevel === i ? '#2a2a2a' : 'transparent',
-                transition: 'all 0.3s ease',
+                display: 'flex', alignItems: 'center', gap: '1rem', padding: '10px 14px',
+                borderRadius: 0, cursor: 'pointer',
+                border: `1px solid ${activeLevel === i ? GC.accentLine : 'transparent'}`,
+                background: activeLevel === i ? GC.accentDim : 'transparent',
+                transition: 'all 0.2s ease',
               }}>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.5rem', color: activeLevel === i ? '#f97316' : '#333333', minWidth: 36, transition: 'color 0.3s ease' }}>{h.level}</span>
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: '0.9rem', letterSpacing: 1.5, color: activeLevel === i ? '#fff' : '#888888', transition: 'color 0.3s ease' }}>{h.name}</span>
+                <span style={{ fontFamily: GM, fontSize: '1rem', color: activeLevel === i ? GC.accent : GC.textMuted, minWidth: 30, transition: 'color 0.2s', textShadow: activeLevel === i ? `0 0 8px ${GC.accent}88` : 'none' }}>{h.level}</span>
+                <span style={{ fontFamily: GB, fontSize: '0.78rem', letterSpacing: 2, textTransform: 'uppercase', color: activeLevel === i ? GC.textPrimary : GC.textMuted, transition: 'color 0.2s' }}>{h.name}</span>
               </div>
             ))}
           </div>
-          <div style={{ flex: 1, background: '#1c1c1c', border: '1px solid #2a2a2a', borderRadius: 4, padding: '2.5rem', position: 'relative', overflow: 'hidden', minHeight: 240, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 280 }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, width: 3, height: '100%', background: '#f97316' }} />
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 3, textTransform: 'uppercase', color: '#f97316', marginBottom: '0.75rem' }}>
+          <div style={{ flex: 1, background: GC.surface, border: `1px solid ${GC.cyanLine}`, borderRadius: 0, padding: '2.5rem', position: 'relative', overflow: 'hidden', minHeight: 240, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 280 }}>
+            {/* Top-left corner bracket */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: 14, height: 14, borderTop: `2px solid ${GC.cyan}`, borderLeft: `2px solid ${GC.cyan}` }} />
+            {/* Left neon accent bar */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: 2, height: '100%', background: `linear-gradient(${GC.accent}, transparent)` }} />
+            <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.accent, marginBottom: '0.75rem' }}>
               {lang === 'es' ? 'PRIORIDAD' : 'PRIORITY'} {SIGNAL_HIERARCHY[activeLevel].level}
             </div>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: '1.8rem', color: '#fff', marginBottom: '1rem' }}>
+            <div style={{ fontFamily: GB, fontSize: '1.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textPrimary, marginBottom: '1rem' }}>
               {SIGNAL_HIERARCHY[activeLevel].name}
             </div>
-            <p style={{ fontSize: '0.95rem', lineHeight: 1.8, color: '#aaaaaa', maxWidth: 480 }}>
+            <p style={{ fontFamily: GM, fontSize: '0.78rem', lineHeight: 1.8, color: GC.textMuted, maxWidth: 480 }}>
               {lang === 'es' ? SIGNAL_HIERARCHY[activeLevel].desc : SIGNAL_HIERARCHY[activeLevel].descEn}
             </p>
             <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden', maxWidth: 200 }}>
-                <div style={{ height: '100%', width: `${SIGNAL_HIERARCHY[activeLevel].weight}%`, background: '#f97316', borderRadius: 2, transition: 'width 0.6s ease' }} />
+              <div style={{ flex: 1, height: 3, background: GC.cyanDim, borderRadius: 0, overflow: 'hidden', maxWidth: 200 }}>
+                <div style={{ height: '100%', width: `${SIGNAL_HIERARCHY[activeLevel].weight}%`, background: GC.accent, boxShadow: `0 0 8px ${GC.accent}88`, transition: 'width 0.5s ease' }} />
               </div>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: '0.8rem', color: '#555555', letterSpacing: 1 }}>
-                {lang === 'es' ? 'PESO RELATIVO' : 'RELATIVE WEIGHT'}
+              <span style={{ fontFamily: GM, fontSize: '0.65rem', color: GC.textMuted, letterSpacing: 2 }}>
+                {lang === 'es' ? 'PESO_REL' : 'REL_WEIGHT'}
               </span>
             </div>
           </div>
@@ -650,62 +692,63 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
 
       {/* ── Data Integrity ── */}
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '6rem 2rem' }}>
-        <div style={{ marginBottom: '0.75rem', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.75rem', letterSpacing: 4, textTransform: 'uppercase', color: '#f97316' }}>
-          {lang === 'es' ? '03 — INTEGRIDAD DE DATOS' : '03 — DATA INTEGRITY'}
+        <div style={{ marginBottom: '0.75rem', fontFamily: GM, fontSize: '0.6rem', letterSpacing: 4, textTransform: 'uppercase', color: GC.textMuted }}>
+          <span style={{ color: GC.textDim }}>[ </span>{lang === 'es' ? '03 — INTEGRIDAD DE DATOS' : '03 — DATA INTEGRITY'}<span style={{ color: GC.textDim }}> ]</span>
         </div>
-        <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', color: '#fff', lineHeight: 1.1, marginBottom: '1rem' }}>
+        <h2 style={{ fontFamily: GB, fontSize: 'clamp(1.5rem, 4vw, 2.4rem)', color: GC.textPrimary, letterSpacing: 4, textTransform: 'uppercase', lineHeight: 1.1, marginBottom: '1rem', textShadow: '0 0 20px rgba(0,217,255,0.15)' }}>
           {lang === 'es' ? <>Si los datos son incompletos,<br/>la confianza baja. Siempre.</> : <>If data is incomplete,<br/>confidence drops. Always.</>}
         </h2>
-        <p style={{ fontSize: '1rem', lineHeight: 1.7, color: '#888888', maxWidth: 600, marginBottom: '3rem' }}>
+        <p style={{ fontFamily: GM, fontSize: '0.8rem', lineHeight: 1.8, color: GC.textMuted, maxWidth: 600, marginBottom: '3rem' }}>
           {lang === 'es'
             ? 'Antes de cada análisis, H.E.X.A. calcula un score de calidad de datos (0-100) que determina qué tipos de apuesta están disponibles y cuánto se penaliza la confianza. Sin teatro.'
             : 'Before every analysis, H.E.X.A. calculates a data quality score (0-100) that determines which bet types are available and how much confidence is penalized. No theater.'}
         </p>
-        <div style={{ background: '#1c1c1c', border: '1px solid #2a2a2a', borderRadius: 4, padding: '3rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 1, background: '#2a2a2a', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ background: GC.surface, border: `1px solid ${GC.cyanLine}`, borderRadius: 0, padding: '2rem', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 14, height: 14, borderTop: `2px solid ${GC.cyan}`, borderLeft: `2px solid ${GC.cyan}` }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 1, background: GC.cyanLine, overflow: 'hidden' }}>
             {/* FULL */}
-            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#22c55e', marginBottom: '0.5rem' }}>80-100</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS COMPLETO' : 'FULL ANALYSIS'}
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', borderRight: `1px solid ${GC.cyanLine}` }}>
+              <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.green, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.green}66` }}>80-100</div>
+              <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS_COMPLETO' : 'FULL_ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
+              <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
                   ? 'Todos los datos disponibles. Todos los tipos de apuesta habilitados. Máxima confianza.'
                   : 'All data available. All bet types enabled. Maximum confidence.'}
               </p>
             </div>
             {/* STANDARD */}
-            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#f97316', marginBottom: '0.5rem' }}>60-79</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS ESTÁNDAR' : 'STANDARD ANALYSIS'}
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', borderRight: `1px solid ${GC.cyanLine}` }}>
+              <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.cyan, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.cyan}66` }}>60-79</div>
+              <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS_ESTÁNDAR' : 'STANDARD_ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
+              <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
                   ? 'Props solo con datos Statcast confirmados del jugador. Confianza ajustada.'
                   : 'Props only with confirmed player Statcast data. Adjusted confidence.'}
               </p>
             </div>
             {/* LIMITED */}
-            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#f59e0b', marginBottom: '0.5rem' }}>40-59</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS LIMITADO' : 'LIMITED ANALYSIS'}
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', borderRight: `1px solid ${GC.cyanLine}` }}>
+              <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.accent, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.accent}66` }}>40-59</div>
+              <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS_LIMITADO' : 'LIMITED_ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
+              <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
                   ? 'Solo Moneyline y Over/Under. Confianza penalizada -15%. Riesgo elevado.'
                   : 'Moneyline and Over/Under only. Confidence penalized -15%. Elevated risk.'}
               </p>
             </div>
             {/* MINIMAL */}
-            <div style={{ background: '#111111', padding: '1.5rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '1.6rem', color: '#f87171', marginBottom: '0.5rem' }}>0-39</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', color: '#888888', marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS MÍNIMO' : 'MINIMAL ANALYSIS'}
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.red, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.red}66` }}>0-39</div>
+              <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
+                {lang === 'es' ? 'ANÁLISIS_MÍNIMO' : 'MINIMAL_ANALYSIS'}
               </div>
-              <p style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#666666' }}>
+              <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
                   ? 'Solo Moneyline. Confianza -25%. Riesgo alto obligatorio. Máxima transparencia.'
                   : 'Moneyline only. Confidence -25%. High risk mandatory. Maximum transparency.'}
@@ -744,11 +787,20 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         <SectionTitle>{t.edgeTitle}</SectionTitle>
         <Box
           sx={{
-            border:       `1px solid ${C.border}`,
-            borderRadius: '4px',
+            border:       `1px solid ${C.cyanLine}`,
+            borderRadius: 0,
             bgcolor:      C.bgCard,
             px:           3,
             maxWidth:     640,
+            position:     'relative',
+            '&::before': {
+              content:   '""',
+              position:  'absolute',
+              top: 0, left: 0,
+              width: '10px', height: '10px',
+              borderTop:  `1px solid ${C.cyan}`,
+              borderLeft: `1px solid ${C.cyan}`,
+            },
           }}
         >
           {t.edges.map(e => (
@@ -772,23 +824,32 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
       >
         <Typography
           sx={{
-            fontFamily: DM,
-            fontSize:   '0.8rem',
+            fontFamily: MONO,
+            fontSize:   '0.72rem',
             color:      C.textDim,
-            lineHeight: 1.6,
+            lineHeight: 1.7,
             maxWidth:   560,
             mx:         'auto',
             mb:         3,
+            border:     `1px solid ${C.cyanLine}`,
+            px:         '16px', py: '12px',
+            position:   'relative',
+            '&::before': {
+              content: '""', position: 'absolute', top: 0, left: 0,
+              width: '8px', height: '8px',
+              borderTop: `1px solid ${C.cyan}`, borderLeft: `1px solid ${C.cyan}`,
+            },
           }}
         >
           {t.disclaimer}
         </Typography>
         <Typography
           sx={{
-            fontFamily: MONO,
-            fontSize:   '0.6rem',
-            color:      C.textDim,
-            letterSpacing: '0.1em',
+            fontFamily:    MONO,
+            fontSize:      '0.6rem',
+            color:         C.textDim,
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
           }}
         >
           {t.footerLine}

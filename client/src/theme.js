@@ -1,48 +1,61 @@
-// H.E.X.A. V4 — Bloomberg Terminal Design System
+// H.E.X.A. V4 — Sci-Fi Terminal Design System
 // Single source of truth for all visual tokens
 
 export const C = {
-  // Backgrounds
-  bg:          '#111111',
-  surface:     '#1c1c1c',
-  surfaceAlt:  '#1a1a1a',
-  elevated:    '#222222',
+  // ── Backgrounds — absolute black foundation ──────────────────────────────
+  bg:          '#000000',
+  surface:     '#07090E',
+  surfaceAlt:  '#050508',
+  elevated:    '#0A0D14',
 
-  // Borders
-  border:      '#2a2a2a',
-  borderLight: '#1e1e1e',
+  // ── Borders ──────────────────────────────────────────────────────────────
+  border:      'rgba(0, 217, 255, 0.2)',
+  borderLight: 'rgba(0, 217, 255, 0.1)',
 
-  // Primary accent
-  accent:      '#f97316',   // Orange — primary actions, highlights
-  accentDim:   'rgba(249,115,22,0.08)',
-  accentLine:  'rgba(249,115,22,0.2)',
+  // ── Neon Orange — primary actions / alerts ────────────────────────────────
+  accent:      '#FF6600',
+  accentDim:   'rgba(255, 102, 0, 0.08)',
+  accentLine:  'rgba(255, 102, 0, 0.3)',
+  accentGlow:  '0 0 8px rgba(255,102,0,0.65), 0 0 20px rgba(255,102,0,0.25)',
 
-  // Semantic
-  green:       '#22c55e',
-  greenDim:    'rgba(34,197,94,0.08)',
-  greenLine:   'rgba(34,197,94,0.15)',
-  amber:       '#f59e0b',
-  amberDim:    'rgba(245,158,11,0.08)',
-  amberLine:   'rgba(245,158,11,0.15)',
-  red:         '#ef4444',
-  redDim:      'rgba(239,68,68,0.08)',
-  redLine:     'rgba(239,68,68,0.15)',
+  // ── Electric Cyan — data / technical labels ───────────────────────────────
+  cyan:        '#00D9FF',
+  cyanDim:     'rgba(0, 217, 255, 0.08)',
+  cyanLine:    'rgba(0, 217, 255, 0.25)',
+  cyanGlow:    '0 0 8px rgba(0,217,255,0.55), 0 0 20px rgba(0,217,255,0.2)',
 
-  // Text
-  textPrimary:   '#ffffff',
-  textSecondary: '#aaaaaa',
-  textTertiary:  '#888888',
-  textMuted:     '#666666',
-  textDim:       '#555555',
-  textGhost:     '#444444',
+  // ── Neon Green — success / Safe Picks ─────────────────────────────────────
+  green:       '#00FF88',
+  greenDim:    'rgba(0, 255, 136, 0.08)',
+  greenLine:   'rgba(0, 255, 136, 0.25)',
+  greenGlow:   '0 0 8px rgba(0,255,136,0.55), 0 0 20px rgba(0,255,136,0.2)',
 
-  // Legacy aliases (for components not yet migrated)
-  cardBg:      '#1c1c1c',
-  cardBorder:  '#2a2a2a',
-  accentSec:   '#f97316',
+  // ── Semantic ──────────────────────────────────────────────────────────────
+  amber:       '#FF9900',
+  amberDim:    'rgba(255, 153, 0, 0.08)',
+  amberLine:   'rgba(255, 153, 0, 0.25)',
+  red:         '#FF2244',
+  redDim:      'rgba(255, 34, 68, 0.08)',
+  redLine:     'rgba(255, 34, 68, 0.25)',
+
+  // ── Text ──────────────────────────────────────────────────────────────────
+  textPrimary:   '#E8F4FF',
+  textSecondary: 'rgba(0, 217, 255, 0.7)',
+  textTertiary:  'rgba(0, 217, 255, 0.5)',
+  textMuted:     'rgba(0, 217, 255, 0.35)',
+  textDim:       'rgba(0, 217, 255, 0.2)',
+  textGhost:     'rgba(0, 217, 255, 0.1)',
+
+  // ── Legacy aliases (for components not yet migrated) ──────────────────────
+  cardBg:      '#07090E',
+  cardBorder:  'rgba(0, 217, 255, 0.2)',
+  accentSec:   '#00D9FF',
 };
 
-// Font stacks
-export const BARLOW = "'Barlow Condensed', sans-serif";
-export const MONO   = "'JetBrains Mono', monospace";
-export const SANS   = "'DM Sans', sans-serif";
+// ── Font stacks — monospaced terminal aesthetic ───────────────────────────────
+export const MONO    = "'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace";
+export const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
+
+// Legacy aliases
+export const BARLOW  = DISPLAY;
+export const SANS    = MONO;
