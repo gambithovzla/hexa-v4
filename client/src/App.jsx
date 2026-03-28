@@ -24,6 +24,7 @@ import BankrollTracker      from './components/BankrollTracker';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
 import OracleChat          from './components/OracleChat';
+import BatchScanPanel      from './components/BatchScanPanel';
 import useHistory           from './hooks/useHistory';
 import { C, MONO } from './theme';
 
@@ -74,6 +75,7 @@ export default function App() {
   const [activeTab,         setActiveTab]         = useState('game');
   const [singleGame,        setSingleGame]        = useState(null);
   const [parlayGames,       setParlayGames]       = useState([]);
+  const [batchGames,        setBatchGames]        = useState([]);
   const [isAnalyzing,       setIsAnalyzing]       = useState(false);
   const [showMethodology,   setShowMethodology]   = useState(false);
   const [showOracleChat,    setShowOracleChat]    = useState(false);
@@ -192,6 +194,22 @@ export default function App() {
 
           {activeTab === 'bankroll' && (
             <BankrollTracker lang={lang} />
+          )}
+
+          {/* Batch Scan (admin only) */}
+          {activeTab === 'batch' && isAdmin && (
+            <Box sx={TAB_LAYOUT}>
+              <GameSelector
+                mode="fullDay"
+                onSelectMultiple={setBatchGames}
+                language={lang}
+              />
+              <BatchScanPanel
+                selectedGames={batchGames}
+                lang={lang}
+                setIsAnalyzing={setIsAnalyzing}
+              />
+            </Box>
           )}
         </Box>
 
