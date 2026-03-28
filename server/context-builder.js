@@ -18,37 +18,37 @@ import { getLineMovement } from './line-movement.js';
 // ---------------------------------------------------------------------------
 
 const HISTORICAL_MLB_CONTEXT = {
-  park_factors_2025: {
-    COL: { overall: 112, hr: 123, r: 115, description: 'Coors Field - extreme hitter park, high altitude' },
-    CIN: { overall: 105, hr: 113, r: 106, description: 'Great American Ball Park - hitter friendly' },
-    TEX: { overall: 104, hr: 106, r: 104, description: 'Globe Life Field - hitter friendly dome' },
-    BAL: { overall: 103, hr: 112, r: 103, description: 'Camden Yards - slight hitter friendly' },
-    BOS: { overall: 103, hr: 95,  r: 104, description: 'Fenway Park - hitter friendly, unique dimensions' },
-    NYY: { overall: 101, hr: 103, r: 101, description: 'Yankee Stadium - short porch favors lefty power' },
-    PHI: { overall: 101, hr: 104, r: 101, description: 'Citizens Bank Park - slight hitter friendly' },
-    ATL: { overall: 100, hr: 98,  r: 100, description: 'Truist Park - neutral' },
-    HOU: { overall: 100, hr: 97,  r: 100, description: 'Minute Maid Park - neutral, Crawford boxes' },
-    LAD: { overall: 100, hr: 100, r: 100, description: 'Dodger Stadium - neutral' },
+  park_factors_2026: {
+    LAD: { overall: 104, hr: 129, r: 108, description: 'UNIQLO Field at Dodger Stadium - hitter friendly, extreme HR park' },
+    PHI: { overall: 104, hr: 113, r: 108, description: 'Citizens Bank Park - hitter friendly' },
+    CIN: { overall: 103, hr: 112, r: 106, description: 'Great American Ball Park - hitter friendly' },
+    BAL: { overall: 103, hr: 105, r: 106, description: 'Oriole Park at Camden Yards - hitter friendly' },
+    HOU: { overall: 102, hr: 108, r: 104, description: 'Daikin Park - slight hitter friendly' },
+    NYM: { overall: 100, hr: 99,  r: 100, description: 'Citi Field - neutral' },
+    MIL: { overall: 99,  hr: 100, r: 98,  description: 'American Family Field - neutral dome' },
+    SD:  { overall: 99,  hr: 104, r: 98,  description: 'Petco Park - neutral, slight HR boost' },
+    STL: { overall: 99,  hr: 75,  r: 98,  description: 'Busch Stadium - neutral overall, extreme HR suppression' },
+    SF:  { overall: 99,  hr: 71,  r: 98,  description: 'Oracle Park - neutral overall, extreme HR suppression, marine layer' },
+    CHC: { overall: 96,  hr: 94,  r: 92,  description: 'Wrigley Field - pitcher friendly, wind dependent' },
+    SEA: { overall: 91,  hr: 92,  r: 83,  description: 'T-Mobile Park - extreme pitcher park' },
+    COL: { overall: 110, hr: 120, r: 112, description: 'Coors Field - extreme hitter park, high altitude' },
+    TEX: { overall: 101, hr: 106, r: 102, description: 'Globe Life Field - slight hitter friendly dome' },
+    BOS: { overall: 101, hr: 95,  r: 103, description: 'Fenway Park - slight hitter friendly, unique dimensions' },
+    NYY: { overall: 100, hr: 105, r: 100, description: 'Yankee Stadium - neutral overall, short porch HR boost' },
+    ATL: { overall: 100, hr: 100, r: 100, description: 'Truist Park - neutral' },
     MIN: { overall: 100, hr: 102, r: 100, description: 'Target Field - neutral' },
-    STL: { overall: 100, hr: 96,  r: 100, description: 'Busch Stadium - neutral' },
-    TOR: { overall: 100, hr: 99,  r: 100, description: 'Rogers Centre - neutral dome' },
-    ARI: { overall: 99,  hr: 101, r: 99,  description: 'Chase Field - neutral, retractable roof' },
-    CLE: { overall: 99,  hr: 95,  r: 99,  description: 'Progressive Field - slight pitcher friendly' },
-    DET: { overall: 99,  hr: 96,  r: 99,  description: 'Comerica Park - slight pitcher friendly, deep center' },
-    KC:  { overall: 99,  hr: 97,  r: 99,  description: 'Kauffman Stadium - slight pitcher friendly' },
-    MIL: { overall: 99,  hr: 100, r: 99,  description: 'American Family Field - neutral dome' },
-    PIT: { overall: 99,  hr: 96,  r: 99,  description: 'PNC Park - slight pitcher friendly' },
-    SEA: { overall: 99,  hr: 96,  r: 99,  description: 'T-Mobile Park - pitcher friendly' },
-    TB:  { overall: 99,  hr: 97,  r: 99,  description: 'Tropicana Field - pitcher friendly dome' },
-    CHC: { overall: 98,  hr: 99,  r: 98,  description: 'Wrigley Field - wind dependent, can favor either' },
-    CWS: { overall: 98,  hr: 101, r: 98,  description: 'Guaranteed Rate Field - neutral' },
-    LAA: { overall: 98,  hr: 95,  r: 98,  description: 'Angel Stadium - pitcher friendly' },
+    TOR: { overall: 100, hr: 100, r: 100, description: 'Rogers Centre - neutral dome' },
+    ARI: { overall: 100, hr: 102, r: 100, description: 'Chase Field - neutral, retractable roof' },
+    CLE: { overall: 99,  hr: 97,  r: 99,  description: 'Progressive Field - slight pitcher friendly' },
+    DET: { overall: 99,  hr: 98,  r: 99,  description: 'Comerica Park - slight pitcher friendly' },
+    KC:  { overall: 99,  hr: 98,  r: 99,  description: 'Kauffman Stadium - slight pitcher friendly' },
+    PIT: { overall: 99,  hr: 97,  r: 99,  description: 'PNC Park - slight pitcher friendly' },
+    TB:  { overall: 99,  hr: 97,  r: 99,  description: 'Tropicana Field - slight pitcher friendly dome' },
+    CWS: { overall: 98,  hr: 100, r: 98,  description: 'Guaranteed Rate Field - neutral' },
+    LAA: { overall: 98,  hr: 96,  r: 98,  description: 'Angel Stadium - slight pitcher friendly' },
     WSH: { overall: 98,  hr: 99,  r: 98,  description: 'Nationals Park - slight pitcher friendly' },
-    OAK: { overall: 96,  hr: 94,  r: 96,  description: 'Oakland Coliseum - pitcher friendly' },
-    MIA: { overall: 95,  hr: 91,  r: 95,  description: 'LoanDepot Park - pitcher friendly dome' },
-    NYM: { overall: 95,  hr: 92,  r: 95,  description: 'Citi Field - pitcher friendly' },
-    SD:  { overall: 94,  hr: 90,  r: 94,  description: 'Petco Park - pitcher friendly, marine layer' },
-    SF:  { overall: 94,  hr: 88,  r: 93,  description: 'Oracle Park - extreme pitcher park, marine layer' },
+    OAK: { overall: 97,  hr: 95,  r: 97,  description: 'Sacramento - estimated neutral to slight pitcher friendly' },
+    MIA: { overall: 96,  hr: 92,  r: 96,  description: 'LoanDepot Park - pitcher friendly dome' },
   },
   team_tendencies_historical: {
     LAD: { home_win_pct_5yr: 0.587, notes: 'Elite pitching depth, strong home record' },
@@ -72,7 +72,7 @@ const HISTORICAL_MLB_CONTEXT = {
 };
 
 function buildHistoricalContextBlock() {
-  const pf = HISTORICAL_MLB_CONTEXT.park_factors_2025;
+  const pf = HISTORICAL_MLB_CONTEXT.park_factors_2026;
   const tt = HISTORICAL_MLB_CONTEXT.team_tendencies_historical;
   const st = HISTORICAL_MLB_CONTEXT.spring_training_adjustments;
 
@@ -1094,7 +1094,7 @@ export async function buildContext(gameData, oddsData = null) {
   // Fallback to hardcoded park factors if dynamic fetch returned nothing
   if (!parkFactorData) {
     const homeAbbr = gameData.teams?.home?.abbreviation;
-    const hardcoded = HISTORICAL_MLB_CONTEXT.park_factors_2025[homeAbbr];
+    const hardcoded = HISTORICAL_MLB_CONTEXT.park_factors_2026[homeAbbr];
     if (hardcoded) {
       parkFactorData = {
         team: homeAbbr,
@@ -1104,7 +1104,7 @@ export async function buildContext(gameData, oddsData = null) {
         park_factor_R: hardcoded.r,
         park_factor_H: null,
       };
-      console.log(`[context-builder] Using hardcoded park factor for ${homeAbbr}: overall=${hardcoded.overall}`);
+      console.log(`[context-builder] Park factor loaded for ${homeAbbr}: overall=${hardcoded.overall} HR=${hardcoded.hr} R=${hardcoded.r}`);
     }
   }
 
