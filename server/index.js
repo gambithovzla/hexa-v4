@@ -595,41 +595,62 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
       })
     );
 
-    // Analyze each game in parallel (single mode, deep model)
-    const results = await Promise.allSettled(
-      gameContexts.map(async (ctx) => {
-        if (ctx.error) return { matchup: `Game ${ctx.id}`, error: ctx.error };
+    // Analyze games in batches of 3 to avoid Anthropic API rate limits (30k tokens/min)
+    const BATCH_SIZE = 3;
+    const BATCH_DELAY_MS = 5000; // 5 seconds between batches
+    const allResults = [];
 
-        try {
-          const analysis = await analyzeGame({
-            mode: 'single',
-            matchup: ctx.matchup,
-            context: ctx.contextString,
-            lang,
-            betType: 'all',
-            riskProfile: 'balanced',
-            webSearch: false,
-            model: 'deep',
-            timeoutMs: 120000,
-          });
+    for (let i = 0; i < gameContexts.length; i += BATCH_SIZE) {
+      const batch = gameContexts.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(gameContexts.length / BATCH_SIZE);
+      console.log(`[Admin Batch] Processing batch ${batchNum}/${totalBatches} (${batch.length} games)`);
 
-          return {
-            gameId: ctx.id,
-            matchup: ctx.matchup,
-            data: analysis.data,
-            rawText: analysis.rawText,
-            parseError: analysis.parseError,
-            odds: ctx.matchedOdds ?? undefined,
-          };
-        } catch (err) {
-          return {
-            gameId: ctx.id,
-            matchup: ctx.matchup,
-            error: err.message === 'TIMEOUT' ? 'Analysis timed out' : err.message,
-          };
-        }
-      })
-    );
+      const batchResults = await Promise.allSettled(
+        batch.map(async (ctx) => {
+          if (ctx.error) return { matchup: `Game ${ctx.id}`, error: ctx.error };
+
+          try {
+            const analysis = await analyzeGame({
+              mode: 'single',
+              matchup: ctx.matchup,
+              context: ctx.contextString,
+              lang,
+              betType: 'all',
+              riskProfile: 'balanced',
+              webSearch: false,
+              model: 'deep',
+              timeoutMs: 120000,
+            });
+
+            return {
+              gameId: ctx.id,
+              matchup: ctx.matchup,
+              data: analysis.data,
+              rawText: analysis.rawText,
+              parseError: analysis.parseError,
+              odds: ctx.matchedOdds ?? undefined,
+            };
+          } catch (err) {
+            return {
+              gameId: ctx.id,
+              matchup: ctx.matchup,
+              error: err.message === 'TIMEOUT' ? 'Analysis timed out' : err.message,
+            };
+          }
+        })
+      );
+
+      allResults.push(...batchResults);
+
+      // Wait between batches to respect rate limits (skip delay after last batch)
+      if (i + BATCH_SIZE < gameContexts.length) {
+        console.log(`[Admin Batch] Waiting ${BATCH_DELAY_MS / 1000}s before next batch...`);
+        await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+      }
+    }
+
+    const results = allResults;
 
     // Process results and auto-save picks
     const processedResults = [];
