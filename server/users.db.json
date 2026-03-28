@@ -1,0 +1,25 @@
+[
+  {
+    "id": "39579c38-ac48-40e9-9b2f-916c6da858ad",
+    "email": "admin@hexa.com",
+    "passwordHash": "$2b$10$JG7mpMinp4UX8q5mD.xz5OFcHlQtxWg799vys7ut2pbEZFYCnR.vG",
+    "createdAt": "2026-03-14T21:36:21.603Z",
+    "credits": 999999,
+    "initialBankroll": 1000,
+    "currentBankroll": 1083.33,
+    "bets": [
+      {
+        "id": "1773524426193-1jqrwk",
+        "date": "2026-03-14T21:40:26.193Z",
+        "matchup": "miami vs wasgh",
+        "pick": "over 4.5",
+        "odds": -120,
+        "stake": 100,
+        "potentialWin": 83.33,
+        "result": "won",
+        "source": "manual",
+        "notes": ""
+      }
+    ]
+  }
+]

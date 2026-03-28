@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rn \"setInterval\\\\|setTimeout.*fetch\\\\|while.*true\" /c/proyectos/hexa-v4/client/src --include=*.jsx --include=*.js)",
+      "Bash(grep -n \"refresh\\\\|Refresh\\\\|REFRESH\" /c/proyectos/hexa-v4/client/src/components/*.jsx)",
+      "Bash(grep -rn \"\\\\.get.*games\\\\|fetch.*games\\\\|fetch.*schedule\" /c/proyectos/hexa-v4/client/src --include=*.jsx --include=*.js)"
+    ]
+  }
+}
