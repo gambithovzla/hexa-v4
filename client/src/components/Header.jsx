@@ -32,6 +32,7 @@ const TABS = [
   { value: 'parlay',  en: 'Parlay',      es: 'Parlay'           },
   { value: 'bankroll', en: 'Bankroll',    es: 'Bankroll'         },
   { value: 'history', en: 'History',     es: 'Historial'        },
+  { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan', adminOnly: true },
 ];
 
 // ── Statcast badge ────────────────────────────────────────────────────────────
@@ -578,7 +579,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
-        {TABS.map(tab => (
+        {TABS.filter(tab => !tab.adminOnly || isAdmin).map(tab => (
           <TabButton
             key={tab.value}
             tab={tab}

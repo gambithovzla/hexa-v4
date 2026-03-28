@@ -67,7 +67,8 @@
       "single": "Individual",
       "parlay": "Parlay",
       "fullDay": "Día Completo",
-      "fullday": "Día Completo"
+      "fullday": "Día Completo",
+      "batch": "Batch Scan"
     },
     "result": {
       "win": "GANÓ",

@@ -67,7 +67,8 @@
       "single": "Single",
       "parlay": "Parlay",
       "fullDay": "Full Day",
-      "fullday": "Full Day"
+      "fullday": "Full Day",
+      "batch": "Batch Scan"
     },
     "result": {
       "win": "WIN",
