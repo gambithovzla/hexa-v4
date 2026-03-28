@@ -59,6 +59,8 @@
     "winRate": "Tasa de Acierto",
     "markWin": "Ganó",
     "markLoss": "Perdió",
+    "markPush": "Push",
+    "pushes": "Empates/Push",
     "clearHistory": "Borrar Historial",
     "confirmClear": "¿Confirmar? Clic de nuevo",
     "mode": {
@@ -70,6 +72,7 @@
     "result": {
       "win": "GANÓ",
       "loss": "PERDIÓ",
+      "push": "PUSH",
       "pending": "PENDIENTE"
     },
     "noPickExtracted": "—",

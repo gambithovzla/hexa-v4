@@ -59,6 +59,8 @@
     "winRate": "Win Rate",
     "markWin": "Win",
     "markLoss": "Loss",
+    "markPush": "Push",
+    "pushes": "Pushes",
     "clearHistory": "Clear History",
     "confirmClear": "Confirm? Click again",
     "mode": {
@@ -70,6 +72,7 @@
     "result": {
       "win": "WIN",
       "loss": "LOSS",
+      "push": "PUSH",
       "pending": "PENDING"
     },
     "noPickExtracted": "—",

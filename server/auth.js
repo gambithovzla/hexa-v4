@@ -523,6 +523,7 @@ bankrollRouter.get('/stats', verifyToken, async (req, res) => {
         COUNT(*) FILTER (WHERE result = 'won') as wins,
         COUNT(*) FILTER (WHERE result = 'lost') as losses,
         COUNT(*) FILTER (WHERE result = 'pending') as pending,
+        COUNT(*) FILTER (WHERE result = 'push') as pushes,
         COUNT(*) as total,
         COALESCE(SUM(CASE
           WHEN result = 'won' THEN stake * (
@@ -570,6 +571,7 @@ bankrollRouter.get('/stats', verifyToken, async (req, res) => {
         general: {
           wins: parseInt(stats.wins),
           losses: parseInt(stats.losses),
+          pushes: parseInt(stats.pushes),
           pending: parseInt(stats.pending),
           total,
           winRate: settled > 0 ? Math.round((stats.wins / settled) * 100 * 10) / 10 : 0,

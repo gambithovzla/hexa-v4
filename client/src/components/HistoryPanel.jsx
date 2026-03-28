@@ -59,12 +59,14 @@ function StatCard({ value, label, color, sub }) {
 function resultBorderColor(result) {
   if (result === 'win')  return C.green;
   if (result === 'loss') return C.red;
+  if (result === 'push') return C.cyan;
   return C.border;
 }
 
 function resultBadgeSx(result) {
   if (result === 'win')  return { bgcolor: C.greenDim, border: `1px solid ${C.greenLine}`, color: C.green };
   if (result === 'loss') return { bgcolor: C.redDim,   border: `1px solid ${C.redLine}`,   color: C.red   };
+  if (result === 'push') return { bgcolor: C.cyanDim,  border: `1px solid ${C.cyanLine}`,  color: C.cyan  };
   return                        { bgcolor: C.amberDim, border: `1px solid ${C.amberLine}`,  color: C.amber };
 }
 
@@ -162,9 +164,10 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
         </Box>
       )}
       {entry.result === 'pending' && (
-        <Box sx={{ display: 'flex', gap: '8px', pt: '2px' }}>
-          <MarkBtn label={`✓ ${t.history.markWin}`} color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />
+        <Box sx={{ display: 'flex', gap: '8px', pt: '2px', flexWrap: 'wrap' }}>
+          <MarkBtn label={`✓ ${t.history.markWin}`}  color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />
           <MarkBtn label={`✗ ${t.history.markLoss}`} color={C.red}   dim={C.redDim}   onClick={() => onMarkResult(entry.id, 'loss')} />
+          <MarkBtn label={`⇌ ${t.history.markPush}`} color={C.cyan}  dim={C.cyanDim}  onClick={() => onMarkResult(entry.id, 'push')} />
         </Box>
       )}
     </Box>
@@ -212,12 +215,13 @@ function AnalisisTab({ lang }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Stats */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(5, 1fr)' }, gap: '8px' }}>
-        <StatCard value={stats.total}   label={t.history.totalPicks} color={C.textPrimary} />
-        <StatCard value={stats.wins}    label={t.history.wins}       color={C.green}       />
-        <StatCard value={stats.losses}  label={t.history.losses}     color={C.red}         />
-        <StatCard value={stats.pending} label={t.history.pending}    color={C.amber}       />
-        <StatCard value={`${stats.winRate}%`} label={t.history.winRate} color={C.accent} />
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(6, 1fr)' }, gap: '8px' }}>
+        <StatCard value={stats.total}          label={t.history.totalPicks} color={C.textPrimary} />
+        <StatCard value={stats.wins}           label={t.history.wins}       color={C.green}       />
+        <StatCard value={stats.losses}         label={t.history.losses}     color={C.red}         />
+        <StatCard value={stats.pushes ?? 0}    label={t.history.pushes}     color={C.cyan}        />
+        <StatCard value={stats.pending}        label={t.history.pending}    color={C.amber}       />
+        <StatCard value={`${stats.winRate}%`}  label={t.history.winRate}    color={C.accent}      />
       </Box>
 
       {/* Pick list */}
@@ -277,10 +281,10 @@ function buildCurve(initialBankroll, bets) {
   return points;
 }
 
-// Calculate streak from bets
+// Calculate streak from bets (pushes don't break streaks)
 function calcStreak(bets) {
   const resolved = [...bets]
-    .filter(b => b.result !== 'pending')
+    .filter(b => b.result === 'won' || b.result === 'lost')
     .sort((a, b) => new Date(b.date) - new Date(a.date));
   if (resolved.length === 0) return '—';
   const firstResult = resolved[0].result;
@@ -444,9 +448,11 @@ function AddBetForm({ onAdd }) {
 // Bet result badge
 function ResultBadge({ result }) {
   const cfg = result === 'won'
-    ? { label: 'GANADA',   color: C.green, dim: C.greenDim, border: C.greenLine }
+    ? { label: 'GANADA',    color: C.green, dim: C.greenDim, border: C.greenLine }
     : result === 'lost'
-    ? { label: 'PERDIDA',  color: C.red,   dim: C.redDim,   border: C.redLine   }
+    ? { label: 'PERDIDA',   color: C.red,   dim: C.redDim,   border: C.redLine   }
+    : result === 'push'
+    ? { label: 'PUSH',      color: C.cyan,  dim: C.cyanDim,  border: C.cyanLine  }
     : { label: 'PENDIENTE', color: C.amber, dim: C.amberDim, border: C.amberLine };
 
   return (
@@ -473,7 +479,7 @@ function BetsTable({ bets, onUpdateResult, onDelete }) {
       {sorted.map(bet => {
         const dateStr = (() => { try { return new Date(bet.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
         return (
-          <Box key={bet.id} sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${bet.result === 'won' ? C.green : bet.result === 'lost' ? C.red : C.border}`, borderRadius: '0 2px 2px 0', p: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <Box key={bet.id} sx={{ bgcolor: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${bet.result === 'won' ? C.green : bet.result === 'lost' ? C.red : bet.result === 'push' ? C.cyan : C.border}`, borderRadius: '0 2px 2px 0', p: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {/* Top row */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, flexShrink: 0 }}>{dateStr}</Typography>
@@ -513,6 +519,9 @@ function BetsTable({ bets, onUpdateResult, onDelete }) {
               )}
               {bet.result !== 'lost' && (
                 <ActionBtn label="✗ Perdida" color={C.red} dim={C.redDim} border="rgba(255,61,87,0.3)" onClick={() => onUpdateResult(bet.id, 'lost')} />
+              )}
+              {bet.result !== 'push' && (
+                <ActionBtn label="⇌ Push" color={C.cyan} dim={C.cyanDim} border={C.cyanLine} onClick={() => onUpdateResult(bet.id, 'push')} />
               )}
               {bet.result !== 'pending' && (
                 <ActionBtn label="↺ Pendiente" color={C.textMuted} dim={C.surfaceAlt} border={C.border} onClick={() => onUpdateResult(bet.id, 'pending')} />
