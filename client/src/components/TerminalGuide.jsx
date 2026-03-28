@@ -352,7 +352,7 @@ function ContentArea({ tabId, lang }) {
   if (!data) return null;
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       {/* Content header */}
       <Box
         sx={{
@@ -360,7 +360,6 @@ function ContentArea({ tabId, lang }) {
           pt:           '28px',
           pb:           '20px',
           borderBottom: `1px solid ${C.border}`,
-          flexShrink:   0,
         }}
       >
         <Typography
@@ -388,20 +387,8 @@ function ContentArea({ tabId, lang }) {
         </Typography>
       </Box>
 
-      {/* Scrollable body */}
-      <Box
-        sx={{
-          flex:       1,
-          overflowY:  'auto',
-          px:         '32px',
-          py:         '28px',
-          scrollbarWidth: 'thin',
-          scrollbarColor: `${C.border} transparent`,
-          '&::-webkit-scrollbar':       { width: '4px' },
-          '&::-webkit-scrollbar-track': { background: 'transparent' },
-          '&::-webkit-scrollbar-thumb': { background: C.border, borderRadius: '2px' },
-        }}
-      >
+      {/* Body — flows naturally, parent handles scroll */}
+      <Box sx={{ px: '32px', py: '28px' }}>
         {data.sections.map((section, i) => (
           <Section key={i} {...section} />
         ))}
@@ -418,176 +405,170 @@ export default function TerminalGuide({ open, onClose, lang = 'en' }) {
   if (!open) return null;
 
   return (
-    /* Backdrop */
+    /* Full-screen takeover — covers everything including the Header */
     <Box
-      onClick={onClose}
       sx={{
-        position:        'fixed',
-        inset:           0,
-        zIndex:          9000,
-        bgcolor:         '#000000',
-        display:         'flex',
-        alignItems:      'center',
-        justifyContent:  'center',
-        p:               { xs: '12px', sm: '24px' },
+        position:   'fixed',
+        top:        0,
+        left:       0,
+        right:      0,
+        bottom:     0,
+        width:      '100vw',
+        height:     '100vh',
+        zIndex:     9999,
+        bgcolor:    '#000000',
+        overflowY:  'auto',
+        display:    'flex',
+        flexDirection: 'column',
       }}
     >
-      {/* Modal panel */}
+      {/* ── Top bar ── */}
       <Box
-        onClick={e => e.stopPropagation()}
         sx={{
-          width:        '100%',
-          maxWidth:     '960px',
-          height:       '80vh',
-          maxHeight:    '700px',
-          display:      'flex',
-          flexDirection:'column',
-          bgcolor:      C.bg,
-          border:       `1px solid ${C.border}`,
-          borderRadius: '4px',
-          overflow:     'hidden',
-          boxShadow:    '0 24px 80px rgba(0,0,0,0.8)',
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'space-between',
+          px:             '20px',
+          py:             '10px',
+          bgcolor:        C.surface,
+          borderBottom:   `1px solid ${C.border}`,
+          flexShrink:     0,
+          position:       'sticky',
+          top:            0,
+          zIndex:         1,
         }}
       >
-        {/* ── Top bar ── */}
-        <Box
-          sx={{
-            display:        'flex',
-            alignItems:     'center',
-            justifyContent: 'space-between',
-            px:             '20px',
-            py:             '10px',
-            bgcolor:        C.surface,
-            borderBottom:   `1px solid ${C.border}`,
-            flexShrink:     0,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Typography
-              sx={{
-                fontFamily:    MONO,
-                fontSize:      '0.6rem',
-                fontWeight:    700,
-                letterSpacing: '0.18em',
-                color:         C.accent,
-                textTransform: 'uppercase',
-              }}
-            >
-              H.E.X.A. TERMINAL
-            </Typography>
-            <Box sx={{ width: '1px', height: '12px', bgcolor: C.border }} />
-            <Typography
-              sx={{
-                fontFamily:    MONO,
-                fontSize:      '0.55rem',
-                letterSpacing: '0.1em',
-                color:         C.textMuted,
-                textTransform: 'uppercase',
-              }}
-            >
-              {lang === 'es' ? 'Guía Interactiva' : 'Interactive Guide'}
-            </Typography>
-          </Box>
-
-          {/* Close button */}
-          <Box
-            component="button"
-            onClick={onClose}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Typography
             sx={{
-              display:        'inline-flex',
-              alignItems:     'center',
-              justifyContent: 'center',
-              width:          '24px',
-              height:         '24px',
-              border:         `1px solid ${C.border}`,
-              borderRadius:   '2px',
-              bgcolor:        'transparent',
-              color:          C.textMuted,
-              fontFamily:     MONO,
-              fontSize:       '0.7rem',
-              cursor:         'pointer',
-              transition:     'all 0.15s',
-              '&:hover':      { color: C.textPrimary, borderColor: C.textTertiary, bgcolor: C.border },
+              fontFamily:    MONO,
+              fontSize:      '0.6rem',
+              fontWeight:    700,
+              letterSpacing: '0.18em',
+              color:         C.accent,
+              textTransform: 'uppercase',
             }}
           >
-            ✕
+            H.E.X.A. TERMINAL
+          </Typography>
+          <Box sx={{ width: '1px', height: '12px', bgcolor: C.border }} />
+          <Typography
+            sx={{
+              fontFamily:    MONO,
+              fontSize:      '0.55rem',
+              letterSpacing: '0.1em',
+              color:         C.textMuted,
+              textTransform: 'uppercase',
+            }}
+          >
+            {lang === 'es' ? 'Guía Interactiva' : 'Interactive Guide'}
+          </Typography>
+        </Box>
+
+        {/* Neon orange close button */}
+        <Box
+          component="button"
+          onClick={onClose}
+          sx={{
+            display:        'inline-flex',
+            alignItems:     'center',
+            justifyContent: 'center',
+            px:             '14px',
+            py:             '6px',
+            border:         '1px solid #ff6600',
+            borderRadius:   '2px',
+            bgcolor:        'transparent',
+            color:          '#ff6600',
+            fontFamily:     MONO,
+            fontSize:       '0.65rem',
+            fontWeight:     700,
+            letterSpacing:  '0.1em',
+            cursor:         'pointer',
+            transition:     'all 0.15s',
+            textTransform:  'uppercase',
+            '&:hover': {
+              bgcolor: 'rgba(255,102,0,0.12)',
+              boxShadow: '0 0 8px rgba(255,102,0,0.5)',
+            },
+          }}
+        >
+          [ X ] {lang === 'es' ? 'CERRAR GUÍA' : 'CLOSE GUIDE'}
+        </Box>
+      </Box>
+
+      {/* ── Body: sidebar + content ── */}
+      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {/* Sidebar */}
+        <Box
+          sx={{
+            width:        { xs: '160px', sm: '220px' },
+            flexShrink:   0,
+            bgcolor:      C.surface,
+            borderRight:  `1px solid ${C.border}`,
+            overflowY:    'auto',
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+            pt:           '8px',
+            position:     'sticky',
+            top:          '41px',
+            alignSelf:    'flex-start',
+            height:       'calc(100vh - 41px)',
+          }}
+        >
+          {/* Sidebar label */}
+          <Typography
+            sx={{
+              fontFamily:    MONO,
+              fontSize:      '0.5rem',
+              letterSpacing: '0.14em',
+              color:         C.textDim,
+              textTransform: 'uppercase',
+              px:            '20px',
+              pb:            '10px',
+              pt:            '4px',
+            }}
+          >
+            {lang === 'es' ? 'Módulos' : 'Modules'}
+          </Typography>
+
+          {TABS.map(tab => (
+            <SidebarTab
+              key={tab.id}
+              tab={tab}
+              active={activeTab === tab.id}
+              lang={lang}
+              onClick={() => setActiveTab(tab.id)}
+            />
+          ))}
+
+          {/* Sidebar footer */}
+          <Box
+            sx={{
+              px:        '20px',
+              py:        '16px',
+              borderTop: `1px solid ${C.border}`,
+              mt:        '16px',
+            }}
+          >
+            <Typography
+              sx={{
+                fontFamily:    MONO,
+                fontSize:      '0.48rem',
+                letterSpacing: '0.08em',
+                color:         C.textGhost,
+                lineHeight:    1.6,
+              }}
+            >
+              H.E.X.A. V4<br />
+              {lang === 'es' ? 'Motor Algorítmico' : 'Algorithmic Engine'}<br />
+              {lang === 'es' ? 'Propietario' : 'Proprietary System'}
+            </Typography>
           </Box>
         </Box>
 
-        {/* ── Body: sidebar + content ── */}
-        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* Sidebar */}
-          <Box
-            sx={{
-              width:        { xs: '160px', sm: '220px' },
-              flexShrink:   0,
-              bgcolor:      C.surface,
-              borderRight:  `1px solid ${C.border}`,
-              overflowY:    'auto',
-              scrollbarWidth: 'none',
-              '&::-webkit-scrollbar': { display: 'none' },
-              pt:           '8px',
-            }}
-          >
-            {/* Sidebar label */}
-            <Typography
-              sx={{
-                fontFamily:    MONO,
-                fontSize:      '0.5rem',
-                letterSpacing: '0.14em',
-                color:         C.textDim,
-                textTransform: 'uppercase',
-                px:            '20px',
-                pb:            '10px',
-                pt:            '4px',
-              }}
-            >
-              {lang === 'es' ? 'Módulos' : 'Modules'}
-            </Typography>
-
-            {TABS.map(tab => (
-              <SidebarTab
-                key={tab.id}
-                tab={tab}
-                active={activeTab === tab.id}
-                lang={lang}
-                onClick={() => setActiveTab(tab.id)}
-              />
-            ))}
-
-            {/* Sidebar footer */}
-            <Box
-              sx={{
-                px:         '20px',
-                py:         '16px',
-                mt:         'auto',
-                borderTop:  `1px solid ${C.border}`,
-                position:   'absolute',
-                bottom:     0,
-                left:       0,
-                width:      { xs: '160px', sm: '220px' },
-              }}
-            >
-              <Typography
-                sx={{
-                  fontFamily:    MONO,
-                  fontSize:      '0.48rem',
-                  letterSpacing: '0.08em',
-                  color:         C.textGhost,
-                  lineHeight:    1.6,
-                }}
-              >
-                H.E.X.A. V4<br />
-                {lang === 'es' ? 'Motor Algorítmico' : 'Algorithmic Engine'}<br />
-                {lang === 'es' ? 'Propietario' : 'Proprietary System'}
-              </Typography>
-            </Box>
-          </Box>
-
-          {/* Content pane */}
-          <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: C.bg }}>
-            <ContentArea tabId={activeTab} lang={lang} />
-          </Box>
+        {/* Content pane */}
+        <Box sx={{ flex: 1, bgcolor: C.bg }}>
+          <ContentArea tabId={activeTab} lang={lang} />
         </Box>
       </Box>
     </Box>
