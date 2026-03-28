@@ -336,7 +336,33 @@ function PickProgressBars({ picks, lang }) {
           const isDone = isWon || isLost;
 
           const isML_RL = pick.type === 'moneyline' || pick.type === 'runline';
-          const barColor  = getPickBarColor(pick);
+
+          // Calculate bar width from current and target
+          const barProgress = pick.current != null && pick.target
+            ? Math.min(100, Math.round((pick.current / pick.target) * 100))
+            : 0;
+
+          // Color logic for the progress bar fill
+          const pickBarColor = (() => {
+            if (!pick || pick.status === 'pending' || pick.status === 'not_started') return C.textMuted || '#666';
+            if (pick.status === 'won' || pick.status === 'hitting') return C.green || '#00ff88';
+            if (pick.status === 'lost') return C.red || '#ff3d57';
+            // For Under: green while safely under, amber near target, red if over
+            if (pick.label?.toLowerCase().includes('under')) {
+              if (barProgress < 65) return C.green || '#00ff88';
+              if (barProgress < 85) return C.amber || '#ffaa00';
+              return C.red || '#ff3d57';
+            }
+            // For Over: green shows progress toward goal
+            if (pick.label?.toLowerCase().includes('over')) {
+              if (barProgress >= 100) return C.green || '#00ff88';
+              if (barProgress >= 70) return C.amber || '#ffaa00';
+              return C.accent || '#00d9ff';
+            }
+            return C.accent || '#00d9ff';
+          })();
+
+          const barColor  = pickBarColor;
           const textColor = isWon ? C.green : isLost ? C.red : C.textSecondary;
 
           const mlStatusColor =
@@ -409,7 +435,7 @@ function PickProgressBars({ picks, lang }) {
                         </Box>
                       ) : (
                         <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: barColor }}>
-                          {Math.round((pct || 0) * 100)}%
+                          {barProgress}%
                         </Typography>
                       )}
                     </Box>
@@ -418,7 +444,7 @@ function PickProgressBars({ picks, lang }) {
                     <Box sx={{
                       position: 'absolute', top: 0, left: 0,
                       height:   '100%',
-                      width:    `${Math.min(100, Math.round((pct || 0) * 100))}%`,
+                      width:    `${barProgress}%`,
                       bgcolor:  barColor,
                       borderRadius: '1px',
                       transition: 'width 0.4s ease',
