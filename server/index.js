@@ -399,60 +399,115 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
   }
 });
 
-// POST /api/analyze/safe — Safe Pick mode (highest probability pick across all bet types)
+// POST /api/analyze/safe — Safe Pick mode (supports single gameId or multiple gameIds for parlay safe picks)
 app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => {
-  const { gameId, lang = 'en', date } = req.body;
+  const { gameId, gameIds, lang = 'en', date } = req.body;
   const resolvedDate = date || new Date().toISOString().split('T')[0];
-  // Input validation
-  if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
-  const cost = 2; // Same as deep single
+
+  // Determine if this is a multi-game safe pick request
+  const ids = gameIds && Array.isArray(gameIds) && gameIds.length > 0
+    ? gameIds
+    : gameId ? [gameId] : [];
+
+  if (ids.length === 0) {
+    return res.status(400).json({ success: false, error: 'gameId or gameIds is required' });
+  }
+
+  // Cost: 2 credits per game
+  const cost = 2 * ids.length;
+  const isMulti = ids.length > 1;
 
   try {
-    let games    = await getTodayGames(resolvedDate);
-    let gameData = games.find(g => String(g.gamePk) === String(gameId));
+    let games = await getTodayGames(resolvedDate);
 
-    if (!gameData) {
+    // Fallback: try today if requested date returned nothing
+    if (games.length === 0) {
       const todayStr = new Date().toISOString().split('T')[0];
       if (todayStr !== resolvedDate) {
-        const retryGames = await getTodayGames(todayStr);
-        gameData = retryGames.find(g => String(g.gamePk) === String(gameId));
-        if (gameData) games = retryGames;
+        games = await getTodayGames(todayStr);
       }
     }
 
-    if (!gameData) return res.status(404).json({ success: false, error: `Partido ${gameId} no encontrado` });
-
-    let matchedOdds = null;
-    try {
-      const allOdds = await getGameOdds();
-      matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
-    } catch { /* odds are optional */ }
+    let allOdds = [];
+    try { allOdds = await getGameOdds(); } catch { /* optional */ }
 
     const updatedUser = await deductCredits(req, res, cost);
     if (!updatedUser) return;
 
-    let analysis;
-    try {
-      const contextString = await buildContext(gameData, matchedOdds);
-      analysis = await analyzeSafe({ contextString, lang });
-    } catch (err) {
-      await refundCredits(updatedUser.id, cost, updatedUser.email);
-      const isTimeout = err.message === 'TIMEOUT';
-      return res.status(500).json({
-        success: false,
-        error: isTimeout
-          ? 'El análisis tardó demasiado. Créditos reembolsados. Por favor reintenta.'
-          : 'Análisis fallido. Tus créditos han sido reembolsados.',
+    // Analyze each game individually in parallel
+    const results = await Promise.allSettled(
+      ids.map(async (id) => {
+        const gameData = games.find(g => String(g.gamePk) === String(id));
+        if (!gameData) return { gameId: id, error: `Game ${id} not found` };
+
+        let matchedOdds = null;
+        try {
+          matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+        } catch { /* optional */ }
+
+        try {
+          const contextString = await buildContext(gameData, matchedOdds);
+          const analysis = await analyzeSafe({ contextString, lang });
+
+          const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
+          const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
+
+          return {
+            gameId: id,
+            matchup: `${awayAbbr} @ ${homeAbbr}`,
+            data: analysis.data,
+            rawText: analysis.rawText,
+            parseError: analysis.parseError,
+            odds: matchedOdds ?? undefined,
+          };
+        } catch (err) {
+          return {
+            gameId: id,
+            matchup: `Game ${id}`,
+            error: err.message === 'TIMEOUT' ? 'Analysis timed out' : err.message,
+          };
+        }
+      })
+    );
+
+    const processedResults = results.map(r =>
+      r.status === 'fulfilled' ? r.value : { error: r.reason?.message ?? 'Unknown error' }
+    );
+
+    const successCount = processedResults.filter(r => r.data && !r.error).length;
+    const failCount = processedResults.filter(r => r.error).length;
+
+    // If any failed, refund those credits
+    if (failCount > 0) {
+      await refundCredits(updatedUser.id, failCount * 2, updatedUser.email);
+    }
+
+    // For single game (backward compatible), return the old format
+    if (!isMulti) {
+      const single = processedResults[0];
+      if (single.error) {
+        return res.status(500).json({ success: false, error: single.error });
+      }
+      return res.json({
+        success: true,
+        data: single.data,
+        parseError: single.parseError,
+        rawText: single.rawText,
+        credits: updatedUser.credits - (failCount * 2),
+        mode: 'safe',
       });
     }
 
+    // Multi-game: return array of results
     res.json({
       success: true,
-      data:    analysis.data,
-      parseError: analysis.parseError,
-      rawText: analysis.rawText,
-      credits: updatedUser.credits,
-      mode:    'safe',
+      data: {
+        mode: 'safe_multi',
+        results: processedResults,
+        summary: { total: ids.length, analyzed: successCount, failed: failCount },
+      },
+      credits: updatedUser.credits - (failCount * 2),
+      mode: 'safe',
     });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -751,7 +806,7 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       type, matchup, pick, oracle_confidence, bet_value,
       model_risk, oracle_report, hexa_hunch, alert_flags,
       probability_model, best_pick, model, language,
-      odds_at_pick, odds_details,
+      odds_at_pick, odds_details, kelly_recommendation,
     } = req.body;
 
     // Calculate implied probability server-side from the American odds provided by the client
@@ -763,9 +818,9 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       `INSERT INTO picks (
          user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
          oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
-         model, language, odds_at_pick, implied_prob_at_pick, odds_details
+         model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         req.user.id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
         oracle_report, hexa_hunch,
@@ -774,6 +829,7 @@ app.post('/api/picks', verifyToken, async (req, res) => {
         odds_at_pick ?? null,
         implied_prob_at_pick,
         odds_details != null ? JSON.stringify(odds_details) : null,
+        kelly_recommendation ?? null,
       ]
     );
     res.json({ success: true, data: rows[0] });
