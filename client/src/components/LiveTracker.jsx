@@ -65,6 +65,24 @@ const T = {
   },
 };
 
+// ── Pick bar color helper ─────────────────────────────────────────────────────
+
+function getPickBarColor(pick) {
+  if (!pick || pick.status === 'pending' || pick.status === 'not_started') return C.textMuted;
+  if (pick.status === 'won' || pick.status === 'hitting' || pick.status === 'winning' || pick.status === 'covering') return C.green || '#00ff88';
+  if (pick.status === 'lost' || pick.status === 'losing' || pick.status === 'not_covering') return C.red || '#ff3d57';
+
+  if (pick.type === 'total' || pick.type === 'player_prop') {
+    if (pick.direction === 'over') {
+      return pick.progress < 70 ? (C.green || '#00ff88') : (pick.progress < 90 ? (C.amber || '#ffaa00') : (C.green || '#00ff88'));
+    } else {
+      return pick.progress < 60 ? (C.green || '#00ff88') : (pick.progress < 85 ? (C.amber || '#ffaa00') : (C.red || '#ff3d57'));
+    }
+  }
+
+  return C.accent;
+}
+
 // ── Diamond SVG ───────────────────────────────────────────────────────────────
 
 function DiamondSVG({ runners, size = 70 }) {
@@ -185,15 +203,27 @@ function Scoreboard({ game, lang }) {
         </thead>
         <tbody>
           {[
-            { label: away?.abbreviation || 'AWY', row: awayRow, rhe: away },
-            { label: home?.abbreviation || 'HOM', row: homeRow, rhe: home },
-          ].map(({ label, row, rhe }) => (
+            { label: away?.abbreviation || 'AWY', row: awayRow, rhe: away, teamId: away?.id },
+            { label: home?.abbreviation || 'HOM', row: homeRow, rhe: home, teamId: home?.id },
+          ].map(({ label, row, rhe, teamId }) => (
             <tr key={label}>
               <Box
                 component="td"
                 sx={{ fontFamily: BARLOW, fontSize: '0.65rem', letterSpacing: '0.1em', color: C.textSecondary, pr: '8px', py: '4px', whiteSpace: 'nowrap' }}
               >
-                {label}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {teamId && (
+                    <img
+                      src={`https://www.mlbstatic.com/team-logos/${teamId}.svg`}
+                      alt=""
+                      style={{ width: 16, height: 16 }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  )}
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.65rem', letterSpacing: '0.1em', color: C.textSecondary }}>
+                    {label}
+                  </Typography>
+                </Box>
               </Box>
               {row.map((val, i) => (
                 <Box
@@ -300,52 +330,102 @@ function PickProgressBars({ picks, lang }) {
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {picks.map((pick, i) => {
-          const { label, current, target, status, pct } = pick;
+          const { label, current, target, status, pct, details } = pick;
           const isWon  = status === 'won';
           const isLost = status === 'lost';
           const isDone = isWon || isLost;
 
-          const barColor  = isWon ? C.green : isLost ? C.red : pct >= 0.5 ? C.cyan : C.amber;
+          const isML_RL = pick.type === 'moneyline' || pick.type === 'runline';
+          const barColor  = getPickBarColor(pick);
           const textColor = isWon ? C.green : isLost ? C.red : C.textSecondary;
+
+          const mlStatusColor =
+            status === 'winning' || status === 'covering' || status === 'won'
+              ? (C.green || '#00ff88')
+              : status === 'losing' || status === 'not_covering' || status === 'lost'
+                ? (C.red || '#ff3d57')
+                : (C.amber || '#ffaa00');
+
+          const mlBorderColor =
+            status === 'winning' || status === 'covering' || status === 'won'
+              ? (C.greenLine || 'rgba(0,255,136,0.3)')
+              : status === 'losing' || status === 'not_covering' || status === 'lost'
+                ? (C.redLine || 'rgba(255,61,87,0.3)')
+                : (C.amberLine || 'rgba(255,170,0,0.3)');
+
+          const mlLabel =
+            status === 'winning' || status === 'covering' ? '✓ W' :
+            status === 'losing'  || status === 'not_covering' ? '✗ L' :
+            status === 'tied' ? '— T' :
+            status === 'won'  ? '✓ WON' :
+            status === 'lost' ? '✗ LOST' : '—';
 
           return (
             <Box key={i}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '4px' }}>
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: textColor, letterSpacing: '0.05em' }}>
-                  {label}
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted }}>
-                    {current}/{target}
+              {isML_RL ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary }}>
+                    {label}
                   </Typography>
-                  {isDone ? (
-                    <Box sx={{
-                      px: '6px', py: '1px',
-                      border: `1px solid ${isWon ? C.greenLine : C.redLine}`,
-                      bgcolor: isWon ? C.greenDim : C.redDim,
-                      fontFamily: BARLOW, fontSize: '0.5rem',
-                      color: isWon ? C.green : C.red,
-                      letterSpacing: '0.1em',
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {details && (
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textSecondary }}>
+                        {details}
+                      </Typography>
+                    )}
+                    <Typography sx={{
+                      fontFamily: MONO, fontSize: '0.75rem', fontWeight: 700,
+                      color: mlStatusColor,
+                      padding: '2px 8px',
+                      border: `1px solid`,
+                      borderColor: mlBorderColor,
+                      borderRadius: '2px',
+                      letterSpacing: '1px',
                     }}>
-                      {isWon ? 'WON' : 'LOST'}
-                    </Box>
-                  ) : (
-                    <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: barColor }}>
-                      {Math.round((pct || 0) * 100)}%
+                      {mlLabel}
                     </Typography>
-                  )}
+                  </Box>
                 </Box>
-              </Box>
-              <Box sx={{ position: 'relative', height: '4px', bgcolor: `${barColor}20`, borderRadius: '1px' }}>
-                <Box sx={{
-                  position: 'absolute', top: 0, left: 0,
-                  height:   '100%',
-                  width:    `${Math.min(100, Math.round((pct || 0) * 100))}%`,
-                  bgcolor:  barColor,
-                  borderRadius: '1px',
-                  transition: 'width 0.4s ease',
-                }} />
-              </Box>
+              ) : (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '4px' }}>
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: textColor, letterSpacing: '0.05em' }}>
+                      {label}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted }}>
+                        {current}/{target}
+                      </Typography>
+                      {isDone ? (
+                        <Box sx={{
+                          px: '6px', py: '1px',
+                          border: `1px solid ${isWon ? C.greenLine : C.redLine}`,
+                          bgcolor: isWon ? C.greenDim : C.redDim,
+                          fontFamily: BARLOW, fontSize: '0.5rem',
+                          color: isWon ? C.green : C.red,
+                          letterSpacing: '0.1em',
+                        }}>
+                          {isWon ? 'WON' : 'LOST'}
+                        </Box>
+                      ) : (
+                        <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: barColor }}>
+                          {Math.round((pct || 0) * 100)}%
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                  <Box sx={{ position: 'relative', height: '4px', bgcolor: `${barColor}20`, borderRadius: '1px' }}>
+                    <Box sx={{
+                      position: 'absolute', top: 0, left: 0,
+                      height:   '100%',
+                      width:    `${Math.min(100, Math.round((pct || 0) * 100))}%`,
+                      bgcolor:  barColor,
+                      borderRadius: '1px',
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </Box>
+                </>
+              )}
             </Box>
           );
         })}
@@ -401,6 +481,14 @@ function LiveGameCard({ game, picks, lang }) {
       >
         {/* Teams */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {game.away?.id && (
+            <img
+              src={`https://www.mlbstatic.com/team-logos/${game.away.id}.svg`}
+              alt={game.away.abbreviation}
+              style={{ width: 24, height: 24, marginRight: 6 }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          )}
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.95rem', letterSpacing: '0.15em', color: C.textSecondary }}>
             {game.away?.abbreviation || 'AWY'}
           </Typography>
@@ -414,6 +502,14 @@ function LiveGameCard({ game, picks, lang }) {
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.95rem', letterSpacing: '0.15em', color: C.textSecondary }}>
             {game.home?.abbreviation || 'HOM'}
           </Typography>
+          {game.home?.id && (
+            <img
+              src={`https://www.mlbstatic.com/team-logos/${game.home.id}.svg`}
+              alt={game.home.abbreviation}
+              style={{ width: 24, height: 24, marginLeft: 6 }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          )}
         </Box>
 
         {/* Inning indicator */}
@@ -443,7 +539,7 @@ function LiveGameCard({ game, picks, lang }) {
           <Scoreboard game={game} lang={lang} />
 
           {/* Situation panel */}
-          <Box sx={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'space-between' }}>
             {/* Diamond + outs */}
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
               <DiamondSVG runners={runners} size={72} />
@@ -476,6 +572,36 @@ function LiveGameCard({ game, picks, lang }) {
                   {balls}–{strikes}
                 </Typography>
               </Box>
+            </Box>
+
+            {/* Player photos — right side */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', ml: 'auto' }}>
+              {situation?.currentBatter?.id && (
+                <Box sx={{ textAlign: 'center' }}>
+                  <img
+                    src={`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${situation.currentBatter.id}/headshot/67/current`}
+                    alt={situation.currentBatter.name}
+                    style={{ width: 56, height: 56, borderRadius: '50%', border: `2px solid ${C.accent}`, objectFit: 'cover', background: C.surface }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: '2px', letterSpacing: '1px' }}>
+                    AB
+                  </Typography>
+                </Box>
+              )}
+              {situation?.currentPitcher?.id && (
+                <Box sx={{ textAlign: 'center' }}>
+                  <img
+                    src={`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${situation.currentPitcher.id}/headshot/67/current`}
+                    alt={situation.currentPitcher.name}
+                    style={{ width: 56, height: 56, borderRadius: '50%', border: `2px solid ${C.orange || '#ff6600'}`, objectFit: 'cover', background: C.surface }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: '2px', letterSpacing: '1px' }}>
+                    P
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </Box>
 
