@@ -1091,6 +1091,23 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Baseball Savant unavailable — continuing without Statcast data:', err.message);
   }
 
+  // Fallback to hardcoded park factors if dynamic fetch returned nothing
+  if (!parkFactorData) {
+    const homeAbbr = gameData.teams?.home?.abbreviation;
+    const hardcoded = HISTORICAL_MLB_CONTEXT.park_factors_2025[homeAbbr];
+    if (hardcoded) {
+      parkFactorData = {
+        team: homeAbbr,
+        venue_name: gameData.venue?.name ?? hardcoded.description?.split(' - ')[0] ?? null,
+        park_factor_overall: hardcoded.overall,
+        park_factor_HR: hardcoded.hr,
+        park_factor_R: hardcoded.r,
+        park_factor_H: null,
+      };
+      console.log(`[context-builder] Using hardcoded park factor for ${homeAbbr}: overall=${hardcoded.overall}`);
+    }
+  }
+
   // ── Real-time weather (Open-Meteo, non-blocking) ─────────────────────────
   let weatherData = null;
   try {
