@@ -22,6 +22,7 @@ function ResultBadge({ result }) {
   const map = {
     won:     { label: "WON",     bg: C.greenDim,  color: C.green,  border: C.greenLine  },
     lost:    { label: "LOST",    bg: C.redDim,    color: C.red,    border: C.redLine    },
+    push:    { label: "PUSH",    bg: C.amberDim,  color: C.amber,  border: C.amberLine  },
     pending: { label: "PENDING", bg: C.cyanDim,   color: C.cyan,   border: C.cyanLine   },
   };
   const s = map[result] || map.pending;
@@ -500,6 +501,7 @@ export default function BankrollTracker({ lang = "es" }) {
               { label: "WIN_RATE", value: (stats?.general?.winRate ?? 0) + "%", color: C.cyan, border: C.cyanLine },
               { label: "WON", value: stats?.general?.wins ?? 0, color: C.green, border: C.greenLine },
               { label: "LOST", value: stats?.general?.losses ?? 0, color: C.red, border: C.redLine },
+              { label: "PUSH", value: stats?.general?.pushes ?? 0, color: C.amber, border: C.amberLine },
             ].map(c => (
               <div key={c.label} style={{ background: C.surface, border: `1px solid ${c.border}`, borderRadius: 0, padding: "12px 14px" }}>
                 <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }}>{c.label}</div>
@@ -694,6 +696,11 @@ function BetRow({ bet, onUpdate, onDelete }) {
               background: C.redDim, color: C.red, cursor: "pointer",
               fontFamily: MONO, fontSize: 8, letterSpacing: 2,
             }}>✗ LOST</button>
+            <button onClick={() => handleResult("push")} disabled={updating} style={{
+              padding: "4px 12px", borderRadius: 0, border: `1px solid ${C.amberLine}`,
+              background: C.amberDim, color: C.amber, cursor: "pointer",
+              fontFamily: MONO, fontSize: 8, letterSpacing: 2,
+            }}>⇌ PUSH</button>
           </>
         )}
         <button onClick={() => onDelete(bet.id)} style={{

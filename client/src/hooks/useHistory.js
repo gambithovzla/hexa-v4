@@ -278,10 +278,11 @@ export default function useHistory() {
     const total    = history.length;
     const wins     = history.filter(e => e.result === 'win').length;
     const losses   = history.filter(e => e.result === 'loss').length;
+    const pushes   = history.filter(e => e.result === 'push').length;
     const pending  = history.filter(e => e.result === 'pending').length;
-    const resolved = wins + losses;
+    const resolved = wins + losses; // pushes excluded from win rate
     const winRate  = resolved > 0 ? Math.round((wins / resolved) * 100) : 0;
-    return { total, wins, losses, pending, winRate };
+    return { total, wins, losses, pushes, pending, winRate };
   }
 
   return { history, addPick, markResult, deletePick, clearHistory, getStats };
