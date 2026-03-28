@@ -68,7 +68,8 @@
       "parlay": "Parlay",
       "fullDay": "Full Day",
       "fullday": "Full Day",
-      "batch": "Batch Scan"
+      "batch": "Batch Scan",
+      "live": "Live"
     },
     "result": {
       "win": "WIN",

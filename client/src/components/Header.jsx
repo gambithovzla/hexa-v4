@@ -32,6 +32,7 @@ const TABS = [
   { value: 'parlay',  en: 'Parlay',      es: 'Parlay'           },
   { value: 'bankroll', en: 'Bankroll',    es: 'Bankroll'         },
   { value: 'history', en: 'History',     es: 'Historial'        },
+  { value: 'live',    en: 'Live',        es: 'En Vivo'          },
   { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan', adminOnly: true },
 ];
 

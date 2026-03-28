@@ -25,6 +25,7 @@ import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
 import OracleChat          from './components/OracleChat';
 import BatchScanPanel      from './components/BatchScanPanel';
+import LiveTracker         from './components/LiveTracker';
 import useHistory           from './hooks/useHistory';
 import { C, MONO } from './theme';
 
@@ -194,6 +195,11 @@ export default function App() {
 
           {activeTab === 'bankroll' && (
             <BankrollTracker lang={lang} />
+          )}
+
+          {/* Live Tracker */}
+          {activeTab === 'live' && (
+            <LiveTracker lang={lang} />
           )}
 
           {/* Batch Scan (admin only) */}
