@@ -12,6 +12,13 @@
 const MLB_BASE = 'https://statsapi.mlb.com/api/v1';
 const SEASON = new Date().getFullYear();
 
+// ---------------------------------------------------------------------------
+// Caché en memoria para getTodayGames — evita spam a la API de MLB
+// TTL: 10 minutos por fecha. Formato: Map<dateStr, { data, expiresAt }>
+// ---------------------------------------------------------------------------
+const gamesCache = new Map();
+const GAMES_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos
+
 // Seasons to try in order — current year may have no data early in calendar year
 const SEASON_FALLBACK = SEASON >= 2026 ? [SEASON, 2025, 2024] : [SEASON, SEASON - 1];
 
@@ -248,6 +255,14 @@ let teamsCache = null;
  */
 export async function getTodayGames(date) {
   const targetDate = date ?? new Date().toISOString().split('T')[0];
+
+  // Servir desde caché si no ha expirado
+  const cached = gamesCache.get(targetDate);
+  if (cached && Date.now() < cached.expiresAt) {
+    console.log(`[MLB API] Partidos para ${targetDate} servidos desde caché (expira en ${Math.round((cached.expiresAt - Date.now()) / 1000)}s)`);
+    return cached.data;
+  }
+
   const url =
     `${MLB_BASE}/schedule` +
     `?date=${targetDate}` +
@@ -258,7 +273,11 @@ export async function getTodayGames(date) {
     const data = await fetchJSON(url);
     const rawGames = (data.dates ?? []).flatMap(d => d.games ?? []);
     const games = rawGames.map(normalizeGame);
-    console.log(`[MLB API] ${games.length} partidos encontrados para ${targetDate}`);
+    console.log(`[MLB API] ${games.length} partidos encontrados para ${targetDate} — guardados en caché por 10 min`);
+
+    // Guardar en caché
+    gamesCache.set(targetDate, { data: games, expiresAt: Date.now() + GAMES_CACHE_TTL_MS });
+
     return games;
   } catch (err) {
     console.error('[MLB API] Error en getTodayGames:', err.message);
