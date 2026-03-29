@@ -260,7 +260,10 @@ export async function resolvePendingPicks() {
   // 2. Group picks by date (YYYY-MM-DD from created_at)
   const byDate = {};
   for (const pick of picks) {
-    const date = new Date(pick.created_at).toISOString().split('T')[0];
+    // Use ET date from created_at (MLB games are scheduled in ET)
+    // This prevents the UTC midnight boundary from shifting the date
+    const pickDate = new Date(pick.created_at);
+    const date = pickDate.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     if (!byDate[date]) byDate[date] = [];
     byDate[date].push(pick);
   }

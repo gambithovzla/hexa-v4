@@ -1260,8 +1260,8 @@ runMigrations()
           }).format(new Date()),
           10
         );
-        // Window: 22:00–02:59 ET (when MLB games finish)
-        if (etHour >= 22 || etHour < 3) {
+        // Window: 19:00–05:59 ET (west coast games finish ~7pm ET; extras/rain delays can run past 3am)
+        if (etHour >= 19 || etHour < 6) {
           console.log(`[pick-resolver] Scheduled run triggered (ET hour: ${etHour})`);
           resolvePendingPicks().catch(err => {
             console.error('[pick-resolver] Scheduled run failed:', err.message);
