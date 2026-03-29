@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
@@ -1080,6 +1080,7 @@ export async function buildContext(gameData, oddsData = null) {
   let awayPitcherSavant = null;
   let savantCacheStatus = null;
   let savantBatters     = { home: [], away: [] };
+  let batterSplitsMap   = { home: [], away: [] };
   let parkFactorData    = null;
   let catcherFraming    = { home: null, away: null };
   let oaaOutfielders    = []; // [{ player, side:'Home'|'Away', oaa }]
@@ -1137,6 +1138,42 @@ export async function buildContext(gameData, oddsData = null) {
       if (idx < homeBattersFull.length) savantBatters.home.push({ name, savant });
       else                               savantBatters.away.push({ name, savant });
     });
+
+    // ── Individual batter splits vs LHP/RHP (P4 enhancement) ────────────────
+    // Fetch splits for ALL lineup batters (not just top 3) to support player props
+    const allHomeBatters = Array.isArray(homeLineup) ? homeLineup : [];
+    const allAwayBatters = Array.isArray(awayLineup) ? awayLineup : [];
+    const splitFetches = [];
+    const splitMeta = []; // track which batter each fetch belongs to
+
+    for (const b of allHomeBatters) {
+      const id = b.id ?? b.playerId ?? null;
+      const name = b.fullName ?? b.name ?? 'Unknown';
+      if (id) {
+        splitFetches.push(getBatterSplits(id));
+        splitMeta.push({ name, side: 'home', id });
+      }
+    }
+    for (const b of allAwayBatters) {
+      const id = b.id ?? b.playerId ?? null;
+      const name = b.fullName ?? b.name ?? 'Unknown';
+      if (id) {
+        splitFetches.push(getBatterSplits(id));
+        splitMeta.push({ name, side: 'away', id });
+      }
+    }
+
+    if (splitFetches.length > 0) {
+      const splitResults = await Promise.allSettled(splitFetches);
+      splitResults.forEach((result, idx) => {
+        const meta = splitMeta[idx];
+        const splits = result.status === 'fulfilled' ? result.value : null;
+        if (splits && (splits.vsLHP || splits.vsRHP)) {
+          batterSplitsMap[meta.side].push({ name: meta.name, id: meta.id, splits });
+        }
+      });
+      console.log(`[context-builder] Individual batter splits: ${batterSplitsMap.home.length} home, ${batterSplitsMap.away.length} away`);
+    }
 
     parkFactorData      = referenceResults[0].status === 'fulfilled' ? referenceResults[0].value : null;
     catcherFraming.home = referenceResults[1].status === 'fulfilled' ? referenceResults[1].value : null;
@@ -1326,6 +1363,57 @@ export async function buildContext(gameData, oddsData = null) {
       blocks.push(`${awayName} (Away):`);
       savantBatters.away.forEach(({ name, savant }) => blocks.push(batterSavantLine(name, savant)));
     }
+    blocks.push('');
+  }
+
+  // ── Individual Batter Splits vs LHP/RHP ──────────────────────────────────
+  if (batterSplitsMap.home.length > 0 || batterSplitsMap.away.length > 0) {
+    const rivalPitcherHandForHome = awayPitcher?.throwingHand ?? null; // home batters face away pitcher
+    const rivalPitcherHandForAway = homePitcher?.throwingHand ?? null; // away batters face home pitcher
+
+    blocks.push(section('INDIVIDUAL BATTER SPLITS vs LHP/RHP'));
+
+    const formatBatterSplit = (batter, rivalHand) => {
+      const s = batter.splits;
+      const fmtS = (v) => v != null ? Number(v).toFixed(3) : 'N/A';
+      const lines = [];
+
+      if (rivalHand === 'L' && s.vsLHP) {
+        const sp = s.vsLHP;
+        lines.push(`  ${batter.name} vs LHP: AVG ${fmtS(sp.avg)} | OBP ${fmtS(sp.obp)} | SLG ${fmtS(sp.slg)} | OPS ${fmtS(sp.ops)} | HR ${sp.homeRuns ?? 'N/A'} | K ${sp.strikeOuts ?? 'N/A'} (${sp.atBats ?? '?'} AB) ← MATCHUP SPLIT`);
+      } else if (rivalHand === 'R' && s.vsRHP) {
+        const sp = s.vsRHP;
+        lines.push(`  ${batter.name} vs RHP: AVG ${fmtS(sp.avg)} | OBP ${fmtS(sp.obp)} | SLG ${fmtS(sp.slg)} | OPS ${fmtS(sp.ops)} | HR ${sp.homeRuns ?? 'N/A'} | K ${sp.strikeOuts ?? 'N/A'} (${sp.atBats ?? '?'} AB) ← MATCHUP SPLIT`);
+      } else {
+        // Show both when pitcher hand unknown
+        if (s.vsLHP) {
+          const sp = s.vsLHP;
+          lines.push(`  ${batter.name} vs LHP: AVG ${fmtS(sp.avg)} | OPS ${fmtS(sp.ops)} (${sp.atBats ?? '?'} AB)`);
+        }
+        if (s.vsRHP) {
+          const sp = s.vsRHP;
+          lines.push(`  ${batter.name} vs RHP: AVG ${fmtS(sp.avg)} | OPS ${fmtS(sp.ops)} (${sp.atBats ?? '?'} AB)`);
+        }
+      }
+      return lines;
+    };
+
+    if (batterSplitsMap.home.length > 0) {
+      blocks.push(`${homeName} (Home) vs ${rivalPitcherHandForHome ?? '?'}HP:`);
+      batterSplitsMap.home.forEach(b => {
+        const lines = formatBatterSplit(b, rivalPitcherHandForHome);
+        lines.forEach(l => blocks.push(l));
+      });
+    }
+    if (batterSplitsMap.away.length > 0) {
+      blocks.push(`${awayName} (Away) vs ${rivalPitcherHandForAway ?? '?'}HP:`);
+      batterSplitsMap.away.forEach(b => {
+        const lines = formatBatterSplit(b, rivalPitcherHandForAway);
+        lines.forEach(l => blocks.push(l));
+      });
+    }
+
+    blocks.push('ORACLE INSTRUCTION: Use individual batter splits for player prop analysis. A batter with OPS > .850 vs the matchup hand = strong hit/TB prop candidate. OPS < .600 vs matchup hand = fade candidate. Prioritize these splits over season averages for props.');
     blocks.push('');
   }
 
