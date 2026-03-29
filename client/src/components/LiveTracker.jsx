@@ -661,7 +661,7 @@ export default function LiveTracker({ lang = 'en' }) {
     setLoading(true);
     try {
       // 1. Get today's games
-      const today    = new Date().toISOString().split('T')[0];
+      const today    = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
       const gamesRes = await fetch(`${API_URL}/api/games?date=${today}`);
       const gamesJson = await gamesRes.json();
       const allGames  = gamesJson.success ? gamesJson.data : [];
@@ -669,12 +669,18 @@ export default function LiveTracker({ lang = 'en' }) {
       // 2. Filter live games
       const liveGamePks = allGames
         .filter(g => {
-          const status = g.status?.simplified ?? g.status?.code;
+          const simplified = (g.status?.simplified ?? '').toLowerCase();
+          const abstract   = (g.status?.abstractGameState ?? '').toLowerCase();
+          const detailed   = (g.status?.detailedState ?? g.status?.description ?? '').toLowerCase();
+          const code       = g.status?.code ?? g.status?.codedGameState ?? '';
           return (
-            status === 'live' ||
-            g.status?.code === 'I' ||
-            g.status?.code === 'MA' ||
-            g.status?.description === 'In Progress'
+            simplified === 'live' ||
+            abstract   === 'live' ||
+            detailed   === 'in progress' ||
+            detailed   === 'warmup' ||
+            detailed   === 'manager challenge' ||
+            code       === 'I' ||
+            code       === 'MA'
           );
         })
         .map(g => g.gamePk);
