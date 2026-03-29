@@ -8,6 +8,7 @@
 
 import pool from './db.js';
 import { getTodayGames } from './mlb-api.js';
+import { getLiveGameData } from './live-feed.js';
 
 // ── MLB abbreviation → nickname (all 30 franchises) ──────────────────────────
 
@@ -106,6 +107,54 @@ function findGame(matchup, games) {
   return null;
 }
 
+// ── Player prop helpers ───────────────────────────────────────────────────────
+
+function normalizeStat(raw) {
+  const s = raw.toLowerCase().replace(/[^a-záéíóú\s]/g, '').trim();
+  if (/hits?$/.test(s)) return 'hits';
+  if (/home\s*runs?|hr|jonron/.test(s)) return 'homeRuns';
+  if (/total\s*bases?|bases\s*totales/.test(s)) return 'totalBases';
+  if (/rbi|carreras?\s*impulsadas?|runs?\s*batted/.test(s)) return 'rbi';
+  if (/strikeouts?|ponches?|k/.test(s)) return 'strikeOuts';
+  if (/stolen\s*bases?|bases?\s*robadas?|sb/.test(s)) return 'stolenBases';
+  if (/walks?|bases?\s*por\s*bolas?|bb/.test(s)) return 'walks';
+  return null;
+}
+
+function findPlayerStat(playerStats, playerName, stat) {
+  if (!playerStats || !playerName || !stat) return null;
+  const target = playerName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  for (const side of ['home', 'away']) {
+    const sideData = playerStats[side];
+    if (!sideData) continue;
+
+    // Check batters for batting stats
+    if (stat !== 'strikeOuts' || stat === 'strikeOuts') {
+      const batters = sideData.batters ?? [];
+      for (const b of batters) {
+        const name = (b.name ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (name.includes(target) || target.includes(name)) {
+          if (stat === 'strikeOuts' && b[stat] != null) return b[stat];
+          if (b[stat] != null) return b[stat];
+        }
+      }
+    }
+
+    // Check pitchers for strikeouts
+    if (stat === 'strikeOuts') {
+      const pitchers = sideData.pitchers ?? [];
+      for (const p of pitchers) {
+        const name = (p.name ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (name.includes(target) || target.includes(name)) {
+          if (p[stat] != null) return p[stat];
+        }
+      }
+    }
+  }
+  return null;
+}
+
 // ── Pick parsing ──────────────────────────────────────────────────────────────
 
 /**
@@ -171,10 +220,13 @@ function parsePick(pickStr) {
   m = cleaned.match(new RegExp(`^(.+?)\\s+-(\\d+\\.?\\d*)\\s+${RL.source}$`, 'i'));
   if (m) return { type: 'runline_fav', team: m[1].trim(), line: parseFloat(m[2]) };
 
-  // Player prop — "Player Name — Over/Más de X.X stat"
-  // We can't resolve player props automatically, skip gracefully
-  m = cleaned.match(/^.+?\s*[—–-]\s*(?:Over|Under|M[aá]s\s+de|Menos\s+de)\s+(\d+\.?\d*)\s+/i);
-  if (m) return { type: 'player_prop', team: null, line: parseFloat(m[1]), unresolvable: true };
+  // Player prop: "Player Name — Over/Más de X.X hits/HR/strikeouts/etc (-odds)"
+  // Also: "Player Name — Under/Menos de X.X hits (-odds)"
+  m = cleaned.match(/^(.+?)\s*[—–-]\s*(?:Over|M[aá]s\s+de)\s+(\d+\.?\d*)\s+(.+)$/i);
+  if (m) return { type: 'player_prop', direction: 'over', player: m[1].trim(), line: parseFloat(m[2]), stat: normalizeStat(m[3].trim()) };
+
+  m = cleaned.match(/^(.+?)\s*[—–-]\s*(?:Under|Menos\s+de)\s+(\d+\.?\d*)\s+(.+)$/i);
+  if (m) return { type: 'player_prop', direction: 'under', player: m[1].trim(), line: parseFloat(m[2]), stat: normalizeStat(m[3].trim()) };
 
   return null;
 }
@@ -317,8 +369,56 @@ export async function resolvePendingPicks() {
           continue;
         }
 
-        if (parsed.unresolvable) {
-          console.log(`[pick-resolver] Pick #${pick.id}: player prop — skipping (cannot auto-resolve)`);
+        if (parsed.type === 'player_prop') {
+          // Need boxscore data to resolve player props
+          if (!parsed.stat) {
+            console.log(`[pick-resolver] Pick #${pick.id}: player prop with unknown stat type — skipping`);
+            continue;
+          }
+
+          // Find the game for this pick
+          const ppGame = findGame(pick.matchup, games);
+          if (!ppGame) {
+            console.log(`[pick-resolver] Pick #${pick.id}: no matching game for "${pick.matchup}"`);
+            continue;
+          }
+
+          // Only resolve if game is final
+          const gameStatus = (ppGame.status?.simplified ?? ppGame.status?.abstractGameState ?? '').toLowerCase();
+          if (gameStatus !== 'final') {
+            console.log(`[pick-resolver] Pick #${pick.id}: game not final yet (${gameStatus})`);
+            continue;
+          }
+
+          try {
+            const liveData = await getLiveGameData(ppGame.gamePk);
+            if (!liveData?.playerStats) {
+              console.log(`[pick-resolver] Pick #${pick.id}: no playerStats in boxscore`);
+              continue;
+            }
+
+            const actual = findPlayerStat(liveData.playerStats, parsed.player, parsed.stat);
+            if (actual == null) {
+              console.log(`[pick-resolver] Pick #${pick.id}: player "${parsed.player}" stat "${parsed.stat}" not found in boxscore`);
+              continue;
+            }
+
+            let result;
+            if (parsed.direction === 'over') {
+              result = actual > parsed.line ? 'won' : actual === parsed.line ? 'push' : 'lost';
+            } else {
+              result = actual < parsed.line ? 'won' : actual === parsed.line ? 'push' : 'lost';
+            }
+
+            await pool.query('UPDATE picks SET result = $1 WHERE id = $2', [result, pick.id]);
+            summary.resolved++;
+            if (result === 'won') summary.wins++;
+            else if (result === 'lost') summary.losses++;
+            else summary.pushes++;
+            console.log(`[pick-resolver] Pick #${pick.id}: ${parsed.player} ${parsed.stat} = ${actual} vs ${parsed.direction} ${parsed.line} → ${result}`);
+          } catch (err) {
+            summary.errors.push(`Pick #${pick.id}: player prop resolve error — ${err.message}`);
+          }
           continue;
         }
 
