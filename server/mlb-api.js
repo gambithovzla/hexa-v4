@@ -641,3 +641,164 @@ export async function getGameContext(gameId) {
     throw err;
   }
 }
+
+// ---------------------------------------------------------------------------
+// getBullpenUsage — bullpen workload for a team over the last 3 days
+// ---------------------------------------------------------------------------
+
+function parseInningsPitched(ip) {
+  if (!ip && ip !== 0) return 0;
+  const str = String(ip);
+  const parts = str.split('.');
+  const whole = parseInt(parts[0], 10) || 0;
+  const thirds = parseInt(parts[1] || '0', 10);
+  return whole + (thirds / 3);
+}
+
+function ipToDisplay(decimalIP) {
+  const whole = Math.floor(decimalIP);
+  const thirds = Math.round((decimalIP - whole) * 3);
+  return `${whole}.${thirds}`;
+}
+
+export async function getBullpenUsage(teamId) {
+  if (!teamId) return null;
+
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const threeDaysAgoDate = new Date();
+    threeDaysAgoDate.setDate(threeDaysAgoDate.getDate() - 3);
+    const threeDaysAgo = threeDaysAgoDate.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+    const scheduleUrl = `${MLB_BASE}/schedule?teamId=${teamId}&startDate=${threeDaysAgo}&endDate=${today}&sportId=1&gameType=R`;
+    const scheduleData = await fetchJSON(scheduleUrl);
+
+    const finishedGames = [];
+    for (const dateEntry of (scheduleData.dates ?? [])) {
+      for (const game of (dateEntry.games ?? [])) {
+        if (game.status?.abstractGameState === 'Final') {
+          finishedGames.push({ gamePk: game.gamePk, date: dateEntry.date });
+        }
+      }
+    }
+
+    const recentGames = finishedGames.slice(-3);
+
+    // Map: playerId -> { id, name, appearances: [] }
+    const relieversMap = new Map();
+
+    for (let i = 0; i < recentGames.length; i++) {
+      const { gamePk, date } = recentGames[i];
+      if (i > 0) await new Promise(r => setTimeout(r, 200));
+
+      try {
+        const feedUrl = `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+        const feed = await fetchJSON(feedUrl);
+
+        const liveData = feed.liveData;
+        if (!liveData?.boxscore) continue;
+
+        const homeTeamId = feed.gameData?.teams?.home?.id;
+        const side = homeTeamId === Number(teamId) ? 'home' : 'away';
+
+        const teamBox = liveData.boxscore.teams[side];
+        if (!teamBox) continue;
+
+        const pitcherIds = teamBox.pitchers ?? [];
+        if (pitcherIds.length === 0) continue;
+
+        const starterId = pitcherIds[0];
+        const relieverIds = pitcherIds.slice(1);
+
+        for (const pid of relieverIds) {
+          const playerKey = `ID${pid}`;
+          const player = teamBox.players?.[playerKey];
+          if (!player) continue;
+
+          const pitching = player.stats?.pitching;
+          if (!pitching || !pitching.inningsPitched) continue;
+
+          const appearance = {
+            date,
+            ip: pitching.inningsPitched,
+            er: pitching.earnedRuns ?? 0,
+            k: pitching.strikeOuts ?? 0,
+            h: pitching.hits ?? 0,
+            bb: pitching.baseOnBalls ?? 0,
+            pitchCount: pitching.numberOfPitches ?? 0,
+          };
+
+          if (!relieversMap.has(pid)) {
+            relieversMap.set(pid, {
+              id: pid,
+              name: player.person?.fullName ?? `Player ${pid}`,
+              appearances: [],
+            });
+          }
+          relieversMap.get(pid).appearances.push(appearance);
+        }
+      } catch (gameErr) {
+        console.warn(`[MLB API] Failed to fetch boxscore for game ${gamePk}:`, gameErr.message);
+      }
+    }
+
+    const gameDates = recentGames.map(g => g.date).sort();
+    const today1dAgo = gameDates[gameDates.length - 1];
+    const today2dAgo = gameDates.length >= 2 ? gameDates[gameDates.length - 2] : null;
+
+    let bullpenIP_1d = 0, bullpenIP_2d = 0, bullpenIP_3d = 0;
+    let bullpenER_3d = 0, bullpenK_3d = 0;
+
+    const relievers = Array.from(relieversMap.values()).map(r => {
+      r.appearances.sort((a, b) => a.date.localeCompare(b.date));
+
+      let totalDecimalIP = 0;
+      for (const app of r.appearances) {
+        const decIP = parseInningsPitched(app.ip);
+        totalDecimalIP += decIP;
+
+        bullpenIP_3d += decIP;
+        bullpenER_3d += app.er;
+        bullpenK_3d += app.k;
+
+        if (app.date === today1dAgo) bullpenIP_1d += decIP;
+        if (today2dAgo && (app.date === today1dAgo || app.date === today2dAgo)) bullpenIP_2d += decIP;
+      }
+
+      const dates = r.appearances.map(a => a.date).sort();
+      let isBackToBack = false;
+      for (let i = 1; i < dates.length; i++) {
+        const prev = new Date(dates[i - 1]);
+        const curr = new Date(dates[i]);
+        const diffDays = (curr - prev) / (1000 * 60 * 60 * 24);
+        if (diffDays === 1) { isBackToBack = true; break; }
+      }
+
+      return {
+        id: r.id,
+        name: r.name,
+        appearances: r.appearances,
+        totalIP_last3d: Math.round(totalDecimalIP * 1000) / 1000,
+        gamesLast3d: r.appearances.length,
+        isBackToBack,
+      };
+    });
+
+    const totalIP = ipToDisplay(bullpenIP_3d);
+    console.log(`[MLB API] Bullpen usage for team ${teamId}: ${relievers.length} relievers, ${totalIP}IP last 3 days`);
+
+    return {
+      teamId,
+      gamesAnalyzed: recentGames.length,
+      relievers,
+      bullpenIP_1d: Math.round(bullpenIP_1d * 1000) / 1000,
+      bullpenIP_2d: Math.round(bullpenIP_2d * 1000) / 1000,
+      bullpenIP_3d: Math.round(bullpenIP_3d * 1000) / 1000,
+      bullpenER_3d,
+      bullpenK_3d,
+    };
+  } catch (err) {
+    console.warn(`[MLB API] getBullpenUsage failed for team ${teamId}:`, err.message);
+    return null;
+  }
+}
