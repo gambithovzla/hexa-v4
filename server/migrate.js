@@ -132,6 +132,12 @@ export async function runMigrations() {
     `);
 
     await client.query('COMMIT');
+
+    // Normalize pick results: 'won' → 'win', 'lost' → 'loss'
+    await pool.query("UPDATE picks SET result = 'win' WHERE result = 'won'");
+    await pool.query("UPDATE picks SET result = 'loss' WHERE result = 'lost'");
+    console.log('[migrate] Normalized pick results (won→win, lost→loss)');
+
     console.log('[H.E.X.A.] Database migrations applied successfully');
   } catch (err) {
     await client.query('ROLLBACK');
