@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
@@ -334,16 +334,15 @@ function offenseBlock(label, hittingData, teamName, splitsData = null, rivalHand
  * @param {object|null} awayPitching — Resultado de getTeamPitchingStats() para Away
  * @returns {string}
  */
-function buildBullpenBlock(homeName, awayName, homePitching, awayPitching) {
+function buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeBullpenUsage, awayBullpenUsage) {
   const lines = ['### BULLPEN & RELIEF PITCHING ###'];
 
   const fmtStat = (v, d = 2) => (v != null ? Number(v).toFixed(d) : 'N/A');
 
   const formatTeamLine = (label, pitchingData) => {
-    // Preferir métricas de bullpen si la API las expone; fallback a overall del equipo
     const stats = pitchingData?.bullpen ?? pitchingData?.overall ?? null;
     if (!stats) {
-      return `[${label}] Bullpen: Datos no disponibles`;
+      return `[${label}] Bullpen Season: Datos no disponibles`;
     }
     const era  = fmtStat(stats.era);
     const whip = fmtStat(stats.whip);
@@ -351,11 +350,56 @@ function buildBullpenBlock(homeName, awayName, homePitching, awayPitching) {
     const bb9  = fmtStat(stats.walksPer9Inn);
     const saves = stats.saves != null ? ` | SV: ${stats.saves}` : '';
     const source = pitchingData?.bullpen ? '(Bullpen)' : '(Team pitching)';
-    return `[${label}] ${source} ERA: ${era} | WHIP: ${whip} | K/9: ${k9} | BB/9: ${bb9}${saves}`;
+    return `[${label}] ${source} Season ERA: ${era} | WHIP: ${whip} | K/9: ${k9} | BB/9: ${bb9}${saves}`;
   };
 
   lines.push(formatTeamLine(homeName, homePitching ?? null));
   lines.push(formatTeamLine(awayName, awayPitching ?? null));
+
+  // ── Recent usage block (P3) ──────────────────────────────────────────────
+  const formatUsageBlock = (label, usage) => {
+    if (!usage) return [`[${label}] Recent Bullpen Usage: No data available`];
+    const uLines = [];
+    uLines.push(`[${label}] RECENT BULLPEN USAGE (last 3 days, ${usage.gamesAnalyzed} games analyzed):`);
+    uLines.push(`  Workload: ${usage.bullpenIP_1d}IP yesterday | ${usage.bullpenIP_2d}IP last 2d | ${usage.bullpenIP_3d}IP last 3d | ${usage.bullpenER_3d}ER | ${usage.bullpenK_3d}K`);
+
+    const fatigued = usage.relievers.filter(r => r.isBackToBack || r.totalIP_last3d >= 2.0);
+    const heavy    = usage.relievers.filter(r => r.totalIP_last3d >= 3.0);
+
+    if (heavy.length > 0) {
+      uLines.push(`  ⚠ HEAVY USAGE: ${heavy.map(r => `${r.name} (${r.totalIP_last3d.toFixed(1)}IP/${r.gamesLast3d}G)`).join(', ')}`);
+    }
+    if (fatigued.length > 0) {
+      const b2b = fatigued.filter(r => r.isBackToBack);
+      if (b2b.length > 0) {
+        uLines.push(`  ⚠ BACK-TO-BACK: ${b2b.map(r => r.name).join(', ')} — pitched consecutive days`);
+      }
+    }
+
+    const fresh = usage.relievers.filter(r => r.gamesLast3d === 0 || (r.gamesLast3d === 1 && r.totalIP_last3d <= 1.0));
+    if (fresh.length > 0) {
+      uLines.push(`  ✓ FRESH/AVAILABLE: ${fresh.map(r => r.name).join(', ')}`);
+    }
+
+    // Fatigue summary for Oracle
+    if (usage.bullpenIP_3d >= 10) {
+      uLines.push(`  🔴 BULLPEN FATIGUE: CRITICAL — ${usage.bullpenIP_3d}IP in 3 days. Late-inning vulnerability HIGH.`);
+    } else if (usage.bullpenIP_3d >= 7) {
+      uLines.push(`  🟡 BULLPEN FATIGUE: MODERATE — ${usage.bullpenIP_3d}IP in 3 days. Monitor late innings.`);
+    } else {
+      uLines.push(`  🟢 BULLPEN FATIGUE: LOW — ${usage.bullpenIP_3d}IP in 3 days. Bullpen relatively fresh.`);
+    }
+
+    return uLines;
+  };
+
+  lines.push('');
+  lines.push(...formatUsageBlock(homeName, homeBullpenUsage));
+  lines.push('');
+  lines.push(...formatUsageBlock(awayName, awayBullpenUsage));
+
+  lines.push('');
+  lines.push('ORACLE INSTRUCTION: When bullpen fatigue is CRITICAL or MODERATE, bias OVER/UNDER toward OVER for late innings. When a key reliever is back-to-back, reduce confidence in that team holding a lead. Fresh bullpen = UNDER bias for late innings.');
   lines.push('### END BULLPEN ###');
 
   return lines.join('\n');
@@ -1012,6 +1056,22 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Team pitching stats unavailable — continuing without bullpen data:', err.message);
   }
 
+  // ── Bullpen recent usage (P3 — last 3 days from boxscores) ────────────────
+  let homeBullpenUsage = null;
+  let awayBullpenUsage = null;
+  try {
+    const [homeUsageResult, awayUsageResult] = await Promise.all([
+      home?.id ? getBullpenUsage(home.id) : Promise.resolve(null),
+      away?.id ? getBullpenUsage(away.id) : Promise.resolve(null),
+    ]);
+    homeBullpenUsage = homeUsageResult;
+    awayBullpenUsage = awayUsageResult;
+    if (homeBullpenUsage) console.log(`[context-builder] Home bullpen usage: ${homeBullpenUsage.bullpenIP_3d}IP last 3d, ${homeBullpenUsage.relievers.length} relievers`);
+    if (awayBullpenUsage) console.log(`[context-builder] Away bullpen usage: ${awayBullpenUsage.bullpenIP_3d}IP last 3d, ${awayBullpenUsage.relievers.length} relievers`);
+  } catch (err) {
+    console.warn('[context-builder] Bullpen usage data unavailable — continuing:', err.message);
+  }
+
   const homePitcherTeam = settled(homeTeamVerifyResult);
   const awayPitcherTeam = settled(awayTeamVerifyResult);
 
@@ -1220,7 +1280,7 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push('');
 
   // Bullpen / pitcheo del equipo
-  blocks.push(buildBullpenBlock(homeName, awayName, homePitching, awayPitching));
+  blocks.push(buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeBullpenUsage, awayBullpenUsage));
   blocks.push('');
 
   // Ofensiva — cross-matched with rival pitcher's throwing hand for platoon splits
