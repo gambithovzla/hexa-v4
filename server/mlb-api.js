@@ -802,3 +802,70 @@ export async function getBullpenUsage(teamId) {
     return null;
   }
 }
+
+/**
+ * Fetches individual batter splits vs LHP and vs RHP.
+ * Endpoint: /people/{playerId}/stats?stats=statSplits&group=hitting&season={year}&sitCodes=vl,vr
+ *
+ * @param {number|string} playerId
+ * @returns {Promise<{playerId, vsLHP: object|null, vsRHP: object|null}|null>}
+ */
+export async function getBatterSplits(playerId) {
+  if (!playerId) return null;
+
+  const extractStats = (stat) => ({
+    avg: stat.avg ?? null,
+    obp: stat.obp ?? null,
+    slg: stat.slg ?? null,
+    ops: stat.ops ?? null,
+    atBats: stat.atBats ?? null,
+    hits: stat.hits ?? null,
+    homeRuns: stat.homeRuns ?? null,
+    strikeOuts: stat.strikeOuts ?? null,
+    baseOnBalls: stat.baseOnBalls ?? null,
+  });
+
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url =
+        `${MLB_BASE}/people/${playerId}/stats` +
+        `?stats=statSplits&group=hitting&season=${season}&sitCodes=vl,vr`;
+      const data = await fetchJSON(url);
+
+      const splitsBlock = (data.stats ?? []).find(
+        s => s.type?.displayName === 'statSplits' || s.group?.displayName === 'hitting'
+      );
+      const rawSplits = splitsBlock?.splits ?? data.stats?.[0]?.splits ?? [];
+
+      if (rawSplits.length === 0) {
+        console.log(`[MLB API] Season ${season} returned no batter splits for player ${playerId} — trying next`);
+        continue;
+      }
+
+      let vsLHP = null;
+      let vsRHP = null;
+
+      for (const split of rawSplits) {
+        const code = split.split?.code ?? '';
+        const desc = (split.split?.description ?? '').toLowerCase();
+        if (code === 'vl' || desc.includes('vs. left')) {
+          vsLHP = extractStats(split.stat ?? {});
+        } else if (code === 'vr' || desc.includes('vs. right')) {
+          vsRHP = extractStats(split.stat ?? {});
+        }
+      }
+
+      if (vsLHP || vsRHP) {
+        console.log(`[MLB API] Batter ${playerId} splits loaded from season ${season} — vsLHP: ${vsLHP?.avg ?? 'N/A'} vsRHP: ${vsRHP?.avg ?? 'N/A'}`);
+        return { playerId, season, vsLHP, vsRHP };
+      }
+
+      console.log(`[MLB API] Season ${season} had splits but no vl/vr codes for player ${playerId} — trying next`);
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} batter splits failed for player ${playerId}: ${err.message}`);
+    }
+  }
+
+  console.warn(`[MLB API] No batter splits found for player ${playerId} in seasons: ${SEASON_FALLBACK.join(', ')}`);
+  return null;
+}
