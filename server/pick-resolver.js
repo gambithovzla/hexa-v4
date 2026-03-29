@@ -136,36 +136,45 @@ function parsePick(pickStr) {
   if (!pickStr) return null;
   const s = pickStr.trim();
 
+  // Strip trailing odds in parentheses: "Over 8.5 (-104)" → "Over 8.5"
+  // Also handles "(...estimado)", "(+104)", etc.
+  const cleaned = s.replace(/\s*\([^)]*\)\s*$/, '').trim();
+
   // Over — standalone: "Over 8.5", "O 8.5", "Más de 8.5", "Mas de 8.5"
-  let m = s.match(/^(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)$/i);
+  let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)$/i);
   if (m) return { type: 'over', team: null, line: parseFloat(m[1]) };
 
   // Under — standalone: "Under 8.5", "U 8.5", "Menos de 8.5"
-  m = s.match(/^(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)$/i);
+  m = cleaned.match(/^(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)$/i);
   if (m) return { type: 'under', team: null, line: parseFloat(m[1]) };
 
   // Over with team prefix — "NYY Alta 8.5"
-  m = s.match(/^(.+?)\s+Alta\s+(\d+\.?\d*)$/i);
+  m = cleaned.match(/^(.+?)\s+Alta\s+(\d+\.?\d*)$/i);
   if (m) return { type: 'over', team: m[1].trim(), line: parseFloat(m[2]) };
 
   // Under with team prefix — "NYY Baja 8.5"
-  m = s.match(/^(.+?)\s+Baja\s+(\d+\.?\d*)$/i);
+  m = cleaned.match(/^(.+?)\s+Baja\s+(\d+\.?\d*)$/i);
   if (m) return { type: 'under', team: m[1].trim(), line: parseFloat(m[2]) };
 
   // TEAM Moneyline — "NYY Moneyline", "NYY ML", "NYY A ganar", "NYY Dinero"
-  m = s.match(/^(.+?)\s+(?:Moneyline|ML|A\s+ganar|Dinero)$/i);
+  m = cleaned.match(/^(.+?)\s+(?:Moneyline|ML|A\s+ganar|Dinero)$/i);
   if (m) return { type: 'moneyline', team: m[1].trim(), line: null };
 
   // Run Line keyword pattern
   const RL = /(?:Run\s+Line|RL|L[ií]nea\s+de\s+Carrera)/i;
 
   // TEAM +X.X Run Line  (underdog)
-  m = s.match(new RegExp(`^(.+?)\\s+\\+(\\d+\\.?\\d*)\\s+${RL.source}$`, 'i'));
+  m = cleaned.match(new RegExp(`^(.+?)\\s+\\+(\\d+\\.?\\d*)\\s+${RL.source}$`, 'i'));
   if (m) return { type: 'runline_dog', team: m[1].trim(), line: parseFloat(m[2]) };
 
   // TEAM -X.X Run Line  (favorite)
-  m = s.match(new RegExp(`^(.+?)\\s+-(\\d+\\.?\\d*)\\s+${RL.source}$`, 'i'));
+  m = cleaned.match(new RegExp(`^(.+?)\\s+-(\\d+\\.?\\d*)\\s+${RL.source}$`, 'i'));
   if (m) return { type: 'runline_fav', team: m[1].trim(), line: parseFloat(m[2]) };
+
+  // Player prop — "Player Name — Over/Más de X.X stat"
+  // We can't resolve player props automatically, skip gracefully
+  m = cleaned.match(/^.+?\s*[—–-]\s*(?:Over|Under|M[aá]s\s+de|Menos\s+de)\s+(\d+\.?\d*)\s+/i);
+  if (m) return { type: 'player_prop', team: null, line: parseFloat(m[1]), unresolvable: true };
 
   return null;
 }
@@ -305,6 +314,11 @@ export async function resolvePendingPicks() {
           const msg = `Pick #${pick.id}: unparseable pick string "${pick.pick}"`;
           console.warn(`[pick-resolver] ${msg}`);
           summary.errors.push(msg);
+          continue;
+        }
+
+        if (parsed.unresolvable) {
+          console.log(`[pick-resolver] Pick #${pick.id}: player prop — skipping (cannot auto-resolve)`);
           continue;
         }
 
