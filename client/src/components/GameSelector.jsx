@@ -63,9 +63,12 @@ const L = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function todayStr() {
-  // MLB games are scheduled in ET. Use ET date so "today" doesn't flip
-  // until ~midnight ET (when west coast games are done).
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  // MLB "today" shouldn't flip until 5am ET (west coast games end ~1am ET)
+  const now = new Date();
+  // Subtract 5 hours from ET to create an effective "MLB day" boundary at 5am ET
+  const etNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  etNow.setHours(etNow.getHours() - 5);
+  return etNow.toLocaleDateString('en-CA');
 }
 
 function getAbbr(side) {
