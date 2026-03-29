@@ -140,12 +140,38 @@ function MatchupHeader({ games, mode }) {
           {games.map((g, i) => {
             const a = g.teams?.away?.abbreviation ?? '???';
             const h = g.teams?.home?.abbreviation ?? '???';
+            const awayId = g.teams?.away?.id;
+            const homeId = g.teams?.home?.id;
             return (
               <Box key={i} sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ color: C.cyan, opacity: 0.5, fontFamily: MONO, fontSize: '12px' }}>[</span>
-                <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '14px', color: C.cyan, letterSpacing: '2px' }}>{a}</Typography>
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  {awayId && (
+                    <Box
+                      component="img"
+                      src={`https://www.mlb.com/team-logos/${awayId}.svg`}
+                      width={20}
+                      height={20}
+                      sx={{ objectFit: 'contain' }}
+                      onError={e => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  )}
+                  <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '14px', color: C.cyan, letterSpacing: '2px' }}>{a}</Typography>
+                </Box>
                 <Typography component="span" sx={{ fontFamily: MONO, fontSize: '9px', color: C.textMuted }}>@</Typography>
-                <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '14px', color: C.accent, letterSpacing: '2px' }}>{h}</Typography>
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  {homeId && (
+                    <Box
+                      component="img"
+                      src={`https://www.mlb.com/team-logos/${homeId}.svg`}
+                      width={20}
+                      height={20}
+                      sx={{ objectFit: 'contain' }}
+                      onError={e => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  )}
+                  <Typography component="span" sx={{ fontFamily: BARLOW, fontSize: '14px', color: C.accent, letterSpacing: '2px' }}>{h}</Typography>
+                </Box>
                 <span style={{ color: C.accent, opacity: 0.5, fontFamily: MONO, fontSize: '12px' }}>]</span>
               </Box>
             );
@@ -160,6 +186,8 @@ function MatchupHeader({ games, mode }) {
   const home = g.teams?.home?.abbreviation ?? '???';
   const awayFull = g.teams?.away?.name ?? away;
   const homeFull = g.teams?.home?.name ?? home;
+  const awayId = g.teams?.away?.id;
+  const homeId = g.teams?.home?.id;
   const gameDate = g.gameDate
     ? new Date(g.gameDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
     : '';
@@ -177,15 +205,27 @@ function MatchupHeader({ games, mode }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <Typography component="span" sx={{ fontFamily: MONO, fontSize: '14px', color: C.cyan, opacity: 0.5 }}>[</Typography>
         <Box sx={{ textAlign: 'center' }}>
-          <Typography component="span" sx={{
-            fontFamily:  BARLOW,
-            fontSize:    '24px',
-            color:       C.cyan,
-            letterSpacing: '3px',
-            textShadow:  `0 0 12px rgba(0,217,255,0.5)`,
-          }}>
-            {away}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+            {awayId && (
+              <Box
+                component="img"
+                src={`https://www.mlb.com/team-logos/${awayId}.svg`}
+                width={36}
+                height={36}
+                sx={{ objectFit: 'contain' }}
+                onError={e => { e.currentTarget.style.display = 'none'; }}
+              />
+            )}
+            <Typography component="span" sx={{
+              fontFamily:  BARLOW,
+              fontSize:    '24px',
+              color:       C.cyan,
+              letterSpacing: '3px',
+              textShadow:  `0 0 12px rgba(0,217,255,0.5)`,
+            }}>
+              {away}
+            </Typography>
+          </Box>
           <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textMuted, letterSpacing: '1px', mt: '-2px' }}>
             {awayFull.toUpperCase()}
           </Typography>
@@ -197,15 +237,27 @@ function MatchupHeader({ games, mode }) {
         </Box>
 
         <Box sx={{ textAlign: 'center' }}>
-          <Typography component="span" sx={{
-            fontFamily:  BARLOW,
-            fontSize:    '24px',
-            color:       C.accent,
-            letterSpacing: '3px',
-            textShadow:  `0 0 12px rgba(255,102,0,0.5)`,
-          }}>
-            {home}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+            {homeId && (
+              <Box
+                component="img"
+                src={`https://www.mlb.com/team-logos/${homeId}.svg`}
+                width={36}
+                height={36}
+                sx={{ objectFit: 'contain' }}
+                onError={e => { e.currentTarget.style.display = 'none'; }}
+              />
+            )}
+            <Typography component="span" sx={{
+              fontFamily:  BARLOW,
+              fontSize:    '24px',
+              color:       C.accent,
+              letterSpacing: '3px',
+              textShadow:  `0 0 12px rgba(255,102,0,0.5)`,
+            }}>
+              {home}
+            </Typography>
+          </Box>
           <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.textMuted, letterSpacing: '1px', mt: '-2px' }}>
             {homeFull.toUpperCase()}
           </Typography>
