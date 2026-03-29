@@ -405,15 +405,15 @@ export async function resolvePendingPicks() {
 
             let result;
             if (parsed.direction === 'over') {
-              result = actual > parsed.line ? 'won' : actual === parsed.line ? 'push' : 'lost';
+              result = actual > parsed.line ? 'win' : actual === parsed.line ? 'push' : 'loss';
             } else {
-              result = actual < parsed.line ? 'won' : actual === parsed.line ? 'push' : 'lost';
+              result = actual < parsed.line ? 'win' : actual === parsed.line ? 'push' : 'loss';
             }
 
             await pool.query('UPDATE picks SET result = $1 WHERE id = $2', [result, pick.id]);
             summary.resolved++;
-            if (result === 'won') summary.wins++;
-            else if (result === 'lost') summary.losses++;
+            if (result === 'win') summary.wins++;
+            else if (result === 'loss') summary.losses++;
             else summary.pushes++;
             console.log(`[pick-resolver] Pick #${pick.id}: ${parsed.player} ${parsed.stat} = ${actual} vs ${parsed.direction} ${parsed.line} → ${result}`);
           } catch (err) {
