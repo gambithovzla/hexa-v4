@@ -200,6 +200,131 @@ function MarkBtn({ label, color, dim, onClick }) {
   );
 }
 
+function groupPicksByDay(picks) {
+  const groups = {};
+  for (const entry of picks) {
+    let dayKey = 'unknown';
+    try {
+      dayKey = new Date(entry.date).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    } catch { /* fallback */ }
+    if (!groups[dayKey]) groups[dayKey] = [];
+    groups[dayKey].push(entry);
+  }
+  // Sort days descending (most recent first)
+  return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+}
+
+function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDelete, t }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const isEs = lang === 'es';
+
+  const wins = picks.filter(p => p.result === 'win').length;
+  const losses = picks.filter(p => p.result === 'loss').length;
+  const pushes = picks.filter(p => p.result === 'push').length;
+  const pending = picks.filter(p => p.result === 'pending').length;
+  const total = picks.length;
+
+  // Format: "Mar 28, 2026" or "28 Mar 2026"
+  let displayDate = dateStr;
+  try {
+    const d = new Date(dateStr + 'T12:00:00');
+    displayDate = d.toLocaleDateString(isEs ? 'es-ES' : 'en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
+  } catch { /* use raw */ }
+
+  // Check if this is today
+  const todayET = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const isToday = dateStr === todayET;
+
+  return (
+    <Box>
+      <Box
+        component="button"
+        onClick={() => setExpanded(prev => !prev)}
+        sx={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          py: '10px',
+          px: '12px',
+          bgcolor: C.surface,
+          border: `1px solid ${C.border}`,
+          borderLeft: `3px solid ${isToday ? C.accent : C.cyan}`,
+          borderRadius: '0',
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+          '&:hover': { bgcolor: C.surfaceAlt, borderColor: C.borderLight },
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Typography sx={{
+            fontFamily: MONO,
+            fontSize: '10px',
+            color: expanded ? C.cyan : C.textMuted,
+            transition: 'transform 0.2s',
+            transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+          }}>
+            ▶
+          </Typography>
+          <Typography sx={{
+            fontFamily: BARLOW,
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            color: isToday ? C.accent : C.textPrimary,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+          }}>
+            {isToday ? (isEs ? 'HOY' : 'TODAY') : displayDate}
+          </Typography>
+          {isToday && (
+            <Typography sx={{
+              fontFamily: MONO, fontSize: '9px', color: C.textMuted, letterSpacing: '1px',
+            }}>
+              {displayDate}
+            </Typography>
+          )}
+          <Typography sx={{
+            fontFamily: MONO, fontSize: '9px', color: C.textDim, letterSpacing: '1px',
+          }}>
+            {total} {total === 1 ? 'pick' : 'picks'}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {wins > 0 && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.green, letterSpacing: '1px' }}>
+              {wins}W
+            </Typography>
+          )}
+          {losses > 0 && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.red, letterSpacing: '1px' }}>
+              {losses}L
+            </Typography>
+          )}
+          {pushes > 0 && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.cyan, letterSpacing: '1px' }}>
+              {pushes}P
+            </Typography>
+          )}
+          {pending > 0 && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.amber, letterSpacing: '1px' }}>
+              {pending}⏳
+            </Typography>
+          )}
+        </Box>
+      </Box>
+      {expanded && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', pt: '6px', pb: '12px' }}>
+          {picks.map(entry => (
+            <PickCard key={entry.id} entry={entry} onMarkResult={onMarkResult} onDelete={onDelete} t={t} />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function AnalisisTab({ lang }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
   const { isAuthenticated, token } = useAuth();
@@ -265,9 +390,18 @@ function AnalisisTab({ lang }) {
           <Typography sx={{ fontFamily: SANS, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 320, lineHeight: 1.7 }}>{t.history.empty}</Typography>
         </Box>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {history.map(entry => (
-            <PickCard key={entry.id} entry={entry} onMarkResult={markResult} onDelete={deletePick} t={t} />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {groupPicksByDay(history).map(([dayKey, dayPicks], idx) => (
+            <DayHeader
+              key={dayKey}
+              dateStr={dayKey}
+              picks={dayPicks}
+              lang={lang}
+              defaultExpanded={idx === 0}
+              onMarkResult={markResult}
+              onDelete={deletePick}
+              t={t}
+            />
           ))}
         </Box>
       )}
