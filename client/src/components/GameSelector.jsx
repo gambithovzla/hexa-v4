@@ -63,7 +63,9 @@ const L = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  // MLB games are scheduled in ET. Use ET date so "today" doesn't flip
+  // until ~midnight ET (when west coast games are done).
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
 function getAbbr(side) {
@@ -104,6 +106,9 @@ function getTime(game) {
  * Returns: 'scheduled' | 'live' | 'final'
  */
 function getStatus(game) {
+  // 0. Trust simplified status from mlb-api.js normalization if present
+  if (game.status?.simplified) return game.status.simplified;
+
   // 1. Trust explicit API fields
   const abs      = game.status?.abstractGameState ?? '';
   const detailed = game.status?.detailedState ?? '';
@@ -128,8 +133,9 @@ function getStatus(game) {
     const gameMs  = new Date(game.gameDate).getTime();
     const nowMs   = Date.now();
     const elapsed = nowMs - gameMs;          // negative = future
-    if (elapsed >= 4 * 60 * 60 * 1000) return 'final';  // 4 h+ past start → over
-    if (elapsed >= 0)                  return 'live';    // past start, < 4 h → in progress
+    if (elapsed >= 5.5 * 60 * 60 * 1000) return 'final'; // 5.5 h+ past start → over (accounts for extras)
+    if (elapsed >= 30 * 60 * 1000)        return 'live';  // 30+ min past start, < 5.5 h → in progress
+    // < 30 min since start: stay 'scheduled' so the API can update (delays are common)
   }
 
   return 'scheduled';

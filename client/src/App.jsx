@@ -27,7 +27,7 @@ import OracleChat          from './components/OracleChat';
 import BatchScanPanel      from './components/BatchScanPanel';
 import LiveTracker         from './components/LiveTracker';
 import useHistory           from './hooks/useHistory';
-import { C, MONO } from './theme';
+import { C, MONO, BARLOW } from './theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -57,13 +57,28 @@ function AppFooter() {
     >
       <Typography
         sx={{
-          fontFamily: MONO,
-          fontSize:   '11px',
-          color:      C.textDim,
-          userSelect: 'none',
+          fontFamily:   BARLOW,
+          fontSize:     '18px',
+          fontWeight:   800,
+          letterSpacing:'4px',
+          color:        C.accent,
+          textShadow:   '0 0 12px rgba(255,102,0,0.3)',
+          userSelect:   'none',
+          lineHeight:   1.2,
         }}
       >
-        Creado por Gambitho Labs&nbsp;·&nbsp;H.E.X.A. Hybrid Expert X-Analysis
+        GAMBITHO LABS
+      </Typography>
+      <Typography
+        sx={{
+          fontFamily: MONO,
+          fontSize:   '12px',
+          color:      C.textMuted,
+          userSelect: 'none',
+          mt:         '4px',
+        }}
+      >
+        H.E.X.A. Hybrid Expert X-Analysis
       </Typography>
     </Box>
   );
