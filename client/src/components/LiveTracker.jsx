@@ -661,7 +661,9 @@ export default function LiveTracker({ lang = 'en' }) {
     setLoading(true);
     try {
       // 1. Get today's games
-      const today    = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      etNow.setHours(etNow.getHours() - 5);
+      const today    = etNow.toLocaleDateString('en-CA');
       const gamesRes = await fetch(`${API_URL}/api/games?date=${today}`);
       const gamesJson = await gamesRes.json();
       const allGames  = gamesJson.success ? gamesJson.data : [];
