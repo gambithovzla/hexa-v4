@@ -869,3 +869,69 @@ export async function getBatterSplits(playerId) {
   console.warn(`[MLB API] No batter splits found for player ${playerId} in seasons: ${SEASON_FALLBACK.join(', ')}`);
   return null;
 }
+
+/**
+ * Fetches a pitcher's home/away splits for the current season.
+ * Endpoint: /people/{playerId}/stats?stats=statSplits&group=pitching&season={year}&sitCodes=h,a
+ *
+ * @param {number|string} pitcherId
+ * @returns {Promise<{pitcherId, home: object|null, away: object|null}|null>}
+ */
+export async function getPitcherHomeSplits(pitcherId) {
+  if (!pitcherId) return null;
+
+  const extractStats = (stat) => ({
+    era: stat.era ?? null,
+    whip: stat.whip ?? null,
+    ops: stat.ops ?? null,
+    avg: stat.avg ?? null,
+    inningsPitched: stat.inningsPitched ?? null,
+    strikeOuts: stat.strikeOuts ?? null,
+    homeRuns: stat.homeRuns ?? null,
+    baseOnBalls: stat.baseOnBalls ?? null,
+    gamesStarted: stat.gamesStarted ?? null,
+  });
+
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url =
+        `${MLB_BASE}/people/${pitcherId}/stats` +
+        `?stats=statSplits&group=pitching&season=${season}&sitCodes=h,a`;
+      const data = await fetchJSON(url);
+
+      const splitsBlock = (data.stats ?? []).find(
+        s => s.type?.displayName === 'statSplits' || s.group?.displayName === 'pitching'
+      );
+      const rawSplits = splitsBlock?.splits ?? data.stats?.[0]?.splits ?? [];
+
+      if (rawSplits.length === 0) {
+        console.log(`[MLB API] Season ${season} returned no pitcher home/away splits for ${pitcherId} — trying next`);
+        continue;
+      }
+
+      let home = null;
+      let away = null;
+
+      for (const split of rawSplits) {
+        const code = split.split?.code ?? '';
+        const desc = (split.split?.description ?? '').toLowerCase();
+        if (code === 'h' || desc.includes('home')) {
+          home = extractStats(split.stat ?? {});
+        } else if (code === 'a' || desc.includes('away') || desc.includes('road')) {
+          away = extractStats(split.stat ?? {});
+        }
+      }
+
+      if (home || away) {
+        console.log(`[MLB API] Pitcher ${pitcherId} home/away splits from ${season} — Home ERA: ${home?.era ?? 'N/A'} Away ERA: ${away?.era ?? 'N/A'}`);
+        return { pitcherId, season, home, away };
+      }
+
+      console.log(`[MLB API] Season ${season} had splits but no h/a codes for pitcher ${pitcherId} — trying next`);
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} pitcher home/away splits failed for ${pitcherId}: ${err.message}`);
+    }
+  }
+
+  return null;
+}

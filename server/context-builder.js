@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
@@ -1021,6 +1021,14 @@ export async function buildContext(gameData, oddsData = null) {
   try { awayHitting      = away?.id      ? await getTeamHittingHistoricalStats(away.id)      : null; } catch (_) {}
   try { awayPitcherStats = awayPitcher?.id ? await getPitcherHistoricalStats(awayPitcher.id) : null; } catch (_) {}
 
+  // ── Pitcher home/away splits (Gap #3) ──────────────────────────────────────
+  let homePitcherHASplits = null;
+  let awayPitcherHASplits = null;
+  try { homePitcherHASplits = homePitcher?.id ? await getPitcherHomeSplits(homePitcher.id) : null; } catch (_) {}
+  try { awayPitcherHASplits = awayPitcher?.id ? await getPitcherHomeSplits(awayPitcher.id) : null; } catch (_) {}
+  if (homePitcherHASplits) console.log(`[context-builder] Home pitcher H/A splits loaded`);
+  if (awayPitcherHASplits) console.log(`[context-builder] Away pitcher H/A splits loaded`);
+
   // ── Platoon splits (parallel, non-blocking) ─────────────────────────────────
   let homeSplits = null;
   let awaySplits = null;
@@ -1315,6 +1323,46 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push('');
   blocks.push(pitcherBlock('AWAY', awayPitcherStats, awayPitcher));
   blocks.push('');
+
+  // ── Pitcher Home/Away Splits ──────────────────────────────────────────────
+  if (homePitcherHASplits || awayPitcherHASplits) {
+    blocks.push(section('PITCHER HOME/AWAY SPLITS'));
+    const fmtHA = (v) => v != null ? Number(v).toFixed(2) : 'N/A';
+    const fmtHA3 = (v) => v != null ? Number(v).toFixed(3) : 'N/A';
+
+    const formatPitcherHA = (label, name, splits, isHome) => {
+      if (!splits) return `[${label}] ${name}: Home/Away splits unavailable`;
+      // isHome = true means this pitcher IS at home today
+      const relevant = isHome ? splits.home : splits.away;
+      const other = isHome ? splits.away : splits.home;
+      const venue = isHome ? 'HOME' : 'AWAY';
+      const otherVenue = isHome ? 'Away' : 'Home';
+
+      if (!relevant) return `[${label}] ${name}: No ${venue.toLowerCase()} split data`;
+
+      let line = `[${label}] ${name} — TODAY (${venue}): ERA ${fmtHA(relevant.era)} | WHIP ${fmtHA(relevant.whip)} | OPS-against ${fmtHA3(relevant.ops)} | IP ${relevant.inningsPitched ?? 'N/A'} | K ${relevant.strikeOuts ?? 'N/A'}`;
+      if (other) {
+        line += ` | ${otherVenue}: ERA ${fmtHA(other.era)} | WHIP ${fmtHA(other.whip)}`;
+        // Flag significant gap
+        const relERA = parseFloat(relevant.era);
+        const othERA = parseFloat(other.era);
+        if (!isNaN(relERA) && !isNaN(othERA)) {
+          const gap = Math.abs(relERA - othERA);
+          if (gap >= 1.0) {
+            const better = relERA < othERA ? venue : otherVenue;
+            line += ` ⚠ ${gap.toFixed(2)} ERA gap — significantly ${relERA < othERA ? 'better' : 'worse'} at ${venue}`;
+          }
+        }
+      }
+      return line;
+    };
+
+    // Home pitcher IS at home, Away pitcher IS away
+    blocks.push(formatPitcherHA('HOME', homePitcher?.fullName ?? 'Home Pitcher', homePitcherHASplits, true));
+    blocks.push(formatPitcherHA('AWAY', awayPitcher?.fullName ?? 'Away Pitcher', awayPitcherHASplits, false));
+    blocks.push('ORACLE INSTRUCTION: When a pitcher has 1.00+ ERA gap between home and away, weight the venue-specific split heavily. A pitcher with 2.80 home ERA and 5.20 away ERA pitching on the road is a significantly weaker proposition.');
+    blocks.push('');
+  }
 
   // Bullpen / pitcheo del equipo
   blocks.push(buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeBullpenUsage, awayBullpenUsage));
