@@ -935,3 +935,83 @@ export async function getPitcherHomeSplits(pitcherId) {
 
   return null;
 }
+
+/**
+ * Calculates days of rest for a pitcher by checking their most recent game log entry.
+ * Endpoint: /people/{playerId}/stats?stats=gameLog&group=pitching&season={year}
+ *
+ * @param {number|string} pitcherId
+ * @param {string} gameDateStr — today's game date in YYYY-MM-DD format
+ * @returns {Promise<{pitcherId, daysRest: number|null, lastStart: string|null, lastIP: string|null}|null>}
+ */
+export async function getPitcherRestDays(pitcherId, gameDateStr) {
+  if (!pitcherId) return null;
+
+  const today = gameDateStr
+    ? new Date(gameDateStr + 'T12:00:00Z')
+    : new Date();
+
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url =
+        `${MLB_BASE}/people/${pitcherId}/stats` +
+        `?stats=gameLog&group=pitching&season=${season}`;
+      const data = await fetchJSON(url);
+
+      const logBlock = (data.stats ?? []).find(
+        s => s.type?.displayName === 'gameLog'
+      );
+      const entries = logBlock?.splits ?? [];
+
+      if (entries.length === 0) {
+        console.log(`[MLB API] Season ${season} returned no game log for pitcher ${pitcherId} — trying next`);
+        continue;
+      }
+
+      // Entries are typically in chronological order; we want the most recent
+      // Find the last entry where the pitcher actually pitched (has IP > 0 or gamesStarted > 0)
+      let lastEntry = null;
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const stat = entries[i].stat ?? {};
+        const ip = parseFloat(stat.inningsPitched ?? '0');
+        if (ip > 0) {
+          lastEntry = entries[i];
+          break;
+        }
+      }
+
+      if (!lastEntry) {
+        console.log(`[MLB API] Pitcher ${pitcherId} has game log but no IP entries in ${season}`);
+        continue;
+      }
+
+      const lastDate = lastEntry.date ?? lastEntry.gameDate ?? null;
+      if (!lastDate) {
+        console.log(`[MLB API] Pitcher ${pitcherId} last entry has no date`);
+        continue;
+      }
+
+      const lastMs = new Date(lastDate + 'T12:00:00Z').getTime();
+      const todayMs = today.getTime();
+      const daysRest = Math.round((todayMs - lastMs) / (1000 * 60 * 60 * 24));
+
+      const lastIP = lastEntry.stat?.inningsPitched ?? null;
+      const lastPitchCount = lastEntry.stat?.numberOfPitches ?? lastEntry.stat?.pitchesThrown ?? null;
+
+      console.log(`[MLB API] Pitcher ${pitcherId} rest: ${daysRest} days (last pitched ${lastDate}, ${lastIP ?? '?'}IP)`);
+
+      return {
+        pitcherId,
+        daysRest: daysRest >= 0 ? daysRest : null,
+        lastStart: lastDate,
+        lastIP,
+        lastPitchCount,
+      };
+
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} game log failed for pitcher ${pitcherId}: ${err.message}`);
+    }
+  }
+
+  return null;
+}
