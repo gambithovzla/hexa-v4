@@ -24,6 +24,7 @@ import BankrollTracker      from './components/BankrollTracker';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
 import OracleChat          from './components/OracleChat';
+import PerformanceDashboard from './pages/PerformanceDashboard';
 import BatchScanPanel      from './components/BatchScanPanel';
 import LiveTracker         from './components/LiveTracker';
 import useHistory           from './hooks/useHistory';
@@ -95,6 +96,7 @@ export default function App() {
   const [isAnalyzing,       setIsAnalyzing]       = useState(false);
   const [showMethodology,   setShowMethodology]   = useState(false);
   const [showOracleChat,    setShowOracleChat]    = useState(false);
+  const [showPerformance,   setShowPerformance]   = useState(false);
   const [isAdmin,           setIsAdmin]           = useState(false);
 
   // Check admin status on mount
@@ -117,6 +119,16 @@ export default function App() {
   // Render Oracle Chat as a full-page takeover (admin only)
   if (showOracleChat) {
     return <OracleChat lang={lang} onBack={() => setShowOracleChat(false)} />;
+  }
+
+  // Render Performance Dashboard as a full-page takeover (public — no auth required)
+  if (showPerformance) {
+    return (
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
+        <PerformanceDashboard onBack={() => setShowPerformance(false)} />
+      </ThemeProvider>
+    );
   }
 
   // Render Methodology as a full-page takeover (no tab, no header)
@@ -151,6 +163,7 @@ export default function App() {
           onTabChange={isAnalyzing ? () => {} : setActiveTab}
           disabled={isAnalyzing}
           onMethodology={() => setShowMethodology(true)}
+          onPerformance={() => setShowPerformance(true)}
           isAdmin={isAdmin}
           onOracleChat={() => setShowOracleChat(true)}
         />
