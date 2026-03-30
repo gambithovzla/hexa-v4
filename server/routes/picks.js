@@ -32,12 +32,13 @@ function detectPickType(pick) {
 /**
  * Calculate units profit for a single pick using flat 1-unit stake.
  * American odds: +150 → profit 1.5u ; -110 → profit 0.909u ; loss → -1u ; push → 0u
+ * Returns null for won picks with no usable odds — caller must exclude from ROI math.
  */
 function calcUnits(result, odds) {
   const isWon = result === 'won' || result === 'win';
   const isLost = result === 'lost' || result === 'loss';
   if (isWon) {
-    if (odds == null) return 0;
+    if (odds == null || odds === 0) return null;
     return odds >= 0 ? odds / 100 : 100 / Math.abs(odds);
   }
   if (isLost) return -1;
@@ -98,12 +99,13 @@ router.get('/public-stats', async (req, res) => {
     `);
 
     // ── Aggregate ──────────────────────────────────────────────────────────────
-    let wins = 0, losses = 0, pushes = 0, totalUnits = 0;
+    let wins = 0, losses = 0, pushes = 0;
+    let roiUnits = 0, totalPicksForROI = 0;  // only picks with usable odds
     const modelStats = {};
     const typeStats  = {};
     const roiCurve   = [];
     let runningUnits = 0;
-    let pickNumber   = 0;
+    let roiPickNumber = 0;  // cursor for picks that contribute to ROI curve
 
     for (const row of rows) {
       const result = row.result;
@@ -112,50 +114,55 @@ router.get('/public-stats', async (req, res) => {
       const isPush = result === 'push';
 
       const odds  = row.odds_at_pick != null ? parseInt(row.odds_at_pick, 10) : null;
-      const units = calcUnits(result, odds);
+      const units = calcUnits(result, odds); // null means won pick with no usable odds
 
-      totalUnits += units;
-      pickNumber++;
-
+      // W-L-P record uses ALL resolved picks regardless of odds
       if (isWon)       wins++;
       else if (isLost) losses++;
       else if (isPush) pushes++;
 
-      // ── Model breakdown ──────────────────────────────────────────────────────
-      const model = row.model || 'unknown';
-      if (!modelStats[model]) modelStats[model] = { wins: 0, losses: 0, pushes: 0, units: 0 };
-      if (isWon)       modelStats[model].wins++;
-      else if (isLost) modelStats[model].losses++;
-      else if (isPush) modelStats[model].pushes++;
-      modelStats[model].units += units;
+      // ROI math only counts picks where calcUnits returned a number
+      if (units !== null) {
+        roiUnits += units;
+        totalPicksForROI++;
 
-      // ── Type breakdown ───────────────────────────────────────────────────────
-      const type = detectPickType(row.pick);
-      if (!typeStats[type]) typeStats[type] = { wins: 0, losses: 0, pushes: 0, units: 0 };
-      if (isWon)       typeStats[type].wins++;
-      else if (isLost) typeStats[type].losses++;
-      else if (isPush) typeStats[type].pushes++;
-      typeStats[type].units += units;
+        // ── Model breakdown ────────────────────────────────────────────────────
+        const model = row.model || 'unknown';
+        if (!modelStats[model]) modelStats[model] = { wins: 0, losses: 0, pushes: 0, units: 0 };
+        if (isWon)       modelStats[model].wins++;
+        else if (isLost) modelStats[model].losses++;
+        else if (isPush) modelStats[model].pushes++;
+        modelStats[model].units += units;
 
-      // ── ROI curve entry ──────────────────────────────────────────────────────
-      runningUnits += units;
-      const cumulativeRoi = Math.round((runningUnits / pickNumber) * 10000) / 100;
-      roiCurve.push({
-        pickNumber,
-        cumulativeRoi,
-        date:   row.created_at,
-        result: isWon ? 'won' : isLost ? 'lost' : 'push',
-      });
+        // ── Type breakdown ─────────────────────────────────────────────────────
+        const type = detectPickType(row.pick);
+        if (!typeStats[type]) typeStats[type] = { wins: 0, losses: 0, pushes: 0, units: 0 };
+        if (isWon)       typeStats[type].wins++;
+        else if (isLost) typeStats[type].losses++;
+        else if (isPush) typeStats[type].pushes++;
+        typeStats[type].units += units;
+
+        // ── ROI curve entry (only picks with usable odds) ──────────────────────
+        runningUnits += units;
+        roiPickNumber++;
+        const cumulativeRoi = Math.round((runningUnits / roiPickNumber) * 10000) / 100;
+        roiCurve.push({
+          pickNumber:   roiPickNumber,
+          cumulativeRoi,
+          date:         row.created_at,
+          result:       isWon ? 'won' : isLost ? 'lost' : 'push',
+        });
+      }
     }
 
     const totalPicks = rows.length;
     const winRate    = (wins + losses) > 0
       ? Math.round((wins / (wins + losses)) * 1000) / 10
       : 0;
-    const roi        = totalPicks > 0
-      ? Math.round((totalUnits / totalPicks) * 10000) / 100
+    const unitProfit = Math.round(roiUnits * 100) / 100;
+    const roi        = totalPicksForROI > 0
+      ? Math.round((roiUnits / totalPicksForROI) * 10000) / 100
       : 0;
-    const unitProfit = Math.round(totalUnits * 100) / 100;
 
     return res.json({
       success: true,
@@ -167,6 +174,7 @@ router.get('/public-stats', async (req, res) => {
         winRate,
         roi,
         unitProfit,
+        roiSampleSize: totalPicksForROI,
         breakdown: {
           byModel: buildSummary(modelStats),
           byType:  buildSummary(typeStats),
