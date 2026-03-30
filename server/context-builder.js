@@ -265,8 +265,11 @@ function pitcherBlock(label, pitcherData, probablePitcher) {
  * @param {object|null} splitsData   — result of getTeamHittingSplits() { vsLHP, vsRHP }
  * @param {string|null} rivalHand    — throwing hand of the opposing starter: 'L', 'R', or null
  */
-function offenseBlock(label, hittingData, teamName, splitsData = null, rivalHand = null) {
-  const lines = [section(`${label} OFFENSE (Season)`)];
+function offenseBlock(label, hittingData, teamName, splitsData = null, rivalHand = null, rivalPitcherName = null) {
+  const rivalInfo = rivalPitcherName
+    ? ` — FACING: ${rivalPitcherName} (${rivalHand === 'L' ? 'LHP' : rivalHand === 'R' ? 'RHP' : '?'})`
+    : '';
+  const lines = [section(`${label} OFFENSE (Season)${rivalInfo}`)];
 
   if (!hittingData?.stats) {
     lines.push(`⚠ MISSING DATA: hitting stats unavailable for ${teamName ?? label} — increase model_risk`);
@@ -1404,9 +1407,9 @@ export async function buildContext(gameData, oddsData = null) {
   const homePitcherHand = homePitcher?.throwingHand ?? null;  // hand of HOME starter (faces Away batters)
   const awayPitcherHand = awayPitcher?.throwingHand ?? null;  // hand of AWAY starter (faces Home batters)
 
-  blocks.push(offenseBlock('HOME', homeHitting, homeName, homeSplits, awayPitcherHand));
+  blocks.push(offenseBlock('HOME', homeHitting, homeName, homeSplits, awayPitcherHand, awayPitcher?.fullName));
   blocks.push('');
-  blocks.push(offenseBlock('AWAY', awayHitting, awayName, awaySplits, homePitcherHand));
+  blocks.push(offenseBlock('AWAY', awayHitting, awayName, awaySplits, homePitcherHand, homePitcher?.fullName));
   blocks.push('');
 
   // Flags situacionales
@@ -1434,11 +1437,11 @@ export async function buildContext(gameData, oddsData = null) {
   if (savantBatters.home.length > 0 || savantBatters.away.length > 0) {
     blocks.push(section(`BATTER STATCAST — TOP 3 per Lineup (Savant ${new Date().getFullYear()})`));
     if (savantBatters.home.length > 0) {
-      blocks.push(`${homeName} (Home):`);
+      blocks.push(`${homeName} (Home) — FACING: ${awayPitcher?.fullName ?? 'TBD'} (${awayPitcher?.throwingHand === 'L' ? 'LHP' : awayPitcher?.throwingHand === 'R' ? 'RHP' : '?'}):`);
       savantBatters.home.forEach(({ name, savant }) => blocks.push(batterSavantLine(name, savant)));
     }
     if (savantBatters.away.length > 0) {
-      blocks.push(`${awayName} (Away):`);
+      blocks.push(`${awayName} (Away) — FACING: ${homePitcher?.fullName ?? 'TBD'} (${homePitcher?.throwingHand === 'L' ? 'LHP' : homePitcher?.throwingHand === 'R' ? 'RHP' : '?'}):`);
       savantBatters.away.forEach(({ name, savant }) => blocks.push(batterSavantLine(name, savant)));
     }
     blocks.push('');
@@ -1477,14 +1480,18 @@ export async function buildContext(gameData, oddsData = null) {
     };
 
     if (batterSplitsMap.home.length > 0) {
-      blocks.push(`${homeName} (Home) vs ${rivalPitcherHandForHome ?? '?'}HP:`);
+      const awayPName = awayPitcher?.fullName ?? 'Unknown';
+      const awayPHand = rivalPitcherHandForHome === 'L' ? 'LHP' : rivalPitcherHandForHome === 'R' ? 'RHP' : 'Unknown hand';
+      blocks.push(`${homeName} (Home) — FACING: ${awayPName} (${awayPHand})`);
       batterSplitsMap.home.forEach(b => {
         const lines = formatBatterSplit(b, rivalPitcherHandForHome);
         lines.forEach(l => blocks.push(l));
       });
     }
     if (batterSplitsMap.away.length > 0) {
-      blocks.push(`${awayName} (Away) vs ${rivalPitcherHandForAway ?? '?'}HP:`);
+      const homePName = homePitcher?.fullName ?? 'Unknown';
+      const homePHand = rivalPitcherHandForAway === 'L' ? 'LHP' : rivalPitcherHandForAway === 'R' ? 'RHP' : 'Unknown hand';
+      blocks.push(`${awayName} (Away) — FACING: ${homePName} (${homePHand})`);
       batterSplitsMap.away.forEach(b => {
         const lines = formatBatterSplit(b, rivalPitcherHandForAway);
         lines.forEach(l => blocks.push(l));
