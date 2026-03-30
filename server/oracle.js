@@ -332,10 +332,32 @@ export async function analyzeGame(params) {
     matchup, betType, context, riskProfile, mode, lang, games, legs, userBankroll,
   });
 
-  // Append a hard Spanish instruction to the system prompt when lang === 'es'
-  const systemPrompt = lang === 'es'
-    ? SYSTEM_PROMPT + '\n\nIMPORTANT: Respond ALL text content in Spanish (español). All fields: oracle_report, hexa_hunch, alert_flags, pick descriptions, strategy_note, day_summary — everything in Spanish. JSON keys remain in English.'
-    : SYSTEM_PROMPT;
+  // ── Premium tier enhancements ───────────────────────────────────────────
+  let systemPrompt = SYSTEM_PROMPT;
+
+  if (model === 'premium') {
+    systemPrompt += `
+
+## PREMIUM ANALYSIS MODE — ENHANCED OUTPUT
+You are running in PREMIUM mode. The user paid extra for deeper analysis. You MUST provide noticeably more thorough output than standard Deep mode:
+
+### MANDATORY PREMIUM ADDITIONS:
+1. **CONTRARIAN CASE**: After your main pick, write a "CONTRARIAN CASE" paragraph (3-5 sentences) in oracle_report explaining the strongest argument AGAINST your pick. What scenario makes this pick lose? Be specific with data.
+
+2. **SECONDARY PICK**: In addition to best_pick, identify a SECOND-BEST pick from a different bet type. If your main pick is Over/Under, your secondary should be ML or Run Line (or vice versa). Include it at the end of oracle_report as "SECONDARY EDGE: [pick] — [one-line reasoning]".
+
+3. **PROP DEEP DIVE**: When individual batter splits are available, analyze the top 2-3 player prop opportunities in detail in oracle_report. Name specific players, cite their split OPS, and give a clear OVER/UNDER recommendation with reasoning.
+
+4. **CONFIDENCE GRANULARITY**: Use one decimal place for oracle_confidence (e.g. 57.5 instead of 58). This signals precision to the user.
+
+5. **REPORT LENGTH**: oracle_report should be 400-600 words (vs 200-350 for Deep). Cover more angles, more data points, more nuance.
+
+These additions make Premium feel substantially different from Deep. The user should read the Premium report and immediately see they got more depth, more options, and more actionable intelligence.`;
+  }
+
+  if (lang === 'es') {
+    systemPrompt += '\n\nIMPORTANT: Respond ALL text content in Spanish (español). All fields: oracle_report, hexa_hunch, alert_flags, pick descriptions, strategy_note, day_summary — everything in Spanish. JSON keys remain in English.';
+  }
 
   const requestBody = {
     model:      modelId,
