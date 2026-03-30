@@ -406,6 +406,37 @@ function GuideButton({ lang }) {
   );
 }
 
+// ── Performance link ──────────────────────────────────────────────────────────
+
+function PerformanceLink({ lang, onClick }) {
+  const label = lang === 'es' ? 'Rendimiento' : 'Performance';
+  return (
+    <Box
+      component="button"
+      onClick={onClick}
+      sx={{
+        px:            '16px',
+        py:            '6px',
+        border:        `1px solid ${C.cyanLine}`,
+        borderRadius:  '0',
+        bgcolor:       'transparent',
+        color:         C.cyan,
+        fontFamily:    BARLOW,
+        fontSize:      '0.68rem',
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+        cursor:        'pointer',
+        whiteSpace:    'nowrap',
+        flexShrink:    0,
+        transition:    'all 0.2s ease',
+        '&:hover':     { bgcolor: C.cyanDim, borderColor: C.cyan, boxShadow: C.cyanGlow },
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 // ── Methodology link ──────────────────────────────────────────────────────────
 
 function MethodologyLink({ lang, onClick }) {
@@ -439,7 +470,7 @@ function MethodologyLink({ lang, onClick }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, isAdmin = false, onOracleChat }) {
+export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, onPerformance, isAdmin = false, onOracleChat }) {
   const [showCreditPanel, setShowCreditPanel] = useState(false);
 
   return (
@@ -558,6 +589,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Guide button */}
         <GuideButton lang={lang} />
+
+        {/* Performance link — public, visible to all users */}
+        <PerformanceLink lang={lang} onClick={onPerformance} />
 
         {/* Methodology link */}
         <MethodologyLink lang={lang} onClick={onMethodology} />

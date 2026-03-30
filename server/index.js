@@ -15,6 +15,7 @@ import { verifyToken } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import pool from './db.js';
 import lemonRouter from './lemon.js';
+import picksRouter from './routes/picks.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
 import { resolvePendingPicks } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
@@ -93,6 +94,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/api/auth',      authRouter);
 app.use('/api/bankroll',  bankrollRouter);
 app.use('/api/lemon',     lemonRouter);
+app.use('/api/picks',     picksRouter);
 app.post('/api/bmc/webhook', handleBMCWebhook);
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
