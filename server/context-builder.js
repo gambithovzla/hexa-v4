@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
@@ -1029,6 +1029,15 @@ export async function buildContext(gameData, oddsData = null) {
   if (homePitcherHASplits) console.log(`[context-builder] Home pitcher H/A splits loaded`);
   if (awayPitcherHASplits) console.log(`[context-builder] Away pitcher H/A splits loaded`);
 
+  // ── Pitcher rest days (Gap #4) ─────────────────────────────────────────────
+  const gameDate = (gameData.gameDate ?? new Date().toISOString()).split('T')[0];
+  let homePitcherRest = null;
+  let awayPitcherRest = null;
+  try { homePitcherRest = homePitcher?.id ? await getPitcherRestDays(homePitcher.id, gameDate) : null; } catch (_) {}
+  try { awayPitcherRest = awayPitcher?.id ? await getPitcherRestDays(awayPitcher.id, gameDate) : null; } catch (_) {}
+  if (homePitcherRest) console.log(`[context-builder] Home pitcher rest: ${homePitcherRest.daysRest} days`);
+  if (awayPitcherRest) console.log(`[context-builder] Away pitcher rest: ${awayPitcherRest.daysRest} days`);
+
   // ── Platoon splits (parallel, non-blocking) ─────────────────────────────────
   let homeSplits = null;
   let awaySplits = null;
@@ -1361,6 +1370,27 @@ export async function buildContext(gameData, oddsData = null) {
     blocks.push(formatPitcherHA('HOME', homePitcher?.fullName ?? 'Home Pitcher', homePitcherHASplits, true));
     blocks.push(formatPitcherHA('AWAY', awayPitcher?.fullName ?? 'Away Pitcher', awayPitcherHASplits, false));
     blocks.push('ORACLE INSTRUCTION: When a pitcher has 1.00+ ERA gap between home and away, weight the venue-specific split heavily. A pitcher with 2.80 home ERA and 5.20 away ERA pitching on the road is a significantly weaker proposition.');
+    blocks.push('');
+  }
+
+  // ── Pitcher Rest Days ─────────────────────────────────────────────────────
+  if (homePitcherRest || awayPitcherRest) {
+    blocks.push(section('PITCHER REST DAYS'));
+
+    const formatRest = (label, name, rest) => {
+      if (!rest || rest.daysRest == null) return `[${label}] ${name}: Rest days unknown`;
+      const days = rest.daysRest;
+      const ipStr = rest.lastIP ? ` (${rest.lastIP}IP` + (rest.lastPitchCount ? `, ${rest.lastPitchCount} pitches` : '') + ')' : '';
+      let flag = '';
+      if (days <= 3) flag = ' ⚠ SHORT REST — velocity and stamina risk';
+      else if (days === 4) flag = ' — Normal rest (4 days)';
+      else if (days === 5) flag = ' — Extra rest (5 days) — may benefit velocity';
+      else if (days >= 6) flag = ' — Extended rest (6+ days) — rust risk possible';
+      return `[${label}] ${name}: ${days} days rest (last: ${rest.lastStart}${ipStr})${flag}`;
+    };
+
+    blocks.push(formatRest('HOME', homePitcher?.fullName ?? 'Home Pitcher', homePitcherRest));
+    blocks.push(formatRest('AWAY', awayPitcher?.fullName ?? 'Away Pitcher', awayPitcherRest));
     blocks.push('');
   }
 
