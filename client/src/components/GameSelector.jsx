@@ -481,6 +481,7 @@ export default function GameSelector({
   mode = 'single',
   onSelectGame,
   onSelectMultiple,
+  onDateChange,
   // Backward compat (App.jsx passes these)
   onSelect,
   onAnalyze,
@@ -498,6 +499,9 @@ export default function GameSelector({
   const [singleGame, setSingleGame] = useState(null);
   // parlay / fullDay selection
   const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // ── Notify parent of date changes ────────────────────────────────────────
+  useEffect(() => { onDateChange?.(date); }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch games ───────────────────────────────────────────────────────────
   useEffect(() => {

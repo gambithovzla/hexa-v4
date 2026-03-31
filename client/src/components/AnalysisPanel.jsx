@@ -719,6 +719,7 @@ function RunButton({ canAnalyze, loading, onClick, t }) {
 
 export default function AnalysisPanel({
   selectedGames = [],
+  selectedDate = '',
   mode = 'single',
   lang = 'en',
   onSave,
@@ -802,14 +803,14 @@ export default function AnalysisPanel({
           // Multi-game safe pick: send all gameIds
           body = {
             gameIds: selectedGames.map(g => g.gamePk),
-            date:    selectedGames[0]?.gameDate?.split('T')[0],
+            date:    selectedDate,
             lang,
           };
         } else {
           const g = selectedGames[0];
           body = {
             gameId: g.gamePk,
-            date:   g.gameDate?.split('T')[0],
+            date:   selectedDate,
             lang,
           };
         }
@@ -818,7 +819,7 @@ export default function AnalysisPanel({
         endpoint = `${API_URL}/api/analyze/game`;
         body = {
           gameId:      g.gamePk,
-          date:        g.gameDate?.split('T')[0],
+          date:        selectedDate,
           lang,
           betType,
           riskProfile: 'balanced',
@@ -829,7 +830,7 @@ export default function AnalysisPanel({
         endpoint = `${API_URL}/api/analyze/parlay`;
         body = {
           gameIds:     selectedGames.map(g => g.gamePk),
-          date:        selectedGames[0]?.gameDate?.split('T')[0],
+          date:        selectedDate,
           lang,
           betType,
           riskProfile: 'balanced',
