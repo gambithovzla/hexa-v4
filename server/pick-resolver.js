@@ -190,11 +190,11 @@ function parsePick(pickStr) {
   const cleaned = s.replace(/\s*\([^)]*\)\s*$/, '').trim();
 
   // Over — standalone: "Over 8.5", "O 8.5", "Más de 8.5", "Mas de 8.5"
-  let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)$/i);
+  let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
   if (m) return { type: 'over', team: null, line: parseFloat(m[1]) };
 
   // Under — standalone: "Under 8.5", "U 8.5", "Menos de 8.5"
-  m = cleaned.match(/^(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)$/i);
+  m = cleaned.match(/^(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
   if (m) return { type: 'under', team: null, line: parseFloat(m[1]) };
 
   // Over with team prefix — "NYY Alta 8.5"
