@@ -1095,6 +1095,16 @@ export async function buildContext(gameData, oddsData = null) {
   const homePitcherTeam = settled(homeTeamVerifyResult);
   const awayPitcherTeam = settled(awayTeamVerifyResult);
 
+  // Inject pitcher throwing hand from person data into probablePitcher objects
+  if (homePitcherTeam?.pitchHand && homePitcher) {
+    homePitcher.throwingHand = homePitcherTeam.pitchHand;
+    console.log(`[context-builder] Home pitcher hand: ${homePitcherTeam.pitchHand}HP`);
+  }
+  if (awayPitcherTeam?.pitchHand && awayPitcher) {
+    awayPitcher.throwingHand = awayPitcherTeam.pitchHand;
+    console.log(`[context-builder] Away pitcher hand: ${awayPitcherTeam.pitchHand}HP`);
+  }
+
   // ── Baseball Savant Statcast (non-blocking) ──────────────────────────────
   let homePitcherSavant = null;
   let awayPitcherSavant = null;
