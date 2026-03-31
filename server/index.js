@@ -1235,8 +1235,8 @@ runMigrations()
           });
       }, SIX_HOURS).unref();
 
-      // ── Line movement snapshot: every 3 hours between 9am–7pm ET ────────
-      const THREE_HOURS = 3 * 60 * 60 * 1000;
+      // ── Line movement snapshot: every 6 hours between 9am–7pm ET ────────
+      const SIX_HOURS_LM = 6 * 60 * 60 * 1000;
       setInterval(() => {
         const etHour = parseInt(
           new Intl.DateTimeFormat('en-US', {
@@ -1251,9 +1251,9 @@ runMigrations()
             console.error('[line-movement] Scheduled snapshot failed:', err.message);
           });
         }
-      }, THREE_HOURS).unref();
+      }, SIX_HOURS_LM).unref();
 
-      // ── Pick resolver: every 30 min between 10pm–3am ET ──────────────────
+      // ── Pick resolver: every 30 min between 7pm–6am ET ───────────────────
       const THIRTY_MIN = 30 * 60 * 1000;
       setInterval(() => {
         // Get current hour in US Eastern Time (handles EDT/EST automatically)
@@ -1270,6 +1270,17 @@ runMigrations()
             console.error('[pick-resolver] Scheduled run failed:', err.message);
           });
         }
+      }, THIRTY_MIN).unref();
+
+      // ── Closing line capture: every 2 hours between 5pm–1am ET ──────────
+      const TWO_HOURS = 2 * 60 * 60 * 1000;
+      setInterval(() => {
+        const etHour = parseInt(
+          new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric', hour12: false, timeZone: 'America/New_York',
+          }).format(new Date()),
+          10
+        );
         // Closing line capture: 17:00–00:59 ET (before and during MLB game windows)
         if (etHour >= 17 || etHour < 1) {
           console.log(`[closing-line] Scheduled capture triggered (ET hour: ${etHour})`);
@@ -1277,7 +1288,7 @@ runMigrations()
             console.error('[closing-line] Scheduled capture failed:', err.message);
           });
         }
-      }, THIRTY_MIN).unref();
+      }, TWO_HOURS).unref();
     });
   })
   .catch(err => {

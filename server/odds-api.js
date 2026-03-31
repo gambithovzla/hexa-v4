@@ -9,7 +9,7 @@
  */
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
-const CACHE_TTL_MS  = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS  = 60 * 60 * 1000; // 60 minutes
 
 let _cache = { data: null, ts: 0 };
 
