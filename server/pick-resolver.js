@@ -91,6 +91,14 @@ function findGame(matchup, games) {
 
   const [token1, token2] = parts;
 
+  // Debug: log all available games so we can diagnose matching failures
+  const date = games[0]?.gameDate?.slice(0, 10) ?? 'unknown';
+  console.log(
+    `[pick-resolver] Available games for ${date}:`,
+    games.map(g => `${g.teams?.away?.abbreviation}(${g.teams?.away?.name}) @ ${g.teams?.home?.abbreviation}(${g.teams?.home?.name})`)
+  );
+  console.log(`[pick-resolver] Trying to match: "${matchup}" → tokens ["${token1}", "${token2}"]`);
+
   for (const game of games) {
     const home = game.teams?.home;
     const away = game.teams?.away;
