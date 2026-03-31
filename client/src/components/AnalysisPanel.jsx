@@ -901,6 +901,7 @@ export default function AnalysisPanel({
               language: lang,
               // Override matchup directly from the server response so it always works
               _matchupOverride: r.matchup,
+              odds: r.odds ?? null,
             });
           }
         }
@@ -915,6 +916,7 @@ export default function AnalysisPanel({
           date:     new Date().toISOString(),
           model:    modelMode,
           language: lang,
+          odds:     json.odds ?? null,
         });
       }
     } catch (e) {
