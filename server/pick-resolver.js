@@ -342,6 +342,12 @@ export async function resolvePendingPicks() {
           continue;
         }
 
+        console.log(`[pick-resolver] Game found:`, JSON.stringify({
+          matchup: `${game.teams?.away?.abbreviation} @ ${game.teams?.home?.abbreviation}`,
+          status: game.status,
+          score: `${game.teams?.away?.score} - ${game.teams?.home?.score}`
+        }));
+
         // b. Skip if not final yet
         if (game.status?.simplified !== 'final') {
           console.log(
