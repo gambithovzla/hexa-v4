@@ -94,6 +94,7 @@ export default function App() {
   const [singleGame,        setSingleGame]        = useState(null);
   const [parlayGames,       setParlayGames]       = useState([]);
   const [batchGames,        setBatchGames]        = useState([]);
+  const [selectedDate,      setSelectedDate]      = useState('');
   const [isAnalyzing,       setIsAnalyzing]       = useState(false);
   const [showMethodology,   setShowMethodology]   = useState(false);
   const [showOracleChat,    setShowOracleChat]    = useState(false);
@@ -192,11 +193,13 @@ export default function App() {
               <GameSelector
                 mode="single"
                 onSelectGame={setSingleGame}
+                onDateChange={setSelectedDate}
                 language={lang}
               />
               <AnalysisPanel
                 mode="single"
                 selectedGames={singleGame ? [singleGame] : []}
+                selectedDate={selectedDate}
                 lang={lang}
                 onSave={addPick}
                 setIsAnalyzing={setIsAnalyzing}
@@ -210,11 +213,13 @@ export default function App() {
               <GameSelector
                 mode="parlay"
                 onSelectMultiple={setParlayGames}
+                onDateChange={setSelectedDate}
                 language={lang}
               />
               <AnalysisPanel
                 mode="parlay"
                 selectedGames={parlayGames}
+                selectedDate={selectedDate}
                 lang={lang}
                 onSave={addPick}
                 setIsAnalyzing={setIsAnalyzing}
