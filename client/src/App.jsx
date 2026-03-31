@@ -25,6 +25,7 @@ import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
 import OracleChat          from './components/OracleChat';
 import PerformanceDashboard from './pages/PerformanceDashboard';
+import PerformancePage      from './components/PerformancePage';
 import BatchScanPanel      from './components/BatchScanPanel';
 import LiveTracker         from './components/LiveTracker';
 import useHistory           from './hooks/useHistory';
@@ -115,6 +116,11 @@ export default function App() {
   // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
   // HistoryPanel reads history via its own hook instance (remounts each visit).
   const { addPick } = useHistory();
+
+  // Public landing — /performance is accessible without login
+  if (window.location.pathname === '/performance') {
+    return <PerformancePage />;
+  }
 
   // Render Oracle Chat as a full-page takeover (admin only)
   if (showOracleChat) {
