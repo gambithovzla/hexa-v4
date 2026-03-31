@@ -298,9 +298,18 @@ function RecentPlaysFeed({ plays, lang }) {
               <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {half}{inn}
               </Typography>
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textPrimary, lineHeight: 1.4, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                {play.batter}:
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                {play.batterTeamId && (
+                  <img
+                    src={`https://www.mlbstatic.com/team-logos/${play.batterTeamId}.svg`}
+                    alt=""
+                    style={{ width: 18, height: 18, marginRight: 6, verticalAlign: 'middle' }}
+                  />
+                )}
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textPrimary, lineHeight: 1.4, whiteSpace: 'nowrap' }}>
+                  {play.batter}:
+                </Typography>
+              </Box>
               <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: eventColor, fontWeight: 600, lineHeight: 1.4 }}>
                 {play.event}
               </Typography>

@@ -667,7 +667,7 @@ export default function PerformanceDashboard({ onBack }) {
             <Typography sx={{
               fontFamily: MONO,
               fontSize:   '9px',
-              color:      DIM,
+              color:      'rgba(255,102,0,0.7)',
               letterSpacing: '1px',
             }}>
               ROI calculated using flat 1-unit stakes · American odds · Won: profit = odds/100 (+ odds) or 100/|odds| (− odds) · Push = 0u
