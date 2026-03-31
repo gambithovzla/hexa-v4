@@ -32,7 +32,8 @@ function detectPickType(pick) {
 /**
  * Calculate units profit for a single pick using flat 1-unit stake.
  * American odds: +150 → profit 1.5u ; -110 → profit 0.909u ; loss → -1u ; push → 0u
- * Returns null for won picks with no usable odds — caller must exclude from ROI math.
+ * Returns null only if odds === 0 (degenerate case — caller skips from ROI math).
+ * Callers should pass -110 as the default when odds_at_pick is missing.
  */
 function calcUnits(result, odds) {
   const isWon = result === 'won' || result === 'win';
@@ -113,8 +114,8 @@ router.get('/public-stats', async (req, res) => {
       const isLost = result === 'lost' || result === 'loss';
       const isPush = result === 'push';
 
-      const odds  = row.odds_at_pick != null ? parseInt(row.odds_at_pick, 10) : null;
-      const units = calcUnits(result, odds); // null means won pick with no usable odds
+      const odds  = row.odds_at_pick != null ? parseInt(row.odds_at_pick, 10) : -110; // default to standard juice when missing
+      const units = calcUnits(result, odds); // null only if odds === 0 (shouldn't happen with -110 default)
 
       // W-L-P record uses ALL resolved picks regardless of odds
       if (isWon)       wins++;
