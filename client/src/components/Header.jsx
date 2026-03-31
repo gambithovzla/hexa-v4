@@ -408,31 +408,40 @@ function GuideButton({ lang }) {
 
 // ── Performance link ──────────────────────────────────────────────────────────
 
-function PerformanceLink({ lang, onClick }) {
-  const label = lang === 'es' ? 'Rendimiento' : 'Performance';
+function PerformanceLink() {
   return (
     <Box
       component="button"
-      onClick={onClick}
+      onClick={() => { window.location.href = '/performance'; }}
       sx={{
         px:            '16px',
         py:            '6px',
-        border:        `1px solid ${C.cyanLine}`,
+        border:        '1px solid rgba(0,255,136,0.4)',
         borderRadius:  '0',
-        bgcolor:       'transparent',
-        color:         C.cyan,
+        bgcolor:       'rgba(0,255,136,0.12)',
+        color:         '#00FF88',
         fontFamily:    BARLOW,
         fontSize:      '0.68rem',
+        fontWeight:    700,
         letterSpacing: '2px',
         textTransform: 'uppercase',
         cursor:        'pointer',
         whiteSpace:    'nowrap',
         flexShrink:    0,
         transition:    'all 0.2s ease',
-        '&:hover':     { bgcolor: C.cyanDim, borderColor: C.cyan, boxShadow: C.cyanGlow },
+        '@keyframes perfPulse': {
+          '0%, 100%': { boxShadow: '0 0 6px rgba(0,255,136,0.3)' },
+          '50%':      { boxShadow: '0 0 14px rgba(0,255,136,0.6), 0 0 28px rgba(0,255,136,0.15)' },
+        },
+        animation: 'perfPulse 2.4s ease-in-out infinite',
+        '&:hover': {
+          bgcolor:     'rgba(0,255,136,0.25)',
+          borderColor: 'rgba(0,255,136,0.6)',
+          boxShadow:   '0 0 14px rgba(0,255,136,0.6), 0 0 28px rgba(0,255,136,0.15)',
+        },
       }}
     >
-      {label}
+      PERFORMANCE
     </Box>
   );
 }
@@ -591,7 +600,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         <GuideButton lang={lang} />
 
         {/* Performance link — public, visible to all users */}
-        <PerformanceLink lang={lang} onClick={onPerformance} />
+        <PerformanceLink />
 
         {/* Methodology link */}
         <MethodologyLink lang={lang} onClick={onMethodology} />
