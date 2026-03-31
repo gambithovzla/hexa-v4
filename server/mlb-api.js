@@ -444,6 +444,8 @@ export async function getCurrentTeam(playerId) {
     return {
       playerId,
       fullName:         person.fullName,
+      pitchHand:        person.pitchHand?.code           ?? null,
+      batSide:          person.batSide?.code             ?? null,
       currentTeamId:    person.currentTeam?.id           ?? null,
       currentTeamName:  person.currentTeam?.name         ?? null,
       currentTeamAbbr:  person.currentTeam?.abbreviation ?? null,
