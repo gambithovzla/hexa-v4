@@ -43,20 +43,31 @@ const ABBR_TO_NICKNAME = {
 function tokenMatchesTeam(token, teamName, teamAbbr) {
   if (!token) return false;
   const t = token.trim().toLowerCase();
+  const nameLower = (teamName ?? '').toLowerCase();
+  const abbrLower = (teamAbbr ?? '').toLowerCase();
 
-  // Direct abbreviation match
-  if (teamAbbr && t === teamAbbr.toLowerCase()) return true;
+  // Direct abbreviation match: "SF" === "SF"
+  if (abbrLower && t === abbrLower) return true;
 
-  // Full / partial name match (e.g. "New York Yankees" or "Yankees")
-  if (teamName && teamName.toLowerCase().includes(t)) return true;
+  // Full / partial name match: "San Francisco Giants".includes("Giants")
+  if (nameLower && nameLower.includes(t)) return true;
 
-  // Nickname via reverse map  → abbreviation comparison
+  // Token includes team name: "SF Giants".includes("Giants") — reversed check
+  if (nameLower && t.includes(nameLower)) return true;
+
+  // Nickname via reverse map: "Giants" → "SF"
   const abbrFromNick = NICKNAME_TO_ABBR[t];
-  if (abbrFromNick && teamAbbr && abbrFromNick === teamAbbr) return true;
+  if (abbrFromNick && abbrLower && abbrFromNick === teamAbbr) return true;
 
-  // Abbreviation → nickname → team name match (handles alt abbreviations e.g. AZ vs ARI)
-  const nickFromAbbr = ABBR_TO_NICKNAME[t.toUpperCase()];
-  if (nickFromAbbr && teamName && teamName.toLowerCase().includes(nickFromAbbr.toLowerCase())) return true;
+  // Multi-word token: split and check if abbreviation OR nickname matches any word
+  // Handles "SF Giants" → checks "sf" (=== abbr) ✓ and "giants" (=== nickname) ✓
+  const words = t.split(/\s+/);
+  if (words.length > 1) {
+    for (const w of words) {
+      if (abbrLower && w === abbrLower) return true;
+      if (NICKNAME_TO_ABBR[w] === teamAbbr) return true;
+    }
+  }
 
   return false;
 }
