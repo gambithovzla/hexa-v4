@@ -173,7 +173,7 @@ function findPlayerStat(playerStats, playerName, stat) {
  */
 function parsePick(pickStr) {
   if (!pickStr) return null;
-  const s = pickStr.trim();
+  const s = pickStr.replace(/\s*\([^)]*\)\s*$/g, '').trim();
 
   // Strip all trailing parenthetical groups: "Over 8.5 (-104)" → "Over 8.5"
   // Handles multiple groups like "SF Giants Moneyline (Away) (-150)" → "SF Giants Moneyline"
