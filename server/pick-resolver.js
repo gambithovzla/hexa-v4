@@ -10,51 +10,29 @@ import pool from './db.js';
 import { getTodayGames } from './mlb-api.js';
 import { getLiveGameData } from './live-feed.js';
 
-// ── MLB abbreviation → nickname (all 30 franchises) ──────────────────────────
+// ── Nickname → abbreviation (lowercase keys for case-insensitive lookup) ─────
 
-const ABBR_TO_NICKNAME = {
-  // AL East
-  NYY: 'Yankees',
-  BOS: 'Red Sox',
-  TOR: 'Blue Jays',
-  BAL: 'Orioles',
-  TB:  'Rays',
-  // AL Central
-  CLE: 'Guardians',
-  DET: 'Tigers',
-  CWS: 'White Sox',
-  KC:  'Royals',
-  MIN: 'Twins',
-  // AL West
-  HOU: 'Astros',
-  SEA: 'Mariners',
-  TEX: 'Rangers',
-  LAA: 'Angels',
-  OAK: 'Athletics',
-  // NL East
-  ATL: 'Braves',
-  NYM: 'Mets',
-  PHI: 'Phillies',
-  MIA: 'Marlins',
-  WSH: 'Nationals',
-  // NL Central
-  MIL: 'Brewers',
-  CHC: 'Cubs',
-  STL: 'Cardinals',
-  CIN: 'Reds',
-  PIT: 'Pirates',
-  // NL West
-  LAD: 'Dodgers',
-  SF:  'Giants',
-  SD:  'Padres',
-  COL: 'Rockies',
-  ARI: 'Diamondbacks',
+const NICKNAME_TO_ABBR = {
+  'yankees': 'NYY', 'red sox': 'BOS', 'blue jays': 'TOR', 'orioles': 'BAL', 'rays': 'TB',
+  'guardians': 'CLE', 'tigers': 'DET', 'white sox': 'CWS', 'royals': 'KC', 'twins': 'MIN',
+  'astros': 'HOU', 'mariners': 'SEA', 'rangers': 'TEX', 'angels': 'LAA', 'athletics': 'OAK',
+  'braves': 'ATL', 'mets': 'NYM', 'phillies': 'PHI', 'marlins': 'MIA', 'nationals': 'WSH',
+  'brewers': 'MIL', 'cubs': 'CHC', 'cardinals': 'STL', 'reds': 'CIN', 'pirates': 'PIT',
+  'dodgers': 'LAD', 'giants': 'SF', 'padres': 'SD', 'rockies': 'COL', 'diamondbacks': 'AZ',
 };
 
-// Nickname → abbreviation (lowercase keys for case-insensitive lookup)
-const NICKNAME_TO_ABBR = Object.fromEntries(
-  Object.entries(ABBR_TO_NICKNAME).map(([abbr, nick]) => [nick.toLowerCase(), abbr])
-);
+// ── Abbreviation → nickname (all 30 franchises) ───────────────────────────────
+
+const ABBR_TO_NICKNAME = {
+  SF: 'Giants', SD: 'Padres', LAD: 'Dodgers', LAA: 'Angels',
+  NYY: 'Yankees', NYM: 'Mets', BOS: 'Red Sox', CHC: 'Cubs',
+  CWS: 'White Sox', HOU: 'Astros', ATL: 'Braves', PHI: 'Phillies',
+  MIA: 'Marlins', WSH: 'Nationals', PIT: 'Pirates', STL: 'Cardinals',
+  MIL: 'Brewers', CIN: 'Reds', COL: 'Rockies', AZ: 'Diamondbacks',
+  TEX: 'Rangers', OAK: 'Athletics', SEA: 'Mariners', MIN: 'Twins',
+  DET: 'Tigers', CLE: 'Guardians', KC: 'Royals', TB: 'Rays',
+  TOR: 'Blue Jays', BAL: 'Orioles',
+};
 
 // ── Team matching helpers ─────────────────────────────────────────────────────
 
@@ -75,6 +53,10 @@ function tokenMatchesTeam(token, teamName, teamAbbr) {
   // Nickname via reverse map  → abbreviation comparison
   const abbrFromNick = NICKNAME_TO_ABBR[t];
   if (abbrFromNick && teamAbbr && abbrFromNick === teamAbbr) return true;
+
+  // Abbreviation → nickname → team name match (handles alt abbreviations e.g. AZ vs ARI)
+  const nickFromAbbr = ABBR_TO_NICKNAME[t.toUpperCase()];
+  if (nickFromAbbr && teamName && teamName.toLowerCase().includes(nickFromAbbr.toLowerCase())) return true;
 
   return false;
 }
