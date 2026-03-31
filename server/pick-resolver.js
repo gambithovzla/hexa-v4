@@ -282,6 +282,11 @@ function resolvePickResult(parsed, game) {
     return 'push';
   }
 
+  console.log(`[debug] parsed:`, JSON.stringify(parsed));
+  console.log(`[debug] home:`, JSON.stringify({ name: game.teams.home.name, abbr: game.teams.home.abbreviation, score: game.teams.home.score }));
+  console.log(`[debug] away:`, JSON.stringify({ name: game.teams.away.name, abbr: game.teams.away.abbreviation, score: game.teams.away.score }));
+  console.log(`[debug] tokenMatch home:`, tokenMatchesTeam(parsed.team, game.teams.home.name, game.teams.home.abbreviation));
+  console.log(`[debug] tokenMatch away:`, tokenMatchesTeam(parsed.team, game.teams.away.name, game.teams.away.abbreviation));
   return null;
 }
 
