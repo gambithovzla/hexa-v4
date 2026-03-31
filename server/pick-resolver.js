@@ -193,9 +193,9 @@ function parsePick(pickStr) {
   if (!pickStr) return null;
   const s = pickStr.trim();
 
-  // Strip trailing odds in parentheses: "Over 8.5 (-104)" → "Over 8.5"
-  // Also handles "(...estimado)", "(+104)", etc.
-  const cleaned = s.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  // Strip all trailing parenthetical groups: "Over 8.5 (-104)" → "Over 8.5"
+  // Handles multiple groups like "SF Giants Moneyline (Away) (-150)" → "SF Giants Moneyline"
+  const cleaned = s.replace(/(\s*\([^)]*\))+\s*$/, '').trim();
 
   // Over — standalone: "Over 8.5", "O 8.5", "Más de 8.5", "Mas de 8.5"
   let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
