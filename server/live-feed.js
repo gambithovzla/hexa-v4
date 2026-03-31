@@ -148,6 +148,7 @@ function normalizeLiveFeed(raw, gamePk) {
       halfInning: p.about?.halfInning ?? '',
       batter: p.matchup?.batter?.fullName ?? 'Unknown',
       batterId: p.matchup?.batter?.id ?? null,
+      batterTeamId: (p.about?.halfInning === 'top' ? awayTeam?.id : homeTeam?.id) ?? null,
       pitcher: p.matchup?.pitcher?.fullName ?? 'Unknown',
       pitcherId: p.matchup?.pitcher?.id ?? null,
       event: p.result?.event ?? '',
