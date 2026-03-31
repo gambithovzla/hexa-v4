@@ -332,7 +332,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
     }
 
     const responseData = analysis.data ? { ...analysis.data, odds: matchedOdds ?? undefined } : null;
-    res.json({ success: true, data: responseData, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
+    res.json({ success: true, data: responseData, odds: matchedOdds ?? null, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -495,6 +495,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
       return res.json({
         success: true,
         data: single.data,
+        odds: single.odds ?? null,
         parseError: single.parseError,
         rawText: single.rawText,
         credits: updatedUser.credits - (failCount * 2),

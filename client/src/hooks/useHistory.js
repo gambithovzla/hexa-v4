@@ -181,6 +181,35 @@ export default function useHistory() {
     // Authenticated: POST to API
     const mp = hexaData?.master_prediction ?? {};
     const sp = hexaData?.safe_pick ?? null;
+
+    // Extract odds for the pick
+    let oddsAtPick = null;
+    let oddsDetails = null;
+    const oddsData = payload.odds;
+    if (oddsData) {
+      const pickLower = (pick ?? '').toLowerCase();
+      const ml = oddsData.moneyline;
+      const rl = oddsData.runLine;
+      const ou = oddsData.overUnder;
+
+      if (pickLower.includes('over') && ou?.overPrice) {
+        oddsAtPick = ou.overPrice;
+      } else if (pickLower.includes('under') && ou?.underPrice) {
+        oddsAtPick = ou.underPrice;
+      } else if (pickLower.includes('run line') || pickLower.includes('línea')) {
+        oddsAtPick = rl?.home?.price ?? rl?.away?.price ?? null;
+      } else if (ml) {
+        // Moneyline: determine home vs away from matchup
+        const awayName = (payload.games?.[0]?.teams?.away?.name ?? '').toLowerCase();
+        if (pickLower.includes(awayName.split(' ').pop())) {
+          oddsAtPick = ml.away;
+        } else {
+          oddsAtPick = ml.home;
+        }
+      }
+      oddsDetails = oddsData;
+    }
+
     const body = {
       type:              isSafe ? 'safe' : (payload.type ?? 'single'),
       matchup,
@@ -196,6 +225,8 @@ export default function useHistory() {
       model:             payload.model ?? null,
       language:          payload.language ?? 'en',
       kelly_recommendation: hexaData?.kelly_recommendation ?? null,
+      odds_at_pick:      oddsAtPick ?? null,
+      odds_details:      oddsDetails ? JSON.stringify(oddsDetails) : null,
     };
 
     try {
