@@ -1139,6 +1139,7 @@ export async function buildContext(gameData, oddsData = null) {
       ...OF_POSITIONS.map(pos => { const p = findByPos(awayLineup, pos); return p ? { player: p, pos, side: 'Away' } : null; }),
     ].filter(Boolean);
 
+    console.log('[context-builder] Batter names to search:', [...homeBatters, ...awayBatters].map(b => b.fullName ?? b.name ?? b));
     const batterFetches = [
       ...homeBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
       ...awayBatters.map(b => getBatterStatcast(b.fullName ?? b.name ?? b)),
@@ -1168,6 +1169,9 @@ export async function buildContext(gameData, oddsData = null) {
       if (idx < homeBattersFull.length) savantBatters.home.push({ name, savant });
       else                               savantBatters.away.push({ name, savant });
     });
+    const foundCount = [...savantBatters.home, ...savantBatters.away].filter(b => b.savant !== null).length;
+    const totalCount = savantBatters.home.length + savantBatters.away.length;
+    console.log(`[context-builder] Batter Statcast: ${foundCount}/${totalCount} found in cache`);
 
     // ── Individual batter splits vs LHP/RHP (P4 enhancement) ────────────────
     // Fetch splits for ALL lineup batters (not just top 3) to support player props
