@@ -1685,6 +1685,7 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push('');
   blocks.push(buildHistoricalContextBlock());
 
+  console.log('[context-builder] Savant batters with data:', savantBatters.home.filter(b => b.savant).length, 'home,', savantBatters.away.filter(b => b.savant).length, 'away');
   return blocks.join('\n');
 }
 
