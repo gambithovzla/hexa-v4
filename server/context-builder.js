@@ -1129,8 +1129,8 @@ export async function buildContext(gameData, oddsData = null) {
       awayPitcher?.fullName ? getPitcherStatcast(awayPitcher.fullName) : Promise.resolve(null),
     ];
 
-    const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
-    const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
+    const homeBatters = Array.isArray(homeLineup) ? homeLineup.slice(0, 9) : [];
+    const awayBatters = Array.isArray(awayLineup) ? awayLineup.slice(0, 9) : [];
     const homeCatcher = findByPos(homeLineup, 'C');
     const awayCatcher = findByPos(awayLineup, 'C');
     const OF_POSITIONS = ['CF', 'LF', 'RF'];
@@ -1159,8 +1159,8 @@ export async function buildContext(gameData, oddsData = null) {
     homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
     awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
 
-    const homeBattersFull = Array.isArray(homeLineup) ? homeLineup.slice(0, 3) : [];
-    const awayBattersFull = Array.isArray(awayLineup) ? awayLineup.slice(0, 3) : [];
+    const homeBattersFull = Array.isArray(homeLineup) ? homeLineup.slice(0, 9) : [];
+    const awayBattersFull = Array.isArray(awayLineup) ? awayLineup.slice(0, 9) : [];
     const allBatters = [...homeBattersFull, ...awayBattersFull];
     batterResults.forEach((r, idx) => {
       const name   = allBatters[idx]?.fullName ?? allBatters[idx]?.name ?? allBatters[idx] ?? `Batter ${idx + 1}`;
@@ -1445,7 +1445,7 @@ export async function buildContext(gameData, oddsData = null) {
 
   // Batter Savant — only rendered when lineup data was available
   if (savantBatters.home.length > 0 || savantBatters.away.length > 0) {
-    blocks.push(section(`BATTER STATCAST — TOP 3 per Lineup (Savant ${new Date().getFullYear()})`));
+    blocks.push(section(`BATTER STATCAST — Full Lineup (Savant ${new Date().getFullYear()})`));
     if (savantBatters.home.length > 0) {
       blocks.push(`${homeName} (Home) — FACING: ${awayPitcher?.fullName ?? 'TBD'} (${awayPitcher?.throwingHand === 'L' ? 'LHP' : awayPitcher?.throwingHand === 'R' ? 'RHP' : '?'}):`);
       savantBatters.home.forEach(({ name, savant }) => blocks.push(batterSavantLine(name, savant)));
