@@ -177,12 +177,20 @@ export default function BacktestRunner({ lang = 'en', onBack }) {
               { value: 'props', label: 'PLAYER PROPS' },
               { value: 'moneyline', label: 'MONEYLINE' },
               { value: 'totals', label: 'OVER/UNDER' },
+              { value: 'fade_hits', label: 'FADE HITS' },
             ].map(opt => (
               <Box key={opt.value} component="button" onClick={() => setBetType(opt.value)} sx={{
                 px: '12px', py: '5px',
-                border: `1px solid ${betType === opt.value ? C.accentLine : C.border}`,
-                background: betType === opt.value ? C.accentDim : 'transparent',
-                color: betType === opt.value ? C.accent : C.textMuted,
+                border: opt.value === 'fade_hits'
+                  ? `1px solid ${betType === 'fade_hits' ? 'rgba(255,34,68,0.4)' : C.border}`
+                  : `1px solid ${betType === opt.value ? C.accentLine : C.border}`,
+                background: opt.value === 'fade_hits'
+                  ? (betType === 'fade_hits' ? 'rgba(255,34,68,0.08)' : 'transparent')
+                  : (betType === opt.value ? C.accentDim : 'transparent'),
+                color: opt.value === 'fade_hits'
+                  ? (betType === 'fade_hits' ? '#FF2244' : C.textMuted)
+                  : (betType === opt.value ? C.accent : C.textMuted),
+                boxShadow: opt.value === 'fade_hits' && betType === 'fade_hits' ? '0 0 8px rgba(255,34,68,0.2)' : 'none',
                 fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '1px', cursor: 'pointer',
               }}>
                 {opt.label}
