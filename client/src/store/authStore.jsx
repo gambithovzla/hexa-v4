@@ -101,8 +101,34 @@ export function AuthProvider({ children }) {
     setUser(prev => prev ? { ...prev, credits } : prev);
   }
 
+  // ── verifyEmail — submit 6-digit code ─────────────────────────────────────
+  async function verifyEmail(code) {
+    const t = token ?? localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_URL}/api/auth/verify-email`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+      body:    JSON.stringify({ code }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error ?? 'Verification failed');
+    setUser(prev => prev ? { ...prev, email_verified: true } : prev);
+    return true;
+  }
+
+  // ── resendCode — request a new verification code ──────────────────────────
+  async function resendCode() {
+    const t = token ?? localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_URL}/api/auth/resend-code`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${t}` },
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error ?? 'Failed to resend code');
+    return true;
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated, isLoading, login, register, logout, checkAuth, updateCredits }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated, isLoading, login, register, logout, checkAuth, updateCredits, verifyEmail, resendCode }}>
       {children}
     </AuthContext.Provider>
   );

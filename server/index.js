@@ -230,6 +230,12 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
   const resolvedLang = lang ?? language;
   const cost         = calcServerCost('single', model, webSearch);
 
+  // Require email verification before allowing analysis
+  const gameUserCheck = await pool.query('SELECT email_verified FROM users WHERE id = $1', [req.user.id]);
+  if (gameUserCheck.rows[0] && !gameUserCheck.rows[0].email_verified) {
+    return res.status(403).json({ success: false, error: 'Please verify your email before running analysis' });
+  }
+
   try {
     let games    = await getTodayGames(date);
     let gameData = games.find(g => String(g.gamePk) === String(gameId));
@@ -364,6 +370,12 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
   const resolvedLang = lang ?? language;
   const cost         = calcServerCost('parlay', model, false);
 
+  // Require email verification before allowing analysis
+  const parlayUserCheck = await pool.query('SELECT email_verified FROM users WHERE id = $1', [req.user.id]);
+  if (parlayUserCheck.rows[0] && !parlayUserCheck.rows[0].email_verified) {
+    return res.status(403).json({ success: false, error: 'Please verify your email before running analysis' });
+  }
+
   try {
     const games = await getTodayGames(date);
 
@@ -426,6 +438,12 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
   // Cost: 2 credits per game
   const cost = 2 * ids.length;
   const isMulti = ids.length > 1;
+
+  // Require email verification before allowing analysis
+  const safeUserCheck = await pool.query('SELECT email_verified FROM users WHERE id = $1', [req.user.id]);
+  if (safeUserCheck.rows[0] && !safeUserCheck.rows[0].email_verified) {
+    return res.status(403).json({ success: false, error: 'Please verify your email before running analysis' });
+  }
 
   try {
     let games = await getTodayGames(resolvedDate);

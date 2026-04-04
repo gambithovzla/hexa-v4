@@ -137,6 +137,12 @@ export async function runMigrations() {
     await client.query(`UPDATE users SET is_admin = true WHERE email = 'cdanielrr@hotmail.com'`);
     await client.query(`UPDATE users SET is_admin = true WHERE email = 'admin@hexa.com'`);
 
+    // ── email verification columns (safe for existing DBs) ────────────────────
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code TEXT DEFAULT NULL`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMP DEFAULT NULL`);
+    await client.query(`UPDATE users SET email_verified = true WHERE email = 'cdanielrr@hotmail.com' OR email = 'admin@hexa.com'`);
+
     await client.query('COMMIT');
 
     // Normalize pick results: 'won' → 'win', 'lost' → 'loss'
