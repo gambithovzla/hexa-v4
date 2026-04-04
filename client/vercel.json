@@ -3,6 +3,7 @@
     { "source": "/terms", "destination": "/index.html" },
     { "source": "/privacy", "destination": "/index.html" },
     { "source": "/admin/backtests", "destination": "/index.html" },
+    { "source": "/admin/run-backtest", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
