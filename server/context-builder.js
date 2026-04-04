@@ -1303,16 +1303,18 @@ export async function buildContext(gameData, oddsData = null) {
   }
 
   // ── DEBUG: log assembled data before building context string ───────────────
-  console.log('=== CONTEXT BUILDER DEBUG ===');
-  console.log('MLB Stats data keys:', Object.keys({
-    homeHitting:       homeHitting,
-    awayHitting:       awayHitting,
-    homePitcherStats:  homePitcherStats,
-    awayPitcherStats:  awayPitcherStats,
-  }).filter(k => ({ homeHitting, awayHitting, homePitcherStats, awayPitcherStats })[k] != null));
-  console.log('Statcast data available:', !!(homePitcherSavant || awayPitcherSavant));
-  console.log('Odds data:', JSON.stringify(oddsData)?.substring(0, 300));
-  console.log('=== END CONTEXT BUILDER ===');
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('=== CONTEXT BUILDER DEBUG ===');
+    console.log('MLB Stats data keys:', Object.keys({
+      homeHitting:       homeHitting,
+      awayHitting:       awayHitting,
+      homePitcherStats:  homePitcherStats,
+      awayPitcherStats:  awayPitcherStats,
+    }).filter(k => ({ homeHitting, awayHitting, homePitcherStats, awayPitcherStats })[k] != null));
+    console.log('Statcast data available:', !!(homePitcherSavant || awayPitcherSavant));
+    console.log('Odds data:', JSON.stringify(oddsData)?.substring(0, 300));
+    console.log('=== END CONTEXT BUILDER ===');
+  }
 
   // ---------------------------------------------------------------------------
   // Ensamblar el string
