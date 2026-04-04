@@ -371,16 +371,18 @@ These additions make Premium feel substantially different from Deep. The user sh
   }
 
   // ── DEBUG: log full prompt before API call ─────────────────────────────────
-  console.log('=== H.E.X.A. DEBUG: FULL CONTEXT ===');
-  console.log('Game:', matchup || 'Full Day');
-  console.log('Mode:', mode);
-  console.log('Web Intel:', webSearch);
-  console.log('Model:', modelId);
-  console.log('--- SYSTEM PROMPT ---');
-  console.log(systemPrompt);
-  console.log('--- USER PROMPT / CONTEXT ---');
-  console.log(userMessage);
-  console.log('=== END DEBUG ===');
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('=== H.E.X.A. DEBUG: FULL CONTEXT ===');
+    console.log('Game:', matchup || 'Full Day');
+    console.log('Mode:', mode);
+    console.log('Web Intel:', webSearch);
+    console.log('Model:', modelId);
+    console.log('--- SYSTEM PROMPT ---');
+    console.log(systemPrompt);
+    console.log('--- USER PROMPT / CONTEXT ---');
+    console.log(userMessage);
+    console.log('=== END DEBUG ===');
+  }
 
   // Stream the response; race against optional timeout
   const streamPromise = anthropic.messages.stream(requestBody).finalMessage();
@@ -396,9 +398,11 @@ These additions make Premium feel substantially different from Deep. The user sh
   const rawText              = extractRawText(message);
 
   // ── DEBUG: log response ────────────────────────────────────────────────────
-  console.log('=== H.E.X.A. DEBUG: CLAUDE RESPONSE ===');
-  console.log((rawText?.substring(0, 500) ?? '') + (rawText?.length > 500 ? '...' : ''));
-  console.log('=== END RESPONSE ===');
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('=== H.E.X.A. DEBUG: CLAUDE RESPONSE ===');
+    console.log((rawText?.substring(0, 500) ?? '') + (rawText?.length > 500 ? '...' : ''));
+    console.log('=== END RESPONSE ===');
+  }
 
   const { data, parseError } = parseResponse(rawText);
 
