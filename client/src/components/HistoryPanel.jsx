@@ -430,8 +430,14 @@ function AnalisisTab({ lang }) {
           >
             {lang === 'es' ? '⟳ RESOLVER PICKS' : '⟳ RESOLVE PICKS'}
           </Box>
-          <Box component="button" onClick={handleClearClick} sx={{ px: '18px', py: '8px', border: `1px solid ${confirming ? C.red : C.border}`, borderRadius: '2px', bgcolor: confirming ? C.redDim : 'transparent', color: confirming ? C.red : C.textMuted, fontFamily: BARLOW, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}>
-            {confirming ? t.history.confirmClear : t.history.clearHistory}
+          <Box component="button" onClick={() => {
+            if (window.confirm(lang === 'es'
+              ? '⚠️ ¿Estás seguro? Esto ocultará todo tu historial de picks. Esta acción solo está disponible para administradores.'
+              : '⚠️ Are you sure? This will hide your entire pick history. This action is only available to administrators.')) {
+              clearHistory();
+            }
+          }} sx={{ px: '18px', py: '8px', border: `1px solid ${C.border}`, borderRadius: '2px', bgcolor: 'transparent', color: C.textMuted, fontFamily: BARLOW, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}>
+            {t.history.clearHistory}
           </Box>
         </Box>
       )}
