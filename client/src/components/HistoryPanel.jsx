@@ -19,6 +19,37 @@ import { C, BARLOW, MONO, SANS } from '../theme';
 
 const TRANSLATIONS = { en, es };
 
+const TEAM_IDS = {
+  'Arizona Diamondbacks': 109, 'Atlanta Braves': 144, 'Baltimore Orioles': 110,
+  'Boston Red Sox': 111, 'Chicago Cubs': 112, 'Chicago White Sox': 145,
+  'Cincinnati Reds': 113, 'Cleveland Guardians': 114, 'Colorado Rockies': 115,
+  'Detroit Tigers': 116, 'Houston Astros': 117, 'Kansas City Royals': 118,
+  'Los Angeles Angels': 108, 'Los Angeles Dodgers': 119, 'Miami Marlins': 146,
+  'Milwaukee Brewers': 158, 'Minnesota Twins': 142, 'New York Mets': 121,
+  'New York Yankees': 147, 'Oakland Athletics': 133, 'Philadelphia Phillies': 143,
+  'Pittsburgh Pirates': 134, 'San Diego Padres': 135, 'San Francisco Giants': 137,
+  'Seattle Mariners': 136, 'St. Louis Cardinals': 138, 'Tampa Bay Rays': 139,
+  'Texas Rangers': 140, 'Toronto Blue Jays': 141, 'Washington Nationals': 120,
+};
+
+function getTeamId(teamName) {
+  if (!teamName) return null;
+  const exact = TEAM_IDS[teamName];
+  if (exact) return exact;
+  const lower = teamName.toLowerCase();
+  for (const [name, id] of Object.entries(TEAM_IDS)) {
+    if (lower.includes(name.toLowerCase().split(' ').pop())) return id;
+  }
+  return null;
+}
+
+function parseMatchupTeams(matchup) {
+  if (!matchup) return { away: null, home: null };
+  const parts = matchup.split(/\s+(?:vs\.?|@|VS)\s+/i);
+  if (parts.length < 2) return { away: null, home: null };
+  return { away: parts[0].trim(), home: parts[1].trim() };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,8 +166,21 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
           ✕
         </Box>
       </Box>
-      <Typography sx={{ fontFamily: BARLOW, fontSize: '1rem', color: C.textPrimary, letterSpacing: '1px', lineHeight: 1.3 }}>
-        {entry.matchup}
+      <Typography component="div" sx={{ fontFamily: BARLOW, fontSize: '1rem', color: C.textPrimary, letterSpacing: '1px', lineHeight: 1.3 }}>
+        {(() => {
+          const { away, home } = parseMatchupTeams(entry.matchup);
+          const awayId = getTeamId(away);
+          const homeId = getTeamId(home);
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {awayId && <img src={`https://www.mlbstatic.com/team-logos/${awayId}.svg`} width={20} height={20} alt="" onError={e => e.target.style.display='none'} />}
+              <span>{away || entry.matchup || '?'}</span>
+              {home && <span style={{ opacity: 0.4, fontSize: '0.7em' }}>vs</span>}
+              {homeId && <img src={`https://www.mlbstatic.com/team-logos/${homeId}.svg`} width={20} height={20} alt="" onError={e => e.target.style.display='none'} />}
+              {home && <span>{home}</span>}
+            </Box>
+          );
+        })()}
       </Typography>
       {entry.pick && (
         <Box sx={{
