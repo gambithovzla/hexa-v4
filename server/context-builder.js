@@ -762,9 +762,11 @@ function calcDataQuality({
   if (hasBatterData) { score += 10; available.push('batter_statcast'); }
   else missing.push(`batter_statcast (only ${battersWithData} with data)`);
 
-  // Rolling windows (10 pts)
-  const hasRolling = homePitcherSavant?.rolling_windows_against?.woba_against_7d != null
-    || awayPitcherSavant?.rolling_windows_against?.woba_against_7d != null;
+  // Rolling windows (10 pts) — accept any rolling data from pitchers or batters
+  const hasRolling = (homePitcherSavant?.rolling_windows_against?.woba_against_7d != null)
+    || (awayPitcherSavant?.rolling_windows_against?.woba_against_7d != null)
+    || (savantBatters?.home?.some(b => b.savant?.rolling_woba_30d != null))
+    || (savantBatters?.away?.some(b => b.savant?.rolling_woba_30d != null));
   if (hasRolling) { score += 10; available.push('rolling_windows'); }
   else missing.push('rolling_windows');
 

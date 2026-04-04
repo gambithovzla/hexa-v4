@@ -505,6 +505,8 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           pb:         '8px',
           gap:        '14px',
           minHeight:  '44px',
+          flexWrap:   'wrap',
+          overflow:   'hidden',
         }}
       >
         {/* Logo block */}
@@ -619,6 +621,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           alignItems: 'stretch',
           px:         { xs: '4px', sm: '12px' },
           overflowX:  'auto',
+          flexWrap:   'nowrap',
+          WebkitOverflowScrolling: 'touch',
+          msOverflowStyle: 'none',
           scrollbarWidth: 'none',
           '&::-webkit-scrollbar': { display: 'none' },
         }}
