@@ -1186,6 +1186,9 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
 // DELETE /api/picks/:id — elimina un pick individual del historial
 app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   try {
+    if (!req.user.is_admin) {
+      return res.status(403).json({ success: false, error: 'Only admin can delete picks' });
+    }
     const { rows } = await pool.query(
       'UPDATE picks SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id',
       [req.params.id, req.user.id]
