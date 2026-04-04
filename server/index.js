@@ -222,7 +222,11 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
   const date         = req.body.date || new Date().toISOString().split('T')[0];
   // Input validation
   if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
-  if (model && !['fast', 'deep'].includes(model)) return res.status(400).json({ success: false, error: 'Invalid model' });
+  if (model && !['fast', 'deep', 'premium'].includes(model)) return res.status(400).json({ success: false, error: 'Invalid model' });
+  const ADMIN_EMAIL = 'cdanielrr@hotmail.com';
+  if (model === 'premium' && req.user.email !== ADMIN_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Premium model is currently admin-only' });
+  }
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'Invalid date format' });
   const resolvedLang = lang ?? language;
   const cost         = calcServerCost('single', model, webSearch);
@@ -340,6 +344,10 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
 
 // POST /api/analyze/parlay  — requires auth, costs 4 (fast) or 8 (deep) credits
 app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) => {
+  const ADMIN_EMAIL = 'cdanielrr@hotmail.com';
+  if (req.user.email !== ADMIN_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Parlay analysis is currently admin-only' });
+  }
   const {
     gameIds,
     language    = 'en',
