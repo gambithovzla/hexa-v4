@@ -129,6 +129,13 @@ function resolveResult(pickStr, game) {
   m = cleaned.match(/(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)/i);
   if (m) { const line = parseFloat(m[1]); return total < line ? 'win' : total > line ? 'loss' : 'push'; }
 
+  // Over/Under con "estimated" o "est.": "Under (estimated 8.5)", "Over 7.5 (est.)"
+  m = cleaned.match(/(?:Over|O)\s*\(?(?:estimated\s+|est\.?\s*)?(\d+\.?\d*)\)?/i);
+  if (m) { const line = parseFloat(m[1]); return total > line ? 'win' : total < line ? 'loss' : 'push'; }
+
+  m = cleaned.match(/(?:Under|U)\s*\(?(?:estimated\s+|est\.?\s*)?(\d+\.?\d*)\)?/i);
+  if (m) { const line = parseFloat(m[1]); return total < line ? 'win' : total > line ? 'loss' : 'push'; }
+
   // Over SIN línea: "Over (total runs)", "Over", etc — intentar con info del analysis
   if (/over|por encima|alta/i.test(cleaned) && !/moneyline|ml/i.test(cleaned)) {
     // No tenemos línea exacta, marcar como unresolved
