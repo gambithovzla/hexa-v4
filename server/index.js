@@ -13,6 +13,7 @@ import { getCacheStatus, refreshCache, getPitcherStatcast, getBatterStatcast } f
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
+import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
 import pool from './db.js';
 import lemonRouter from './lemon.js';
 import picksRouter from './routes/picks.js';
@@ -1391,7 +1392,7 @@ app.get('/api/admin/historical-games', verifyToken, async (req, res) => {
 // POST /api/admin/run-backtest — analyze a single historical game and save to backtest_results
 app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
   if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
-  const { gamePk, date, runId, homeTeam, awayTeam, homeScore, awayScore, totalRuns } = req.body;
+  const { gamePk, date, runId, homeTeam, awayTeam, homeScore, awayScore, totalRuns, betType } = req.body;
   if (!gamePk || !date) return res.status(400).json({ success: false, error: 'gamePk and date required' });
 
   try {
@@ -1410,7 +1411,7 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
     const context = await buildContext(gameData, matchedOdds);
     const analysis = await analyzeGame({
       mode: 'single', matchup, context, lang: 'en',
-      betType: 'all', riskProfile: 'balanced', webSearch: false, model: 'deep', timeoutMs: 90000,
+      betType: betType || 'all', riskProfile: 'balanced', webSearch: false, model: 'deep', timeoutMs: 90000,
     });
 
     const latency = Date.now() - start;
@@ -1423,7 +1424,7 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
     const hasCriticalFlags = alertFlags.some(f =>
       /statcast.*no.*available|no.*statcast|data.*limited|minimal.*analysis|small.*sample/i.test(f)
     );
-    const pickType = pick ? (
+    let pickType = pick ? (
       /over|under/i.test(pick) ? 'total' :
       /moneyline|ml/i.test(pick) ? 'moneyline' :
       /run\s*line|rl/i.test(pick) ? 'runline' : 'other'
@@ -1445,6 +1446,24 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
         const pickedAway = awayTeam?.toLowerCase().includes(teamToken) || teamToken.includes(awayTeam?.toLowerCase()?.split(' ').pop());
         if (pickedHome) actualResult = parseInt(homeScore) > parseInt(awayScore) ? 'win' : 'loss';
         else if (pickedAway) actualResult = parseInt(awayScore) > parseInt(homeScore) ? 'win' : 'loss';
+      }
+    }
+
+    // Si no se resolvió con los patterns estándar, intentar como player prop
+    if (!actualResult && pick) {
+      try {
+        const boxscorePlayers = await getGameBoxscore(gamePk);
+        if (boxscorePlayers) {
+          const propResult = resolvePlayerProp(pick, boxscorePlayers);
+          if (propResult?.result) {
+            actualResult = propResult.result;
+            // Override pickType for props
+            pickType = `prop_${propResult.propType}`;
+            console.log(`[backtest] Prop resolved: ${propResult.playerName} ${propResult.propType} — actual: ${propResult.actual} — ${actualResult}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[backtest] Props resolver failed: ${err.message}`);
       }
     }
 

@@ -37,6 +37,7 @@ const targetDate = args.find(a => /^\d{4}-\d{2}-\d{2}$/.test(a));
 const dryRun = args.includes('--dry-run');
 const maxGames = parseInt(args.find(a => a.startsWith('--max='))?.split('=')[1] ?? '50');
 const batchDelay = parseInt(args.find(a => a.startsWith('--delay='))?.split('=')[1] ?? '5000');
+const betType = args.find(a => a.startsWith('--bet-type='))?.split('=')[1] ?? 'all';
 
 if (!targetDate) {
   console.error('Usage: node scripts/training/run-backtest.js YYYY-MM-DD [--dry-run] [--max=5] [--delay=5000]');
@@ -56,6 +57,7 @@ console.log(`[backtest] Target date: ${targetDate}`);
 console.log(`[backtest] Max games: ${maxGames}`);
 console.log(`[backtest] Batch delay: ${batchDelay}ms`);
 console.log(`[backtest] Dry run: ${dryRun}`);
+console.log(`[backtest] Bet type: ${betType}`);
 console.log(`[backtest] API: ${API_URL}\n`);
 
 // ── Fetch completed games ─────────────────────────────────────────────────────
@@ -99,7 +101,7 @@ async function analyzeGame(gamePk, date) {
       gameId: gamePk,
       date,
       lang: 'en',
-      betType: 'all',
+      betType: betType,
       riskProfile: 'balanced',
       webSearch: false,
       model: 'deep',
