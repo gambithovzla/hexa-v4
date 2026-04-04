@@ -14,6 +14,23 @@ import { calculateImpliedProbability } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
 
 // ---------------------------------------------------------------------------
+// In-memory context cache — avoids redundant API calls when the same game is
+// analysed multiple times within a short window (e.g. props then moneyline).
+// ---------------------------------------------------------------------------
+
+const _contextCache = new Map();
+const CONTEXT_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutos
+
+// Limpiar entradas expiradas cada 30 minutos
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of _contextCache) {
+    if (now - val.timestamp > CONTEXT_CACHE_TTL_MS) _contextCache.delete(key);
+  }
+  if (_contextCache.size > 0) console.log(`[context-builder] Cache cleanup — ${_contextCache.size} entries remaining`);
+}, 30 * 60 * 1000).unref();
+
+// ---------------------------------------------------------------------------
 // Historical MLB context (static reference data for Spring Training + early season)
 // ---------------------------------------------------------------------------
 
@@ -1000,6 +1017,13 @@ function calcSignalCoherence({
  * @returns {Promise<string>} String listo para el prompt del Oracle
  */
 export async function buildContext(gameData, oddsData = null) {
+  const cacheKey = `${gameData.gamePk}-${(gameData.gameDate ?? new Date().toISOString()).split('T')[0]}`;
+  const cached = _contextCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CONTEXT_CACHE_TTL_MS) {
+    console.log(`[context-builder] Cache HIT for ${cacheKey} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+    return cached.context;
+  }
+
   const maxPastSeasons = 3;
   const home = gameData.teams?.home;
   const away = gameData.teams?.away;
@@ -1686,7 +1710,10 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push(buildHistoricalContextBlock());
 
   console.log('[context-builder] Savant batters with data:', savantBatters.home.filter(b => b.savant).length, 'home,', savantBatters.away.filter(b => b.savant).length, 'away');
-  return blocks.join('\n');
+  const context = blocks.join('\n');
+  _contextCache.set(cacheKey, { context, timestamp: Date.now() });
+  console.log(`[context-builder] Cache SET for ${cacheKey} (total cached: ${_contextCache.size})`);
+  return context;
 }
 
 // ---------------------------------------------------------------------------
