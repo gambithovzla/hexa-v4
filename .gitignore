@@ -30,3 +30,6 @@ Thumbs.db
 
 # Vite cache
 client/.vite/
+
+# Backups
+scripts/backups/
