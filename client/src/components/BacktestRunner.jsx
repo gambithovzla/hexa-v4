@@ -37,6 +37,7 @@ export default function BacktestRunner({ lang = 'en', onBack }) {
   const [results, setResults] = useState([]);
   const [currentGame, setCurrentGame] = useState(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [betType, setBetType] = useState('all');
 
   const runId = `bt-${date}-${Date.now().toString(36)}`;
 
@@ -97,6 +98,7 @@ export default function BacktestRunner({ lang = 'en', onBack }) {
             runId, homeTeam: game.home.name, awayTeam: game.away.name,
             homeScore: game.home.score, awayScore: game.away.score,
             totalRuns: game.totalRuns,
+            betType,
           }),
         });
         const json = await res.json();
@@ -162,6 +164,33 @@ export default function BacktestRunner({ lang = 'en', onBack }) {
           {loading ? 'LOADING...' : 'FETCH GAMES'}
         </Box>
       </Box>
+
+      {/* Bet type selector */}
+      {games.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, mb: 0.5, letterSpacing: '0.1em' }}>
+            ANALYSIS TYPE
+          </Typography>
+          <Box sx={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+            {[
+              { value: 'all', label: 'BEST PICK (ALL)' },
+              { value: 'props', label: 'PLAYER PROPS' },
+              { value: 'moneyline', label: 'MONEYLINE' },
+              { value: 'totals', label: 'OVER/UNDER' },
+            ].map(opt => (
+              <Box key={opt.value} component="button" onClick={() => setBetType(opt.value)} sx={{
+                px: '12px', py: '5px',
+                border: `1px solid ${betType === opt.value ? C.accentLine : C.border}`,
+                background: betType === opt.value ? C.accentDim : 'transparent',
+                color: betType === opt.value ? C.accent : C.textMuted,
+                fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '1px', cursor: 'pointer',
+              }}>
+                {opt.label}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
 
       {/* Games list */}
       {games.length > 0 && (
