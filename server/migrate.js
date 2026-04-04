@@ -169,6 +169,10 @@ export async function runMigrations() {
       )
     `);
 
+    await client.query(`ALTER TABLE backtest_results ADD COLUMN IF NOT EXISTS alert_flags JSONB DEFAULT '[]'`);
+    await client.query(`ALTER TABLE backtest_results ADD COLUMN IF NOT EXISTS bet_value_raw TEXT`);
+    await client.query(`ALTER TABLE backtest_results ADD COLUMN IF NOT EXISTS has_critical_flags BOOLEAN DEFAULT false`);
+
     await client.query('COMMIT');
 
     // Normalize pick results: 'won' → 'win', 'lost' → 'loss'

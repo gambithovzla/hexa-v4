@@ -110,6 +110,25 @@ export default function BacktestDashboard({ lang = 'en', onBack }) {
             })}
           </Box>
 
+          {/* By flags */}
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.accent, letterSpacing: '0.1em', mb: 1 }}>
+            FLAGS IMPACT
+          </Typography>
+          <Box sx={{ border: `1px solid ${C.border}`, mb: 3 }}>
+            {(data.byFlags ?? []).map((row, i) => {
+              const total = parseInt(row.wins) + parseInt(row.losses);
+              const hr = total > 0 ? ((parseInt(row.wins) / total) * 100).toFixed(1) : '—';
+              const label = row.has_critical_flags ? '⚠ WITH CRITICAL FLAGS' : '✅ CLEAN (no critical flags)';
+              return (
+                <Box key={i} sx={{ display: 'flex', p: '6px 12px', gap: 2, borderBottom: `1px solid ${C.border}` }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: row.has_critical_flags ? C.amber : C.green, flex: 1 }}>{label}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textSecondary }}>{row.wins}W-{row.losses}L</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: parseFloat(hr) >= 55 ? C.green : C.red }}>{hr}%</Typography>
+                </Box>
+              );
+            })}
+          </Box>
+
           {/* Run history */}
           <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.accent, letterSpacing: '0.1em', mb: 1 }}>
             RUN HISTORY
