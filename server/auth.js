@@ -30,7 +30,7 @@ function signToken(user) {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET not configured');
   return jwt.sign(
-    { id: user.id, email: user.email },
+    { id: user.id, email: user.email, is_admin: user.is_admin || false },
     secret,
     { expiresIn: '7d' }
   );
@@ -42,6 +42,7 @@ function safeUser(row) {
     id:        row.id,
     email:     row.email,
     credits:   Number(row.credits),
+    is_admin:  row.is_admin || false,
     createdAt: row.created_at,
   };
 }
@@ -136,7 +137,7 @@ router.post('/register', async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO users (id, email, password_hash, credits)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, credits, created_at`,
+       RETURNING id, email, credits, is_admin, created_at`,
       [id, normalizedEmail, passwordHash, 0]
     );
 
@@ -152,7 +153,7 @@ router.post('/register', async (req, res) => {
       const pendingIds   = pending.rows.map(r => r.id);
 
       const updated = await pool.query(
-        'UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING id, email, credits, created_at',
+        'UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING id, email, credits, is_admin, created_at',
         [totalPending, newUser.id]
       );
       await pool.query(
@@ -181,7 +182,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, email, password_hash, credits, created_at FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, credits, is_admin, created_at FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
     const user = rows[0];
@@ -206,7 +207,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', verifyToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, email, credits, created_at FROM users WHERE id = $1',
+      'SELECT id, email, credits, is_admin, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
     if (!rows[0]) {
@@ -233,9 +234,9 @@ export async function seedAdminUser() {
   const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'hexa2025admin';
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   await pool.query(
-    `INSERT INTO users (id, email, password_hash, credits)
-     VALUES ($1, $2, $3, $4)`,
-    [randomUUID(), 'admin@hexa.com', passwordHash, 999999]
+    `INSERT INTO users (id, email, password_hash, credits, is_admin)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [randomUUID(), 'admin@hexa.com', passwordHash, 999999, true]
   );
   console.log('[H.E.X.A.] Admin account seeded');
 }

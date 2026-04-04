@@ -132,6 +132,11 @@ export async function runMigrations() {
       )
     `);
 
+    // ── is_admin column (safe for existing DBs) ──────────────────────────────
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false`);
+    await client.query(`UPDATE users SET is_admin = true WHERE email = 'cdanielrr@hotmail.com'`);
+    await client.query(`UPDATE users SET is_admin = true WHERE email = 'admin@hexa.com'`);
+
     await client.query('COMMIT');
 
     // Normalize pick results: 'won' → 'win', 'lost' → 'loss'
