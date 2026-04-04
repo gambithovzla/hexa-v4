@@ -32,13 +32,29 @@ const TEAM_IDS = {
   'Texas Rangers': 140, 'Toronto Blue Jays': 141, 'Washington Nationals': 120,
 };
 
-function getTeamId(teamName) {
-  if (!teamName) return null;
-  const exact = TEAM_IDS[teamName];
-  if (exact) return exact;
-  const lower = teamName.toLowerCase();
-  for (const [name, id] of Object.entries(TEAM_IDS)) {
-    if (lower.includes(name.toLowerCase().split(' ').pop())) return id;
+const TEAM_ABBREVS = {
+  'ARI': 109, 'AZ': 109, 'ATL': 144, 'BAL': 110, 'BOS': 111,
+  'CHC': 112, 'CWS': 145, 'CHW': 145, 'CIN': 113, 'CLE': 114,
+  'COL': 115, 'DET': 116, 'HOU': 117, 'KC': 118, 'KCR': 118,
+  'LAA': 108, 'LAD': 119, 'MIA': 146, 'MIL': 158, 'MIN': 142,
+  'NYM': 121, 'NYY': 147, 'OAK': 133, 'PHI': 143, 'PIT': 134,
+  'SD': 135, 'SDP': 135, 'SF': 137, 'SFG': 137, 'SEA': 136,
+  'STL': 138, 'TB': 139, 'TBR': 139, 'TEX': 140, 'TOR': 141,
+  'WSH': 120, 'WAS': 120, 'WSN': 120,
+};
+
+function getTeamId(name) {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (TEAM_IDS[trimmed]) return TEAM_IDS[trimmed];
+  const upper = trimmed.toUpperCase();
+  if (TEAM_ABBREVS[upper]) return TEAM_ABBREVS[upper];
+  const l = trimmed.toLowerCase();
+  for (const [n, id] of Object.entries(TEAM_IDS)) {
+    const parts = n.toLowerCase().split(' ');
+    const nickname = parts[parts.length - 1];
+    if (l.includes(nickname)) return id;
+    if (n.toLowerCase() === l) return id;
   }
   return null;
 }
@@ -146,10 +162,11 @@ function ModeBadge({ mode }) {
   );
 }
 
-function PickCard({ entry, onMarkResult, onDelete, isAdmin, t }) {
+function PickCard({ entry, onMarkResult, onDelete, isAdmin, t, lang }) {
   const borderColor = resultBorderColor(entry.result);
   const badgeSx     = resultBadgeSx(entry.result);
   const resultLabel = t.history.result?.[entry.result] ?? entry.result.toUpperCase();
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Terminal date format: LOG // 2026-03-27 · 19:05
   const dateStr = (() => {
@@ -177,13 +194,46 @@ function PickCard({ entry, onMarkResult, onDelete, isAdmin, t }) {
           {resultLabel}
         </Box>
         {isAdmin && (
-          <Box
-            component="button"
-            onClick={() => onDelete(entry.id)}
-            title="Eliminar pick"
-            sx={{ ml: '4px', px: '6px', py: '2px', border: `1px solid transparent`, borderRadius: '0', bgcolor: 'transparent', color: C.textMuted, fontFamily: MONO, fontSize: '0.7rem', lineHeight: 1, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0, '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}
-          >
-            ✕
+          <Box sx={{ position: 'relative', flexShrink: 0 }}>
+            <Box
+              component="button"
+              onClick={() => setConfirmDeleteId(entry.id)}
+              title="Eliminar pick"
+              sx={{ ml: '4px', px: '6px', py: '2px', border: `1px solid transparent`, borderRadius: '0', bgcolor: 'transparent', color: C.textMuted, fontFamily: MONO, fontSize: '0.7rem', lineHeight: 1, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0, '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}
+            >
+              ✕
+            </Box>
+            {confirmDeleteId === entry.id && (
+              <Box sx={{
+                position: 'absolute', top: 0, right: 0, zIndex: 10,
+                background: '#07090E',
+                border: '1px solid #FF2244',
+                boxShadow: '0 0 15px rgba(255,34,68,0.3)',
+                padding: '10px 14px',
+                display: 'flex', flexDirection: 'column', gap: '8px',
+                minWidth: '180px',
+              }}>
+                <Typography sx={{ fontFamily: "'Share Tech Mono', monospace", fontSize: '0.65rem', color: '#FF2244', letterSpacing: '0.08em' }}>
+                  {lang === 'es' ? '¿BORRAR ESTE PICK?' : 'DELETE THIS PICK?'}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Box component="button" onClick={() => setConfirmDeleteId(null)} sx={{
+                    flex: 1, background: 'transparent', border: '1px solid rgba(0,217,255,0.3)',
+                    color: '#00D9FF', fontFamily: "'Share Tech Mono', monospace",
+                    fontSize: '0.6rem', padding: '4px 8px', cursor: 'pointer',
+                  }}>
+                    {lang === 'es' ? 'NO' : 'NO'}
+                  </Box>
+                  <Box component="button" onClick={() => { onDelete(entry.id); setConfirmDeleteId(null); }} sx={{
+                    flex: 1, background: 'rgba(255,34,68,0.15)', border: '1px solid #FF2244',
+                    color: '#FF2244', fontFamily: "'Share Tech Mono', monospace",
+                    fontSize: '0.6rem', padding: '4px 8px', cursor: 'pointer',
+                  }}>
+                    {lang === 'es' ? 'SÍ' : 'YES'}
+                  </Box>
+                </Box>
+              </Box>
+            )}
           </Box>
         )}
       </Box>
@@ -369,7 +419,7 @@ function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDele
       {expanded && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', pt: '6px', pb: '12px' }}>
           {picks.map(entry => (
-            <PickCard key={entry.id} entry={entry} onMarkResult={onMarkResult} onDelete={onDelete} isAdmin={isAdmin} t={t} />
+            <PickCard key={entry.id} entry={entry} onMarkResult={onMarkResult} onDelete={onDelete} isAdmin={isAdmin} t={t} lang={lang} />
           ))}
         </Box>
       )}
