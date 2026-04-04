@@ -86,16 +86,24 @@ async function getCompletedGames(date) {
   return games;
 }
 
-// ── Call Oracle Safe Pick ─────────────────────────────────────────────────────
+// ── Call Oracle Full Analysis ─────────────────────────────────────────────────
 async function analyzeGame(gamePk, date) {
   const start = Date.now();
-  const res = await fetch(`${API_URL}/api/analyze/safe`, {
+  const res = await fetch(`${API_URL}/api/analyze/game`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${ADMIN_TOKEN}`,
     },
-    body: JSON.stringify({ gameId: gamePk, date, lang: 'en' }),
+    body: JSON.stringify({
+      gameId: gamePk,
+      date,
+      lang: 'en',
+      betType: 'all',
+      riskProfile: 'balanced',
+      webSearch: false,
+      model: 'deep',
+    }),
   });
   const json = await res.json();
   const latency = Date.now() - start;
@@ -203,30 +211,23 @@ async function main() {
             return;
           }
 
-          // Extract pick from safe_pick response
-          const safePick = analysis.data?.safe_pick;
-          let pick = safePick?.pick ?? null;
-          const confidence = safePick?.hit_probability ?? safePick?.confidence ?? null;
-          const betValue = analysis.data?.bet_value ?? safePick?.bet_value ?? null;
-          const modelRisk = analysis.data?.model_risk ?? safePick?.model_risk ?? null;
-          const pickType = safePick?.type ?? 'unknown';
-
-          // Si el pick no tiene línea numérica para O/U, intentar extraer de otros campos
-          if (pick && /under|over/i.test(pick) && !/\d+\.?\d/.test(pick)) {
-            // Buscar la línea en el objeto safe_pick
-            const line = safePick?.line ?? safePick?.total_line ?? safePick?.ou_line ?? null;
-            if (line) {
-              const direction = /under/i.test(pick) ? 'Under' : 'Over';
-              pick = `${direction} ${line}`;
-              console.log(`  → Línea extraída del response: ${pick}`);
-            }
-          }
+          // Extract pick from full analysis response
+          const mp = analysis.data?.master_prediction;
+          const pick = mp?.pick ?? null;
+          const confidence = mp?.oracle_confidence ?? null;
+          const betValue = mp?.bet_value ?? null;
+          const modelRisk = analysis.data?.model_risk ?? null;
+          const pickType = mp?.pick ? (
+            /over|under/i.test(mp.pick) ? 'total' :
+            /moneyline|ml/i.test(mp.pick) ? 'moneyline' :
+            /run\s*line|rl/i.test(mp.pick) ? 'runline' : 'other'
+          ) : 'unknown';
 
           // Resolve against actual result
           const actualResult = pick ? resolveResult(pick, game) : null;
 
-          console.log(`  -> Pick: ${pick ?? 'N/A'}`);
-          console.log(`  -> Confidence: ${confidence ?? 'N/A'}%`);
+          console.log(`  → Pick: ${pick ?? 'N/A'} (${pickType})`);
+          console.log(`  → Confidence: ${confidence ?? 'N/A'}%`);
           console.log(`  -> Actual: ${game.away.abbreviation} ${game.away.score} - ${game.home.abbreviation} ${game.home.score} (total: ${game.totalRuns})`);
           console.log(`  -> Result: ${actualResult?.toUpperCase() ?? 'UNRESOLVED'}`);
 
@@ -247,7 +248,7 @@ async function main() {
             `, [
               runId, targetDate, game.gamePk, matchup,
               game.home.name, game.away.name,
-              pick, confidence, betValue, modelRisk, 'safe',
+              pick, confidence, betValue, modelRisk, pickType,
               game.home.score, game.away.score, actualResult,
               'deep', analysis.latency_ms,
             ]);
