@@ -143,6 +143,32 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMP DEFAULT NULL`);
     await client.query(`UPDATE users SET email_verified = true WHERE email = 'cdanielrr@hotmail.com' OR email = 'admin@hexa.com'`);
 
+    // ── backtest_results (Shadow Mode — offline backtesting, never touches picks) ─
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS backtest_results (
+        id                  SERIAL        PRIMARY KEY,
+        run_id              TEXT          NOT NULL,
+        historical_date     DATE          NOT NULL,
+        game_pk             INTEGER       NOT NULL,
+        matchup             TEXT          NOT NULL,
+        home_team           TEXT,
+        away_team           TEXT,
+        pick                TEXT,
+        oracle_confidence   INTEGER,
+        bet_value           TEXT,
+        model_risk          TEXT,
+        pick_type           TEXT,
+        actual_home_score   INTEGER,
+        actual_away_score   INTEGER,
+        actual_result       TEXT,
+        model               TEXT          DEFAULT 'deep',
+        prompt_version      TEXT          DEFAULT 'v1',
+        latency_ms          INTEGER,
+        created_at          TIMESTAMP     DEFAULT NOW(),
+        UNIQUE(run_id, game_pk, pick_type)
+      )
+    `);
+
     await client.query('COMMIT');
 
     // Normalize pick results: 'won' → 'win', 'lost' → 'loss'
