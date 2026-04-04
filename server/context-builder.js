@@ -747,18 +747,19 @@ function calcDataQuality({
   if (awayPitcher?.fullName && awayPitcherStats?.stats) { score += 15; available.push('away_pitcher_stats'); }
   else missing.push('away_pitcher_stats');
 
-  // Statcast pitchers (20 pts)
-  if (homePitcherSavant?.xwOBA_against != null) { score += 10; available.push('home_pitcher_statcast'); }
+  // Statcast pitchers (20 pts) — give full points if savant object exists, even if some fields are null
+  if (homePitcherSavant != null) { score += 10; available.push('home_pitcher_statcast'); }
   else missing.push('home_pitcher_statcast');
-  if (awayPitcherSavant?.xwOBA_against != null) { score += 10; available.push('away_pitcher_statcast'); }
+  if (awayPitcherSavant != null) { score += 10; available.push('away_pitcher_statcast'); }
   else missing.push('away_pitcher_statcast');
 
-  // Statcast batters (10 pts)
+  // Statcast batters (10 pts) — give full points if any batters returned, even if not all have every field
+  const hasBatterData = (savantBatters?.home?.length ?? 0) > 0 || (savantBatters?.away?.length ?? 0) > 0;
   const battersWithData = [
     ...(savantBatters?.home ?? []),
     ...(savantBatters?.away ?? []),
   ].filter(b => b.savant?.xwOBA != null).length;
-  if (battersWithData >= 3) { score += 10; available.push('batter_statcast'); }
+  if (hasBatterData) { score += 10; available.push('batter_statcast'); }
   else missing.push(`batter_statcast (only ${battersWithData} with data)`);
 
   // Rolling windows (10 pts)
@@ -785,15 +786,15 @@ function calcDataQuality({
 
   // Determine strategy
   let strategy, confidencePenalty, allowedBetTypes;
-  if (score >= 80) {
+  if (score >= 75) {
     strategy = 'FULL_ANALYSIS';
     confidencePenalty = 0;
     allowedBetTypes = 'all';
-  } else if (score >= 60) {
+  } else if (score >= 50) {
     strategy = 'STANDARD_ANALYSIS';
     confidencePenalty = 0;
     allowedBetTypes = 'moneyline, runline, over-under, props only if batter statcast available';
-  } else if (score >= 40) {
+  } else if (score >= 30) {
     strategy = 'LIMITED_ANALYSIS';
     confidencePenalty = 15;
     allowedBetTypes = 'moneyline and over-under only';

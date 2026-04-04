@@ -127,7 +127,7 @@ function ModeBadge({ mode }) {
   );
 }
 
-function PickCard({ entry, onMarkResult, onDelete, t }) {
+function PickCard({ entry, onMarkResult, onDelete, isAdmin, t }) {
   const borderColor = resultBorderColor(entry.result);
   const badgeSx     = resultBadgeSx(entry.result);
   const resultLabel = t.history.result?.[entry.result] ?? entry.result.toUpperCase();
@@ -157,14 +157,16 @@ function PickCard({ entry, onMarkResult, onDelete, t }) {
         <Box sx={{ ...badgeSx, px: '8px', py: '2px', borderRadius: '0', fontFamily: MONO, fontSize: '8px', textTransform: 'uppercase', letterSpacing: '2px', flexShrink: 0 }}>
           {resultLabel}
         </Box>
-        <Box
-          component="button"
-          onClick={() => onDelete(entry.id)}
-          title="Eliminar pick"
-          sx={{ ml: '4px', px: '6px', py: '2px', border: `1px solid transparent`, borderRadius: '0', bgcolor: 'transparent', color: C.textMuted, fontFamily: MONO, fontSize: '0.7rem', lineHeight: 1, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0, '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}
-        >
-          ✕
-        </Box>
+        {isAdmin && (
+          <Box
+            component="button"
+            onClick={() => onDelete(entry.id)}
+            title="Eliminar pick"
+            sx={{ ml: '4px', px: '6px', py: '2px', border: `1px solid transparent`, borderRadius: '0', bgcolor: 'transparent', color: C.textMuted, fontFamily: MONO, fontSize: '0.7rem', lineHeight: 1, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0, '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}
+          >
+            ✕
+          </Box>
+        )}
       </Box>
       <Typography component="div" sx={{ fontFamily: BARLOW, fontSize: '1rem', color: C.textPrimary, letterSpacing: '1px', lineHeight: 1.3 }}>
         {(() => {
@@ -258,7 +260,7 @@ function groupPicksByDay(picks) {
   return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
-function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDelete, t }) {
+function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDelete, isAdmin, t }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const isEs = lang === 'es';
 
@@ -361,7 +363,7 @@ function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDele
       {expanded && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', pt: '6px', pb: '12px' }}>
           {picks.map(entry => (
-            <PickCard key={entry.id} entry={entry} onMarkResult={onMarkResult} onDelete={onDelete} t={t} />
+            <PickCard key={entry.id} entry={entry} onMarkResult={onMarkResult} onDelete={onDelete} isAdmin={isAdmin} t={t} />
           ))}
         </Box>
       )}
@@ -371,7 +373,8 @@ function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDele
 
 function AnalisisTab({ lang }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated, token, user } = useAuth();
+  const isAdmin = user?.is_admin === true;
   const { history, markResult, deletePick, clearHistory, getStats, loadHistory } = useHistory();
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const stats = getStats();
@@ -444,6 +447,7 @@ function AnalisisTab({ lang }) {
               defaultExpanded={idx === 0}
               onMarkResult={markResult}
               onDelete={deletePick}
+              isAdmin={isAdmin}
               t={t}
             />
           ))}
@@ -474,15 +478,29 @@ function AnalisisTab({ lang }) {
           >
             {lang === 'es' ? '⟳ RESOLVER PICKS' : '⟳ RESOLVE PICKS'}
           </Box>
-          <Box component="button" onClick={() => {
-            if (window.confirm(lang === 'es'
-              ? '⚠️ ¿Estás seguro? Esto ocultará todo tu historial de picks. Esta acción solo está disponible para administradores.'
-              : '⚠️ Are you sure? This will hide your entire pick history. This action is only available to administrators.')) {
-              clearHistory();
-            }
-          }} sx={{ px: '18px', py: '8px', border: `1px solid ${C.border}`, borderRadius: '2px', bgcolor: 'transparent', color: C.textMuted, fontFamily: BARLOW, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: C.red, color: C.red, bgcolor: C.redDim } }}>
-            {t.history.clearHistory}
-          </Box>
+          {isAdmin && (
+            <Box component="button" onClick={() => {
+              if (window.confirm('⚠️ DANGER: This will soft-delete ALL picks. This affects the Performance dashboard. Are you absolutely sure?')) {
+                if (window.confirm('⚠️ FINAL WARNING: Type OK to confirm you want to delete all pick history.')) {
+                  clearHistory();
+                }
+              }
+            }} sx={{
+              border: '2px solid #FF2244',
+              background: 'rgba(255, 34, 68, 0.15)',
+              color: '#FF2244',
+              fontFamily: "'Share Tech Mono', monospace",
+              fontSize: '0.75rem',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              '&:hover': { background: 'rgba(255, 34, 68, 0.3)', boxShadow: '0 0 12px rgba(255,34,68,0.5)' },
+            }}>
+              {t.history.clearHistory}
+            </Box>
+          )}
         </Box>
       )}
     </Box>
