@@ -23,6 +23,7 @@ import HistoryPanel         from './components/HistoryPanel';
 import BankrollTracker      from './components/BankrollTracker';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
+import LegalPage            from './components/LegalPage';
 import OracleChat          from './components/OracleChat';
 import PerformanceDashboard from './pages/PerformanceDashboard';
 import PerformancePage      from './components/PerformancePage';
@@ -122,6 +123,10 @@ export default function App() {
   if (window.location.pathname === '/performance') {
     return <PerformancePage />;
   }
+
+  if (window.location.pathname === '/terms') return <LegalPage page="terms" lang={lang} />;
+  if (window.location.pathname === '/privacy') return <LegalPage page="privacy" lang={lang} />;
+
 
   // Render Oracle Chat as a full-page takeover (admin only)
   if (showOracleChat) {

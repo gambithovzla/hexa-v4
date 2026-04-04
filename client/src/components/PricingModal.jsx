@@ -242,6 +242,14 @@ export default function PricingModal({ onClose, lang = 'es' }) {
               ? 'Precios de lanzamiento — Temporada 2026. Los precios subirán una vez validado el modelo.'
               : 'Launch pricing — 2026 Season. Prices will increase once the model is validated.'}
           </Typography>
+          <Box sx={{ mt: 1, display: 'flex', gap: 2, justifyContent: 'center' }}>
+            <a href="/terms" style={{ color: 'rgba(0,217,255,0.5)', fontSize: '0.6rem', fontFamily: "'Share Tech Mono', monospace" }}>
+              {isEs ? 'Términos de Servicio' : 'Terms of Service'}
+            </a>
+            <a href="/privacy" style={{ color: 'rgba(0,217,255,0.5)', fontSize: '0.6rem', fontFamily: "'Share Tech Mono', monospace" }}>
+              {isEs ? 'Política de Privacidad' : 'Privacy Policy'}
+            </a>
+          </Box>
         </Box>
       </Box>
     </Box>

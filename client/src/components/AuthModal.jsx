@@ -244,6 +244,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
   const [verifyEmail_,  setVerifyEmail_]  = useState('');
   const [verifyCode,    setVerifyCode]    = useState('');
   const [resendStatus,  setResendStatus]  = useState('idle'); // 'idle' | 'sending' | 'sent'
+  const [ageConfirmed,  setAgeConfirmed]  = useState(false);
 
   // Reset form on open / tab change
   useEffect(() => {
@@ -318,7 +319,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     if (e.target === e.currentTarget) onClose();
   }
 
-  const canSubmit = !loading && email && password;
+  const canSubmit = !loading && email && password && (tab === 'login' || ageConfirmed);
 
   return (
     <Box
@@ -514,6 +515,38 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
                   <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.red, letterSpacing: '0.04em' }}>
                     ⚠ {error}
                   </Typography>
+                </Box>
+              )}
+
+              {/* Age confirmation — register only */}
+              {tab === 'register' && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <input
+                    type="checkbox"
+                    id="age-confirm"
+                    checked={ageConfirmed}
+                    onChange={e => setAgeConfirmed(e.target.checked)}
+                    disabled={loading}
+                    style={{
+                      accentColor: NC.cyan,
+                      width: '14px',
+                      height: '14px',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <label htmlFor="age-confirm" style={{
+                    fontFamily: MONO,
+                    fontSize: '9px',
+                    color: NC.textMuted,
+                    letterSpacing: '0.04em',
+                    cursor: 'pointer',
+                    lineHeight: 1.5,
+                  }}>
+                    {lang === 'es'
+                      ? 'Confirmo que soy mayor de 18 años'
+                      : 'I confirm I am 18 years or older'}
+                  </label>
                 </Box>
               )}
 
