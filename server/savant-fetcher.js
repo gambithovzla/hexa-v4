@@ -271,6 +271,18 @@ function substituteYear(url, year) {
 }
 
 /**
+ * For the current season, replaces min=q / min=25 / min=10 with min=1
+ * so early-season data is captured before players reach qualified thresholds.
+ */
+function substituteMinForCurrentYear(url, year) {
+  const currentYear = new Date().getFullYear();
+  if (year === currentYear) {
+    return url.replace(/min=q/g, 'min=1').replace(/min=25/g, 'min=1').replace(/min=10/g, 'min=1');
+  }
+  return url;
+}
+
+/**
  * Fetches a leaderboard across multiple seasons and merges results.
  * Most recent year's data wins when a player appears in multiple seasons.
  * Returns { rows, yearsLoaded }.
@@ -281,7 +293,7 @@ async function fetchMultiYear(urlsOrUrl, years, name = '') {
   const yearsLoaded = [];
 
   for (const year of years) {
-    const yearUrls = urlList.map(u => substituteYear(u, year));
+    const yearUrls = urlList.map(u => substituteMinForCurrentYear(substituteYear(u, year), year));
     try {
       const rows = await fetchCSVWithFallback(yearUrls, `${name}:${year}`);
       if (!rows.length) continue;
@@ -375,6 +387,7 @@ async function loadAll() {
     `batTracking: ${c.batTracking.length}, catcherPopTime: ${c.catcherPopTime.length}, outfieldJump: ${c.outfieldJump.length}, armStrength: ${c.armStrength.length}, ` +
     `90ft: ${c.ninetyFtSplits.length}, pitcherPos: ${c.pitcherPositioning.length}, activeSpin: ${c.activeSpin.length}, pitchMovement: ${c.pitchMovement.length}`
   );
+  console.log(`[savant] Year breakdown: ${JSON.stringify(Object.fromEntries([...newCache.yearsLoaded].map(y => [y, 'loaded'])))}`);
 }
 
 async function ensureCache() {
