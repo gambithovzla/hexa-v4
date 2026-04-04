@@ -1258,6 +1258,21 @@ export default function AnalysisPanel({
       {!loading && !error && !result && (
         <EmptyState mode={mode} canAnalyze={canAnalyze} t={t} />
       )}
+
+      {/* ── Responsible gambling disclaimer ── */}
+      <Box sx={{
+        mt: 3, p: 1.5,
+        border: '1px solid rgba(255, 153, 0, 0.25)',
+        borderRadius: '2px',
+        background: 'rgba(255, 153, 0, 0.05)',
+        textAlign: 'center',
+      }}>
+        <Typography sx={{ fontFamily: "'Share Tech Mono', monospace", fontSize: '0.65rem', color: 'rgba(255, 153, 0, 0.7)', letterSpacing: '0.05em' }}>
+          {lang === 'es'
+            ? '⚠ H.E.X.A. es una herramienta de análisis, no garantiza resultados. Apuesta responsablemente. Si tienes problemas con el juego, busca ayuda profesional. Solo para mayores de 18 años.'
+            : '⚠ H.E.X.A. is an analytical tool, not a guarantee of results. Bet responsibly. If you have gambling problems, seek professional help. 18+ only.'}
+        </Typography>
+      </Box>
     </Box>
   );
 }
