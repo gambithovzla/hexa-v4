@@ -118,8 +118,21 @@ function resolveResult(pickStr, game) {
   const awayScore = game.away.score;
   const total = homeScore + awayScore;
 
-  // Limpiar odds del string: "Under 7.5 (-119)" → "Under 7.5"
-  const cleaned = s.replace(/\s*\([+-]?\d+\)\s*$/, '').trim();
+  // Limpiar odds del string en varios formatos:
+  // "Under 7.5 (-119)" → "Under 7.5"
+  // "CHC Moneyline +248" → "CHC Moneyline"
+  // "Kansas City Royals ML +100" → "Kansas City Royals ML"
+  // "Under 7.5 (estimated line)" → "Under 7.5"
+  // "Over (Total Runs)" → "Over"
+  const cleaned = s
+    .replace(/\s*\([+-]?\d+\)\s*$/i, '')           // (odds) al final
+    .replace(/\s+[+-]\d{3,}\s*$/i, '')              // +248 o -119 al final sin paréntesis
+    .replace(/\s+[+-]\d{2,3}\s*$/i, '')             // +100 al final
+    .replace(/\s*\(estimated\s+line\)\s*$/i, '')    // (estimated line)
+    .replace(/\s*\(est\.?\)\s*$/i, '')              // (est.) o (est)
+    .replace(/\s*\(total\s+runs?\)\s*$/i, '')       // (Total Runs)
+    .replace(/\s*\([^)]*total[^)]*\)\s*$/i, '')     // (TEX @ BAL Total Runs)
+    .trim();
 
   // Over con línea: "Over 8.5", "O 8.5", "Más de 8.5"
   let m = cleaned.match(/(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)/i);
