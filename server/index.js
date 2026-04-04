@@ -119,7 +119,7 @@ function calcServerCost(type, model, webSearch) {
  */
 async function deductCredits(req, res, cost) {
   const { rows } = await pool.query(
-    'SELECT id, email, credits FROM users WHERE id = $1',
+    'SELECT id, email, credits, is_admin FROM users WHERE id = $1',
     [req.user.id]
   );
   const user = rows[0];
@@ -128,25 +128,25 @@ async function deductCredits(req, res, cost) {
     return null;
   }
   // Admin account bypasses credit deduction
-  if (user.email === 'cdanielrr@hotmail.com') return user;
+  if (user.is_admin) return user;
   if (user.credits < cost) {
     res.status(403).json({ error: 'No credits remaining' });
     return null;
   }
   const updated = await pool.query(
-    'UPDATE users SET credits = credits - $1 WHERE id = $2 RETURNING id, email, credits',
+    'UPDATE users SET credits = credits - $1 WHERE id = $2 RETURNING id, email, credits, is_admin',
     [cost, user.id]
   );
   return updated.rows[0];
 }
 
 /**
- * refundCredits(userId, cost, email)
+ * refundCredits(userId, cost, isAdmin)
  * Adds `cost` credits back to the user account.
  * Admin accounts are skipped (they were never charged).
  */
-async function refundCredits(userId, cost, email) {
-  if (email === 'cdanielrr@hotmail.com') return;
+async function refundCredits(userId, cost, isAdmin) {
+  if (isAdmin) return;
   try {
     await pool.query(
       'UPDATE users SET credits = credits + $1 WHERE id = $2',
@@ -161,7 +161,7 @@ async function refundCredits(userId, cost, email) {
 // ── Admin middleware ───────────────────────────────────────────────────────────
 
 function isAdmin(req, res, next) {
-  if (req.user.email !== 'cdanielrr@hotmail.com') {
+  if (!req.user.is_admin) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -223,8 +223,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
   // Input validation
   if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
   if (model && !['fast', 'deep', 'premium'].includes(model)) return res.status(400).json({ success: false, error: 'Invalid model' });
-  const ADMIN_EMAIL = 'cdanielrr@hotmail.com';
-  if (model === 'premium' && req.user.email !== ADMIN_EMAIL) {
+  if (model === 'premium' && !req.user.is_admin) {
     return res.status(403).json({ success: false, error: 'Premium model is currently admin-only' });
   }
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'Invalid date format' });
@@ -325,7 +324,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
         userBankroll,
       });
     } catch (err) {
-      await refundCredits(updatedUser.id, cost, updatedUser.email);
+      await refundCredits(updatedUser.id, cost, updatedUser.is_admin);
       const isTimeout = err.message === 'TIMEOUT';
       return res.status(500).json({
         success: false,
@@ -344,8 +343,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
 
 // POST /api/analyze/parlay  — requires auth, costs 4 (fast) or 8 (deep) credits
 app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) => {
-  const ADMIN_EMAIL = 'cdanielrr@hotmail.com';
-  if (req.user.email !== ADMIN_EMAIL) {
+  if (!req.user.is_admin) {
     return res.status(403).json({ success: false, error: 'Parlay analysis is currently admin-only' });
   }
   const {
@@ -392,7 +390,7 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
       );
       analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs, model, timeoutMs: 90000 });
     } catch (err) {
-      await refundCredits(updatedUser.id, cost, updatedUser.email);
+      await refundCredits(updatedUser.id, cost, updatedUser.is_admin);
       const isTimeout = err.message === 'TIMEOUT';
       return res.status(500).json({
         success: false,
@@ -491,7 +489,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
 
     // If any failed, refund those credits
     if (failCount > 0) {
-      await refundCredits(updatedUser.id, failCount * 2, updatedUser.email);
+      await refundCredits(updatedUser.id, failCount * 2, updatedUser.is_admin);
     }
 
     // For single game (backward compatible), return the old format
@@ -801,7 +799,7 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
 
 // GET /api/auth/is-admin — check if the authenticated user is admin
 app.get('/api/auth/is-admin', verifyToken, (req, res) => {
-  res.json({ isAdmin: req.user.email === 'cdanielrr@hotmail.com' });
+  res.json({ isAdmin: req.user.is_admin === true });
 });
 
 // GET /api/games/:gamePk/live — Live game feed (GUMBO) with normalized data
@@ -1184,8 +1182,7 @@ app.delete('/api/picks/:id', verifyToken, async (req, res) => {
 // DELETE /api/picks — elimina todo el historial del usuario autenticado (solo admin)
 app.delete('/api/picks', verifyToken, async (req, res) => {
   try {
-    const ADMIN_EMAIL = 'cdanielrr@hotmail.com';
-    if (req.user.email !== ADMIN_EMAIL) {
+    if (!req.user.is_admin) {
       return res.status(403).json({ success: false, error: 'Only admin can clear all history' });
     }
     await pool.query('UPDATE picks SET deleted_at = NOW() WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);

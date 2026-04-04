@@ -727,7 +727,7 @@ export default function AnalysisPanel({
 }) {
   const t = L[lang] ?? L.en;
   const { isAuthenticated, token, user, updateCredits } = useAuth();
-  const isAdmin = user?.email === 'cdanielrr@hotmail.com';
+  const isAdmin = user?.is_admin === true;
 
   const [betType,     setBetType]     = useState('all');
   const [modelMode,   setModelMode]   = useState('deep');
