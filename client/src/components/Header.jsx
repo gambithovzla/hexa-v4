@@ -29,7 +29,7 @@ const SUBTITLE = {
 
 const TABS = [
   { value: 'game',    en: 'Single Game', es: 'Juego Individual' },
-  { value: 'parlay',  en: 'Parlay',      es: 'Parlay'           },
+  { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           adminOnly: true },
   { value: 'bankroll', en: 'Bankroll',    es: 'Bankroll'         },
   { value: 'history', en: 'History',     es: 'Historial'        },
   { value: 'live',    en: 'Live',        es: 'En Vivo'          },

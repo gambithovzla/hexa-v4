@@ -314,11 +314,11 @@ function BetTypeSelect({ value, onChange, t }) {
   );
 }
 
-function ModelPicker({ value, onChange, t, lang }) {
+function ModelPicker({ value, onChange, t, lang, isAdmin = false }) {
   const safeActive = value === 'safe';
   const options = [
     { value: 'deep',    label: t.modelSelect.deep    },
-    { value: 'premium', label: t.modelSelect.premium },
+    ...(isAdmin ? [{ value: 'premium', label: t.modelSelect.premium }] : []),
   ];
 
   return (
@@ -727,6 +727,7 @@ export default function AnalysisPanel({
 }) {
   const t = L[lang] ?? L.en;
   const { isAuthenticated, token, user, updateCredits } = useAuth();
+  const isAdmin = user?.email === 'cdanielrr@hotmail.com';
 
   const [betType,     setBetType]     = useState('all');
   const [modelMode,   setModelMode]   = useState('deep');
@@ -751,6 +752,13 @@ export default function AnalysisPanel({
     setError(null);
     if (mode !== 'single') setWebSearch(false);
   }, [mode, selectedGames.length]);
+
+  // Reset to 'deep' if non-admin has premium selected
+  useEffect(() => {
+    if (!isAdmin && modelMode === 'premium') {
+      setModelMode('deep');
+    }
+  }, [isAdmin, modelMode]);
 
   const canAnalyze =
     (mode === 'single' && selectedGames.length === 1) ||
@@ -1024,7 +1032,7 @@ export default function AnalysisPanel({
         )}
 
         {/* Model picker */}
-        <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} />
+        <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} isAdmin={isAdmin} />
 
         {/* Parlay legs slider (only in parlay mode) */}
         {mode === 'parlay' && selectedGames.length >= 2 && (
