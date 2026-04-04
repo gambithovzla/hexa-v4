@@ -50,6 +50,25 @@ function parseMatchupTeams(matchup) {
   return { away: parts[0].trim(), home: parts[1].trim() };
 }
 
+function MatchupWithLogos({ matchup }) {
+  if (!matchup) return matchup;
+  const parts = matchup.split(/\s+(?:vs\.?|@|VS)\s+/i);
+  if (parts.length < 2) return <span>{matchup}</span>;
+  const away = parts[0].trim();
+  const home = parts[1].trim();
+  const awayId = getTeamId(away);
+  const homeId = getTeamId(home);
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+      {awayId && <img src={`https://www.mlbstatic.com/team-logos/${awayId}.svg`} width={18} height={18} alt="" style={{ flexShrink: 0, verticalAlign: 'middle' }} onError={e => { e.target.style.display = 'none'; }} />}
+      <span>{away}</span>
+      <span style={{ opacity: 0.4, fontSize: '0.7em' }}>vs</span>
+      {homeId && <img src={`https://www.mlbstatic.com/team-logos/${homeId}.svg`} width={18} height={18} alt="" style={{ flexShrink: 0, verticalAlign: 'middle' }} onError={e => { e.target.style.display = 'none'; }} />}
+      <span>{home}</span>
+    </span>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,20 +188,7 @@ function PickCard({ entry, onMarkResult, onDelete, isAdmin, t }) {
         )}
       </Box>
       <Typography component="div" sx={{ fontFamily: BARLOW, fontSize: '1rem', color: C.textPrimary, letterSpacing: '1px', lineHeight: 1.3 }}>
-        {(() => {
-          const { away, home } = parseMatchupTeams(entry.matchup);
-          const awayId = getTeamId(away);
-          const homeId = getTeamId(home);
-          return (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {awayId && <img src={`https://www.mlbstatic.com/team-logos/${awayId}.svg`} width={20} height={20} alt="" onError={e => e.target.style.display='none'} />}
-              <span>{away || entry.matchup || '?'}</span>
-              {home && <span style={{ opacity: 0.4, fontSize: '0.7em' }}>vs</span>}
-              {homeId && <img src={`https://www.mlbstatic.com/team-logos/${homeId}.svg`} width={20} height={20} alt="" onError={e => e.target.style.display='none'} />}
-              {home && <span>{home}</span>}
-            </Box>
-          );
-        })()}
+        <MatchupWithLogos matchup={entry.matchup} />
       </Typography>
       {entry.pick && (
         <Box sx={{
@@ -380,6 +386,7 @@ function AnalisisTab({ lang }) {
   const stats = getStats();
   const [confirming, setConfirming] = useState(false);
   const confirmTimeout = useRef(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   async function resolveAllPicks() {
     try {
@@ -479,13 +486,7 @@ function AnalisisTab({ lang }) {
             {lang === 'es' ? '⟳ RESOLVER PICKS' : '⟳ RESOLVE PICKS'}
           </Box>
           {isAdmin && (
-            <Box component="button" onClick={() => {
-              if (window.confirm('⚠️ DANGER: This will soft-delete ALL picks. This affects the Performance dashboard. Are you absolutely sure?')) {
-                if (window.confirm('⚠️ FINAL WARNING: Type OK to confirm you want to delete all pick history.')) {
-                  clearHistory();
-                }
-              }
-            }} sx={{
+            <Box component="button" onClick={() => setShowDeleteConfirm(true)} sx={{
               border: '2px solid #FF2244',
               background: 'rgba(255, 34, 68, 0.15)',
               color: '#FF2244',
@@ -501,6 +502,57 @@ function AnalisisTab({ lang }) {
               {t.history.clearHistory}
             </Box>
           )}
+        </Box>
+      )}
+
+      {showDeleteConfirm && (
+        <Box sx={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999,
+        }}>
+          <Box sx={{
+            background: '#07090E',
+            border: '2px solid #FF2244',
+            boxShadow: '0 0 30px rgba(255,34,68,0.3), 0 0 60px rgba(255,34,68,0.1)',
+            padding: '30px',
+            maxWidth: '420px',
+            width: '90%',
+            textAlign: 'center',
+          }}>
+            <Typography sx={{ fontFamily: "'Share Tech Mono', monospace", fontSize: '1.1rem', color: '#FF2244', letterSpacing: '0.15em', mb: 2 }}>
+              ⚠ DANGER ZONE ⚠
+            </Typography>
+            <Typography sx={{ fontFamily: "'Share Tech Mono', monospace", fontSize: '0.8rem', color: '#E8F4FF', mb: 1, lineHeight: 1.6 }}>
+              {lang === 'es'
+                ? 'Esto hará soft-delete de TODOS los picks. Afecta el dashboard de Performance y la credibilidad del Oracle.'
+                : 'This will soft-delete ALL picks. This affects the Performance dashboard and Oracle credibility.'}
+            </Typography>
+            <Typography sx={{ fontFamily: "'Share Tech Mono', monospace", fontSize: '0.7rem', color: 'rgba(255,34,68,0.7)', mb: 3 }}>
+              {lang === 'es' ? 'Esta acción no se puede deshacer fácilmente.' : 'This action cannot be easily undone.'}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+              <Box component="button" onClick={() => setShowDeleteConfirm(false)} sx={{
+                background: 'transparent', border: '1px solid rgba(0,217,255,0.3)',
+                color: '#00D9FF', fontFamily: "'Share Tech Mono', monospace",
+                fontSize: '0.75rem', padding: '8px 24px', cursor: 'pointer',
+                letterSpacing: '0.1em',
+                '&:hover': { background: 'rgba(0,217,255,0.1)' },
+              }}>
+                {lang === 'es' ? 'CANCELAR' : 'CANCEL'}
+              </Box>
+              <Box component="button" onClick={() => { setShowDeleteConfirm(false); clearHistory(); }} sx={{
+                background: 'rgba(255,34,68,0.15)', border: '2px solid #FF2244',
+                color: '#FF2244', fontFamily: "'Share Tech Mono', monospace",
+                fontSize: '0.75rem', padding: '8px 24px', cursor: 'pointer',
+                letterSpacing: '0.1em',
+                '&:hover': { background: 'rgba(255,34,68,0.3)', boxShadow: '0 0 12px rgba(255,34,68,0.5)' },
+              }}>
+                {lang === 'es' ? 'BORRAR TODO' : 'DELETE ALL'}
+              </Box>
+            </Box>
+          </Box>
         </Box>
       )}
     </Box>
