@@ -29,6 +29,7 @@ const L = {
       totals:     'Over/Under',
       pitcherprops:'🔥 Pitcher Props (Strikeouts)',
       batterprops: '🦇 Batter Props (HR, Hits)',
+      fadehits:    '🚫 FADE HITS',
     },
     modelSelect: {
       label:   'Analysis Model',
@@ -68,6 +69,7 @@ const L = {
       totals:     'Totales (O/U)',
       pitcherprops:'🔥 Pitcher Props (Ponches)',
       batterprops: '🦇 Batter Props (HR, Hits)',
+      fadehits:    '🚫 FADE HITS',
     },
     modelSelect: {
       label:   'Modelo de Análisis',
@@ -278,6 +280,7 @@ function BetTypeSelect({ value, onChange, t }) {
     { value: 'totals',      label: t.betType.totals       },
     { value: 'Pitcher Props', label: t.betType.pitcherprops },
     { value: 'Batter Props',  label: t.betType.batterprops  },
+    { value: 'fade_hits',     label: t.betType.fadehits     },
   ];
 
   return (
@@ -288,10 +291,11 @@ function BetTypeSelect({ value, onChange, t }) {
         onChange={e => onChange(e.target.value)}
         style={{
           width:             '100%',
-          background:        '#000000',
-          border:            '1px solid rgba(0, 217, 255, 0.22)',
+          background:        value === 'fade_hits' ? 'rgba(255,34,68,0.08)' : '#000000',
+          border:            value === 'fade_hits' ? '1px solid rgba(255,34,68,0.4)' : '1px solid rgba(0, 217, 255, 0.22)',
           borderRadius:      '0',
-          color:             '#E8F4FF',
+          color:             value === 'fade_hits' ? '#FF2244' : '#E8F4FF',
+          boxShadow:         value === 'fade_hits' ? '0 0 8px rgba(255,34,68,0.2)' : 'none',
           fontFamily:        MONO,
           fontSize:          '10px',
           letterSpacing:     '0.08em',
