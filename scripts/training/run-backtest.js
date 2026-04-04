@@ -110,36 +110,62 @@ function resolveResult(pickStr, game) {
   const awayScore = game.away.score;
   const total = homeScore + awayScore;
 
-  // Over/Under
-  let m = s.match(/(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)/i);
+  // Limpiar odds del string: "Under 7.5 (-119)" → "Under 7.5"
+  const cleaned = s.replace(/\s*\([+-]?\d+\)\s*$/, '').trim();
+
+  // Over con línea: "Over 8.5", "O 8.5", "Más de 8.5"
+  let m = cleaned.match(/(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)/i);
   if (m) { const line = parseFloat(m[1]); return total > line ? 'win' : total < line ? 'loss' : 'push'; }
-  m = s.match(/(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)/i);
+
+  // Under con línea: "Under 8.5", "U 8.5", "Menos de 8.5"
+  m = cleaned.match(/(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)/i);
   if (m) { const line = parseFloat(m[1]); return total < line ? 'win' : total > line ? 'loss' : 'push'; }
 
-  // Moneyline
-  if (/moneyline|ml|a ganar|dinero/i.test(s)) {
-    const teamToken = s.replace(/\s*(moneyline|ml|a ganar|dinero)\s*/gi, '').trim().toLowerCase();
-    const pickedHome = game.home.abbreviation.toLowerCase() === teamToken ||
-                       game.home.name.toLowerCase().includes(teamToken);
-    const pickedAway = game.away.abbreviation.toLowerCase() === teamToken ||
-                       game.away.name.toLowerCase().includes(teamToken);
-    if (pickedHome) return homeScore > awayScore ? 'win' : homeScore < awayScore ? 'loss' : 'push';
-    if (pickedAway) return awayScore > homeScore ? 'win' : awayScore < homeScore ? 'loss' : 'push';
+  // Over SIN línea: "Over (total runs)", "Over", etc — intentar con info del analysis
+  if (/over|por encima|alta/i.test(cleaned) && !/moneyline|ml/i.test(cleaned)) {
+    // No tenemos línea exacta, marcar como unresolved
+    console.log(`  ⚠ Over sin línea detectado: "${s}" — no se puede resolver sin línea`);
+    return null;
   }
 
-  // Run Line
-  m = s.match(/(.+?)\s+([+-]\d+\.?\d*)\s*(?:run\s*line|rl)/i);
+  // Under SIN línea: "Under (total runs)", "Under", etc
+  if (/under|por debajo|baja|menos/i.test(cleaned) && !/moneyline|ml/i.test(cleaned)) {
+    console.log(`  ⚠ Under sin línea detectado: "${s}" — no se puede resolver sin línea`);
+    return null;
+  }
+
+  // Moneyline: "Atlanta Braves Moneyline", "NYY ML", "Detroit Tigers ML (-158)"
+  if (/moneyline|ml|a ganar|dinero/i.test(cleaned)) {
+    const teamToken = cleaned.replace(/\s*(moneyline|ml|a ganar|dinero)\s*/gi, '').trim().toLowerCase();
+    const pickedHome = game.home.abbreviation?.toLowerCase() === teamToken ||
+                       game.home.name?.toLowerCase().includes(teamToken);
+    const pickedAway = game.away.abbreviation?.toLowerCase() === teamToken ||
+                       game.away.name?.toLowerCase().includes(teamToken);
+    if (pickedHome) return homeScore > awayScore ? 'win' : homeScore < awayScore ? 'loss' : 'push';
+    if (pickedAway) return awayScore > homeScore ? 'win' : awayScore < homeScore ? 'loss' : 'push';
+    return null;
+  }
+
+  // Run Line: "DET -1.5 Run Line", "BOS +1.5 RL"
+  m = cleaned.match(/(.+?)\s+([+-]\d+\.?\d*)\s*(?:run\s*line|rl|línea)/i);
   if (m) {
     const teamToken = m[1].trim().toLowerCase();
     const line = parseFloat(m[2]);
-    const pickedHome = game.home.abbreviation.toLowerCase() === teamToken ||
-                       game.home.name.toLowerCase().includes(teamToken);
-    const score = pickedHome ? homeScore - awayScore : awayScore - homeScore;
-    const adjusted = score + line;
+    const pickedHome = game.home.abbreviation?.toLowerCase() === teamToken ||
+                       game.home.name?.toLowerCase().includes(teamToken);
+    const diff = pickedHome ? (homeScore - awayScore) : (awayScore - homeScore);
+    const adjusted = diff + line;
     return adjusted > 0 ? 'win' : adjusted < 0 ? 'loss' : 'push';
   }
 
-  return null; // Could not parse (e.g., player props)
+  // Player prop — no se puede resolver automáticamente
+  if (/over|under|hits|bases|hr|strikeout|k\b/i.test(cleaned) && /[A-Z][a-z]+ [A-Z][a-z]+/.test(cleaned)) {
+    console.log(`  ⚠ Player prop detectado: "${s}" — resolución manual requerida`);
+    return null;
+  }
+
+  console.log(`  ⚠ Pick no reconocido: "${s}"`);
+  return null;
 }
 
 // ── Main execution ────────────────────────────────────────────────────────────
@@ -179,10 +205,22 @@ async function main() {
 
           // Extract pick from safe_pick response
           const safePick = analysis.data?.safe_pick;
-          const pick = safePick?.pick ?? null;
+          let pick = safePick?.pick ?? null;
           const confidence = safePick?.hit_probability ?? safePick?.confidence ?? null;
-          const betValue = analysis.data?.bet_value ?? null;
-          const modelRisk = analysis.data?.model_risk ?? null;
+          const betValue = analysis.data?.bet_value ?? safePick?.bet_value ?? null;
+          const modelRisk = analysis.data?.model_risk ?? safePick?.model_risk ?? null;
+          const pickType = safePick?.type ?? 'unknown';
+
+          // Si el pick no tiene línea numérica para O/U, intentar extraer de otros campos
+          if (pick && /under|over/i.test(pick) && !/\d+\.?\d/.test(pick)) {
+            // Buscar la línea en el objeto safe_pick
+            const line = safePick?.line ?? safePick?.total_line ?? safePick?.ou_line ?? null;
+            if (line) {
+              const direction = /under/i.test(pick) ? 'Under' : 'Over';
+              pick = `${direction} ${line}`;
+              console.log(`  → Línea extraída del response: ${pick}`);
+            }
+          }
 
           // Resolve against actual result
           const actualResult = pick ? resolveResult(pick, game) : null;
