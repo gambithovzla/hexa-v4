@@ -815,7 +815,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
     const { rows: pendingPicks } = await pool.query(
       `SELECT id, matchup, pick, oracle_confidence, type, created_at
        FROM picks
-       WHERE user_id = $1 AND result = 'pending'
+       WHERE user_id = $1 AND result = 'pending' AND deleted_at IS NULL
        ORDER BY created_at DESC
        LIMIT 20`,
       [userId]
@@ -948,7 +948,7 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
 
     // Find pending picks that match this game
     const { rows: pendingPicks } = await pool.query(
-      `SELECT id, pick, matchup FROM picks WHERE result = 'pending'`
+      `SELECT id, pick, matchup FROM picks WHERE result = 'pending' AND deleted_at IS NULL`
     );
 
     let resolved = 0;
@@ -1059,7 +1059,7 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
         COUNT(*) FILTER (WHERE clv > 0)                     AS "positiveCLV",
         COUNT(*) FILTER (WHERE clv < 0)                     AS "negativeCLV"
       FROM picks
-      WHERE user_id = $1
+      WHERE user_id = $1 AND deleted_at IS NULL
     `, [userId]);
 
     // Last 20 picks with CLV fields
@@ -1069,7 +1069,7 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
              closing_odds, implied_prob_closing, clv,
              created_at
       FROM picks
-      WHERE user_id = $1
+      WHERE user_id = $1 AND deleted_at IS NULL
       ORDER BY created_at DESC
       LIMIT 20
     `, [userId]);
@@ -1079,7 +1079,7 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
     const modelMap   = {};
 
     const { rows: allWithCLV } = await pool.query(`
-      SELECT pick, model, clv FROM picks WHERE user_id = $1 AND clv IS NOT NULL
+      SELECT pick, model, clv FROM picks WHERE user_id = $1 AND clv IS NOT NULL AND deleted_at IS NULL
     `, [userId]);
 
     for (const row of allWithCLV) {
@@ -1135,7 +1135,7 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
 app.get('/api/picks', verifyToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM picks WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100',
+      'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100',
       [req.user.id]
     );
     res.json({ success: true, data: rows });
@@ -1163,7 +1163,7 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
 app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'DELETE FROM picks WHERE id = $1 AND user_id = $2 RETURNING id',
+      'UPDATE picks SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id',
       [req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
@@ -1173,10 +1173,14 @@ app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   }
 });
 
-// DELETE /api/picks — elimina todo el historial del usuario autenticado
+// DELETE /api/picks — elimina todo el historial del usuario autenticado (solo admin)
 app.delete('/api/picks', verifyToken, async (req, res) => {
   try {
-    await pool.query('DELETE FROM picks WHERE user_id = $1', [req.user.id]);
+    const ADMIN_EMAIL = 'cdanielrr@hotmail.com';
+    if (req.user.email !== ADMIN_EMAIL) {
+      return res.status(403).json({ success: false, error: 'Only admin can clear all history' });
+    }
+    await pool.query('UPDATE picks SET deleted_at = NOW() WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });

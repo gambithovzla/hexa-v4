@@ -90,6 +90,7 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS clv                   DECIMAL(5,2)`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS odds_details          JSONB`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS kelly_recommendation TEXT`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL`);
 
     // ── odds_snapshots (P7 — Line Movement Tracking) ──────────────────────────
     await client.query(`
