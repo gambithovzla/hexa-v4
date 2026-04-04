@@ -558,6 +558,21 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           </Box>
         )}
 
+        {/* Backtest Dashboard button — admin only */}
+        {isAdmin && (
+          <Box component="button" onClick={() => { window.location.href = '/admin/backtests'; }} sx={{
+            px: '10px', py: '5px',
+            border: `1px solid rgba(255,153,0,0.3)`,
+            background: 'rgba(255,153,0,0.08)',
+            color: '#FF9900',
+            fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '1.5px',
+            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            '&:hover': { background: 'rgba(255,153,0,0.15)', borderColor: 'rgba(255,153,0,0.5)' },
+          }}>
+            BACKTESTS
+          </Box>
+        )}
+
         {/* Credit Manager button + panel — admin only */}
         {isAdmin && (
           <Box sx={{ position: 'relative', flexShrink: 0 }}>

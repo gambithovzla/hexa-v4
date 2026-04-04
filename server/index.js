@@ -1230,6 +1230,108 @@ app.get('/api/odds/movement', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/backtest-stats — backtest results dashboard (admin only)
+app.get('/api/admin/backtest-stats', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ success: false, error: 'Admin access required' });
+  }
+  try {
+    // Summary
+    const summary = await pool.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE actual_result = 'win') as wins,
+        COUNT(*) FILTER (WHERE actual_result = 'loss') as losses,
+        COUNT(*) FILTER (WHERE actual_result = 'push') as pushes,
+        COUNT(*) FILTER (WHERE actual_result IS NULL) as unresolved,
+        ROUND(AVG(oracle_confidence)::numeric, 1) as avg_confidence,
+        ROUND(AVG(latency_ms)::numeric, 0) as avg_latency_ms
+      FROM backtest_results
+    `);
+
+    // By date
+    const byDate = await pool.query(`
+      SELECT
+        historical_date,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE actual_result = 'win') as wins,
+        COUNT(*) FILTER (WHERE actual_result = 'loss') as losses,
+        COUNT(*) FILTER (WHERE actual_result IS NULL) as unresolved
+      FROM backtest_results
+      GROUP BY historical_date
+      ORDER BY historical_date DESC
+    `);
+
+    // By pick type
+    const byType = await pool.query(`
+      SELECT
+        pick_type,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE actual_result = 'win') as wins,
+        COUNT(*) FILTER (WHERE actual_result = 'loss') as losses
+      FROM backtest_results
+      WHERE actual_result IS NOT NULL
+      GROUP BY pick_type
+    `);
+
+    // By confidence bucket
+    const byConfidence = await pool.query(`
+      SELECT
+        CASE
+          WHEN oracle_confidence >= 65 THEN '65-70'
+          WHEN oracle_confidence >= 60 THEN '60-64'
+          WHEN oracle_confidence >= 55 THEN '55-59'
+          WHEN oracle_confidence >= 50 THEN '50-54'
+          ELSE 'under-50'
+        END as bucket,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE actual_result = 'win') as wins,
+        COUNT(*) FILTER (WHERE actual_result = 'loss') as losses
+      FROM backtest_results
+      WHERE actual_result IS NOT NULL
+      GROUP BY bucket
+      ORDER BY bucket
+    `);
+
+    // Recent picks detail
+    const recent = await pool.query(`
+      SELECT matchup, pick, oracle_confidence, actual_result,
+             actual_home_score, actual_away_score, historical_date, latency_ms
+      FROM backtest_results
+      ORDER BY created_at DESC
+      LIMIT 50
+    `);
+
+    // Run history
+    const runs = await pool.query(`
+      SELECT run_id,
+        MIN(historical_date) as date,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE actual_result = 'win') as wins,
+        COUNT(*) FILTER (WHERE actual_result = 'loss') as losses,
+        MIN(created_at) as run_time
+      FROM backtest_results
+      GROUP BY run_id
+      ORDER BY MIN(created_at) DESC
+      LIMIT 20
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        summary: summary.rows[0],
+        byDate: byDate.rows,
+        byType: byType.rows,
+        byConfidence: byConfidence.rows,
+        recent: recent.rows,
+        runs: runs.rows,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Startup: run migrations → seed admin → start server ───────────────────────
 runMigrations()
   .then(() => seedAdminUser())
