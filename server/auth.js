@@ -23,6 +23,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import pool from './db.js';
 import { verifyToken } from './middleware/auth-middleware.js';
+import { generateCode, sendVerificationEmail } from './email.js';
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
 
@@ -39,11 +40,12 @@ function signToken(user) {
 /** Strip password_hash before sending to client */
 function safeUser(row) {
   return {
-    id:        row.id,
-    email:     row.email,
-    credits:   Number(row.credits),
-    is_admin:  row.is_admin || false,
-    createdAt: row.created_at,
+    id:             row.id,
+    email:          row.email,
+    credits:        Number(row.credits),
+    is_admin:       row.is_admin || false,
+    email_verified: row.email_verified ?? false,
+    createdAt:      row.created_at,
   };
 }
 
@@ -137,7 +139,7 @@ router.post('/register', async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO users (id, email, password_hash, credits)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, credits, is_admin, created_at`,
+       RETURNING id, email, credits, is_admin, email_verified, created_at`,
       [id, normalizedEmail, passwordHash, 0]
     );
 
@@ -153,7 +155,7 @@ router.post('/register', async (req, res) => {
       const pendingIds   = pending.rows.map(r => r.id);
 
       const updated = await pool.query(
-        'UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING id, email, credits, is_admin, created_at',
+        'UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING id, email, credits, is_admin, email_verified, created_at',
         [totalPending, newUser.id]
       );
       await pool.query(
@@ -163,6 +165,15 @@ router.post('/register', async (req, res) => {
       newUser = updated.rows[0];
       console.log(`[auth] Claimed ${totalPending} pending BMC credits for ${normalizedEmail}`);
     }
+
+    // Generate and send verification code
+    const code = generateCode();
+    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+    await pool.query(
+      'UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3',
+      [code, expires, newUser.id]
+    );
+    await sendVerificationEmail(normalizedEmail, code);
 
     const token = signToken(newUser);
     return res.status(201).json({ token, user: safeUser(newUser) });
@@ -182,7 +193,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, email, password_hash, credits, is_admin, created_at FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, credits, is_admin, email_verified, created_at FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
     const user = rows[0];
@@ -207,7 +218,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', verifyToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, email, credits, is_admin, created_at FROM users WHERE id = $1',
+      'SELECT id, email, credits, is_admin, email_verified, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
     if (!rows[0]) {
@@ -217,6 +228,72 @@ router.get('/me', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('[auth] me error:', err.message);
     return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/verify-email — requires JWT, body: { code }
+router.post('/verify-email', verifyToken, async (req, res) => {
+  try {
+    const { code } = req.body ?? {};
+    if (!code) return res.status(400).json({ success: false, error: 'Code is required' });
+
+    const { rows } = await pool.query(
+      'SELECT verification_code, verification_expires FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    if (
+      !user.verification_code ||
+      user.verification_code !== String(code) ||
+      !user.verification_expires ||
+      new Date(user.verification_expires) < new Date()
+    ) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired code' });
+    }
+
+    await pool.query(
+      'UPDATE users SET email_verified = true, verification_code = NULL, verification_expires = NULL WHERE id = $1',
+      [req.user.id]
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[auth] verify-email error:', err.message);
+    return res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// POST /api/auth/resend-code — requires JWT, no body
+router.post('/resend-code', verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT email, email_verified, verification_expires FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const user = rows[0];
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.email_verified) return res.status(400).json({ success: false, error: 'Email already verified' });
+
+    // Rate limit: allow resend only if last code was sent more than 1 minute ago
+    if (user.verification_expires) {
+      const sentAt = new Date(user.verification_expires).getTime() - 15 * 60 * 1000;
+      if (Date.now() - sentAt < 60 * 1000) {
+        return res.status(429).json({ success: false, error: 'Please wait 1 minute before requesting a new code' });
+      }
+    }
+
+    const code = generateCode();
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    await pool.query(
+      'UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3',
+      [code, expires, req.user.id]
+    );
+    await sendVerificationEmail(user.email, code);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[auth] resend-code error:', err.message);
+    return res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 

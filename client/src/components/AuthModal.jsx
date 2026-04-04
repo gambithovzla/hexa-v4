@@ -39,36 +39,52 @@ const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
   en: {
-    login:         'Login',
-    register:      'Register',
-    email:         'User ID // Email',
-    password:      'Auth Key // Password',
-    submitLogin:   'Authenticate',
-    submitReg:     'Create Access',
-    loading:       'Verifying…',
-    switchToReg:   "No account? → Register",
-    switchToLogin: 'Have access? → Login',
-    close:         'Close',
-    bootLine1:     'Establishing secure connection…',
-    bootLine2:     'H.E.X.A. SECURE ACCESS PORTAL',
-    bootLineEs1:   'Estableciendo conexión segura…',
-    bootLineEs2:   'PORTAL DE ACCESO SEGURO H.E.X.A.',
+    login:           'Login',
+    register:        'Register',
+    email:           'User ID // Email',
+    password:        'Auth Key // Password',
+    submitLogin:     'Authenticate',
+    submitReg:       'Create Access',
+    loading:         'Verifying…',
+    switchToReg:     "No account? → Register",
+    switchToLogin:   'Have access? → Login',
+    close:           'Close',
+    bootLine1:       'Establishing secure connection…',
+    bootLine2:       'H.E.X.A. SECURE ACCESS PORTAL',
+    bootLineEs1:     'Estableciendo conexión segura…',
+    bootLineEs2:     'PORTAL DE ACCESO SEGURO H.E.X.A.',
+    verifyTitle:     'VERIFY YOUR EMAIL',
+    verifySent:      (email) => `We sent a 6-digit code to ${email}`,
+    verifyCode:      'Verification Code',
+    verifySubmit:    'Verify',
+    verifyResend:    'Resend code',
+    verifyResending: 'Sending…',
+    verifySentOk:    'Code resent!',
+    verifySkip:      'Verify later',
   },
   es: {
-    login:         'Iniciar sesión',
-    register:      'Registrarse',
-    email:         'ID Usuario // Email',
-    password:      'Clave Auth // Contraseña',
-    submitLogin:   'Autenticar',
-    submitReg:     'Crear Acceso',
-    loading:       'Verificando…',
-    switchToReg:   '¿Sin cuenta? → Registrarse',
-    switchToLogin: '¿Ya tienes acceso? → Login',
-    close:         'Cerrar',
-    bootLine1:     'Estableciendo conexión segura…',
-    bootLine2:     'PORTAL DE ACCESO SEGURO H.E.X.A.',
-    bootLineEs1:   'Establishing secure connection…',
-    bootLineEs2:   'H.E.X.A. SECURE ACCESS PORTAL',
+    login:           'Iniciar sesión',
+    register:        'Registrarse',
+    email:           'ID Usuario // Email',
+    password:        'Clave Auth // Contraseña',
+    submitLogin:     'Autenticar',
+    submitReg:       'Crear Acceso',
+    loading:         'Verificando…',
+    switchToReg:     '¿Sin cuenta? → Registrarse',
+    switchToLogin:   '¿Ya tienes acceso? → Login',
+    close:           'Cerrar',
+    bootLine1:       'Estableciendo conexión segura…',
+    bootLine2:       'PORTAL DE ACCESO SEGURO H.E.X.A.',
+    bootLineEs1:     'Establishing secure connection…',
+    bootLineEs2:     'H.E.X.A. SECURE ACCESS PORTAL',
+    verifyTitle:     'VERIFICA TU EMAIL',
+    verifySent:      (email) => `Enviamos un código de 6 dígitos a ${email}`,
+    verifyCode:      'Código de Verificación',
+    verifySubmit:    'Verificar',
+    verifyResend:    'Reenviar código',
+    verifyResending: 'Enviando…',
+    verifySentOk:    '¡Código reenviado!',
+    verifySkip:      'Verificar después',
   },
 };
 
@@ -217,13 +233,17 @@ function InputField({ label, type, value, onChange, disabled }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'login' }) {
   const t = L[lang] ?? L.en;
-  const { login, register } = useAuth();
+  const { login, register, verifyEmail, resendCode } = useAuth();
 
-  const [tab,      setTab]      = useState(defaultTab);
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [tab,           setTab]           = useState(defaultTab);
+  const [email,         setEmail]         = useState('');
+  const [password,      setPassword]      = useState('');
+  const [error,         setError]         = useState('');
+  const [loading,       setLoading]       = useState(false);
+  const [verifyStep,    setVerifyStep]    = useState(false);
+  const [verifyEmail_,  setVerifyEmail_]  = useState('');
+  const [verifyCode,    setVerifyCode]    = useState('');
+  const [resendStatus,  setResendStatus]  = useState('idle'); // 'idle' | 'sending' | 'sent'
 
   // Reset form on open / tab change
   useEffect(() => {
@@ -233,6 +253,9 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
       setPassword('');
       setError('');
       setLoading(false);
+      setVerifyStep(false);
+      setVerifyCode('');
+      setResendStatus('idle');
     }
   }, [open, defaultTab]);
 
@@ -245,13 +268,49 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     setError('');
     setLoading(true);
     try {
-      if (tab === 'login') await login(email, password);
-      else                 await register(email, password);
-      onClose();
+      if (tab === 'login') {
+        const user = await login(email, password);
+        if (user && user.email_verified === false) {
+          setVerifyEmail_(email);
+          setVerifyStep(true);
+          setLoading(false);
+          return;
+        }
+        onClose();
+      } else {
+        const user = await register(email, password);
+        setVerifyEmail_(email);
+        setVerifyStep(true);
+      }
     } catch (err) {
       setError(err.message ?? 'Authentication failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleVerify(e) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await verifyEmail(verifyCode);
+      onClose();
+    } catch (err) {
+      setError(err.message ?? 'Verification failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setResendStatus('sending');
+    try {
+      await resendCode();
+      setResendStatus('sent');
+      setTimeout(() => setResendStatus('idle'), 3000);
+    } catch {
+      setResendStatus('idle');
     }
   }
 
@@ -347,87 +406,166 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
         {/* Boot sequence header */}
         <BootHeader lang={lang} />
 
-        {/* Tab bar */}
-        <TabBar tab={tab} setTab={setTab} t={t} />
+        {verifyStep ? (
+          /* ── Verification step ── */
+          <Box component="form" onSubmit={handleVerify} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Typography sx={{ fontFamily: DISPLAY, fontSize: '11px', color: NC.cyan, letterSpacing: '3px', textTransform: 'uppercase', mb: '4px' }}>
+              {t.verifyTitle}
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, letterSpacing: '0.04em' }}>
+              {t.verifySent(verifyEmail_)}
+            </Typography>
 
-        {/* Form */}
-        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <InputField label={t.email}    type="email"    value={email}    onChange={setEmail}    disabled={loading} />
-          <InputField label={t.password} type="password" value={password} onChange={setPassword} disabled={loading} />
+            <InputField label={t.verifyCode} type="text" value={verifyCode} onChange={setVerifyCode} disabled={loading} />
 
-          {/* Error */}
-          {error && (
-            <Box sx={{
-              bgcolor:      NC.redDim,
-              border:       `1px solid ${NC.redLine}`,
-              borderRadius: '0',
-              px:           '12px',
-              py:           '8px',
-              position:     'relative',
-              '&::before': {
-                content:    '""',
-                position:   'absolute',
-                top:        0,
-                left:       0,
-                width:      '6px',
-                height:     '6px',
-                borderTop:  `1px solid ${NC.red}`,
-                borderLeft: `1px solid ${NC.red}`,
-              },
-            }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.red, letterSpacing: '0.04em' }}>
-                ⚠ {error}
+            {/* Error */}
+            {error && (
+              <Box sx={{ bgcolor: NC.redDim, border: `1px solid ${NC.redLine}`, borderRadius: '0', px: '12px', py: '8px' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.red }}>⚠ {error}</Typography>
+              </Box>
+            )}
+
+            {/* Verify button */}
+            <Box
+              component="button"
+              type="submit"
+              disabled={loading || verifyCode.length < 6}
+              sx={{
+                mt:            '4px',
+                py:            '13px',
+                border:        `1px solid ${verifyCode.length >= 6 ? NC.orange : NC.cyanLine}`,
+                borderRadius:  '0',
+                background:    verifyCode.length >= 6 ? NC.orangeDim : 'transparent',
+                color:         verifyCode.length >= 6 ? NC.orange : NC.textDim,
+                fontFamily:    MONO,
+                fontSize:      '10px',
+                letterSpacing: '4px',
+                textTransform: 'uppercase',
+                cursor:        verifyCode.length >= 6 && !loading ? 'pointer' : 'not-allowed',
+                transition:    'all 0.2s',
+                '&:hover':     verifyCode.length >= 6 ? { background: 'rgba(255,102,0,0.2)', color: '#ffffff' } : {},
+              }}
+            >
+              {loading ? t.loading : t.verifySubmit}
+            </Box>
+
+            {/* Resend + skip */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography
+                onClick={resendStatus === 'idle' ? handleResend : undefined}
+                sx={{
+                  fontFamily:    MONO,
+                  fontSize:      '9px',
+                  color:         resendStatus === 'sent' ? NC.green : NC.textMuted,
+                  cursor:        resendStatus === 'idle' ? 'pointer' : 'default',
+                  letterSpacing: '0.04em',
+                  '&:hover':     resendStatus === 'idle' ? { color: NC.cyan } : {},
+                  transition:    'color 0.2s',
+                }}
+              >
+                {resendStatus === 'sending' ? t.verifyResending : resendStatus === 'sent' ? t.verifySentOk : t.verifyResend}
+              </Typography>
+              <Typography
+                onClick={onClose}
+                sx={{
+                  fontFamily:    MONO,
+                  fontSize:      '9px',
+                  color:         NC.textDim,
+                  cursor:        'pointer',
+                  letterSpacing: '0.04em',
+                  '&:hover':     { color: NC.textMuted },
+                  transition:    'color 0.2s',
+                }}
+              >
+                {t.verifySkip}
               </Typography>
             </Box>
-          )}
-
-          {/* Submit */}
-          <Box
-            component="button"
-            type="submit"
-            disabled={!canSubmit}
-            sx={{
-              mt:            '4px',
-              py:            '13px',
-              border:        `1px solid ${canSubmit ? NC.orange : NC.cyanLine}`,
-              borderRadius:  '0',
-              background:    canSubmit ? NC.orangeDim : 'transparent',
-              color:         canSubmit ? NC.orange : NC.textDim,
-              fontFamily:    MONO,
-              fontSize:      '10px',
-              letterSpacing: '4px',
-              textTransform: 'uppercase',
-              cursor:        canSubmit ? 'pointer' : 'not-allowed',
-              boxShadow:     canSubmit ? NC.orangeGlow : 'none',
-              transition:    'all 0.2s',
-              '@keyframes authPulse': {
-                '0%, 100%': { boxShadow: '0 0 6px rgba(255,102,0,0.3)' },
-                '50%':      { boxShadow: '0 0 18px rgba(255,102,0,0.8), 0 0 36px rgba(255,102,0,0.2)' },
-              },
-              animation:     canSubmit ? 'authPulse 2s ease-in-out infinite' : 'none',
-              '&:hover':     canSubmit ? { background: 'rgba(255,102,0,0.2)', color: '#ffffff' } : {},
-            }}
-          >
-            {loading ? t.loading : (tab === 'login' ? t.submitLogin : t.submitReg)}
           </Box>
+        ) : (
+          <>
+            {/* Tab bar */}
+            <TabBar tab={tab} setTab={setTab} t={t} />
 
-          {/* Switch tab link */}
-          <Typography
-            onClick={() => setTab(tab === 'login' ? 'register' : 'login')}
-            sx={{
-              fontFamily:    MONO,
-              fontSize:      '9px',
-              color:         NC.textMuted,
-              textAlign:     'center',
-              cursor:        'pointer',
-              letterSpacing: '0.06em',
-              '&:hover':     { color: NC.cyan },
-              transition:    'color 0.2s',
-            }}
-          >
-            {tab === 'login' ? t.switchToReg : t.switchToLogin}
-          </Typography>
-        </Box>
+            {/* Form */}
+            <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <InputField label={t.email}    type="email"    value={email}    onChange={setEmail}    disabled={loading} />
+              <InputField label={t.password} type="password" value={password} onChange={setPassword} disabled={loading} />
+
+              {/* Error */}
+              {error && (
+                <Box sx={{
+                  bgcolor:      NC.redDim,
+                  border:       `1px solid ${NC.redLine}`,
+                  borderRadius: '0',
+                  px:           '12px',
+                  py:           '8px',
+                  position:     'relative',
+                  '&::before': {
+                    content:    '""',
+                    position:   'absolute',
+                    top:        0,
+                    left:       0,
+                    width:      '6px',
+                    height:     '6px',
+                    borderTop:  `1px solid ${NC.red}`,
+                    borderLeft: `1px solid ${NC.red}`,
+                  },
+                }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.red, letterSpacing: '0.04em' }}>
+                    ⚠ {error}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Submit */}
+              <Box
+                component="button"
+                type="submit"
+                disabled={!canSubmit}
+                sx={{
+                  mt:            '4px',
+                  py:            '13px',
+                  border:        `1px solid ${canSubmit ? NC.orange : NC.cyanLine}`,
+                  borderRadius:  '0',
+                  background:    canSubmit ? NC.orangeDim : 'transparent',
+                  color:         canSubmit ? NC.orange : NC.textDim,
+                  fontFamily:    MONO,
+                  fontSize:      '10px',
+                  letterSpacing: '4px',
+                  textTransform: 'uppercase',
+                  cursor:        canSubmit ? 'pointer' : 'not-allowed',
+                  boxShadow:     canSubmit ? NC.orangeGlow : 'none',
+                  transition:    'all 0.2s',
+                  '@keyframes authPulse': {
+                    '0%, 100%': { boxShadow: '0 0 6px rgba(255,102,0,0.3)' },
+                    '50%':      { boxShadow: '0 0 18px rgba(255,102,0,0.8), 0 0 36px rgba(255,102,0,0.2)' },
+                  },
+                  animation:     canSubmit ? 'authPulse 2s ease-in-out infinite' : 'none',
+                  '&:hover':     canSubmit ? { background: 'rgba(255,102,0,0.2)', color: '#ffffff' } : {},
+                }}
+              >
+                {loading ? t.loading : (tab === 'login' ? t.submitLogin : t.submitReg)}
+              </Box>
+
+              {/* Switch tab link */}
+              <Typography
+                onClick={() => setTab(tab === 'login' ? 'register' : 'login')}
+                sx={{
+                  fontFamily:    MONO,
+                  fontSize:      '9px',
+                  color:         NC.textMuted,
+                  textAlign:     'center',
+                  cursor:        'pointer',
+                  letterSpacing: '0.06em',
+                  '&:hover':     { color: NC.cyan },
+                  transition:    'color 0.2s',
+                }}
+              >
+                {tab === 'login' ? t.switchToReg : t.switchToLogin}
+              </Typography>
+            </Box>
+          </>
+        )}
       </Box>
     </Box>
   );

@@ -715,6 +715,76 @@ function RunButton({ canAnalyze, loading, onClick, t }) {
   );
 }
 
+// ── EmailVerificationBanner ───────────────────────────────────────────────────
+
+const API_URL_BANNER = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+function EmailVerificationBanner({ lang, token }) {
+  const [status, setStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'error'
+
+  async function handleResend() {
+    setStatus('sending');
+    try {
+      const res = await fetch(`${API_URL_BANNER}/api/auth/resend-code`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      setStatus(res.ok && json.success ? 'sent' : 'error');
+      if (res.ok) setTimeout(() => setStatus('idle'), 3000);
+    } catch {
+      setStatus('error');
+    }
+  }
+
+  const msg    = lang === 'es'
+    ? '⚠ Verifica tu email para ejecutar análisis. Revisa tu bandeja.'
+    : '⚠ Please verify your email to run analyses. Check your inbox.';
+  const btnTxt = lang === 'es'
+    ? (status === 'sending' ? 'Enviando…' : status === 'sent' ? '¡Enviado!' : 'Reenviar código')
+    : (status === 'sending' ? 'Sending…'  : status === 'sent' ? 'Sent!'     : 'Resend code');
+
+  return (
+    <Box sx={{
+      bgcolor:      'rgba(255, 170, 0, 0.08)',
+      border:       '1px solid rgba(255, 170, 0, 0.4)',
+      borderRadius: '0',
+      px:           '16px',
+      py:           '10px',
+      display:      'flex',
+      alignItems:   'center',
+      justifyContent: 'space-between',
+      gap:          '12px',
+      flexWrap:     'wrap',
+    }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: '#FFAA00', letterSpacing: '0.04em' }}>
+        {msg}
+      </Typography>
+      <Box
+        component="button"
+        onClick={status === 'idle' ? handleResend : undefined}
+        disabled={status !== 'idle'}
+        sx={{
+          border:        '1px solid rgba(255,170,0,0.5)',
+          bgcolor:       'rgba(255,170,0,0.1)',
+          color:         status === 'sent' ? '#00FF88' : '#FFAA00',
+          fontFamily:    MONO,
+          fontSize:      '9px',
+          letterSpacing: '2px',
+          textTransform: 'uppercase',
+          px:            '12px',
+          py:            '6px',
+          cursor:        status === 'idle' ? 'pointer' : 'default',
+          transition:    'all 0.2s',
+          '&:hover':     status === 'idle' ? { bgcolor: 'rgba(255,170,0,0.2)' } : {},
+        }}
+      >
+        {btnTxt}
+      </Box>
+    </Box>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function AnalysisPanel({
@@ -985,8 +1055,15 @@ export default function AnalysisPanel({
 
   const hexaData = extractHexaData(result);
 
+  const isEmailUnverified = isAuthenticated && user?.email_verified === false;
+
   return (
     <Box sx={{ bgcolor: C.bg, display: 'flex', flexDirection: 'column', gap: '16px', p: 2 }}>
+
+      {/* ── Email verification banner ── */}
+      {isEmailUnverified && (
+        <EmailVerificationBanner lang={lang} token={token} />
+      )}
 
       {/* ── Controls card ── */}
       <Box
