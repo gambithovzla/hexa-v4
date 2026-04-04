@@ -237,6 +237,10 @@ async function main() {
           const confidence = mp?.oracle_confidence ?? null;
           const betValue = mp?.bet_value ?? null;
           const modelRisk = analysis.data?.model_risk ?? null;
+          const alertFlags = analysis.data?.alert_flags ?? [];
+          const hasCriticalFlags = alertFlags.some(f =>
+            /statcast.*no.*available|no.*statcast|data.*limited|minimal.*analysis|small.*sample/i.test(f)
+          );
           const pickType = mp?.pick ? (
             /over|under/i.test(mp.pick) ? 'total' :
             /moneyline|ml/i.test(mp.pick) ? 'moneyline' :
@@ -248,6 +252,7 @@ async function main() {
 
           console.log(`  → Pick: ${pick ?? 'N/A'} (${pickType})`);
           console.log(`  → Confidence: ${confidence ?? 'N/A'}%`);
+          console.log(`  → Flags: ${alertFlags.length} (critical: ${hasCriticalFlags})`);
           console.log(`  -> Actual: ${game.away.abbreviation} ${game.away.score} - ${game.home.abbreviation} ${game.home.score} (total: ${game.totalRuns})`);
           console.log(`  -> Result: ${actualResult?.toUpperCase() ?? 'UNRESOLVED'}`);
 
@@ -262,8 +267,9 @@ async function main() {
             await pool.query(`
               INSERT INTO backtest_results (run_id, historical_date, game_pk, matchup, home_team, away_team,
                 pick, oracle_confidence, bet_value, model_risk, pick_type,
-                actual_home_score, actual_away_score, actual_result, model, latency_ms)
-              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                actual_home_score, actual_away_score, actual_result, model, latency_ms,
+                alert_flags, bet_value_raw, has_critical_flags)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
               ON CONFLICT (run_id, game_pk, pick_type) DO NOTHING
             `, [
               runId, targetDate, game.gamePk, matchup,
@@ -271,6 +277,7 @@ async function main() {
               pick, confidence, betValue, modelRisk, pickType,
               game.home.score, game.away.score, actualResult,
               'deep', analysis.latency_ms,
+              JSON.stringify(alertFlags), betValue, hasCriticalFlags,
             ]);
           }
         } catch (err) {

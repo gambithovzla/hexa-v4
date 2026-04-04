@@ -1293,6 +1293,18 @@ app.get('/api/admin/backtest-stats', verifyToken, async (req, res) => {
       ORDER BY bucket
     `);
 
+    // By flags
+    const byFlags = await pool.query(`
+      SELECT
+        has_critical_flags,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE actual_result = 'win') as wins,
+        COUNT(*) FILTER (WHERE actual_result = 'loss') as losses
+      FROM backtest_results
+      WHERE actual_result IS NOT NULL
+      GROUP BY has_critical_flags
+    `);
+
     // Recent picks detail
     const recent = await pool.query(`
       SELECT matchup, pick, oracle_confidence, actual_result,
@@ -1323,6 +1335,7 @@ app.get('/api/admin/backtest-stats', verifyToken, async (req, res) => {
         byDate: byDate.rows,
         byType: byType.rows,
         byConfidence: byConfidence.rows,
+        byFlags: byFlags.rows,
         recent: recent.rows,
         runs: runs.rows,
       },
