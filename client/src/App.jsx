@@ -29,6 +29,7 @@ import PerformanceDashboard from './pages/PerformanceDashboard';
 import PerformancePage      from './components/PerformancePage';
 import BatchScanPanel      from './components/BatchScanPanel';
 import BacktestDashboard  from './components/BacktestDashboard';
+import BacktestRunner     from './components/BacktestRunner';
 import LiveTracker         from './components/LiveTracker';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
@@ -129,6 +130,9 @@ export default function App() {
   if (window.location.pathname === '/privacy') return <LegalPage page="privacy" lang={lang} />;
   if (window.location.pathname === '/admin/backtests') {
     return <BacktestDashboard lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/run-backtest') {
+    return <BacktestRunner lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
 
 

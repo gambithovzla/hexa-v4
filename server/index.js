@@ -1345,6 +1345,133 @@ app.get('/api/admin/backtest-stats', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/historical-games?date=YYYY-MM-DD — fetch completed games for a date
+app.get('/api/admin/historical-games', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
+  const date = req.query.date;
+  if (!date) return res.status(400).json({ success: false, error: 'date query param required' });
+
+  try {
+    const url = `https://statsapi.mlb.com/api/v1/schedule?date=${date}&sportId=1&hydrate=team,linescore,probablePitcher`;
+    const mlbRes = await fetch(url);
+    const data = await mlbRes.json();
+    const games = [];
+    for (const dateObj of data.dates ?? []) {
+      for (const game of dateObj.games ?? []) {
+        const status = game.status?.detailedState ?? '';
+        const isFinal = status.toLowerCase().includes('final');
+        const home = game.teams?.home;
+        const away = game.teams?.away;
+        games.push({
+          gamePk: game.gamePk,
+          status: isFinal ? 'final' : status,
+          isFinal,
+          home: { name: home?.team?.name ?? '', abbreviation: home?.team?.abbreviation ?? '', score: home?.score ?? 0 },
+          away: { name: away?.team?.name ?? '', abbreviation: away?.team?.abbreviation ?? '', score: away?.score ?? 0 },
+          totalRuns: (home?.score ?? 0) + (away?.score ?? 0),
+          homePitcher: home?.probablePitcher?.fullName ?? 'TBD',
+          awayPitcher: away?.probablePitcher?.fullName ?? 'TBD',
+        });
+      }
+    }
+    // Check which games already have backtest results
+    const existing = await pool.query(
+      'SELECT DISTINCT game_pk FROM backtest_results WHERE historical_date = $1',
+      [date]
+    );
+    const existingPks = new Set(existing.rows.map(r => r.game_pk));
+    games.forEach(g => { g.alreadyTested = existingPks.has(g.gamePk); });
+
+    res.json({ success: true, data: { date, games } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/run-backtest — analyze a single historical game and save to backtest_results
+app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
+  const { gamePk, date, runId, homeTeam, awayTeam, homeScore, awayScore, totalRuns } = req.body;
+  if (!gamePk || !date) return res.status(400).json({ success: false, error: 'gamePk and date required' });
+
+  try {
+    const matchup = `${awayTeam} vs ${homeTeam}`;
+    const start = Date.now();
+
+    // Use existing analyze/game endpoint logic internally
+    const games = await getTodayGames(date);
+    const gameData = games.find(g => String(g.gamePk) === String(gamePk));
+    if (!gameData) return res.status(404).json({ success: false, error: 'Game not found in MLB schedule' });
+
+    let allOdds = [];
+    try { allOdds = await getGameOdds(); } catch {}
+    const matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+
+    const context = await buildContext(gameData, matchedOdds);
+    const analysis = await analyzeGame({
+      mode: 'single', matchup, context, lang: 'en',
+      betType: 'all', riskProfile: 'balanced', webSearch: false, model: 'deep', timeoutMs: 90000,
+    });
+
+    const latency = Date.now() - start;
+    const mp = analysis.data?.master_prediction;
+    const pick = mp?.pick ?? null;
+    const confidence = mp?.oracle_confidence ?? null;
+    const betValue = mp?.bet_value ?? null;
+    const modelRisk = analysis.data?.model_risk ?? null;
+    const alertFlags = analysis.data?.alert_flags ?? [];
+    const hasCriticalFlags = alertFlags.some(f =>
+      /statcast.*no.*available|no.*statcast|data.*limited|minimal.*analysis|small.*sample/i.test(f)
+    );
+    const pickType = pick ? (
+      /over|under/i.test(pick) ? 'total' :
+      /moneyline|ml/i.test(pick) ? 'moneyline' :
+      /run\s*line|rl/i.test(pick) ? 'runline' : 'other'
+    ) : 'unknown';
+
+    // Resolve result
+    let actualResult = null;
+    if (pick && homeScore != null && awayScore != null) {
+      const total = parseInt(homeScore) + parseInt(awayScore);
+      const cleaned = pick.replace(/\s*\([+-]?\d+\)\s*$/i, '').replace(/\s+[+-]\d{2,3}\s*$/i, '').replace(/\s*\(estimated\s+line\)\s*$/i, '').replace(/\s*\(est\.?\)\s*$/i, '').replace(/\s*\([^)]*total[^)]*\)\s*$/i, '').trim();
+
+      let m = cleaned.match(/(?:Over|O)\s*\(?(?:estimated\s+|est\.?\s*)?(\d+\.?\d*)\)?/i);
+      if (m) { const line = parseFloat(m[1]); actualResult = total > line ? 'win' : total < line ? 'loss' : 'push'; }
+      if (!actualResult) { m = cleaned.match(/(?:Under|U)\s*\(?(?:estimated\s+|est\.?\s*)?(\d+\.?\d*)\)?/i); }
+      if (m && !actualResult) { const line = parseFloat(m[1]); actualResult = total < line ? 'win' : total > line ? 'loss' : 'push'; }
+      if (!actualResult && /moneyline|ml|a ganar/i.test(cleaned)) {
+        const teamToken = cleaned.replace(/\s*(moneyline|ml|a ganar|dinero)\s*/gi, '').trim().toLowerCase();
+        const pickedHome = homeTeam?.toLowerCase().includes(teamToken) || teamToken.includes(homeTeam?.toLowerCase()?.split(' ').pop());
+        const pickedAway = awayTeam?.toLowerCase().includes(teamToken) || teamToken.includes(awayTeam?.toLowerCase()?.split(' ').pop());
+        if (pickedHome) actualResult = parseInt(homeScore) > parseInt(awayScore) ? 'win' : 'loss';
+        else if (pickedAway) actualResult = parseInt(awayScore) > parseInt(homeScore) ? 'win' : 'loss';
+      }
+    }
+
+    // Save to DB
+    await pool.query(`
+      INSERT INTO backtest_results (run_id, historical_date, game_pk, matchup, home_team, away_team,
+        pick, oracle_confidence, bet_value, model_risk, pick_type,
+        actual_home_score, actual_away_score, actual_result, model, latency_ms,
+        alert_flags, bet_value_raw, has_critical_flags)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+      ON CONFLICT (run_id, game_pk, pick_type) DO NOTHING
+    `, [
+      runId, date, gamePk, matchup, homeTeam, awayTeam,
+      pick, confidence, betValue, modelRisk, pickType,
+      homeScore, awayScore, actualResult, 'deep', latency,
+      JSON.stringify(alertFlags), betValue, hasCriticalFlags,
+    ]);
+
+    res.json({
+      success: true,
+      data: { gamePk, matchup, pick, confidence, betValue, modelRisk, actualResult, alertFlags, latency, pickType },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Startup: run migrations → seed admin → start server ───────────────────────
 runMigrations()
   .then(() => seedAdminUser())
