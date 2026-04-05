@@ -4,6 +4,7 @@
     { "source": "/privacy", "destination": "/index.html" },
     { "source": "/admin/backtests", "destination": "/index.html" },
     { "source": "/admin/run-backtest", "destination": "/index.html" },
+    { "source": "/admin/dataset", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

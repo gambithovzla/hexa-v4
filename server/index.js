@@ -1497,6 +1497,78 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/feature-store — view ML training dataset (admin only)
+app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
+  try {
+    const summary = await pool.query(`
+      SELECT
+        COUNT(*) as total_records,
+        COUNT(*) FILTER (WHERE result = 'win') as wins,
+        COUNT(*) FILTER (WHERE result = 'loss') as losses,
+        COUNT(*) FILTER (WHERE result IS NULL) as pending,
+        COUNT(*) FILTER (WHERE pick_id IS NOT NULL) as from_real_picks,
+        COUNT(*) FILTER (WHERE backtest_id IS NOT NULL) as from_backtests,
+        ROUND(AVG(home_pitcher_xwoba)::numeric, 3) as avg_home_p_xwoba,
+        ROUND(AVG(away_pitcher_xwoba)::numeric, 3) as avg_away_p_xwoba,
+        ROUND(AVG(temperature)::numeric, 1) as avg_temperature,
+        ROUND(AVG(data_quality_score)::numeric, 0) as avg_data_quality,
+        MIN(game_date) as earliest_date,
+        MAX(game_date) as latest_date
+      FROM pick_features
+    `);
+
+    const recent = await pool.query(`
+      SELECT game_date, game_pk, pick, result,
+        home_pitcher_xwoba, away_pitcher_xwoba,
+        home_pitcher_whiff, away_pitcher_whiff,
+        home_lineup_avg_xwoba, away_lineup_avg_xwoba,
+        park_factor_overall, temperature, wind_speed,
+        data_quality_score, signal_coherence_score,
+        odds_ml_home, odds_ml_away, odds_ou_total
+      FROM pick_features
+      ORDER BY created_at DESC
+      LIMIT 50
+    `);
+
+    const featureCoverage = await pool.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(home_pitcher_xwoba) as has_home_xwoba,
+        COUNT(away_pitcher_xwoba) as has_away_xwoba,
+        COUNT(home_pitcher_whiff) as has_home_whiff,
+        COUNT(home_lineup_avg_xwoba) as has_home_lineup,
+        COUNT(temperature) as has_temperature,
+        COUNT(odds_ml_home) as has_odds,
+        COUNT(park_factor_overall) as has_park
+      FROM pick_features
+    `);
+
+    const winRateByFeature = await pool.query(`
+      SELECT
+        CASE WHEN temperature < 50 THEN 'COLD (<50F)' WHEN temperature < 70 THEN 'MILD (50-70F)' ELSE 'WARM (70F+)' END as temp_bucket,
+        COUNT(*) FILTER (WHERE result = 'win') as wins,
+        COUNT(*) FILTER (WHERE result IN ('win','loss')) as total
+      FROM pick_features
+      WHERE temperature IS NOT NULL AND result IN ('win','loss')
+      GROUP BY temp_bucket
+      ORDER BY temp_bucket
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        summary: summary.rows[0],
+        recent: recent.rows,
+        featureCoverage: featureCoverage.rows[0],
+        winRateByTemperature: winRateByFeature.rows,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Startup: run migrations → seed admin → start server ───────────────────────
 runMigrations()
   .then(() => seedAdminUser())

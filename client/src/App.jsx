@@ -30,6 +30,7 @@ import PerformancePage      from './components/PerformancePage';
 import BatchScanPanel      from './components/BatchScanPanel';
 import BacktestDashboard  from './components/BacktestDashboard';
 import BacktestRunner     from './components/BacktestRunner';
+import DatasetDashboard  from './components/DatasetDashboard';
 import LiveTracker         from './components/LiveTracker';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
@@ -133,6 +134,9 @@ export default function App() {
   }
   if (window.location.pathname === '/admin/run-backtest') {
     return <BacktestRunner lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/dataset') {
+    return <DatasetDashboard lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
 
 
