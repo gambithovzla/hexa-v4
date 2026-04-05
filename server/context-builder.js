@@ -1186,6 +1186,8 @@ export async function buildContext(gameData, oddsData = null) {
 
     homePitcherSavant = pitcherResults[0].status === 'fulfilled' ? pitcherResults[0].value : null;
     awayPitcherSavant = pitcherResults[1].status === 'fulfilled' ? pitcherResults[1].value : null;
+    console.log(`[context-builder] Statcast pitcher lookup: HOME "${homePitcher?.fullName}" → ${homePitcherSavant ? 'FOUND' : 'NOT FOUND'}`);
+    console.log(`[context-builder] Statcast pitcher lookup: AWAY "${awayPitcher?.fullName}" → ${awayPitcherSavant ? 'FOUND' : 'NOT FOUND'}`);
 
     const homeBattersFull = Array.isArray(homeLineup) ? homeLineup.slice(0, 9) : [];
     const awayBattersFull = Array.isArray(awayLineup) ? awayLineup.slice(0, 9) : [];

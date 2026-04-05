@@ -398,9 +398,14 @@ async function ensureCache() {
 
 // ── Player matching ───────────────────────────────────────────────────────────
 
-/** Normalises a name for comparison: lowercase, trim, collapse spaces */
+/** Normalises a name for comparison: lowercase, remove accents, trim, collapse spaces */
 function norm(s) {
-  return String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // Remove accents: é→e, ñ→n, ü→u
+    .replace(/[.,'-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -417,27 +422,45 @@ function findPlayer(rows, playerName, nameKey = 'last_name, first_name') {
     return norm(raw);
   }
 
-  // 1. Exact full-name match
+  // 1. Exact full-name match (after normalization)
   let match = rows.find(r => rowName(r) === query);
   if (match) return match;
 
-  // 2. Try "first last" vs stored "last, first"
+  // 2. Try "first last" vs stored "last, first" (Savant format)
   const parts = query.split(' ');
   if (parts.length >= 2) {
-    const reversed = parts.slice(1).join(' ') + ' ' + parts[0];
-    match = rows.find(r => rowName(r).replace(', ', ' ') === reversed || rowName(r).replace(', ', ' ') === query);
+    // "max fried" → try "fried, max" and "fried max"
+    const reversed = parts.slice(1).join(' ') + ', ' + parts[0];
+    const reversedNoComma = parts.slice(1).join(' ') + ' ' + parts[0];
+    match = rows.find(r => {
+      const rn = rowName(r);
+      return rn === reversed || rn === reversedNoComma || rn.replace(', ', ' ') === query || rn.replace(', ', ' ') === reversedNoComma;
+    });
     if (match) return match;
   }
 
-  // 3. Last-name-only match (first result wins)
+  // 3. Last-name match (first result wins)
   const lastName = parts[parts.length - 1];
-  match = rows.find(r => {
-    const rn = rowName(r);
-    return rn.split(', ')[0] === lastName || rn.split(' ').pop() === lastName;
-  });
-  if (match) return match;
+  if (lastName.length > 2) {
+    match = rows.find(r => {
+      const rn = rowName(r);
+      const rnParts = rn.replace(',', '').split(' ');
+      return rnParts[0] === lastName || rnParts[rnParts.length - 1] === lastName;
+    });
+    if (match) return match;
+  }
 
-  // 4. Word-overlap score ≥ 0.5
+  // 4. First name + last name both present (handles middle names, suffixes)
+  if (parts.length >= 2) {
+    const firstName = parts[0];
+    match = rows.find(r => {
+      const rn = rowName(r);
+      return rn.includes(firstName) && rn.includes(lastName);
+    });
+    if (match) return match;
+  }
+
+  // 5. Word-overlap score >= 0.5
   match = rows
     .map(r => {
       const rn     = rowName(r).replace(/[,]/g, '');
@@ -478,7 +501,10 @@ export async function getBatterStatcast(playerName) {
   const btRow = findPlayer(_cache.batTracking,      playerName);
   const sf   = findPlayer(_cache.ninetyFtSplits,    playerName);
 
-  if (!xs && !ev && !pct && !rb && !ss && !bb && !y2y && !hr && !rv && !rb7 && !rb14 && !rb21 && !sp && !btRow && !sf) return null;
+  if (!xs && !ev && !pct && !rb && !ss && !bb && !y2y && !hr && !rv && !rb7 && !rb14 && !rb21 && !sp && !btRow && !sf) {
+    console.log(`[savant] Batter NOT FOUND in cache: "${playerName}" (normalized: "${norm(playerName)}")`);
+    return null;
+  }
 
   return {
     player_name: xs?.['last_name, first_name'] ?? ev?.['last_name, first_name'] ?? playerName,
@@ -562,7 +588,10 @@ export async function getPitcherStatcast(playerName) {
   const asp  = findPlayer(_cache.activeSpin,           playerName);
   const pm   = findPlayer(_cache.pitchMovement,        playerName);
 
-  if (!xs && !pa && !rp && !pt && !bb && !y2y && !hr && !rv && !rp7 && !rp14 && !rp21 && !pp && !asp && !pm) return null;
+  if (!xs && !pa && !rp && !pt && !bb && !y2y && !hr && !rv && !rp7 && !rp14 && !rp21 && !pp && !asp && !pm) {
+    console.log(`[savant] Pitcher NOT FOUND in cache: "${playerName}" (normalized: "${norm(playerName)}")`);
+    return null;
+  }
 
   return {
     player_name: xs?.['last_name, first_name'] ?? pa?.['last_name, first_name'] ?? playerName,
