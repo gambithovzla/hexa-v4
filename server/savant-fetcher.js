@@ -988,3 +988,61 @@ function extractSwingPath(row) {
     blasts_per_swing: parseFloat(row['blasts_per_swing'] ?? row['blasts_swing']  ?? '') || null,
   };
 }
+
+/**
+ * Returns multi-year Statcast data for a player (for evolution tracking).
+ * Returns array of { year, xwOBA, whiff_percent, k_percent, barrel_rate } sorted by year desc.
+ */
+export async function getPlayerHistory(playerName, type = 'batter') {
+  await ensureCache();
+
+  const cacheKey = type === 'pitcher' ? 'xStatsPitcher' : 'xStatsBatter';
+  const allRows = _cache[cacheKey] ?? [];
+
+  if (!allRows.length || !playerName) return [];
+
+  // We need to search across all years. The cache merges years (most recent wins).
+  // To get history, we need to re-fetch per year. But that's expensive.
+  // Instead, use the year-to-year leaderboard which already has the diff.
+
+  const y2yKey = type === 'pitcher' ? 'yearToYearPitcher' : 'yearToYearBatter';
+  const y2yRow = findPlayer(_cache[y2yKey], playerName);
+
+  // Also get current season data
+  const currentRow = findPlayer(allRows, playerName);
+
+  const history = [];
+
+  if (currentRow) {
+    const xwOBA = parseFloat(currentRow.xwOBA ?? currentRow.xwoba ?? '') || null;
+    const whiff = parseFloat(currentRow.whiff_percent ?? currentRow.swstr_percent ?? '') || null;
+    const kPct = parseFloat(currentRow.k_percent ?? currentRow.strikeout_percent ?? '') || null;
+    const barrel = parseFloat(currentRow.brl_percent ?? currentRow.barrel_batted_rate ?? '') || null;
+
+    history.push({
+      year: new Date().getFullYear(),
+      xwOBA,
+      whiff_percent: whiff,
+      k_percent: kPct,
+      barrel_rate: barrel,
+      source: 'current_season',
+    });
+  }
+
+  // Y2Y diff gives us previous year comparison
+  if (y2yRow) {
+    const diff = calcYearToYearDiff(y2yRow);
+    if (diff != null && history.length > 0 && history[0].xwOBA != null) {
+      history.push({
+        year: new Date().getFullYear() - 1,
+        xwOBA: Math.round((history[0].xwOBA - diff) * 1000) / 1000,
+        whiff_percent: null,
+        k_percent: null,
+        barrel_rate: null,
+        source: 'year_to_year_derived',
+      });
+    }
+  }
+
+  return history;
+}

@@ -8,7 +8,7 @@
  */
 
 import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays } from './mlb-api.js';
-import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus } from './savant-fetcher.js';
+import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
@@ -1025,7 +1025,7 @@ export async function buildContext(gameData, oddsData = null) {
   const cached = _contextCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CONTEXT_CACHE_TTL_MS) {
     console.log(`[context-builder] Cache HIT for ${cacheKey} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
-    return cached.context;
+    return { context: cached.context, _features: cached._features ?? {} };
   }
 
   const maxPastSeasons = 3;
@@ -1561,6 +1561,62 @@ export async function buildContext(gameData, oddsData = null) {
     }
   } catch (_) { /* skip silently on any error */ }
 
+  // ── Player Evolution ─────────────────────────────────────────────────────
+  try {
+    const evolutions = [];
+
+    if (homePitcher?.fullName) {
+      const hist = await getPlayerHistory(homePitcher.fullName, 'pitcher');
+      if (hist.length >= 2) {
+        const curr = hist[0];
+        const prev = hist[1];
+        const trend = curr.xwOBA != null && prev.xwOBA != null
+          ? (curr.xwOBA < prev.xwOBA ? 'IMPROVING (lower xwOBA = harder to hit)' : curr.xwOBA > prev.xwOBA ? 'DECLINING (higher xwOBA = easier to hit)' : 'STABLE')
+          : 'INSUFFICIENT DATA';
+        evolutions.push(`HOME P ${homePitcher.fullName}: ${prev.year} xwOBA=${prev.xwOBA ?? 'N/A'} → ${curr.year} xwOBA=${curr.xwOBA ?? 'N/A'} | Trend: ${trend}`);
+      }
+    }
+
+    if (awayPitcher?.fullName) {
+      const hist = await getPlayerHistory(awayPitcher.fullName, 'pitcher');
+      if (hist.length >= 2) {
+        const curr = hist[0];
+        const prev = hist[1];
+        const trend = curr.xwOBA != null && prev.xwOBA != null
+          ? (curr.xwOBA < prev.xwOBA ? 'IMPROVING' : curr.xwOBA > prev.xwOBA ? 'DECLINING' : 'STABLE')
+          : 'INSUFFICIENT DATA';
+        evolutions.push(`AWAY P ${awayPitcher.fullName}: ${prev.year} xwOBA=${prev.xwOBA ?? 'N/A'} → ${curr.year} xwOBA=${curr.xwOBA ?? 'N/A'} | Trend: ${trend}`);
+      }
+    }
+
+    // Top 3 batters evolution (home + away)
+    const topBatters = [
+      ...(savantBatters?.home?.slice(0, 2) ?? []),
+      ...(savantBatters?.away?.slice(0, 2) ?? []),
+    ];
+    for (const batter of topBatters) {
+      const name = batter.name ?? batter.fullName;
+      if (!name) continue;
+      const hist = await getPlayerHistory(name, 'batter');
+      if (hist.length >= 2 && hist[0].xwOBA != null && hist[1].xwOBA != null) {
+        const diff = hist[0].xwOBA - hist[1].xwOBA;
+        if (Math.abs(diff) >= 0.020) {
+          const trend = diff > 0 ? 'IMPROVING (+' + diff.toFixed(3) + ')' : 'DECLINING (' + diff.toFixed(3) + ')';
+          evolutions.push(`BAT ${name}: ${hist[1].year} xwOBA=${hist[1].xwOBA} → ${hist[0].year} xwOBA=${hist[0].xwOBA} | ${trend}`);
+        }
+      }
+    }
+
+    if (evolutions.length > 0) {
+      blocks.push(section('PLAYER EVOLUTION (Year-over-Year Trends)'));
+      blocks.push('Use these trends to weight current season data. Improving players may outperform early-season stats. Declining players may underperform.');
+      evolutions.forEach(e => blocks.push(e));
+      blocks.push('');
+    }
+  } catch (err) {
+    console.warn('[context-builder] Player evolution failed:', err.message);
+  }
+
   // ── Park Factor ──────────────────────────────────────────────────────────
   try {
     blocks.push(section('PARK FACTOR (Baseball Savant)'));
@@ -1731,10 +1787,27 @@ export async function buildContext(gameData, oddsData = null) {
     blocks.push(oracleMemory);
   }
 
-  const context = blocks.join('\n');
-  _contextCache.set(cacheKey, { context, timestamp: Date.now() });
+  const contextString = blocks.join('\n');
+  const result = {
+    context: contextString,
+    _features: {
+      homePitcherSavant,
+      awayPitcherSavant,
+      homePitcherStats,
+      awayPitcherStats,
+      homeHitting,
+      awayHitting,
+      savantBatters,
+      parkFactorData,
+      weatherData,
+      dataQuality,
+      signalCoherence,
+      oddsData: oddsData ?? null,
+    },
+  };
+  _contextCache.set(cacheKey, { context: contextString, _features: result._features, timestamp: Date.now() });
   console.log(`[context-builder] Cache SET for ${cacheKey} (total cached: ${_contextCache.size})`);
-  return context;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
