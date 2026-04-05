@@ -173,6 +173,41 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE backtest_results ADD COLUMN IF NOT EXISTS bet_value_raw TEXT`);
     await client.query(`ALTER TABLE backtest_results ADD COLUMN IF NOT EXISTS has_critical_flags BOOLEAN DEFAULT false`);
 
+    // ── pick_features (ML Feature Store) ─────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pick_features (
+        id SERIAL PRIMARY KEY,
+        pick_id INTEGER,
+        backtest_id INTEGER,
+        game_pk INTEGER,
+        game_date DATE,
+        home_pitcher_xwoba DECIMAL(5,3),
+        away_pitcher_xwoba DECIMAL(5,3),
+        home_pitcher_whiff DECIMAL(5,2),
+        away_pitcher_whiff DECIMAL(5,2),
+        home_pitcher_k_pct DECIMAL(5,2),
+        away_pitcher_k_pct DECIMAL(5,2),
+        home_pitcher_era DECIMAL(5,2),
+        away_pitcher_era DECIMAL(5,2),
+        home_team_ops DECIMAL(5,3),
+        away_team_ops DECIMAL(5,3),
+        home_lineup_avg_xwoba DECIMAL(5,3),
+        away_lineup_avg_xwoba DECIMAL(5,3),
+        park_factor_overall INTEGER,
+        park_factor_hr INTEGER,
+        temperature DECIMAL(5,1),
+        wind_speed DECIMAL(5,1),
+        data_quality_score INTEGER,
+        signal_coherence_score INTEGER,
+        odds_ml_home INTEGER,
+        odds_ml_away INTEGER,
+        odds_ou_total DECIMAL(4,1),
+        pick TEXT,
+        result TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
 
     // Normalize pick results: 'won' → 'win', 'lost' → 'loss'

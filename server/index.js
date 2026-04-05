@@ -202,7 +202,8 @@ app.get('/api/teams', async (req, res) => {
 // GET /api/games/:gameId/context  — devuelve el contexto en texto plano
 app.get('/api/games/:gameId/context', verifyToken, async (req, res) => {
   try {
-    const context = await buildContextById(req.params.gameId);
+    const contextResult = await buildContextById(req.params.gameId);
+    const context = contextResult.context ?? contextResult;
     res.json({ success: true, data: context });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -280,7 +281,8 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
 
     let analysis;
     try {
-      const context = await buildContext(gameData, matchedOdds);
+      const contextResult = await buildContext(gameData, matchedOdds);
+      const context = contextResult.context ?? contextResult;
       const matchup = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
 
       // Construir statcastData para el validador XGBoost.
@@ -398,7 +400,7 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
         gameIds.map(async (id, i) => {
           const gameData = games.find(g => String(g.gamePk) === String(id));
           if (!gameData) throw new Error(`Partido ${id} no encontrado`);
-          return buildContext(gameData, legOddsArr[i] ?? null);
+          return buildContext(gameData, legOddsArr[i] ?? null).then(r => r.context ?? r);
         })
       );
       analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs, model, timeoutMs: 90000 });
@@ -475,7 +477,8 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
         } catch { /* optional */ }
 
         try {
-          const contextString = await buildContext(gameData, matchedOdds);
+          const contextBuildResult = await buildContext(gameData, matchedOdds);
+          const contextString = contextBuildResult.context ?? contextBuildResult;
           const analysis = await analyzeSafe({ contextString, lang });
 
           const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
@@ -609,7 +612,8 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
         } catch { /* optional */ }
 
         try {
-          const contextString = await buildContext(gameData, matchedOdds);
+          const contextBuildResult2 = await buildContext(gameData, matchedOdds);
+          const contextString = contextBuildResult2.context ?? contextBuildResult2;
           const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
           const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
           return {
@@ -796,7 +800,8 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
       matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     } catch { /* odds are optional */ }
 
-    const contextString = await buildContext(gameData, matchedOdds);
+    const contextBuildResult3 = await buildContext(gameData, matchedOdds);
+    const contextString = contextBuildResult3.context ?? contextBuildResult3;
 
     const answer = await analyzeChat({
       contextString,
@@ -1408,7 +1413,8 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
     try { allOdds = await getGameOdds(); } catch {}
     const matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
 
-    const context = await buildContext(gameData, matchedOdds);
+    const contextResult2 = await buildContext(gameData, matchedOdds);
+    const context = contextResult2.context ?? contextResult2;
     const analysis = await analyzeGame({
       mode: 'single', matchup, context, lang: 'en',
       betType: betType || 'all', riskProfile: 'balanced', webSearch: false, model: 'deep', timeoutMs: 90000,
