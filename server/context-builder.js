@@ -12,6 +12,7 @@ import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
+import { buildOracleMemory } from './oracle-memory.js';
 
 // ---------------------------------------------------------------------------
 // In-memory context cache — avoids redundant API calls when the same game is
@@ -1717,6 +1718,19 @@ export async function buildContext(gameData, oddsData = null) {
   blocks.push(buildHistoricalContextBlock());
 
   console.log('[context-builder] Savant batters with data:', savantBatters.home.filter(b => b.savant).length, 'home,', savantBatters.away.filter(b => b.savant).length, 'away');
+
+  // ── Oracle Memory (learning from past picks) ────────────────────────────
+  let oracleMemory = '';
+  try {
+    oracleMemory = await buildOracleMemory();
+  } catch (err) {
+    console.warn('[context-builder] Oracle memory failed:', err.message);
+  }
+  if (oracleMemory) {
+    blocks.push('');
+    blocks.push(oracleMemory);
+  }
+
   const context = blocks.join('\n');
   _contextCache.set(cacheKey, { context, timestamp: Date.now() });
   console.log(`[context-builder] Cache SET for ${cacheKey} (total cached: ${_contextCache.size})`);
