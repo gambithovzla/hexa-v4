@@ -43,8 +43,8 @@ const CONTENT = {
           body: `Standard Mode delivers rapid analysis by processing the most impactful Statcast variables: exit velocity, xFIP, barrel rate, BABIP, sprint speed, park factors, and current-season weighted metrics. Results are returned in seconds, giving you a sharp, data-driven read on any matchup.`,
         },
         {
-          heading: 'Deep Analytics Mode  ·  PREMIUM',
-          body: `Deep Analytics Mode unlocks the full power of the Advanced Processing System. It runs multi-layer cross-referencing across historical databases, situational splits (day/night, L/R, home/away), pitcher fatigue curves, lineup construction patterns, umpire tendencies, and weather-adjusted trajectory models. This mode is reserved for Premium users and provides the highest-confidence output the system can generate.`,
+          heading: 'Deep Analytics Mode',
+          body: `Deep Analytics Mode unlocks the full power of the Advanced Processing System. It runs multi-layer cross-referencing across historical databases, situational splits (day/night, L/R, home/away), pitcher fatigue curves, lineup construction patterns, umpire tendencies, and weather-adjusted trajectory models. This mode provides the highest-confidence output the system can generate.`,
           highlight: true,
         },
         {
@@ -66,8 +66,8 @@ const CONTENT = {
           body: `El Modo Estándar entrega análisis rápidos procesando las variables Statcast de mayor impacto: velocidad de salida, xFIP, tasa de barril, BABIP, velocidad de carrera, factores de estadio y métricas ponderadas de la temporada actual. Los resultados se generan en segundos, brindando una lectura precisa y basada en datos de cualquier enfrentamiento.`,
         },
         {
-          heading: 'Deep Analytics Mode  ·  PREMIUM',
-          body: `El Modo Deep Analytics desbloquea la potencia completa del Sistema de Procesamiento Avanzado. Ejecuta cruces multicapa sobre bases de datos históricas, splits situacionales (día/noche, L/D, local/visitante), curvas de fatiga del lanzador, patrones de construcción de alineación, tendencias de árbitros y modelos de trayectoria ajustados al clima. Este modo es exclusivo para usuarios Premium y genera el output de mayor confianza que el sistema puede producir.`,
+          heading: 'Deep Analytics Mode',
+          body: `El Modo Deep Analytics desbloquea la potencia completa del Sistema de Procesamiento Avanzado. Ejecuta cruces multicapa sobre bases de datos históricas, splits situacionales (día/noche, L/D, local/visitante), curvas de fatiga del lanzador, patrones de construcción de alineación, tendencias de árbitros y modelos de trayectoria ajustados al clima. Este modo genera el output de mayor confianza que el sistema puede producir.`,
           highlight: true,
         },
         {

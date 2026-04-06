@@ -724,67 +724,161 @@ function RunButton({ canAnalyze, loading, onClick, t }) {
 const API_URL_BANNER = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function EmailVerificationBanner({ lang, token }) {
-  const [status, setStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'error'
+  const [code,         setCode]         = useState('');
+  const [verifyStatus, setVerifyStatus] = useState('idle');   // 'idle' | 'verifying' | 'success' | 'error'
+  const [resendStatus, setResendStatus] = useState('idle');   // 'idle' | 'sending' | 'sent'
+  const [verifyMsg,    setVerifyMsg]    = useState('');
+
+  async function handleVerify() {
+    if (code.length !== 6) return;
+    setVerifyStatus('verifying');
+    setVerifyMsg('');
+    try {
+      const res  = await fetch(`${API_URL_BANNER}/api/auth/verify-email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ code }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setVerifyStatus('success');
+        setTimeout(() => window.location.reload(), 1200);
+      } else {
+        setVerifyStatus('error');
+        setVerifyMsg(json.error || (lang === 'es' ? 'Código inválido' : 'Invalid code'));
+      }
+    } catch {
+      setVerifyStatus('error');
+      setVerifyMsg(lang === 'es' ? 'Error de red' : 'Network error');
+    }
+  }
 
   async function handleResend() {
-    setStatus('sending');
+    setResendStatus('sending');
     try {
-      const res = await fetch(`${API_URL_BANNER}/api/auth/resend-code`, {
+      const res  = await fetch(`${API_URL_BANNER}/api/auth/resend-code`, {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
-      setStatus(res.ok && json.success ? 'sent' : 'error');
-      if (res.ok) setTimeout(() => setStatus('idle'), 3000);
+      setResendStatus(res.ok && json.success ? 'sent' : 'idle');
+      if (res.ok) setTimeout(() => setResendStatus('idle'), 3000);
     } catch {
-      setStatus('error');
+      setResendStatus('idle');
     }
   }
 
-  const msg    = lang === 'es'
-    ? '⚠ Verifica tu email para ejecutar análisis. Revisa tu bandeja.'
-    : '⚠ Please verify your email to run analyses. Check your inbox.';
-  const btnTxt = lang === 'es'
-    ? (status === 'sending' ? 'Enviando…' : status === 'sent' ? '¡Enviado!' : 'Reenviar código')
-    : (status === 'sending' ? 'Sending…'  : status === 'sent' ? 'Sent!'     : 'Resend code');
+  const msg = lang === 'es'
+    ? '⚠ Verifica tu email para ejecutar análisis:'
+    : '⚠ Verify your email to run analyses:';
 
   return (
     <Box sx={{
-      bgcolor:      'rgba(255, 170, 0, 0.08)',
-      border:       '1px solid rgba(255, 170, 0, 0.4)',
-      borderRadius: '0',
-      px:           '16px',
-      py:           '10px',
-      display:      'flex',
-      alignItems:   'center',
+      bgcolor:        'rgba(255, 170, 0, 0.08)',
+      border:         '1px solid rgba(255, 170, 0, 0.4)',
+      borderRadius:   '0',
+      px:             '16px',
+      py:             '10px',
+      display:        'flex',
+      alignItems:     'center',
       justifyContent: 'space-between',
-      gap:          '12px',
-      flexWrap:     'wrap',
+      gap:            '12px',
+      flexWrap:       'wrap',
     }}>
-      <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: '#FFAA00', letterSpacing: '0.04em' }}>
-        {msg}
+      {/* Left: label */}
+      <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: '#FFAA00', letterSpacing: '0.04em', flexShrink: 0 }}>
+        {verifyStatus === 'success'
+          ? (lang === 'es' ? '✅ Email verificado! Recargando…' : '✅ Email verified! Reloading…')
+          : msg}
       </Typography>
-      <Box
-        component="button"
-        onClick={status === 'idle' ? handleResend : undefined}
-        disabled={status !== 'idle'}
-        sx={{
-          border:        '1px solid rgba(255,170,0,0.5)',
-          bgcolor:       'rgba(255,170,0,0.1)',
-          color:         status === 'sent' ? '#00FF88' : '#FFAA00',
-          fontFamily:    MONO,
-          fontSize:      '9px',
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-          px:            '12px',
-          py:            '6px',
-          cursor:        status === 'idle' ? 'pointer' : 'default',
-          transition:    'all 0.2s',
-          '&:hover':     status === 'idle' ? { bgcolor: 'rgba(255,170,0,0.2)' } : {},
-        }}
-      >
-        {btnTxt}
-      </Box>
+
+      {/* Right: code input + buttons */}
+      {verifyStatus !== 'success' && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <input
+              type="text"
+              maxLength={6}
+              placeholder="000000"
+              value={code}
+              onChange={e => {
+                setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                setVerifyStatus('idle');
+                setVerifyMsg('');
+              }}
+              style={{
+                background:    'transparent',
+                border:        `1px solid ${verifyStatus === 'error' ? '#FF2244' : 'rgba(255,170,0,0.4)'}`,
+                color:         '#FFAA00',
+                fontFamily:    "'Share Tech Mono', monospace",
+                fontSize:      '13px',
+                textAlign:     'center',
+                letterSpacing: '4px',
+                padding:       '4px 8px',
+                width:         '88px',
+                outline:       'none',
+              }}
+            />
+            {verifyMsg && (
+              <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: '#FF2244', letterSpacing: '0.04em' }}>
+                {verifyMsg}
+              </Typography>
+            )}
+          </Box>
+
+          {/* Verify button */}
+          <Box
+            component="button"
+            onClick={handleVerify}
+            disabled={code.length !== 6 || verifyStatus === 'verifying'}
+            sx={{
+              border:        `1px solid ${code.length === 6 ? 'rgba(255,170,0,0.6)' : 'rgba(255,170,0,0.2)'}`,
+              bgcolor:       code.length === 6 ? 'rgba(255,170,0,0.15)' : 'transparent',
+              color:         code.length === 6 ? '#FFAA00' : 'rgba(255,170,0,0.3)',
+              fontFamily:    MONO,
+              fontSize:      '9px',
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
+              px:            '12px',
+              py:            '6px',
+              cursor:        code.length === 6 ? 'pointer' : 'default',
+              transition:    'all 0.2s',
+              '&:hover':     code.length === 6 ? { bgcolor: 'rgba(255,170,0,0.25)' } : {},
+            }}
+          >
+            {verifyStatus === 'verifying'
+              ? (lang === 'es' ? 'Verificando…' : 'Verifying…')
+              : (lang === 'es' ? 'Verificar' : 'Verify')}
+          </Box>
+
+          {/* Resend button */}
+          <Box
+            component="button"
+            onClick={resendStatus === 'idle' ? handleResend : undefined}
+            disabled={resendStatus !== 'idle'}
+            sx={{
+              border:        '1px solid rgba(0,217,255,0.2)',
+              bgcolor:       'transparent',
+              color:         resendStatus === 'sent' ? '#00FF88' : 'rgba(0,217,255,0.45)',
+              fontFamily:    MONO,
+              fontSize:      '8px',
+              letterSpacing: '1.5px',
+              textTransform: 'uppercase',
+              px:            '10px',
+              py:            '6px',
+              cursor:        resendStatus === 'idle' ? 'pointer' : 'default',
+              transition:    'all 0.2s',
+              '&:hover':     resendStatus === 'idle' ? { bgcolor: 'rgba(0,217,255,0.06)' } : {},
+            }}
+          >
+            {resendStatus === 'sending'
+              ? (lang === 'es' ? 'Enviando…' : 'Sending…')
+              : resendStatus === 'sent'
+              ? (lang === 'es' ? '¡Enviado!' : 'Sent!')
+              : (lang === 'es' ? 'Reenviar' : 'Resend')}
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
