@@ -115,30 +115,6 @@ function TabModes({ lang }) {
         : 'Deep analysis with detailed reasoning. Examines pitcher matchups, offensive trends, bullpen, park factors and more. ~30 seconds.',
     },
     {
-      icon: '✨',
-      title: 'SINGLE PREMIUM',
-      cost: isEs ? '5 créditos' : '5 credits',
-      description: isEs
-        ? 'Análisis con máxima profundidad de razonamiento. Modelo Opus con capacidad analítica superior para los picks de mayor valor.'
-        : 'Analysis with maximum reasoning depth. Opus model with superior analytical capability for highest-value picks.',
-    },
-    {
-      icon: '🃏',
-      title: 'PARLAY DEEP',
-      cost: isEs ? '8 créditos' : '8 credits',
-      description: isEs
-        ? 'Análisis profundo de parlay. Razonamiento detallado para cada pierna del parlay con máxima precisión.'
-        : 'Deep parlay analysis. Detailed reasoning for each parlay leg with maximum precision.',
-    },
-    {
-      icon: '✨',
-      title: 'PARLAY PREMIUM',
-      cost: isEs ? '15 créditos' : '15 credits',
-      description: isEs
-        ? 'Parlay con razonamiento independiente por pick. Modelo Opus evalúa cada pierna de forma autónoma para máxima precisión combinada.'
-        : 'Parlay with independent reasoning per pick. Opus model evaluates each leg autonomously for maximum combined precision.',
-    },
-    {
       icon: '🌐',
       title: 'WEB INTEL',
       cost: isEs ? '+3 créditos (Solo Single)' : '+3 credits (Single only)',
@@ -200,9 +176,7 @@ function TabCredits({ lang }) {
         </Typography>
         {[
           isEs ? '25 análisis Single Deep, ó' : '25 Single Deep analyses, or',
-          isEs ? '10 análisis Single Premium, ó' : '10 Single Premium analyses, or',
-          isEs ? '6 análisis Parlay Deep, ó' : '6 Parlay Deep analyses, or',
-          isEs ? '3 análisis Parlay Premium' : '3 Parlay Premium analyses',
+          isEs ? '25 análisis Safe Pick' : '25 Safe Pick analyses',
         ].map((line, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '4px' }}>
             <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: C.accent, flexShrink: 0 }} />
