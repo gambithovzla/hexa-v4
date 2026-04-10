@@ -23,6 +23,17 @@ import { useAuth } from '../store/authStore';
 const STORAGE_KEY = 'hexa_history';
 const MAX_ENTRIES = 200;
 
+function normalizePickResult(result) {
+  const value = String(result ?? 'pending').toLowerCase();
+  if (value === 'won') return 'win';
+  if (value === 'lost') return 'loss';
+  return value;
+}
+
+function normalizeEntry(entry) {
+  return { ...entry, result: normalizePickResult(entry?.result) };
+}
+
 // ── localStorage helpers (anonymous fallback) ─────────────────────────────────
 
 function load() {
@@ -120,7 +131,7 @@ function dbRowToEntry(row) {
     mode:                row.type,
     pick:                row.pick,
     confidence:          row.oracle_confidence ?? 0,
-    result:              row.result ?? 'pending',
+    result:              normalizePickResult(row.result),
     kelly_recommendation: row.kelly_recommendation ?? null,
   };
 }
@@ -134,7 +145,7 @@ export default function useHistory() {
   // Load history on mount / when auth state changes
   const loadHistory = useCallback(() => {
     if (!isAuthenticated || !token) {
-      setHistory(load());
+      setHistory(load().map(normalizeEntry));
       return;
     }
 
@@ -254,9 +265,10 @@ export default function useHistory() {
   // ── markResult ─────────────────────────────────────────────────────────────
 
   async function markResult(id, outcome) {
+    const normalizedOutcome = normalizePickResult(outcome);
     if (!isAuthenticated || !token) {
       setHistory(prev => {
-        const next = prev.map(e => e.id === id ? { ...e, result: outcome } : e);
+        const next = prev.map(e => e.id === id ? { ...e, result: normalizedOutcome } : e);
         save(next);
         return next;
       });
@@ -267,11 +279,11 @@ export default function useHistory() {
       const res  = await fetch(`${import.meta.env.VITE_API_URL}/api/picks/${id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ result: outcome }),
+        body:    JSON.stringify({ result: normalizedOutcome }),
       });
       const json = await res.json();
       if (json.success) {
-        setHistory(prev => prev.map(e => e.id === id ? { ...e, result: outcome } : e));
+        setHistory(prev => prev.map(e => e.id === id ? { ...e, result: normalizePickResult(json.data?.result ?? normalizedOutcome) } : e));
       }
     } catch {
       // ignore
@@ -330,11 +342,12 @@ export default function useHistory() {
   // ── getStats ───────────────────────────────────────────────────────────────
 
   function getStats() {
+    const normalized = history.map(e => normalizePickResult(e.result));
     const total    = history.length;
-    const wins     = history.filter(e => e.result === 'win').length;
-    const losses   = history.filter(e => e.result === 'loss').length;
-    const pushes   = history.filter(e => e.result === 'push').length;
-    const pending  = history.filter(e => e.result === 'pending').length;
+    const wins     = normalized.filter(result => result === 'win').length;
+    const losses   = normalized.filter(result => result === 'loss').length;
+    const pushes   = normalized.filter(result => result === 'push').length;
+    const pending  = normalized.filter(result => result === 'pending').length;
     const resolved = wins + losses; // pushes excluded from win rate
     const winRate  = resolved > 0 ? Math.round((wins / resolved) * 100) : 0;
     return { total, wins, losses, pushes, pending, winRate };
