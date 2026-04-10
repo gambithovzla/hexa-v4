@@ -118,6 +118,16 @@ export function resolvePlayerProp(pickStr, players) {
 
   // Pattern: [Player Name] [Over|Under] [Line] [Prop Type]
   const patterns = [
+    // Stat before direction: "Jack Flaherty Strikeouts Over 4.5"
+    { regex: /^(.+?)\s+(?:Total\s+Bases|TB|Bases\s+Totales)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'totalBases', stat: 'batting' },
+    { regex: /^(.+?)\s+(?:Strikeouts?|Ks?|Ponches?)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'strikeOuts', stat: 'pitching' },
+    { regex: /^(.+?)\s+(?:Hits?|H)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'hits', stat: 'batting' },
+    { regex: /^(.+?)\s+(?:Home\s+Runs?|HRs?|Jonrones?|Cuadrangulares?)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'homeRuns', stat: 'batting' },
+    { regex: /^(.+?)\s+(?:RBIs?|Carreras?\s+Impulsadas?)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'rbi', stat: 'batting' },
+    { regex: /^(.+?)\s+(?:Stolen\s+Bases?|SBs?|Bases?\s+Robadas?)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'stolenBases', stat: 'batting' },
+    { regex: /^(.+?)\s+(?:Runs?\s+Scored|Runs?|Carreras?\s+Anotadas?)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'runs', stat: 'batting' },
+    { regex: /^(.+?)\s+(?:Walks?|BB|Bases?\s+por\s+Bolas?)\s+(Over|Under)\s+(\d+\.?\d*)/i, prop: 'baseOnBalls', stat: 'batting' },
+
     // English
     { regex: /^(.+?)\s+(Over|Under)\s+(\d+\.?\d*)\s+(?:Total\s+Bases|TB|Bases\s+Totales)/i, prop: 'totalBases', stat: 'batting' },
     { regex: /^(.+?)\s+(Over|Under)\s+(\d+\.?\d*)\s+(?:Strikeouts?|Ks?|Ponches?)/i, prop: 'strikeOuts', stat: 'pitching' },

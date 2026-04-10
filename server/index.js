@@ -18,7 +18,7 @@ import pool from './db.js';
 import lemonRouter from './lemon.js';
 import picksRouter from './routes/picks.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
-import { resolvePendingPicks } from './pick-resolver.js';
+import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames } from './live-feed.js';
 import { parseLivePick, calculatePickProgress } from './pick-tracker.js';
@@ -1058,12 +1058,29 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
       return res.json({ success: false, error: 'Game not finished yet', status: liveData.status });
     }
 
-    const homeTeam = liveData.home?.abbreviation ?? '';
-    const awayTeam = liveData.away?.abbreviation ?? '';
-    const homeName = liveData.home?.name ?? '';
-    const awayName = liveData.away?.name ?? '';
-    const homeScore = liveData.home?.score ?? 0;
-    const awayScore = liveData.away?.score ?? 0;
+    const gameForResolver = {
+      gamePk: liveData.gamePk,
+      gameDate: liveData.lastUpdated,
+      status: { simplified: 'final' },
+      teams: {
+        home: {
+          name: liveData.home?.name ?? '',
+          abbreviation: liveData.home?.abbreviation ?? '',
+          score: liveData.home?.score ?? 0,
+        },
+        away: {
+          name: liveData.away?.name ?? '',
+          abbreviation: liveData.away?.abbreviation ?? '',
+          score: liveData.away?.score ?? 0,
+        },
+      },
+    };
+    const homeTeam = gameForResolver.teams.home.abbreviation;
+    const awayTeam = gameForResolver.teams.away.abbreviation;
+    const homeName = gameForResolver.teams.home.name;
+    const awayName = gameForResolver.teams.away.name;
+    const homeScore = gameForResolver.teams.home.score;
+    const awayScore = gameForResolver.teams.away.score;
     const totalRuns = homeScore + awayScore;
 
     // Find pending picks that match this game
@@ -1073,13 +1090,20 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
 
     let resolved = 0;
     for (const pick of pendingPicks) {
-      const matchup = (pick.matchup ?? '').toLowerCase();
-      const isThisGame = matchup.includes(homeTeam.toLowerCase()) || matchup.includes(awayTeam.toLowerCase()) ||
-                         matchup.includes(homeName.toLowerCase()) || matchup.includes(awayName.toLowerCase());
-      if (!isThisGame) continue;
+      if (!findGame(pick.matchup, [gameForResolver])) continue;
 
       const pickStr = (pick.pick ?? '').toLowerCase();
       let result = null;
+      const parsed = parsePick(pick.pick);
+
+      if (parsed?.type === 'player_prop') {
+        const propResult = resolvePlayerPropPickResult(parsed, liveData.playerStats);
+        result = propResult?.result ?? null;
+      } else if (parsed) {
+        result = resolvePickResult(parsed, gameForResolver);
+      } else {
+        console.log(`[auto-resolve] Pick ${pick.id} unparseable: "${pick.pick}"`);
+      }
 
       // Over/Under
       const ouMatch = pickStr.match(/^(over|under|más\s+de|menos\s+de)\s+(\d+\.?\d*)/i);
