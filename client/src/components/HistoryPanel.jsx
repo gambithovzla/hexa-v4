@@ -8,7 +8,7 @@
  *   lang — 'en' | 'es'
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import useHistory from '../hooks/useHistory';
 import useBankroll from '../hooks/useBankroll';
@@ -171,23 +171,65 @@ function ModeBadge({ mode }) {
   );
 }
 
-function PickCard({ entry, onMarkResult, onDelete, isAdmin, t, lang }) {
+function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin, t, lang }) {
   const normalizedResult = normalizePickResult(entry.result);
   const borderColor = resultBorderColor(entry.result);
-  const badgeSx     = resultBadgeSx(entry.result);
+  const badgeSx = resultBadgeSx(entry.result);
   const resultLabel = t.history.result?.[normalizedResult] ?? normalizedResult.toUpperCase();
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [postmortemOpen, setPostmortemOpen] = useState(Boolean(entry.postmortem));
+  const [postmortemLoading, setPostmortemLoading] = useState(false);
+  const [postmortemError, setPostmortemError] = useState('');
+  const [postmortemData, setPostmortemData] = useState(entry.postmortem ?? null);
 
-  // Terminal date format: LOG // 2026-03-27 · 19:05
+  useEffect(() => {
+    setPostmortemData(entry.postmortem ?? null);
+    if (entry.postmortem) setPostmortemOpen(true);
+  }, [entry.postmortem]);
+
   const dateStr = (() => {
     try {
       const d = new Date(entry.date);
       const datepart = d.toISOString().slice(0, 10);
       const timepart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       return `LOG // ${datepart} · ${timepart}`;
+    } catch {
+      return entry.date ?? '';
     }
-    catch { return entry.date ?? ''; }
   })();
+
+  async function handlePostmortemClick() {
+    if (postmortemData) {
+      setPostmortemOpen((prev) => !prev);
+      return;
+    }
+
+    setPostmortemLoading(true);
+    setPostmortemError('');
+    try {
+      const payload = await onRequestPostmortem?.(entry.id);
+      const nextPostmortem = payload?.postmortem ?? null;
+      setPostmortemData(nextPostmortem);
+      setPostmortemOpen(true);
+    } catch (err) {
+      setPostmortemError(err.message || t.history.postmortemError);
+    } finally {
+      setPostmortemLoading(false);
+    }
+  }
+
+  const renderStringList = (items = [], color = C.textSecondary) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      {items.map((item, idx) => (
+        <Typography
+          key={`${item}-${idx}`}
+          sx={{ fontFamily: MONO, fontSize: '0.62rem', color, lineHeight: 1.5 }}
+        >
+          - {item}
+        </Typography>
+      ))}
+    </Box>
+  );
 
   return (
     <Box sx={{
@@ -247,9 +289,11 @@ function PickCard({ entry, onMarkResult, onDelete, isAdmin, t, lang }) {
           </Box>
         )}
       </Box>
+
       <Typography component="div" sx={{ fontFamily: BARLOW, fontSize: '1rem', color: C.textPrimary, letterSpacing: '1px', lineHeight: 1.3 }}>
         <MatchupWithLogos matchup={entry.matchup} />
       </Typography>
+
       {entry.pick && (
         <Box sx={{
           background: C.accentDim, border: `1px solid ${C.accentLine}`,
@@ -275,7 +319,7 @@ function PickCard({ entry, onMarkResult, onDelete, isAdmin, t, lang }) {
           </Box>
         </Box>
       )}
-      {/* Kelly recommendation */}
+
       {entry.kelly_recommendation && (
         <Box sx={{
           mt: '8px', p: '8px 10px',
@@ -293,11 +337,109 @@ function PickCard({ entry, onMarkResult, onDelete, isAdmin, t, lang }) {
           </Typography>
         </Box>
       )}
-      {normalizedResult === 'pending' && (
+
+      {normalizedResult === 'pending' ? (
         <Box sx={{ display: 'flex', gap: '8px', pt: '2px', flexWrap: 'wrap' }}>
-          <MarkBtn label={`✓ ${t.history.markWin}`}  color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />
-          <MarkBtn label={`✗ ${t.history.markLoss}`} color={C.red}   dim={C.redDim}   onClick={() => onMarkResult(entry.id, 'loss')} />
-          <MarkBtn label={`⇌ ${t.history.markPush}`} color={C.cyan}  dim={C.cyanDim}  onClick={() => onMarkResult(entry.id, 'push')} />
+          <MarkBtn label={`✓ ${t.history.markWin}`} color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />
+          <MarkBtn label={`✗ ${t.history.markLoss}`} color={C.red} dim={C.redDim} onClick={() => onMarkResult(entry.id, 'loss')} />
+          <MarkBtn label={`⇌ ${t.history.markPush}`} color={C.cyan} dim={C.cyanDim} onClick={() => onMarkResult(entry.id, 'push')} />
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', pt: '2px' }}>
+          <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <MarkBtn
+              label={postmortemData ? t.history.viewPostmortem : t.history.requestPostmortem}
+              color={C.cyan}
+              dim={C.cyanDim}
+              onClick={handlePostmortemClick}
+            />
+          </Box>
+
+          {postmortemLoading && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.cyan }}>
+              {t.history.loadingPostmortem}
+            </Typography>
+          )}
+
+          {postmortemError && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.red }}>
+              {postmortemError || t.history.postmortemError}
+            </Typography>
+          )}
+
+          {postmortemOpen && postmortemData && (
+            <Box sx={{
+              mt: '4px',
+              p: '12px',
+              border: `1px solid ${C.cyanLine}`,
+              bgcolor: C.cyanDim,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+            }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.cyan, letterSpacing: '0.16em' }}>
+                {t.history.postmortemTitle}
+              </Typography>
+
+              {postmortemData.summary && (
+                <Box>
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                    {t.history.postmortemSummary}
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, lineHeight: 1.6 }}>
+                    {postmortemData.summary}
+                  </Typography>
+                </Box>
+              )}
+
+              {postmortemData.key_factors?.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                    {t.history.postmortemKeyFactors}
+                  </Typography>
+                  {renderStringList(postmortemData.key_factors, C.textPrimary)}
+                </Box>
+              )}
+
+              {postmortemData.what_hexa_got_right?.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                    {t.history.postmortemRight}
+                  </Typography>
+                  {renderStringList(postmortemData.what_hexa_got_right, C.green)}
+                </Box>
+              )}
+
+              {postmortemData.what_hexa_missed?.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                    {t.history.postmortemMissed}
+                  </Typography>
+                  {renderStringList(postmortemData.what_hexa_missed, C.red)}
+                </Box>
+              )}
+
+              {postmortemData.adjustment_signals?.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                    {t.history.postmortemAdjustments}
+                  </Typography>
+                  {renderStringList(postmortemData.adjustment_signals, C.cyan)}
+                </Box>
+              )}
+
+              {postmortemData.training_takeaway && (
+                <Box>
+                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                    {t.history.postmortemTakeaway}
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, lineHeight: 1.6 }}>
+                    {postmortemData.training_takeaway}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
         </Box>
       )}
     </Box>
@@ -326,7 +468,7 @@ function groupPicksByDay(picks) {
   return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
-function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDelete, isAdmin, t }) {
+function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDelete, onRequestPostmortem, isAdmin, t }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const isEs = lang === 'es';
 
@@ -430,7 +572,16 @@ function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDele
       {expanded && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', pt: '6px', pb: '12px' }}>
           {picks.map(entry => (
-            <PickCard key={entry.id} entry={entry} onMarkResult={onMarkResult} onDelete={onDelete} isAdmin={isAdmin} t={t} lang={lang} />
+            <PickCard
+              key={entry.id}
+              entry={entry}
+              onMarkResult={onMarkResult}
+              onDelete={onDelete}
+              onRequestPostmortem={onRequestPostmortem}
+              isAdmin={isAdmin}
+              t={t}
+              lang={lang}
+            />
           ))}
         </Box>
       )}
@@ -442,7 +593,7 @@ function AnalisisTab({ lang }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
   const { isAuthenticated, token, user } = useAuth();
   const isAdmin = user?.is_admin === true;
-  const { history, markResult, deletePick, clearHistory, getStats, loadHistory } = useHistory();
+  const { history, markResult, deletePick, clearHistory, getStats, loadHistory, requestPostmortem } = useHistory();
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const stats = getStats();
   const [confirming, setConfirming] = useState(false);
@@ -515,6 +666,7 @@ function AnalisisTab({ lang }) {
               defaultExpanded={idx === 0}
               onMarkResult={markResult}
               onDelete={deletePick}
+              onRequestPostmortem={requestPostmortem}
               isAdmin={isAdmin}
               t={t}
             />

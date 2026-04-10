@@ -90,7 +90,14 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS clv                   DECIMAL(5,2)`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS odds_details          JSONB`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS kelly_recommendation TEXT`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS game_pk INTEGER`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS game_date DATE`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem_summary TEXT`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem JSONB`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem_generated_at TIMESTAMP`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem_requested_at TIMESTAMP`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_picks_user_game_pk ON picks(user_id, game_pk)`);
 
     // ── odds_snapshots (P7 — Line Movement Tracking) ──────────────────────────
     await client.query(`
@@ -209,6 +216,15 @@ export async function runMigrations() {
     `);
 
     await client.query('COMMIT');
+
+    await pool.query(`
+      UPDATE picks AS p
+      SET game_pk = pf.game_pk,
+          game_date = COALESCE(p.game_date, pf.game_date)
+      FROM pick_features AS pf
+      WHERE pf.pick_id = p.id
+        AND (p.game_pk IS NULL OR p.game_date IS NULL)
+    `);
 
     // Normalize pick results: 'won' → 'win', 'lost' → 'loss'
     await pool.query("UPDATE picks SET result = 'win' WHERE result = 'won'");
