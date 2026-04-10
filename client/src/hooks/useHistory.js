@@ -125,14 +125,20 @@ function extractPickAndConfidence(hexaData) {
 
 function dbRowToEntry(row) {
   return {
-    id:                  row.id,
-    date:                row.created_at,
-    matchup:             row.matchup,
-    mode:                row.type,
-    pick:                row.pick,
-    confidence:          row.oracle_confidence ?? 0,
-    result:              normalizePickResult(row.result),
+    id:                   row.id,
+    date:                 row.created_at,
+    matchup:              row.matchup,
+    mode:                 row.type,
+    pick:                 row.pick,
+    confidence:           row.oracle_confidence ?? 0,
+    result:               normalizePickResult(row.result),
     kelly_recommendation: row.kelly_recommendation ?? null,
+    oracle_report:        row.oracle_report ?? null,
+    postmortem:           row.postmortem ?? null,
+    postmortem_summary:   row.postmortem_summary ?? null,
+    postmortem_generated_at: row.postmortem_generated_at ?? null,
+    gamePk:               row.game_pk ?? null,
+    gameDate:             row.game_date ?? null,
   };
 }
 
@@ -283,7 +289,13 @@ export default function useHistory() {
       });
       const json = await res.json();
       if (json.success) {
-        setHistory(prev => prev.map(e => e.id === id ? { ...e, result: normalizePickResult(json.data?.result ?? normalizedOutcome) } : e));
+        setHistory(prev => prev.map(e => e.id === id ? {
+          ...e,
+          result: normalizePickResult(json.data?.result ?? normalizedOutcome),
+          postmortem: null,
+          postmortem_summary: null,
+          postmortem_generated_at: null,
+        } : e));
       }
     } catch {
       // ignore
@@ -339,6 +351,38 @@ export default function useHistory() {
     }
   }
 
+  async function requestPostmortem(id, { force = false } = {}) {
+    if (!isAuthenticated || !token) return null;
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/picks/${id}/postmortem`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ force }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        throw new Error(json.error || 'Failed to generate postmortem');
+      }
+
+      const nextFields = {
+        postmortem: json.data?.postmortem ?? null,
+        postmortem_summary: json.data?.postmortem_summary ?? null,
+        postmortem_generated_at: json.data?.postmortem_generated_at ?? null,
+      };
+      setHistory((prev) => prev.map((entry) => (
+        entry.id === id ? { ...entry, ...nextFields } : entry
+      )));
+      return nextFields;
+    } catch (err) {
+      console.error('[useHistory] requestPostmortem error:', err);
+      throw err;
+    }
+  }
+
   // ── getStats ───────────────────────────────────────────────────────────────
 
   function getStats() {
@@ -353,5 +397,5 @@ export default function useHistory() {
     return { total, wins, losses, pushes, pending, winRate };
   }
 
-  return { history, addPick, markResult, deletePick, clearHistory, getStats, loadHistory };
+  return { history, addPick, markResult, deletePick, clearHistory, getStats, loadHistory, requestPostmortem };
 }

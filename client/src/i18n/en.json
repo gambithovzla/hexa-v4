@@ -78,7 +78,18 @@
       "pending": "PENDING"
     },
     "noPickExtracted": "—",
-    "confidence": "Confidence"
+    "confidence": "Confidence",
+    "requestPostmortem": "Explain Pick",
+    "viewPostmortem": "View Postmortem",
+    "loadingPostmortem": "Analyzing pick...",
+    "postmortemTitle": "POSTMORTEM // HEXA FEEDBACK",
+    "postmortemSummary": "Summary",
+    "postmortemKeyFactors": "Key Factors",
+    "postmortemRight": "What HEXA got right",
+    "postmortemMissed": "What HEXA missed",
+    "postmortemAdjustments": "Adjustment Signals",
+    "postmortemTakeaway": "Training Takeaway",
+    "postmortemError": "Could not generate the postmortem."
   },
   "confidence": {
     "low": "Low",

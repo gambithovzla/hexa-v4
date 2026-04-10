@@ -24,6 +24,7 @@ import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live
 import { parseLivePick, calculatePickProgress } from './pick-tracker.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
+import { generatePickPostmortem } from './pick-postmortem.js';
 
 dotenv.config();
 
@@ -44,6 +45,18 @@ function normalizeDateInput(value) {
   const s = String(value);
   const m = s.match(/\d{4}-\d{2}-\d{2}/);
   return m ? m[0] : null;
+}
+
+function getEasternDateString(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
 }
 
 function parseJsonMaybe(value) {
@@ -76,7 +89,7 @@ async function saveFeatureStoreForGame({
   result = null,
   oddsData = null,
 }) {
-  const resolvedDate = normalizeDateInput(gameDate) ?? new Date().toISOString().split('T')[0];
+  const resolvedDate = normalizeDateInput(gameDate) ?? getEasternDateString();
   if (!gamePk) return false;
 
   try {
@@ -251,7 +264,7 @@ function isAdmin(req, res, next) {
 // GET /api/games?date=YYYY-MM-DD
 app.get('/api/games', async (req, res) => {
   try {
-    const date = req.query.date || new Date().toISOString().split('T')[0];
+    const date = req.query.date || getEasternDateString();
     const games = await getTodayGames(date);
     res.json({ success: true, data: games });
   } catch (err) {
@@ -951,9 +964,24 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
 
     // Get user's pending picks
     const { rows: pendingPicks } = await pool.query(
-      `SELECT id, matchup, pick, oracle_confidence, type, created_at
-       FROM picks
-       WHERE user_id = $1 AND result = 'pending' AND deleted_at IS NULL
+      `SELECT
+         p.id,
+         p.matchup,
+         p.pick,
+         p.oracle_confidence,
+         p.type,
+         p.created_at,
+         COALESCE(p.game_pk, pf.game_pk) AS game_pk,
+         COALESCE(p.game_date::text, pf.game_date::text) AS game_date
+       FROM picks p
+       LEFT JOIN LATERAL (
+         SELECT game_pk, game_date
+         FROM pick_features
+         WHERE pick_id = p.id
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) pf ON TRUE
+       WHERE p.user_id = $1 AND p.result = 'pending' AND p.deleted_at IS NULL
        ORDER BY created_at DESC
        LIMIT 20`,
       [userId]
@@ -963,39 +991,53 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    // Get today's games to find gamePks
-    const today = new Date().toISOString().split('T')[0];
-    const games = await getTodayGames(today);
-
-    // Match each pick to a live game and calculate progress
     const results = [];
 
     for (const pick of pendingPicks) {
-      // Try to find the game this pick belongs to
-      const matchedGame = games.find(g => {
-        const homeAbbr = g.teams?.home?.abbreviation?.toLowerCase() ?? '';
-        const awayAbbr = g.teams?.away?.abbreviation?.toLowerCase() ?? '';
-        const homeName = g.teams?.home?.name?.toLowerCase() ?? '';
-        const awayName = g.teams?.away?.name?.toLowerCase() ?? '';
-        const matchup = (pick.matchup ?? '').toLowerCase();
-        return matchup.includes(homeAbbr) || matchup.includes(awayAbbr) ||
-               matchup.includes(homeName) || matchup.includes(awayName);
-      });
-
-      if (!matchedGame) {
-        results.push({ pickId: pick.id, pick: pick.pick, matchup: pick.matchup, progress: null, status: 'no_game_found' });
-        continue;
-      }
-
-      const gameStatus = matchedGame.status?.simplified ?? 'scheduled';
-      if (gameStatus === 'scheduled') {
-        results.push({ pickId: pick.id, pick: pick.pick, matchup: pick.matchup, gamePk: matchedGame.gamePk, progress: null, status: 'not_started' });
-        continue;
-      }
-
-      // Game is live or final — fetch live data and calculate progress
       try {
-        const liveData = await getLiveGameData(matchedGame.gamePk);
+        let resolvedGamePk = pick.game_pk;
+
+        // Fallback for older picks that predate game_pk persistence.
+        if (!resolvedGamePk) {
+          const lookupDate = normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at);
+          const games = await getTodayGames(lookupDate);
+          const matchedGame = games.find((g) => {
+            const homeAbbr = g.teams?.home?.abbreviation?.toLowerCase() ?? '';
+            const awayAbbr = g.teams?.away?.abbreviation?.toLowerCase() ?? '';
+            const homeName = g.teams?.home?.name?.toLowerCase() ?? '';
+            const awayName = g.teams?.away?.name?.toLowerCase() ?? '';
+            const matchup = (pick.matchup ?? '').toLowerCase();
+            return matchup.includes(homeAbbr) || matchup.includes(awayAbbr) ||
+                   matchup.includes(homeName) || matchup.includes(awayName);
+          });
+          resolvedGamePk = matchedGame?.gamePk ?? null;
+        }
+
+        if (!resolvedGamePk) {
+          results.push({
+            pickId: pick.id,
+            pick: pick.pick,
+            matchup: pick.matchup,
+            progress: null,
+            status: 'no_game_found',
+          });
+          continue;
+        }
+
+        const liveData = await getLiveGameData(resolvedGamePk);
+        const liveStatus = String(liveData?.status ?? '').toLowerCase();
+        if (liveStatus === 'scheduled' || liveStatus === 'pre-game' || liveStatus === 'preview') {
+          results.push({
+            pickId: pick.id,
+            pick: pick.pick,
+            matchup: pick.matchup,
+            gamePk: resolvedGamePk,
+            progress: null,
+            status: 'not_started',
+          });
+          continue;
+        }
+
         const parsed = parseLivePick(pick.pick);
         const progress = calculatePickProgress(parsed, liveData);
 
@@ -1003,12 +1045,20 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
           pickId: pick.id,
           pick: pick.pick,
           matchup: pick.matchup,
-          gamePk: matchedGame.gamePk,
+          gamePk: resolvedGamePk,
           confidence: pick.oracle_confidence,
           ...progress,
         });
       } catch (err) {
-        results.push({ pickId: pick.id, pick: pick.pick, matchup: pick.matchup, gamePk: matchedGame.gamePk, progress: null, status: 'fetch_error', error: err.message });
+        results.push({
+          pickId: pick.id,
+          pick: pick.pick,
+          matchup: pick.matchup,
+          gamePk: pick.game_pk ?? null,
+          progress: null,
+          status: 'fetch_error',
+          error: err.message,
+        });
       }
     }
 
@@ -1190,9 +1240,10 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       `INSERT INTO picks (
          user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
          oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
-         model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation
+         model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
+         game_pk, game_date
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [
         req.user.id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
         oracle_report, hexa_hunch,
@@ -1202,6 +1253,8 @@ app.post('/api/picks', verifyToken, async (req, res) => {
         implied_prob_at_pick,
         parsedOddsDetails != null ? JSON.stringify(parsedOddsDetails) : null,
         kelly_recommendation ?? null,
+        game_pk ?? gamePk ?? game_id ?? gameId ?? null,
+        normalizeDateInput(game_date ?? gameDate ?? date),
       ]
     );
     const savedPick = rows[0];
@@ -1331,12 +1384,186 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'result must be pending, win, loss, or push' });
     }
     const { rows } = await pool.query(
-      'UPDATE picks SET result = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      `UPDATE picks
+       SET result = $1,
+           postmortem = NULL,
+           postmortem_summary = NULL,
+           postmortem_generated_at = NULL
+       WHERE id = $2 AND user_id = $3
+       RETURNING *`,
       [result, req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
     await updatePickFeatureResult({ pickId: rows[0].id, result: rows[0].result });
     res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/picks/:id/postmortem — generate or return persisted postmortem analysis
+app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
+  try {
+    const force = req.body?.force === true;
+    const { rows } = await pool.query(
+      `SELECT
+         p.*,
+         pf.game_pk AS feature_game_pk,
+         pf.game_date AS feature_game_date,
+         pf.home_pitcher_xwoba,
+         pf.away_pitcher_xwoba,
+         pf.home_pitcher_whiff,
+         pf.away_pitcher_whiff,
+         pf.home_pitcher_k_pct,
+         pf.away_pitcher_k_pct,
+         pf.home_pitcher_era,
+         pf.away_pitcher_era,
+         pf.home_team_ops,
+         pf.away_team_ops,
+         pf.home_lineup_avg_xwoba,
+         pf.away_lineup_avg_xwoba,
+         pf.park_factor_overall,
+         pf.park_factor_hr,
+         pf.temperature,
+         pf.wind_speed,
+         pf.data_quality_score,
+         pf.signal_coherence_score,
+         pf.odds_ml_home,
+         pf.odds_ml_away,
+         pf.odds_ou_total
+       FROM picks p
+       LEFT JOIN LATERAL (
+         SELECT *
+         FROM pick_features
+         WHERE pick_id = p.id
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) pf ON TRUE
+       WHERE p.id = $1 AND p.user_id = $2 AND p.deleted_at IS NULL
+       LIMIT 1`,
+      [req.params.id, req.user.id]
+    );
+
+    const pickRow = rows[0];
+    if (!pickRow) {
+      return res.status(404).json({ success: false, error: 'Pick not found' });
+    }
+    if (normalizePickResult(pickRow.result) === 'pending') {
+      return res.status(400).json({ success: false, error: 'Pick must be resolved first' });
+    }
+
+    if (pickRow.postmortem && !force) {
+      await pool.query(
+        'UPDATE picks SET postmortem_requested_at = NOW() WHERE id = $1 AND user_id = $2',
+        [pickRow.id, req.user.id]
+      );
+      return res.json({
+        success: true,
+        data: {
+          postmortem: pickRow.postmortem,
+          postmortem_summary: pickRow.postmortem_summary,
+          postmortem_generated_at: pickRow.postmortem_generated_at,
+        },
+      });
+    }
+
+    const gamePk = pickRow.game_pk ?? pickRow.feature_game_pk ?? null;
+    const gameDate =
+      normalizeDateInput(pickRow.game_date) ??
+      normalizeDateInput(pickRow.feature_game_date) ??
+      getEasternDateString(pickRow.created_at);
+
+    let liveData = null;
+    if (gamePk) {
+      try {
+        liveData = await getLiveGameData(gamePk);
+      } catch {
+        liveData = null;
+      }
+    }
+
+    const parsedPick = parseLivePick(pickRow.pick);
+    const progress = liveData ? calculatePickProgress(parsedPick, liveData) : null;
+
+    const gameSummary = liveData ? {
+      gamePk: liveData.gamePk,
+      status: liveData.status,
+      away: {
+        name: liveData.away?.name ?? null,
+        abbreviation: liveData.away?.abbreviation ?? null,
+        score: liveData.away?.score ?? null,
+      },
+      home: {
+        name: liveData.home?.name ?? null,
+        abbreviation: liveData.home?.abbreviation ?? null,
+        score: liveData.home?.score ?? null,
+      },
+      pickProgress: progress,
+      recentPlays: Array.isArray(liveData.recentPlays) ? liveData.recentPlays.slice(0, 5) : [],
+    } : {
+      gamePk,
+      gameDate,
+      pickProgress: null,
+    };
+
+    const featureSnapshot = {
+      gamePk,
+      gameDate,
+      home_pitcher_xwoba: pickRow.home_pitcher_xwoba,
+      away_pitcher_xwoba: pickRow.away_pitcher_xwoba,
+      home_pitcher_whiff: pickRow.home_pitcher_whiff,
+      away_pitcher_whiff: pickRow.away_pitcher_whiff,
+      home_pitcher_k_pct: pickRow.home_pitcher_k_pct,
+      away_pitcher_k_pct: pickRow.away_pitcher_k_pct,
+      home_pitcher_era: pickRow.home_pitcher_era,
+      away_pitcher_era: pickRow.away_pitcher_era,
+      home_team_ops: pickRow.home_team_ops,
+      away_team_ops: pickRow.away_team_ops,
+      home_lineup_avg_xwoba: pickRow.home_lineup_avg_xwoba,
+      away_lineup_avg_xwoba: pickRow.away_lineup_avg_xwoba,
+      park_factor_overall: pickRow.park_factor_overall,
+      park_factor_hr: pickRow.park_factor_hr,
+      temperature: pickRow.temperature,
+      wind_speed: pickRow.wind_speed,
+      data_quality_score: pickRow.data_quality_score,
+      signal_coherence_score: pickRow.signal_coherence_score,
+      odds_ml_home: pickRow.odds_ml_home,
+      odds_ml_away: pickRow.odds_ml_away,
+      odds_ou_total: pickRow.odds_ou_total,
+    };
+
+    const postmortem = await generatePickPostmortem({
+      lang: pickRow.language ?? 'en',
+      pick: {
+        id: pickRow.id,
+        matchup: pickRow.matchup,
+        pick: pickRow.pick,
+        result: normalizePickResult(pickRow.result),
+        oracle_confidence: pickRow.oracle_confidence,
+        bet_value: pickRow.bet_value,
+        model_risk: pickRow.model_risk,
+        oracle_report: pickRow.oracle_report,
+        hexa_hunch: pickRow.hexa_hunch,
+        alert_flags: Array.isArray(pickRow.alert_flags) ? pickRow.alert_flags : [],
+        best_pick: pickRow.best_pick,
+        odds_at_pick: pickRow.odds_at_pick,
+      },
+      featureSnapshot,
+      gameSummary,
+    });
+
+    const { rows: saved } = await pool.query(
+      `UPDATE picks
+       SET postmortem = $1,
+           postmortem_summary = $2,
+           postmortem_generated_at = NOW(),
+           postmortem_requested_at = NOW()
+       WHERE id = $3 AND user_id = $4
+       RETURNING postmortem, postmortem_summary, postmortem_generated_at`,
+      [JSON.stringify(postmortem), postmortem.summary, pickRow.id, req.user.id]
+    );
+
+    return res.json({ success: true, data: saved[0] });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }

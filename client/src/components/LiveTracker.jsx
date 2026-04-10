@@ -14,6 +14,17 @@ import { useAuth } from '../store/authStore';
 const API_URL      = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL = 30_000;
 
+function getEasternDateString(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}
+
 const T = {
   en: {
     title:        'LIVE TRACKER',
@@ -670,9 +681,7 @@ export default function LiveTracker({ lang = 'en' }) {
     setLoading(true);
     try {
       // 1. Get today's games
-      const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-      etNow.setHours(etNow.getHours() - 5);
-      const today    = etNow.toLocaleDateString('en-CA');
+      const today    = getEasternDateString();
       const gamesRes = await fetch(`${API_URL}/api/games?date=${today}`);
       const gamesJson = await gamesRes.json();
       const allGames  = gamesJson.success ? gamesJson.data : [];
