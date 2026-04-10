@@ -122,17 +122,26 @@ function StatCard({ value, label, color, sub }) {
 // ANÁLISIS TAB (existing history)
 // ─────────────────────────────────────────────────────────────────────────────
 
+function normalizePickResult(result) {
+  const value = String(result ?? 'pending').toLowerCase();
+  if (value === 'won') return 'win';
+  if (value === 'lost') return 'loss';
+  return value;
+}
+
 function resultBorderColor(result) {
-  if (result === 'win')  return C.green;
-  if (result === 'loss') return C.red;
-  if (result === 'push') return C.cyan;
+  const normalized = normalizePickResult(result);
+  if (normalized === 'win')  return C.green;
+  if (normalized === 'loss') return C.red;
+  if (normalized === 'push') return C.cyan;
   return C.border;
 }
 
 function resultBadgeSx(result) {
-  if (result === 'win')  return { bgcolor: C.greenDim, border: `1px solid ${C.greenLine}`, color: C.green };
-  if (result === 'loss') return { bgcolor: C.redDim,   border: `1px solid ${C.redLine}`,   color: C.red   };
-  if (result === 'push') return { bgcolor: C.cyanDim,  border: `1px solid ${C.cyanLine}`,  color: C.cyan  };
+  const normalized = normalizePickResult(result);
+  if (normalized === 'win')  return { bgcolor: C.greenDim, border: `1px solid ${C.greenLine}`, color: C.green };
+  if (normalized === 'loss') return { bgcolor: C.redDim,   border: `1px solid ${C.redLine}`,   color: C.red   };
+  if (normalized === 'push') return { bgcolor: C.cyanDim,  border: `1px solid ${C.cyanLine}`,  color: C.cyan  };
   return                        { bgcolor: C.amberDim, border: `1px solid ${C.amberLine}`,  color: C.amber };
 }
 
@@ -163,9 +172,10 @@ function ModeBadge({ mode }) {
 }
 
 function PickCard({ entry, onMarkResult, onDelete, isAdmin, t, lang }) {
+  const normalizedResult = normalizePickResult(entry.result);
   const borderColor = resultBorderColor(entry.result);
   const badgeSx     = resultBadgeSx(entry.result);
-  const resultLabel = t.history.result?.[entry.result] ?? entry.result.toUpperCase();
+  const resultLabel = t.history.result?.[normalizedResult] ?? normalizedResult.toUpperCase();
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Terminal date format: LOG // 2026-03-27 · 19:05
@@ -283,7 +293,7 @@ function PickCard({ entry, onMarkResult, onDelete, isAdmin, t, lang }) {
           </Typography>
         </Box>
       )}
-      {entry.result === 'pending' && (
+      {normalizedResult === 'pending' && (
         <Box sx={{ display: 'flex', gap: '8px', pt: '2px', flexWrap: 'wrap' }}>
           <MarkBtn label={`✓ ${t.history.markWin}`}  color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />
           <MarkBtn label={`✗ ${t.history.markLoss}`} color={C.red}   dim={C.redDim}   onClick={() => onMarkResult(entry.id, 'loss')} />
@@ -320,10 +330,11 @@ function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDele
   const [expanded, setExpanded] = useState(defaultExpanded);
   const isEs = lang === 'es';
 
-  const wins = picks.filter(p => p.result === 'win').length;
-  const losses = picks.filter(p => p.result === 'loss').length;
-  const pushes = picks.filter(p => p.result === 'push').length;
-  const pending = picks.filter(p => p.result === 'pending').length;
+  const results = picks.map(p => normalizePickResult(p.result));
+  const wins = results.filter(result => result === 'win').length;
+  const losses = results.filter(result => result === 'loss').length;
+  const pushes = results.filter(result => result === 'push').length;
+  const pending = results.filter(result => result === 'pending').length;
   const total = picks.length;
 
   // Format: "Mar 28, 2026" or "28 Mar 2026"

@@ -94,7 +94,8 @@ router.get('/public-stats', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT id, pick, model, result, odds_at_pick, created_at
       FROM   picks
-      WHERE  result IN ('won', 'lost', 'push', 'win', 'loss')
+      WHERE  LOWER(result) IN ('won', 'lost', 'push', 'win', 'loss')
+        AND  deleted_at IS NULL
         AND  ${dateFilter}
       ORDER  BY created_at ASC
     `);
@@ -109,7 +110,7 @@ router.get('/public-stats', async (req, res) => {
     let roiPickNumber = 0;  // cursor for picks that contribute to ROI curve
 
     for (const row of rows) {
-      const result = row.result;
+      const result = String(row.result ?? '').toLowerCase();
       const isWon  = result === 'won'  || result === 'win';
       const isLost = result === 'lost' || result === 'loss';
       const isPush = result === 'push';

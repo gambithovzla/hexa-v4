@@ -59,6 +59,14 @@ function parseJsonMaybe(value) {
   return parsed;
 }
 
+function normalizePickResult(result) {
+  if (result == null) return null;
+  const value = String(result).toLowerCase();
+  if (value === 'won') return 'win';
+  if (value === 'lost') return 'loss';
+  return value;
+}
+
 async function saveFeatureStoreForGame({
   pickId = null,
   backtestId = null,
@@ -1308,7 +1316,10 @@ app.get('/api/picks', verifyToken, async (req, res) => {
 // PATCH /api/picks/:id — actualiza resultado (win/loss/pending)
 app.patch('/api/picks/:id', verifyToken, async (req, res) => {
   try {
-    const { result } = req.body;
+    const result = normalizePickResult(req.body?.result);
+    if (!['pending', 'win', 'loss', 'push'].includes(result)) {
+      return res.status(400).json({ success: false, error: 'result must be pending, win, loss, or push' });
+    }
     const { rows } = await pool.query(
       'UPDATE picks SET result = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
       [result, req.params.id, req.user.id]
