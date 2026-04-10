@@ -35,20 +35,49 @@ const ABBR_TO_NICKNAME = {
   TOR: 'Blue Jays', BAL: 'Orioles',
 };
 
+const TEAM_ABBR_ALIASES = {
+  ARI: 'AZ',
+  ATH: 'OAK',
+  CHW: 'CWS',
+  CSW: 'CWS',
+  KCR: 'KC',
+  SFG: 'SF',
+  SDP: 'SD',
+  TBR: 'TB',
+  WSN: 'WSH',
+};
+
+function normalizeTeamAbbr(value) {
+  const abbr = String(value ?? '').trim().toUpperCase();
+  return TEAM_ABBR_ALIASES[abbr] ?? abbr;
+}
+
+function normalizeLooseText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+.\-\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ── Team matching helpers ─────────────────────────────────────────────────────
 
 /**
  * Returns true if `token` identifies the team given by (teamName, teamAbbr).
  * Accepts: abbreviation ("NYY"), full name ("New York Yankees"), nickname ("Yankees").
  */
-function tokenMatchesTeam(token, teamName, teamAbbr) {
+export function tokenMatchesTeam(token, teamName, teamAbbr) {
   if (!token) return false;
-  const t = token.trim().toLowerCase();
-  const nameLower = (teamName ?? '').toLowerCase();
-  const abbrLower = (teamAbbr ?? '').toLowerCase();
+  const t = normalizeLooseText(token);
+  const nameLower = normalizeLooseText(teamName);
+  const abbr = normalizeTeamAbbr(teamAbbr);
+  const abbrLower = abbr.toLowerCase();
+  const tokenAbbr = normalizeTeamAbbr(t);
 
   // Direct abbreviation match: "SF" === "SF"
-  if (abbrLower && t === abbrLower) return true;
+  if (abbr && tokenAbbr === abbr) return true;
 
   // Full / partial name match: "San Francisco Giants".includes("Giants")
   if (nameLower && nameLower.includes(t)) return true;
@@ -58,15 +87,15 @@ function tokenMatchesTeam(token, teamName, teamAbbr) {
 
   // Nickname via reverse map: "Giants" → "SF"
   const abbrFromNick = NICKNAME_TO_ABBR[t];
-  if (abbrFromNick && abbrLower && abbrFromNick === teamAbbr) return true;
+  if (abbrFromNick && abbrLower && normalizeTeamAbbr(abbrFromNick) === abbr) return true;
 
   // Multi-word token: split and check if abbreviation OR nickname matches any word
   // Handles "SF Giants" → checks "sf" (=== abbr) ✓ and "giants" (=== nickname) ✓
   const words = t.split(/\s+/);
   if (words.length > 1) {
     for (const w of words) {
-      if (abbrLower && w === abbrLower) return true;
-      if (NICKNAME_TO_ABBR[w] === teamAbbr) return true;
+      if (abbr && normalizeTeamAbbr(w) === abbr) return true;
+      if (NICKNAME_TO_ABBR[w] && normalizeTeamAbbr(NICKNAME_TO_ABBR[w]) === abbr) return true;
     }
   }
 
@@ -78,7 +107,7 @@ function tokenMatchesTeam(token, teamName, teamAbbr) {
  * Supports formats: "NYY vs BOS", "NYY @ BOS", "New York Yankees vs Boston Red Sox", etc.
  * Returns the game object or null.
  */
-function findGame(matchup, games) {
+export function findGame(matchup, games) {
   if (!matchup) return null;
   const parts = matchup.split(/\s+(?:vs\.?|@|at|-)\s+/i);
   if (parts.length < 2) return null;
@@ -112,6 +141,15 @@ function findGame(matchup, games) {
 // ── Player prop helpers ───────────────────────────────────────────────────────
 
 function normalizeStat(raw) {
+  const normalized = normalizeLooseText(raw).replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/\b(?:hits?|h)\b/.test(normalized)) return 'hits';
+  if (/\b(?:home\s*runs?|hrs?|jonrones?|cuadrangulares?)\b/.test(normalized)) return 'homeRuns';
+  if (/\b(?:total\s*bases?|tb|bases\s*totales)\b/.test(normalized)) return 'totalBases';
+  if (/\b(?:rbi|rbis|carreras?\s*impulsadas?|runs?\s*batted\s*in)\b/.test(normalized)) return 'rbi';
+  if (/\b(?:stolen\s*bases?|sbs?|bases?\s*robadas?)\b/.test(normalized)) return 'stolenBases';
+  if (/\b(?:walks?|bbs?|bases?\s*por\s*bolas?)\b/.test(normalized)) return 'walks';
+  if (/\b(?:strikeouts?|ks?|ponches?|k)\b/.test(normalized)) return 'strikeOuts';
+
   const s = raw.toLowerCase().replace(/[^a-záéíóú\s]/g, '').trim();
   if (/hits?$/.test(s)) return 'hits';
   if (/home\s*runs?|hr|jonron/.test(s)) return 'homeRuns';
@@ -183,13 +221,39 @@ function findPlayerStat(playerStats, playerName, stat) {
  *
  * Returns null if the string cannot be parsed.
  */
-function parsePick(pickStr) {
+export function parsePick(pickStr) {
   if (!pickStr) return null;
   const s = pickStr.replace(/\s*\([^)]*\)\s*$/g, '').trim();
 
   // Strip all trailing parenthetical groups: "Over 8.5 (-104)" → "Over 8.5"
   // Handles multiple groups like "SF Giants Moneyline (Away) (-150)" → "SF Giants Moneyline"
   const cleaned = s.replace(/(\s*\([^)]*\))+\s*$/, '').trim();
+  const lineNumber = '(\\d+(?:\\.\\d+)?)';
+  const totalSuffix = '(?:\\s*(?:total\\s+)?(?:runs?|carreras?))?';
+  const statPhrase = '(?:total\\s+bases?|tb|bases\\s+totales|strikeouts?|ks?|ponches?|hits?|home\\s+runs?|hrs?|jonrones?|cuadrangulares?|rbis?|carreras?\\s+impulsadas?|stolen\\s+bases?|sbs?|bases?\\s+robadas?|walks?|bbs?|bases?\\s+por\\s+bolas?|runs?\\s+scored|carreras?\\s+anotadas?)';
+
+  {
+  // Totals with common sportsbook wording: "Under 9 Total Runs", "O 8.5 runs".
+  let m = cleaned.match(new RegExp(`^(?:Over|O|Mas\\s+de|M[aá]s\\s+de)\\s+${lineNumber}${totalSuffix}$`, 'i'));
+  if (m) return { type: 'over', team: null, line: parseFloat(m[1]) };
+
+  m = cleaned.match(new RegExp(`^(?:Under|U|Menos\\s+de)\\s+${lineNumber}${totalSuffix}$`, 'i'));
+  if (m) return { type: 'under', team: null, line: parseFloat(m[1]) };
+
+  // Player props, direction before stat: "Jack Flaherty Over 4.5 Strikeouts".
+  m = cleaned.match(new RegExp(`^(.+?)\\s*(?:[-–—:]\\s*)?(Over|Under|Mas\\s+de|M[aá]s\\s+de|Menos\\s+de)\\s+${lineNumber}\\s+(${statPhrase})(?:\\s+.*)?$`, 'i'));
+  if (m) {
+    const direction = /^(?:over|mas|más)/i.test(m[2]) ? 'over' : 'under';
+    return { type: 'player_prop', direction, player: m[1].trim(), line: parseFloat(m[3]), stat: normalizeStat(m[4].trim()) };
+  }
+
+  // Player props, stat before direction: "Jack Flaherty Strikeouts Over 4.5".
+  m = cleaned.match(new RegExp(`^(.+?)\\s+(${statPhrase})\\s*(?:[-–—:]\\s*)?(Over|Under|Mas\\s+de|M[aá]s\\s+de|Menos\\s+de)\\s+${lineNumber}(?:\\s+.*)?$`, 'i'));
+  if (m) {
+    const direction = /^(?:over|mas|más)/i.test(m[3]) ? 'over' : 'under';
+    return { type: 'player_prop', direction, player: m[1].trim(), line: parseFloat(m[4]), stat: normalizeStat(m[2].trim()) };
+  }
+  }
 
   // Over — standalone: "Over 8.5", "O 8.5", "Más de 8.5", "Mas de 8.5"
   let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
@@ -239,7 +303,7 @@ function parsePick(pickStr) {
  * Determines whether a parsed pick won, lost, or pushed given a final game.
  * Returns 'win' | 'loss' | 'push' | null (null = unable to determine).
  */
-function resolvePickResult(parsed, game) {
+export function resolvePickResult(parsed, game) {
   const home = game.teams.home;
   const away = game.teams.away;
   const homeScore = Number(home.score);
@@ -303,6 +367,32 @@ function resolvePickResult(parsed, game) {
 }
 
 // ── Main exported function ────────────────────────────────────────────────────
+
+/**
+ * Resolves a parsed player prop against normalized live boxscore stats.
+ */
+export function resolvePlayerPropPickResult(parsed, playerStats) {
+  if (parsed?.type !== 'player_prop' || !parsed.stat) return null;
+
+  const actual = findPlayerStat(playerStats, parsed.player, parsed.stat);
+  if (actual == null) return null;
+
+  let result;
+  if (parsed.direction === 'over') {
+    result = actual > parsed.line ? 'win' : actual === parsed.line ? 'push' : 'loss';
+  } else {
+    result = actual < parsed.line ? 'win' : actual === parsed.line ? 'push' : 'loss';
+  }
+
+  return {
+    result,
+    actual,
+    playerName: parsed.player,
+    propType: parsed.stat,
+    line: parsed.line,
+    direction: parsed.direction,
+  };
+}
 
 /**
  * Fetches all pending picks, groups by date, resolves each against actual
