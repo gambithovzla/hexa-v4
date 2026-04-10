@@ -188,9 +188,10 @@ export default function useHistory() {
     const oddsData = payload.odds;
     if (oddsData) {
       const pickLower = (pick ?? '').toLowerCase();
-      const ml = oddsData.moneyline;
-      const rl = oddsData.runLine;
-      const ou = oddsData.overUnder;
+      const odds = oddsData.odds ?? oddsData;
+      const ml = odds.moneyline;
+      const rl = odds.runLine;
+      const ou = odds.overUnder;
 
       if (pickLower.includes('over') && ou?.overPrice) {
         oddsAtPick = ou.overPrice;
@@ -210,6 +211,8 @@ export default function useHistory() {
       oddsDetails = oddsData;
     }
 
+    const featureGame = payload.games?.length === 1 ? payload.games[0] : null;
+
     const body = {
       type:              isSafe ? 'safe' : (payload.type ?? 'single'),
       matchup,
@@ -227,6 +230,8 @@ export default function useHistory() {
       kelly_recommendation: hexaData?.kelly_recommendation ?? null,
       odds_at_pick:      oddsAtPick ?? null,
       odds_details:      oddsDetails ? JSON.stringify(oddsDetails) : null,
+      game_pk:           payload.gamePk ?? featureGame?.gamePk ?? null,
+      game_date:         payload.gameDate ?? payload.selectedDate ?? null,
     };
 
     try {

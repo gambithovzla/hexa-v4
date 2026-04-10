@@ -9,6 +9,7 @@
 import pool from './db.js';
 import { getTodayGames } from './mlb-api.js';
 import { getLiveGameData } from './live-feed.js';
+import { updatePickFeatureResult } from './feature-store.js';
 
 // ── Nickname → abbreviation (lowercase keys for case-insensitive lookup) ─────
 
@@ -423,6 +424,7 @@ export async function resolvePendingPicks() {
             }
 
             await pool.query('UPDATE picks SET result = $1 WHERE id = $2', [result, pick.id]);
+            await updatePickFeatureResult({ pickId: pick.id, result });
             summary.resolved++;
             if (result === 'win') summary.wins++;
             else if (result === 'loss') summary.losses++;
@@ -445,6 +447,7 @@ export async function resolvePendingPicks() {
 
         // e. Persist result
         await pool.query('UPDATE picks SET result = $1 WHERE id = $2', [result, pick.id]);
+        await updatePickFeatureResult({ pickId: pick.id, result });
 
         const awayScore = game.teams.away.score;
         const homeScore = game.teams.home.score;
