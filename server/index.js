@@ -20,7 +20,7 @@ import picksRouter from './routes/picks.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
-import { getLiveGameData, getMultipleLiveGames } from './live-feed.js';
+import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress } from './pick-tracker.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
@@ -928,6 +928,16 @@ app.get('/api/auth/is-admin', verifyToken, (req, res) => {
 app.get('/api/games/:gamePk/live', async (req, res) => {
   try {
     const data = await getLiveGameData(req.params.gamePk);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/games/:gamePk/play-by-play - Complete game timeline for Gameday detail
+app.get('/api/games/:gamePk/play-by-play', async (req, res) => {
+  try {
+    const data = await getGamePlayByPlay(req.params.gamePk);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });

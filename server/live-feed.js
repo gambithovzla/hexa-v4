@@ -76,6 +76,19 @@ export async function getMultipleLiveGames(gamePks) {
   });
 }
 
+/**
+ * Get the complete play-by-play timeline for one game.
+ * Works for scheduled, live, and final games because MLB keeps the same feed.
+ *
+ * @param {number|string} gamePk
+ * @returns {Promise<object>}
+ */
+export async function getGamePlayByPlay(gamePk) {
+  const url = `${MLB_BASE}/api/v1.1/game/${gamePk}/feed/live`;
+  const raw = await fetchJSON(url);
+  return normalizePlayByPlay(raw, gamePk);
+}
+
 // ── Normalization ─────────────────────────────────────────────────────────────
 
 function normalizeLiveFeed(raw, gamePk) {
@@ -222,6 +235,165 @@ function normalizeLiveFeed(raw, gamePk) {
 
     lastUpdated: new Date().toISOString(),
   };
+}
+
+function normalizePlayByPlay(raw, gamePk) {
+  const gd = raw?.gameData ?? {};
+  const ld = raw?.liveData ?? {};
+  const linescore = ld?.linescore ?? {};
+  const plays = ld?.plays ?? {};
+
+  const status = gd?.status ?? {};
+  const isLive = ['In Progress', 'Manager Challenge', 'Review'].includes(status?.detailedState);
+  const isFinal = status?.detailedState === 'Final' || status?.codedGameState === 'F';
+
+  const homeTeam = gd?.teams?.home ?? {};
+  const awayTeam = gd?.teams?.away ?? {};
+  const allPlays = Array.isArray(plays?.allPlays) ? plays.allPlays : [];
+
+  const normalizedPlays = allPlays
+    .filter(p => p?.result?.type === 'atBat' || p?.result?.description || p?.result?.event)
+    .map((play, index) => {
+      const halfInning = String(play?.about?.halfInning ?? '').toLowerCase();
+      const battingTeam = halfInning === 'top' ? awayTeam : homeTeam;
+      const fieldingTeam = halfInning === 'top' ? homeTeam : awayTeam;
+      const event = play?.result?.event ?? 'Play';
+      const eventType = play?.result?.eventType ?? '';
+      const playEvents = Array.isArray(play?.playEvents) ? play.playEvents : [];
+      const pitchEvents = playEvents.filter(e => e?.isPitch);
+
+      return {
+        id: `${gamePk}-${play?.about?.atBatIndex ?? index}`,
+        gamePk: Number(gamePk),
+        atBatIndex: play?.about?.atBatIndex ?? index,
+        inning: play?.about?.inning ?? null,
+        halfInning,
+        inningLabel: `${halfInning === 'top' ? 'Top' : 'Bottom'} ${play?.about?.inning ?? '?'}`,
+        isComplete: !!play?.about?.isComplete,
+        isScoring: !!play?.about?.isScoringPlay,
+        hasHit: ['single', 'double', 'triple', 'home_run'].includes(eventType),
+        isOut: isOutEvent(eventType, event),
+        isWalk: eventType === 'walk' || eventType === 'intent_walk',
+        event,
+        eventType,
+        eventLabel: {
+          en: event,
+          es: translateEvent(event, eventType),
+        },
+        description: play?.result?.description ?? '',
+        rbi: play?.result?.rbi ?? 0,
+        awayScore: play?.result?.awayScore ?? linescore?.teams?.away?.runs ?? 0,
+        homeScore: play?.result?.homeScore ?? linescore?.teams?.home?.runs ?? 0,
+        count: {
+          balls: play?.count?.balls ?? 0,
+          strikes: play?.count?.strikes ?? 0,
+          outs: play?.count?.outs ?? 0,
+        },
+        batter: {
+          id: play?.matchup?.batter?.id ?? null,
+          name: play?.matchup?.batter?.fullName ?? 'Unknown',
+          teamId: battingTeam?.id ?? null,
+          teamAbbreviation: battingTeam?.abbreviation ?? null,
+        },
+        pitcher: {
+          id: play?.matchup?.pitcher?.id ?? null,
+          name: play?.matchup?.pitcher?.fullName ?? 'Unknown',
+          teamId: fieldingTeam?.id ?? null,
+          teamAbbreviation: fieldingTeam?.abbreviation ?? null,
+        },
+        pitchCount: pitchEvents.length,
+      };
+    });
+
+  return {
+    gamePk: Number(gamePk),
+    status: isLive ? 'live' : isFinal ? 'final' : 'scheduled',
+    detailedState: status?.detailedState ?? 'Unknown',
+    venue: gd?.venue?.name ?? null,
+    gameDate: gd?.datetime?.dateTime ?? null,
+    home: {
+      id: homeTeam?.id,
+      name: homeTeam?.name ?? 'Home',
+      abbreviation: homeTeam?.abbreviation ?? 'HOM',
+      score: linescore?.teams?.home?.runs ?? 0,
+      hits: linescore?.teams?.home?.hits ?? 0,
+      errors: linescore?.teams?.home?.errors ?? 0,
+    },
+    away: {
+      id: awayTeam?.id,
+      name: awayTeam?.name ?? 'Away',
+      abbreviation: awayTeam?.abbreviation ?? 'AWY',
+      score: linescore?.teams?.away?.runs ?? 0,
+      hits: linescore?.teams?.away?.hits ?? 0,
+      errors: linescore?.teams?.away?.errors ?? 0,
+    },
+    summary: {
+      totalPlays: normalizedPlays.length,
+      scoringPlays: normalizedPlays.filter(p => p.isScoring).length,
+      hits: normalizedPlays.filter(p => p.hasHit).length,
+      homeRuns: normalizedPlays.filter(p => p.eventType === 'home_run').length,
+      strikeouts: normalizedPlays.filter(p => p.eventType === 'strikeout').length,
+      walks: normalizedPlays.filter(p => p.isWalk).length,
+    },
+    plays: normalizedPlays,
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
+function isOutEvent(eventType, event) {
+  const value = `${eventType} ${event}`.toLowerCase();
+  return (
+    value.includes('out') ||
+    value.includes('strikeout') ||
+    value.includes('double_play') ||
+    value.includes('fielders_choice') ||
+    value.includes('caught_stealing') ||
+    value.includes('pickoff')
+  );
+}
+
+function translateEvent(event, eventType) {
+  const byType = {
+    single: 'Sencillo',
+    double: 'Doble',
+    triple: 'Triple',
+    home_run: 'Jonron',
+    walk: 'Base por bolas',
+    intent_walk: 'Base intencional',
+    strikeout: 'Ponche',
+    field_out: 'Out en el campo',
+    groundout: 'Rodado de out',
+    force_out: 'Out forzado',
+    flyout: 'Elevado de out',
+    lineout: 'Linea de out',
+    pop_out: 'Elevado de out',
+    field_error: 'Error',
+    hit_by_pitch: 'Golpeado',
+    sac_fly: 'Elevado de sacrificio',
+    sac_bunt: 'Toque de sacrificio',
+    double_play: 'Doble play',
+    fielders_choice: 'Jugada de seleccion',
+  };
+
+  if (byType[eventType]) return byType[eventType];
+
+  const byEvent = {
+    'Home Run': 'Jonron',
+    Single: 'Sencillo',
+    Double: 'Doble',
+    Triple: 'Triple',
+    Walk: 'Base por bolas',
+    Strikeout: 'Ponche',
+    'Groundout': 'Rodado de out',
+    'Flyout': 'Elevado de out',
+    'Lineout': 'Linea de out',
+    'Pop Out': 'Elevado de out',
+    'Hit By Pitch': 'Golpeado',
+    'Field Error': 'Error',
+    'Double Play': 'Doble play',
+  };
+
+  return byEvent[event] ?? event ?? 'Jugada';
 }
 
 /**

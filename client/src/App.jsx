@@ -32,6 +32,7 @@ import BacktestDashboard  from './components/BacktestDashboard';
 import BacktestRunner     from './components/BacktestRunner';
 import DatasetDashboard  from './components/DatasetDashboard';
 import LiveTracker         from './components/LiveTracker';
+import GameDayDetail       from './components/GameDayDetail';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
 
@@ -256,6 +257,11 @@ export default function App() {
           {/* Live Tracker */}
           {activeTab === 'live' && (
             <LiveTracker lang={lang} />
+          )}
+
+          {/* Gameday play-by-play detail */}
+          {activeTab === 'gameday' && (
+            <GameDayDetail lang={lang} />
           )}
 
           {/* Batch Scan (admin only) */}
