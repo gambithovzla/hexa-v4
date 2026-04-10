@@ -1074,6 +1074,8 @@ export default function AnalysisPanel({
               games: matchedGame ? [matchedGame] : [],
               result: r.data,
               date: new Date().toISOString(),
+              gamePk: matchedGame?.gamePk ?? r.gameId ?? null,
+              gameDate: selectedDate,
               model: 'deep',
               language: lang,
               // Override matchup directly from the server response so it always works
@@ -1091,6 +1093,8 @@ export default function AnalysisPanel({
           games:    selectedGames,
           result:   json.data,
           date:     new Date().toISOString(),
+          gamePk:   selectedGames[0]?.gamePk ?? null,
+          gameDate: selectedDate,
           model:    modelMode,
           language: lang,
           odds:     json.odds ?? null,

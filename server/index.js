@@ -23,6 +23,7 @@ import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames } from './live-feed.js';
 import { parseLivePick, calculatePickProgress } from './pick-tracker.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
+import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 
 dotenv.config();
 
@@ -35,6 +36,77 @@ function safeError(err) {
     return 'Internal server error';
   }
   return err.message;
+}
+
+function normalizeDateInput(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().split('T')[0];
+  const s = String(value);
+  const m = s.match(/\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : null;
+}
+
+function parseJsonMaybe(value) {
+  let parsed = value;
+  for (let i = 0; i < 2; i++) {
+    if (typeof parsed !== 'string') break;
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      break;
+    }
+  }
+  return parsed;
+}
+
+async function saveFeatureStoreForGame({
+  pickId = null,
+  backtestId = null,
+  gamePk,
+  gameDate,
+  pick,
+  result = null,
+  oddsData = null,
+}) {
+  const resolvedDate = normalizeDateInput(gameDate) ?? new Date().toISOString().split('T')[0];
+  if (!gamePk) return false;
+
+  try {
+    const games = await getTodayGames(resolvedDate);
+    const gameData = games.find(g => String(g.gamePk) === String(gamePk));
+    if (!gameData) {
+      console.warn(`[feature-store] Game ${gamePk} not found for ${resolvedDate}; skipping feature save`);
+      return false;
+    }
+
+    let matchedOdds = parseJsonMaybe(oddsData);
+    if (!matchedOdds?.odds) {
+      try {
+        const allOdds = await getGameOdds();
+        matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+      } catch {
+        matchedOdds = null;
+      }
+    }
+
+    const contextResult = await buildContext(gameData, matchedOdds);
+    const features = contextResult._features ?? {};
+    await savePickFeatures({
+      pickId,
+      backtestId,
+      gamePk: Number(gamePk),
+      gameDate: resolvedDate,
+      ...features,
+      oddsData: features.oddsData ?? matchedOdds,
+      pick,
+      result,
+    });
+
+    return true;
+  } catch (err) {
+    console.warn(`[feature-store] Could not save features for game ${gamePk}: ${err.message}`);
+    return false;
+  }
 }
 
 const app = express();
@@ -620,6 +692,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
             id,
             gameData,
             contextString,
+            features: contextBuildResult2._features ?? {},
             matchedOdds,
             matchup: `${awayAbbr} @ ${homeAbbr}`,
           };
@@ -664,6 +737,11 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
               rawText: analysis.rawText,
               parseError: analysis.parseError,
               odds: ctx.matchedOdds ?? undefined,
+              _featureStore: {
+                gamePk: ctx.id,
+                gameDate: resolvedDate,
+                features: ctx.features ?? {},
+              },
             };
           } catch (err) {
             return {
@@ -739,11 +817,23 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
           );
 
           value.pickId = pickResult.rows[0]?.id;
+          if (value.pickId) {
+            await savePickFeatures({
+              pickId: value.pickId,
+              gamePk: Number(value._featureStore?.gamePk ?? value.gameId),
+              gameDate: value._featureStore?.gameDate ?? resolvedDate,
+              ...(value._featureStore?.features ?? {}),
+              oddsData: value._featureStore?.features?.oddsData ?? value.odds ?? null,
+              pick: mp.pick ?? bp.detail ?? null,
+              result: null,
+            });
+          }
         } catch (saveErr) {
           console.error(`[Batch] Failed to save pick for ${value.matchup}:`, saveErr.message);
         }
       }
 
+      delete value._featureStore;
       processedResults.push(value);
     }
 
@@ -996,8 +1086,8 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
       if (ouMatch) {
         const dir = ouMatch[1].toLowerCase().startsWith('o') || ouMatch[1].toLowerCase().startsWith('m') ? 'over' : 'under';
         const line = parseFloat(ouMatch[2]);
-        if (dir === 'over') result = totalRuns > line ? 'won' : totalRuns < line ? 'lost' : 'push';
-        else result = totalRuns < line ? 'won' : totalRuns > line ? 'lost' : 'push';
+        if (dir === 'over') result = totalRuns > line ? 'win' : totalRuns < line ? 'loss' : 'push';
+        else result = totalRuns < line ? 'win' : totalRuns > line ? 'loss' : 'push';
       }
 
       // Moneyline
@@ -1005,8 +1095,8 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
         const teamInPick = pickStr.replace(/\s*(ml|moneyline|a ganar).*$/i, '').trim();
         const isHome = homeTeam.toLowerCase() === teamInPick || homeName.toLowerCase().includes(teamInPick);
         const isAway = awayTeam.toLowerCase() === teamInPick || awayName.toLowerCase().includes(teamInPick);
-        if (isHome) result = homeScore > awayScore ? 'won' : homeScore < awayScore ? 'lost' : 'push';
-        else if (isAway) result = awayScore > homeScore ? 'won' : awayScore < homeScore ? 'lost' : 'push';
+        if (isHome) result = homeScore > awayScore ? 'win' : homeScore < awayScore ? 'loss' : 'push';
+        else if (isAway) result = awayScore > homeScore ? 'win' : awayScore < homeScore ? 'loss' : 'push';
       }
 
       // Run Line
@@ -1019,12 +1109,13 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
           const myScore = isHome ? homeScore : awayScore;
           const oppScore = isHome ? awayScore : homeScore;
           const adjusted = myScore + spread;
-          result = adjusted > oppScore ? 'won' : adjusted < oppScore ? 'lost' : 'push';
+          result = adjusted > oppScore ? 'win' : adjusted < oppScore ? 'loss' : 'push';
         }
       }
 
       if (result) {
         await pool.query(`UPDATE picks SET result = $1 WHERE id = $2`, [result, pick.id]);
+        await updatePickFeatureResult({ pickId: pick.id, result });
         resolved++;
         console.log(`[auto-resolve] Pick ${pick.id} "${pick.pick}" → ${result} (${awayTeam} ${awayScore} - ${homeTeam} ${homeScore})`);
       }
@@ -1044,12 +1135,14 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       model_risk, oracle_report, hexa_hunch, alert_flags,
       probability_model, best_pick, model, language,
       odds_at_pick, odds_details, kelly_recommendation,
+      game_pk, gamePk, game_id, gameId, game_date, gameDate, date,
     } = req.body;
 
     // Calculate implied probability server-side from the American odds provided by the client
     const implied_prob_at_pick = odds_at_pick != null
       ? calculateImpliedProbability(odds_at_pick)
       : null;
+    const parsedOddsDetails = odds_details != null ? parseJsonMaybe(odds_details) : null;
 
     const { rows } = await pool.query(
       `INSERT INTO picks (
@@ -1065,11 +1158,25 @@ app.post('/api/picks', verifyToken, async (req, res) => {
         JSON.stringify(best_pick ?? {}), model, language,
         odds_at_pick ?? null,
         implied_prob_at_pick,
-        odds_details != null ? JSON.stringify(odds_details) : null,
+        parsedOddsDetails != null ? JSON.stringify(parsedOddsDetails) : null,
         kelly_recommendation ?? null,
       ]
     );
-    res.json({ success: true, data: rows[0] });
+    const savedPick = rows[0];
+    const featureGamePk = game_pk ?? gamePk ?? game_id ?? gameId ?? null;
+    const featureGameDate = game_date ?? gameDate ?? date ?? null;
+    if (featureGamePk) {
+      await saveFeatureStoreForGame({
+        pickId: savedPick.id,
+        gamePk: featureGamePk,
+        gameDate: featureGameDate,
+        pick: savedPick.pick,
+        result: savedPick.result,
+        oddsData: parsedOddsDetails,
+      });
+    }
+
+    res.json({ success: true, data: savedPick });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -1183,6 +1290,7 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
       [result, req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
+    await updatePickFeatureResult({ pickId: rows[0].id, result: rows[0].result });
     res.json({ success: true, data: rows[0] });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -1474,13 +1582,29 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
     }
 
     // Save to DB
-    await pool.query(`
+    const backtestInsert = await pool.query(`
       INSERT INTO backtest_results (run_id, historical_date, game_pk, matchup, home_team, away_team,
         pick, oracle_confidence, bet_value, model_risk, pick_type,
         actual_home_score, actual_away_score, actual_result, model, latency_ms,
         alert_flags, bet_value_raw, has_critical_flags)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-      ON CONFLICT (run_id, game_pk, pick_type) DO NOTHING
+      ON CONFLICT (run_id, game_pk, pick_type) DO UPDATE SET
+        matchup = EXCLUDED.matchup,
+        home_team = EXCLUDED.home_team,
+        away_team = EXCLUDED.away_team,
+        pick = EXCLUDED.pick,
+        oracle_confidence = EXCLUDED.oracle_confidence,
+        bet_value = EXCLUDED.bet_value,
+        model_risk = EXCLUDED.model_risk,
+        actual_home_score = EXCLUDED.actual_home_score,
+        actual_away_score = EXCLUDED.actual_away_score,
+        actual_result = EXCLUDED.actual_result,
+        model = EXCLUDED.model,
+        latency_ms = EXCLUDED.latency_ms,
+        alert_flags = EXCLUDED.alert_flags,
+        bet_value_raw = EXCLUDED.bet_value_raw,
+        has_critical_flags = EXCLUDED.has_critical_flags
+      RETURNING id
     `, [
       runId, date, gamePk, matchup, homeTeam, awayTeam,
       pick, confidence, betValue, modelRisk, pickType,
@@ -1488,9 +1612,22 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
       JSON.stringify(alertFlags), betValue, hasCriticalFlags,
     ]);
 
+    const backtestId = backtestInsert.rows[0]?.id;
+    if (backtestId) {
+      await savePickFeatures({
+        backtestId,
+        gamePk: Number(gamePk),
+        gameDate: date,
+        ...(contextResult2._features ?? {}),
+        oddsData: contextResult2._features?.oddsData ?? matchedOdds,
+        pick,
+        result: actualResult,
+      });
+    }
+
     res.json({
       success: true,
-      data: { gamePk, matchup, pick, confidence, betValue, modelRisk, actualResult, alertFlags, latency, pickType },
+      data: { gamePk, matchup, pick, confidence, betValue, modelRisk, actualResult, alertFlags, latency, pickType, backtestId },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
