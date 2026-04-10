@@ -189,7 +189,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
 
   const dateStr = (() => {
     try {
-      const dateSource = entry.gameDate ?? entry.date;
+      const dateSource = entry.date ?? entry.gameDate;
       const createdSource = entry.createdAt ?? entry.date;
       const datepart = String(dateSource).includes('T')
         ? new Date(dateSource).toISOString().slice(0, 10)
@@ -197,7 +197,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
       const timepart = new Date(createdSource).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       return `LOG // ${datepart} · ${timepart}`;
     } catch {
-      return entry.gameDate ?? entry.date ?? '';
+      return entry.date ?? entry.gameDate ?? '';
     }
   })();
 
@@ -462,7 +462,7 @@ function groupPicksByDay(picks) {
   for (const entry of picks) {
     let dayKey = 'unknown';
     try {
-      const dateSource = entry.gameDate ?? entry.date;
+      const dateSource = entry.date ?? entry.gameDate;
       dayKey = String(dateSource).includes('T')
         ? new Date(dateSource).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
         : String(dateSource).slice(0, 10);
