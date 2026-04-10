@@ -252,6 +252,11 @@ async function refundCredits(userId, cost, isAdmin) {
   }
 }
 
+function normalizeRequestLanguage(value, fallback = 'en') {
+  const normalized = String(value ?? fallback ?? 'en').toLowerCase();
+  return normalized.startsWith('es') ? 'es' : 'en';
+}
+
 // ── Admin middleware ───────────────────────────────────────────────────────────
 
 function isAdmin(req, res, next) {
@@ -1405,6 +1410,7 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
 app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
   try {
     const force = req.body?.force === true;
+    const requestedLang = normalizeRequestLanguage(req.body?.lang ?? req.body?.language, null);
     const { rows } = await pool.query(
       `SELECT
          p.*,
@@ -1452,7 +1458,20 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Pick must be resolved first' });
     }
 
-    if (pickRow.postmortem && !force) {
+    const storedPostmortemLang = normalizeRequestLanguage(
+      pickRow.postmortem?.lang ?? pickRow.language,
+      'en'
+    );
+    const effectiveLang = normalizeRequestLanguage(
+      requestedLang ?? pickRow.postmortem?.lang ?? pickRow.language,
+      storedPostmortemLang
+    );
+    const shouldReuseStoredPostmortem =
+      Boolean(pickRow.postmortem) &&
+      !force &&
+      storedPostmortemLang === effectiveLang;
+
+    if (shouldReuseStoredPostmortem) {
       await pool.query(
         'UPDATE picks SET postmortem_requested_at = NOW() WHERE id = $1 AND user_id = $2',
         [pickRow.id, req.user.id]
@@ -1533,7 +1552,7 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
     };
 
     const postmortem = await generatePickPostmortem({
-      lang: pickRow.language ?? 'en',
+      lang: effectiveLang,
       pick: {
         id: pickRow.id,
         matchup: pickRow.matchup,
