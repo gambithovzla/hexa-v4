@@ -34,6 +34,23 @@ function normalizeEntry(entry) {
   return { ...entry, result: normalizePickResult(entry?.result) };
 }
 
+function extractDateOnly(value) {
+  const match = String(value ?? '').match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : null;
+}
+
+function getEntryDisplayDate(gameDate, createdAt) {
+  const normalizedGameDate = extractDateOnly(gameDate);
+  const createdDateEt = createdAt
+    ? new Date(createdAt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+    : null;
+
+  if (normalizedGameDate && createdDateEt) {
+    return normalizedGameDate > createdDateEt ? normalizedGameDate : createdDateEt;
+  }
+  return normalizedGameDate ?? createdDateEt ?? extractDateOnly(createdAt) ?? null;
+}
+
 // ── localStorage helpers (anonymous fallback) ─────────────────────────────────
 
 function load() {
@@ -128,7 +145,7 @@ function dbRowToEntry(row) {
   const createdAt = row.created_at ?? null;
   return {
     id:                   row.id,
-    date:                 gameDate ?? createdAt,
+    date:                 getEntryDisplayDate(gameDate, createdAt),
     createdAt,
     matchup:              row.matchup,
     mode:                 row.type,
@@ -185,7 +202,7 @@ export default function useHistory() {
       // Anonymous: persist to localStorage
       const entry = {
         id:         Date.now(),
-        date:       gameDate ?? createdAt,
+        date:       getEntryDisplayDate(gameDate, createdAt),
         createdAt,
         gameDate,
         matchup,
