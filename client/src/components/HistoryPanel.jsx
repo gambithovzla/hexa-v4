@@ -189,17 +189,20 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
 
   const dateStr = (() => {
     try {
-      const d = new Date(entry.date);
-      const datepart = d.toISOString().slice(0, 10);
-      const timepart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateSource = entry.gameDate ?? entry.date;
+      const createdSource = entry.createdAt ?? entry.date;
+      const datepart = String(dateSource).includes('T')
+        ? new Date(dateSource).toISOString().slice(0, 10)
+        : String(dateSource).slice(0, 10);
+      const timepart = new Date(createdSource).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       return `LOG // ${datepart} · ${timepart}`;
     } catch {
-      return entry.date ?? '';
+      return entry.gameDate ?? entry.date ?? '';
     }
   })();
 
   async function handlePostmortemClick() {
-    if (postmortemData) {
+    if (postmortemData?.lang === lang) {
       setPostmortemOpen((prev) => !prev);
       return;
     }
@@ -207,7 +210,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
     setPostmortemLoading(true);
     setPostmortemError('');
     try {
-      const payload = await onRequestPostmortem?.(entry.id);
+      const payload = await onRequestPostmortem?.(entry.id, { lang });
       const nextPostmortem = payload?.postmortem ?? null;
       setPostmortemData(nextPostmortem);
       setPostmortemOpen(true);
@@ -459,7 +462,10 @@ function groupPicksByDay(picks) {
   for (const entry of picks) {
     let dayKey = 'unknown';
     try {
-      dayKey = new Date(entry.date).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const dateSource = entry.gameDate ?? entry.date;
+      dayKey = String(dateSource).includes('T')
+        ? new Date(dateSource).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+        : String(dateSource).slice(0, 10);
     } catch { /* fallback */ }
     if (!groups[dayKey]) groups[dayKey] = [];
     groups[dayKey].push(entry);

@@ -35,6 +35,10 @@ Rules:
 - Keep every string single-line and plain text.
 - When lang=es, all values must be in Spanish. Keys stay in English.`;
 
+function normalizeLanguage(lang) {
+  return String(lang ?? '').toLowerCase().startsWith('es') ? 'es' : 'en';
+}
+
 function extractRawText(response) {
   return response.content
     .filter((block) => block.type === 'text')
@@ -67,7 +71,9 @@ function normalizeStringArray(value) {
 }
 
 function normalizePostmortemPayload(payload) {
+  const resolvedLang = normalizeLanguage(payload?.lang);
   return {
+    lang: resolvedLang,
     summary: String(payload?.summary ?? '').replace(/\s+/g, ' ').trim(),
     key_factors: normalizeStringArray(payload?.key_factors),
     what_hexa_got_right: normalizeStringArray(payload?.what_hexa_got_right),
@@ -83,9 +89,11 @@ export async function generatePickPostmortem({
   featureSnapshot = null,
   gameSummary = null,
 }) {
+  const resolvedLang = normalizeLanguage(lang);
   const userMessage = JSON.stringify(
     {
-      lang,
+      lang: resolvedLang,
+      output_language: resolvedLang === 'es' ? 'Spanish' : 'English',
       pick,
       featureSnapshot,
       gameSummary,
@@ -105,5 +113,5 @@ export async function generatePickPostmortem({
   const raw = extractRawText(response);
   const cleaned = cleanJsonResponse(raw);
   const parsed = JSON.parse(cleaned);
-  return normalizePostmortemPayload(parsed);
+  return normalizePostmortemPayload({ ...parsed, lang: resolvedLang });
 }

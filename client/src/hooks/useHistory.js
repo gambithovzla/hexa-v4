@@ -8,7 +8,7 @@
  * Entry shape (both sources normalised to the same object):
  *   {
  *     id:         number   (DB serial id, or Date.now() for localStorage)
- *     date:       string   (ISO — created_at from DB, or local timestamp)
+ *     date:       string   (game date when available, otherwise created_at)
  *     matchup:    string   ("Away @ Home" | "N-Leg Parlay" | "Full Day — YYYY-MM-DD")
  *     mode:       string   ("single" | "parlay" | "fullday")
  *     pick:       string   (master pick text)
@@ -124,9 +124,12 @@ function extractPickAndConfidence(hexaData) {
 // ── DB row → frontend entry ───────────────────────────────────────────────────
 
 function dbRowToEntry(row) {
+  const gameDate = row.game_date ?? null;
+  const createdAt = row.created_at ?? null;
   return {
     id:                   row.id,
-    date:                 row.created_at,
+    date:                 gameDate ?? createdAt,
+    createdAt,
     matchup:              row.matchup,
     mode:                 row.type,
     pick:                 row.pick,
@@ -138,7 +141,7 @@ function dbRowToEntry(row) {
     postmortem_summary:   row.postmortem_summary ?? null,
     postmortem_generated_at: row.postmortem_generated_at ?? null,
     gamePk:               row.game_pk ?? null,
-    gameDate:             row.game_date ?? null,
+    gameDate,
   };
 }
 
@@ -177,10 +180,14 @@ export default function useHistory() {
     const isSafe = !!hexaData?.safe_pick;
 
     if (!isAuthenticated || !token) {
+      const createdAt = payload.date ?? new Date().toISOString();
+      const gameDate = payload.gameDate ?? payload.selectedDate ?? null;
       // Anonymous: persist to localStorage
       const entry = {
         id:         Date.now(),
-        date:       payload.date ?? new Date().toISOString(),
+        date:       gameDate ?? createdAt,
+        createdAt,
+        gameDate,
         matchup,
         mode:       isSafe ? 'safe' : (payload.type ?? 'single'),
         pick,
@@ -351,7 +358,7 @@ export default function useHistory() {
     }
   }
 
-  async function requestPostmortem(id, { force = false } = {}) {
+  async function requestPostmortem(id, { force = false, lang } = {}) {
     if (!isAuthenticated || !token) return null;
 
     try {
@@ -361,7 +368,7 @@ export default function useHistory() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ force }),
+        body: JSON.stringify({ force, lang }),
       });
       const json = await res.json();
       if (!json.success) {
