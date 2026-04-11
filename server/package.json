@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "backfill:pick-features": "node scripts/backfill-pick-features.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
