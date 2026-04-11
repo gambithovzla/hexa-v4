@@ -280,6 +280,43 @@ function parseResponse(raw) {
   return { data: null, parseError: false };
 }
 
+function toSafeProbability(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, n));
+}
+
+function normalizeSafePickPayload(data) {
+  if (!data?.safe_pick) return data;
+
+  const candidates = [
+    { ...data.safe_pick },
+    ...((Array.isArray(data.alternatives) ? data.alternatives : []).map((alt) => ({ ...alt }))),
+  ].filter((entry) => entry && (entry.pick || entry.type || entry.reasoning));
+
+  if (candidates.length === 0) return data;
+
+  const ranked = candidates
+    .map((entry, index) => ({
+      ...entry,
+      hit_probability: toSafeProbability(entry.hit_probability),
+      _originalIndex: index,
+    }))
+    .sort((a, b) => {
+      const probA = a.hit_probability ?? -1;
+      const probB = b.hit_probability ?? -1;
+      if (probB !== probA) return probB - probA;
+      return a._originalIndex - b._originalIndex;
+    })
+    .map(({ _originalIndex, ...entry }) => entry);
+
+  return {
+    ...data,
+    safe_pick: ranked[0],
+    alternatives: ranked.slice(1, 3),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Función principal exportada
 // ---------------------------------------------------------------------------
@@ -539,8 +576,9 @@ export async function analyzeSafe({ contextString, lang = 'en' }) {
   console.log('[oracle:safe] RAW (first 300):', JSON.stringify(raw.slice(0, 300)));
 
   const { data, parseError } = parseResponse(raw);
+  const normalizedData = normalizeSafePickPayload(data);
 
-  return { data, rawText: raw, parseError };
+  return { data: normalizedData, rawText: raw, parseError };
 }
 
 /**

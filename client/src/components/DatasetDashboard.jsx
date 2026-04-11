@@ -32,19 +32,51 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
   const { token } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMessage, setBackfillMessage] = useState('');
+
+  async function fetchDashboard() {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/feature-store`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success) setData(json.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    fetch(`${API_URL}/api/admin/feature-store`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(json => { if (json.success) setData(json.data); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    fetchDashboard();
   }, [token]);
+
+  async function runBackfill() {
+    setBackfilling(true);
+    setBackfillMessage('Running feature-store backfill...');
+    try {
+      const res = await fetch(`${API_URL}/api/admin/feature-store/backfill`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Backfill failed');
+      const summary = json.data ?? {};
+      setBackfillMessage(`Backfill complete: ${summary.rebuilt ?? 0} rebuilt, ${summary.failed ?? 0} failed, ${summary.scanned ?? 0} scanned.`);
+      await fetchDashboard();
+    } catch (err) {
+      setBackfillMessage(err.message || 'Backfill failed');
+    } finally {
+      setBackfilling(false);
+    }
+  }
 
   const s = data?.summary;
   const fc = data?.featureCoverage;
+  const sc = data?.statcastCache;
   const total = parseInt(fc?.total ?? 0);
 
   return (
@@ -76,7 +108,39 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
           </Box>
 
           <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.accent, letterSpacing: '0.1em', mb: 1 }}>
-            FEATURE COVERAGE (data completeness)
+            STATCAST CACHE STATUS (live system)
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 3 }}>
+            <StatCard label="Years Loaded" value={(sc?.yearsLoaded ?? []).join(', ') || 'â€”'} color={C.green} />
+            <StatCard label="Pitcher xStats" value={sc?.recordCounts?.xStatsPitcher ?? 0} color={C.green} />
+            <StatCard label="Batter xStats" value={sc?.recordCounts?.xStatsBatter ?? 0} color={C.green} />
+            <StatCard label="Pitch Arsenal" value={sc?.recordCounts?.pitchArsenal ?? 0} color={C.green} />
+            <StatCard label="Rolling Pitcher" value={sc?.recordCounts?.rollingPitcher ?? 0} color={C.green} />
+            <StatCard label="Rolling Batter" value={sc?.recordCounts?.rollingBatter ?? 0} color={C.green} />
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 3 }}>
+            <Box component="button" onClick={runBackfill} disabled={backfilling} sx={{
+              background: 'transparent',
+              border: `1px solid ${backfilling ? C.border : C.accent}`,
+              color: backfilling ? C.textMuted : C.accent,
+              fontFamily: MONO,
+              fontSize: '0.6rem',
+              letterSpacing: '0.12em',
+              padding: '8px 12px',
+              cursor: backfilling ? 'default' : 'pointer',
+            }}>
+              {backfilling ? 'RUNNING...' : 'RUN BACKFILL'}
+            </Box>
+            {backfillMessage && (
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>
+                {backfillMessage}
+              </Typography>
+            )}
+          </Box>
+
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.accent, letterSpacing: '0.1em', mb: 1 }}>
+            FEATURE COVERAGE (saved ML dataset only)
           </Typography>
           <Box sx={{ border: `1px solid ${C.border}`, p: 2, mb: 3 }}>
             <CoverageBar label="Home P xwOBA" count={parseInt(fc?.has_home_xwoba ?? 0)} total={total} />
@@ -87,6 +151,9 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
             <CoverageBar label="Odds" count={parseInt(fc?.has_odds ?? 0)} total={total} />
             <CoverageBar label="Park Factor" count={parseInt(fc?.has_park ?? 0)} total={total} />
             <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: 1 }}>
+              These bars measure what was saved into pick_features for ML training, not whether the live Statcast cache is loaded.
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: 0.5 }}>
               Goal: all bars at 90%+ before training ML model. Need 1,000+ records.
             </Typography>
           </Box>
