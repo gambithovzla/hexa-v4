@@ -220,6 +220,32 @@ function parseCSV(text) {
   return rows;
 }
 
+function parseStatNumber(value) {
+  if (value == null) return null;
+  const cleaned = String(value).trim().replace(/%/g, '').replace(/,/g, '');
+  if (!cleaned) return null;
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function getRowNumber(row, keys = []) {
+  if (!row) return null;
+  for (const key of keys) {
+    if (row[key] == null) continue;
+    const num = parseStatNumber(row[key]);
+    if (num != null) return num;
+  }
+  return null;
+}
+
+function getFirstRowNumber(sources = []) {
+  for (const { row, keys } of sources) {
+    const num = getRowNumber(row, keys);
+    if (num != null) return num;
+  }
+  return null;
+}
+
 /** Splits one CSV line respecting quoted fields */
 function splitCSVLine(line) {
   const fields = [];
@@ -506,33 +532,69 @@ export async function getBatterStatcast(playerName) {
     return null;
   }
 
+  const batterXwoba = getFirstRowNumber([
+    { row: xs, keys: ['xwOBA', 'xwoba', 'est_woba', 'estimated_woba_using_speedangle'] },
+    { row: rb, keys: ['xwOBA', 'xwoba', 'est_woba', 'estimated_woba_using_speedangle'] },
+  ]);
+  const batterXba = getFirstRowNumber([
+    { row: xs, keys: ['xBA', 'xba', 'est_ba', 'estimated_ba_using_speedangle'] },
+    { row: rb, keys: ['xBA', 'xba', 'est_ba', 'estimated_ba_using_speedangle'] },
+  ]);
+  const batterXslg = getFirstRowNumber([
+    { row: xs, keys: ['xSLG', 'xslg', 'est_slg', 'estimated_slg_using_speedangle'] },
+    { row: rb, keys: ['xSLG', 'xslg', 'est_slg', 'estimated_slg_using_speedangle'] },
+  ]);
+  const batterXiso = getFirstRowNumber([
+    { row: xs, keys: ['xISO', 'xiso', 'est_iso'] },
+    { row: rb, keys: ['xISO', 'xiso', 'est_iso'] },
+  ]);
+  const batterWoba = getFirstRowNumber([
+    { row: xs, keys: ['wOBA', 'woba'] },
+    { row: rb, keys: ['wOBA', 'woba', 'rolling_woba'] },
+  ]);
+  const batterAvgEv = getFirstRowNumber([
+    { row: ev, keys: ['avg_hit_speed', 'avg_exit_velocity'] },
+    { row: rb, keys: ['exit_velocity_avg', 'avg_exit_velocity'] },
+  ]);
+  const batterBarrelRate = getFirstRowNumber([
+    { row: ev, keys: ['brl_percent', 'barrel_batted_rate', 'brl_pa'] },
+    { row: rb, keys: ['barrel_batted_rate', 'brl_percent'] },
+  ]);
+  const batterHardHit = getFirstRowNumber([
+    { row: ev, keys: ['hard_hit_percent', 'hard_hit_pct', 'anglesweetspotpercent'] },
+    { row: bb, keys: ['hard_hit_percent', 'hard_hit_pct'] },
+  ]);
+
   return {
     player_name: xs?.['last_name, first_name'] ?? ev?.['last_name, first_name'] ?? playerName,
     // Expected stats
-    xwOBA:    parseFloat(xs?.xwOBA   ?? xs?.['xwoba']   ?? '') || null,
-    xBA:      parseFloat(xs?.xBA     ?? xs?.['xba']     ?? '') || null,
-    xSLG:     parseFloat(xs?.xSLG    ?? xs?.['xslg']    ?? '') || null,
-    xISO:     parseFloat(xs?.xISO    ?? xs?.['xiso']    ?? '') || null,
-    wOBA:     parseFloat(xs?.wOBA    ?? xs?.['woba']    ?? '') || null,
+    xwOBA:    batterXwoba,
+    xBA:      batterXba,
+    xSLG:     batterXslg,
+    xISO:     batterXiso,
+    wOBA:     batterWoba,
     // Exit velocity / barrels
-    avg_exit_velocity:  parseFloat(ev?.avg_hit_speed ?? ev?.['avg_exit_velocity'] ?? '') || null,
-    max_exit_velocity:  parseFloat(ev?.max_hit_speed ?? ev?.['max_exit_velocity'] ?? '') || null,
-    barrel_batted_rate: parseFloat(ev?.brl_percent   ?? ev?.['barrel_batted_rate'] ?? ev?.brl_pa ?? '') || null,
-    hard_hit_percent:   parseFloat(ev?.['hard_hit_percent'] ?? ev?.anglesweetspotpercent ?? '') || null,
+    avg_exit_velocity:  batterAvgEv,
+    max_exit_velocity:  getRowNumber(ev, ['max_hit_speed', 'max_exit_velocity']),
+    barrel_batted_rate: batterBarrelRate,
+    hard_hit_percent:   batterHardHit,
     // Rolling wOBA (30-day legacy + new short-term windows)
-    rolling_woba_30d: parseFloat(rb?.woba ?? rb?.['xwoba'] ?? rb?.['rolling_woba'] ?? '') || null,
+    rolling_woba_30d: getRowNumber(rb, ['woba', 'xwoba', 'rolling_woba']),
     rolling_windows: {
-      woba_7d:  parseFloat(rb7?.woba  ?? rb7?.['rolling_woba']  ?? rb7?.['xwoba']  ?? '') || null,
-      woba_14d: parseFloat(rb14?.woba ?? rb14?.['rolling_woba'] ?? rb14?.['xwoba'] ?? '') || null,
-      woba_21d: parseFloat(rb21?.woba ?? rb21?.['rolling_woba'] ?? rb21?.['xwoba'] ?? '') || null,
+      woba_7d:  getRowNumber(rb7, ['woba', 'rolling_woba', 'xwoba']),
+      woba_14d: getRowNumber(rb14, ['woba', 'rolling_woba', 'xwoba']),
+      woba_21d: getRowNumber(rb21, ['woba', 'rolling_woba', 'xwoba']),
     },
     // Sprint speed (ft/sec)
-    sprint_speed: parseFloat(ss?.sprint_speed ?? ss?.['hp_to_1b'] ?? '') || null,
+    sprint_speed: getFirstRowNumber([
+      { row: ss, keys: ['sprint_speed'] },
+      { row: sf, keys: ['sprint_speed', 'speed'] },
+    ]),
     // Batted ball profile
-    gb_pct:   parseFloat(bb?.gb_percent ?? bb?.gb ?? '') || null,
-    fb_pct:   parseFloat(bb?.fb_percent ?? bb?.fb ?? '') || null,
-    ld_pct:   parseFloat(bb?.ld_percent ?? bb?.ld ?? '') || null,
-    iffb_pct: parseFloat(bb?.iffb_percent ?? bb?.iffb ?? '') || null,
+    gb_pct:   getRowNumber(bb, ['gb_percent', 'gb']),
+    fb_pct:   getRowNumber(bb, ['fb_percent', 'fb']),
+    ld_pct:   getRowNumber(bb, ['ld_percent', 'ld']),
+    iffb_pct: getRowNumber(bb, ['iffb_percent', 'iffb']),
     // Year-over-year xwOBA change (positive = improving)
     year_to_year_xwoba_change: calcYearToYearDiff(y2y),
     // Percentile rankings
@@ -545,14 +607,14 @@ export async function getBatterStatcast(playerName) {
     swing_path: sp ? extractSwingPath(sp) : null,
     // Bat tracking (new)
     bat_tracking: btRow ? {
-      bat_speed:        parseFloat(btRow?.bat_speed       ?? btRow?.['avg_bat_speed']    ?? '') || null,
-      swing_length:     parseFloat(btRow?.swing_length    ?? btRow?.['avg_swing_length'] ?? '') || null,
-      blasts_per_swing: parseFloat(btRow?.blasts_per_swing ?? btRow?.['blasts_swing']    ?? '') || null,
+      bat_speed:        getRowNumber(btRow, ['bat_speed', 'avg_bat_speed']),
+      swing_length:     getRowNumber(btRow, ['swing_length', 'avg_swing_length']),
+      blasts_per_swing: getRowNumber(btRow, ['blasts_per_swing', 'blasts_swing']),
     } : null,
     // 90ft splits
     splits_90ft: sf ? {
-      hp_to_1b:     parseFloat(sf?.hp_to_1b     ?? sf?.['home_to_first'] ?? '') || null,
-      sprint_speed: parseFloat(sf?.sprint_speed ?? sf?.['speed']         ?? '') || null,
+      hp_to_1b:     getRowNumber(sf, ['hp_to_1b', 'home_to_first']),
+      sprint_speed: getRowNumber(sf, ['sprint_speed', 'speed']),
     } : null,
     // Source rows for transparency
     _sources: {
@@ -593,40 +655,68 @@ export async function getPitcherStatcast(playerName) {
     return null;
   }
 
+  const pitcherXwoba = getFirstRowNumber([
+    { row: xs, keys: ['xwOBA', 'xwoba', 'est_woba', 'estimated_woba_using_speedangle'] },
+    { row: rp, keys: ['xwOBA', 'xwoba', 'est_woba', 'estimated_woba_using_speedangle'] },
+  ]);
+  const pitcherXba = getFirstRowNumber([
+    { row: xs, keys: ['xBA', 'xba', 'est_ba', 'estimated_ba_using_speedangle'] },
+    { row: rp, keys: ['xBA', 'xba', 'est_ba', 'estimated_ba_using_speedangle'] },
+  ]);
+  const pitcherXslg = getFirstRowNumber([
+    { row: xs, keys: ['xSLG', 'xslg', 'est_slg', 'estimated_slg_using_speedangle'] },
+    { row: rp, keys: ['xSLG', 'xslg', 'est_slg', 'estimated_slg_using_speedangle'] },
+  ]);
+  const pitcherWoba = getFirstRowNumber([
+    { row: xs, keys: ['wOBA', 'woba'] },
+    { row: rp, keys: ['wOBA', 'woba', 'rolling_woba'] },
+  ]);
+  const pitcherWhiff = getFirstRowNumber([
+    { row: xs, keys: ['whiff_percent', 'swstr_percent', 'whiff_pct'] },
+    { row: pa, keys: ['whiff_percent', 'whiff_pct'] },
+    { row: rv, keys: ['whiff_percent', 'whiff_pct'] },
+  ]);
+  const pitcherKPct = getFirstRowNumber([
+    { row: xs, keys: ['k_percent', 'strikeout_percent', 'k_pct'] },
+    { row: pa, keys: ['k_percent', 'strikeout_percent', 'k_pct'] },
+  ]);
+  const pitcherBbPct = getFirstRowNumber([
+    { row: xs, keys: ['bb_percent', 'walk_percent', 'bb_pct'] },
+    { row: pa, keys: ['bb_percent', 'walk_percent', 'bb_pct'] },
+  ]);
+
   return {
     player_name: xs?.['last_name, first_name'] ?? pa?.['last_name, first_name'] ?? playerName,
     // Expected stats (against)
-    xwOBA_against: parseFloat(xs?.xwOBA ?? xs?.['xwoba'] ?? '') || null,
-    xBA_against:   parseFloat(xs?.xBA   ?? xs?.['xba']   ?? '') || null,
-    xSLG_against:  parseFloat(xs?.xSLG  ?? xs?.['xslg']  ?? '') || null,
-    wOBA_against:  parseFloat(xs?.wOBA  ?? xs?.['woba']  ?? '') || null,
+    xwOBA_against: pitcherXwoba,
+    xBA_against:   pitcherXba,
+    xSLG_against:  pitcherXslg,
+    wOBA_against:  pitcherWoba,
     // Plate discipline
-    whiff_percent:     parseFloat(xs?.['whiff_percent']      ?? xs?.['swstr_percent']        ?? '') || null,
-    k_percent:         parseFloat(xs?.['k_percent']          ?? xs?.['strikeout_percent']    ?? '') || null,
-    bb_percent:        parseFloat(xs?.['bb_percent']         ?? xs?.['walk_percent']         ?? '') || null,
+    whiff_percent:     pitcherWhiff,
+    k_percent:         pitcherKPct,
+    bb_percent:        pitcherBbPct,
     // Deep K props metrics — multiple fallback keys per field (Savant changes column names between seasons)
-    csw_percent:       parseFloat(xs?.['csw_percent']        ?? xs?.['csw_rate']             ?? xs?.['called_plus_whiff_pct'] ?? '') || null,
-    o_swing_percent:   parseFloat(xs?.['o_swing_percent']    ?? xs?.['chase_percent']        ?? xs?.['chase_rate']           ?? xs?.['oz_swing_percent'] ?? '') || null,
-    z_contact_percent: parseFloat(xs?.['z_contact_percent']  ?? xs?.['zone_contact_pct']    ?? '') || null,
+    csw_percent:       getRowNumber(xs, ['csw_percent', 'csw_rate', 'called_plus_whiff_pct']),
+    o_swing_percent:   getRowNumber(xs, ['o_swing_percent', 'chase_percent', 'chase_rate', 'oz_swing_percent']),
+    z_contact_percent: getRowNumber(xs, ['z_contact_percent', 'zone_contact_pct']),
     // Pitch arsenal (existing)
     arsenal: pa ? extractArsenal(pa) : null,
     // Best single-pitch run value
     run_value_per_pitch: pa ? bestPitchRunValue(pa) : null,
     // Rolling wOBA against (30-day legacy + new short-term windows)
-    rolling_woba_against_30d: parseFloat(rp?.woba ?? rp?.['xwoba'] ?? rp?.['rolling_woba'] ?? '') || null,
+    rolling_woba_against_30d: getRowNumber(rp, ['woba', 'xwoba', 'rolling_woba']),
     rolling_windows_against: {
-      woba_against_7d:  parseFloat(rp7?.woba  ?? rp7?.['rolling_woba']  ?? rp7?.['xwoba']  ?? '') || null,
-      woba_against_14d: parseFloat(rp14?.woba ?? rp14?.['rolling_woba'] ?? rp14?.['xwoba'] ?? '') || null,
-      woba_against_21d: parseFloat(rp21?.woba ?? rp21?.['rolling_woba'] ?? rp21?.['xwoba'] ?? '') || null,
+      woba_against_7d:  getRowNumber(rp7, ['woba', 'rolling_woba', 'xwoba']),
+      woba_against_14d: getRowNumber(rp14, ['woba', 'rolling_woba', 'xwoba']),
+      woba_against_21d: getRowNumber(rp21, ['woba', 'rolling_woba', 'xwoba']),
     },
     // Pitch tempo
-    pitch_tempo_seconds: parseFloat(
-      pt?.avg_seconds ?? pt?.['seconds_between_pitches'] ?? pt?.['avg_time'] ?? pt?.tempo ?? ''
-    ) || null,
+    pitch_tempo_seconds: getRowNumber(pt, ['avg_seconds', 'seconds_between_pitches', 'avg_time', 'tempo']),
     // Batted ball profile (against)
-    gb_pct: parseFloat(bb?.gb_percent ?? bb?.gb ?? '') || null,
-    fb_pct: parseFloat(bb?.fb_percent ?? bb?.fb ?? '') || null,
-    ld_pct: parseFloat(bb?.ld_percent ?? bb?.ld ?? '') || null,
+    gb_pct: getRowNumber(bb, ['gb_percent', 'gb']),
+    fb_pct: getRowNumber(bb, ['fb_percent', 'fb']),
+    ld_pct: getRowNumber(bb, ['ld_percent', 'ld']),
     // Year-over-year xwOBA against change
     year_to_year_xwoba_against_change: calcYearToYearDiff(y2y),
     // Home run profile allowed (new)
@@ -635,19 +725,19 @@ export async function getPitcherStatcast(playerName) {
     run_value_by_pitch: rv ? extractPitcherRunValue(rv) : null,
     // Pitcher positioning / shift tendencies
     pitcher_positioning: pp ? {
-      shift_rate: parseFloat(pp?.shift_rate ?? pp?.['n_shift']  ?? '') || null,
-      n_shift:    parseInt(pp?.n_shift      ?? pp?.['shifts']   ?? '') || null,
+      shift_rate: getRowNumber(pp, ['shift_rate']),
+      n_shift:    parseStatNumber(pp?.n_shift ?? pp?.['shifts'] ?? ''),
     } : null,
     // Active spin profile
     active_spin: asp ? {
-      active_spin_pct: parseFloat(asp?.active_spin  ?? asp?.['active_spin_pct']  ?? '') || null,
-      avg_spin_rate:   parseFloat(asp?.spin_rate     ?? asp?.['avg_spin_rate']    ?? '') || null,
+      active_spin_pct: getRowNumber(asp, ['active_spin', 'active_spin_pct']),
+      avg_spin_rate:   getRowNumber(asp, ['spin_rate', 'avg_spin_rate']),
     } : null,
     // Pitch movement profile
     pitch_movement: pm ? {
-      horizontal_break: parseFloat(pm?.pfx_x    ?? pm?.['h_break']   ?? '') || null,
-      vertical_break:   parseFloat(pm?.pfx_z    ?? pm?.['v_break']   ?? '') || null,
-      avg_spin_rate:    parseFloat(pm?.spin_rate ?? pm?.['spin_rate'] ?? '') || null,
+      horizontal_break: getRowNumber(pm, ['pfx_x', 'h_break']),
+      vertical_break:   getRowNumber(pm, ['pfx_z', 'v_break']),
+      avg_spin_rate:    getRowNumber(pm, ['spin_rate']),
     } : null,
     _sources: {
       xStats: !!xs, pitchArsenal: !!pa,
