@@ -114,6 +114,14 @@ function normalizePickResult(result) {
   return value;
 }
 
+function buildFeatureStorePayload(gameData, requestedDate, features = {}) {
+  return {
+    gamePk: gameData?.gamePk ?? null,
+    gameDate: normalizeDateInput(requestedDate ?? gameData?.gameDate) ?? null,
+    features: features ?? {},
+  };
+}
+
 async function saveFeatureStoreForGame({
   pickId = null,
   backtestId = null,
@@ -414,9 +422,11 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
     } catch { /* bankroll is optional — never block the analysis */ }
 
     let analysis;
+    let featureStore = null;
     try {
       const contextResult = await buildContext(gameData, matchedOdds);
       const context = contextResult.context ?? contextResult;
+      featureStore = buildFeatureStorePayload(gameData, date, contextResult._features ?? {});
       const matchup = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
 
       // Construir statcastData para el validador XGBoost.
@@ -478,7 +488,15 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
     }
 
     const responseData = analysis.data ? { ...analysis.data, odds: matchedOdds ?? undefined } : null;
-    res.json({ success: true, data: responseData, odds: matchedOdds ?? null, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
+    res.json({
+      success: true,
+      data: responseData,
+      odds: matchedOdds ?? null,
+      featureStore,
+      parseError: analysis.parseError,
+      rawText: analysis.rawText,
+      credits: updatedUser.credits,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -625,6 +643,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             rawText: analysis.rawText,
             parseError: analysis.parseError,
             odds: matchedOdds ?? undefined,
+            featureStore: buildFeatureStorePayload(gameData, resolvedDate, contextBuildResult._features ?? {}),
           };
         } catch (err) {
           return {
@@ -658,6 +677,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
         success: true,
         data: single.data,
         odds: single.odds ?? null,
+        featureStore: single.featureStore ?? null,
         parseError: single.parseError,
         rawText: single.rawText,
         credits: updatedUser.credits - (failCount * 2),
@@ -1269,6 +1289,7 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       probability_model, best_pick, model, language,
       odds_at_pick, odds_details, kelly_recommendation,
       game_pk, gamePk, game_id, gameId, game_date, gameDate, date,
+      feature_store, featureStore,
     } = req.body;
 
     // Calculate implied probability server-side from the American odds provided by the client
@@ -1276,6 +1297,7 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       ? calculateImpliedProbability(odds_at_pick)
       : null;
     const parsedOddsDetails = odds_details != null ? parseJsonMaybe(odds_details) : null;
+    const parsedFeatureStore = parseJsonMaybe(feature_store ?? featureStore);
 
     const { rows } = await pool.query(
       `INSERT INTO picks (
@@ -1301,7 +1323,21 @@ app.post('/api/picks', verifyToken, async (req, res) => {
     const savedPick = rows[0];
     const featureGamePk = game_pk ?? gamePk ?? game_id ?? gameId ?? null;
     const featureGameDate = game_date ?? gameDate ?? date ?? null;
-    if (featureGamePk) {
+    const directFeatureGamePk = parsedFeatureStore?.gamePk ?? featureGamePk;
+    const directFeatureGameDate = parsedFeatureStore?.gameDate ?? featureGameDate;
+    const directFeatures = parsedFeatureStore?.features ?? null;
+
+    if (directFeatureGamePk && directFeatures) {
+      await savePickFeatures({
+        pickId: savedPick.id,
+        gamePk: Number(directFeatureGamePk),
+        gameDate: normalizeDateInput(directFeatureGameDate),
+        ...directFeatures,
+        oddsData: directFeatures.oddsData ?? parsedOddsDetails,
+        pick: savedPick.pick,
+        result: savedPick.result,
+      });
+    } else if (featureGamePk) {
       await saveFeatureStoreForGame({
         pickId: savedPick.id,
         gamePk: featureGamePk,

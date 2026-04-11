@@ -273,6 +273,7 @@ export default function useHistory() {
       odds_details:      oddsDetails ? JSON.stringify(oddsDetails) : null,
       game_pk:           payload.gamePk ?? featureGame?.gamePk ?? null,
       game_date:         payload.gameDate ?? payload.selectedDate ?? null,
+      feature_store:     payload.featureStore ?? null,
     };
 
     try {
