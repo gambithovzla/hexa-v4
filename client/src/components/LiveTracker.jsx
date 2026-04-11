@@ -25,6 +25,43 @@ function getEasternDateString(value = new Date()) {
   return `${lookup.year}-${lookup.month}-${lookup.day}`;
 }
 
+function shiftDateString(dateString, days) {
+  const [year, month, day] = String(dateString).split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0));
+  return shifted.toISOString().slice(0, 10);
+}
+
+function isLiveCandidate(game) {
+  const simplified = String(game?.status?.simplified ?? '').toLowerCase();
+  const abstract = String(game?.status?.abstractGameState ?? '').toLowerCase();
+  const detailed = String(game?.status?.detailedState ?? game?.status?.description ?? '').toLowerCase();
+  const code = String(game?.status?.code ?? game?.status?.codedGameState ?? '').toUpperCase();
+
+  if (
+    simplified === 'live' ||
+    abstract === 'live' ||
+    detailed === 'in progress' ||
+    detailed === 'warmup' ||
+    detailed === 'manager challenge' ||
+    detailed === 'review' ||
+    detailed === 'delayed start' ||
+    detailed === 'delayed' ||
+    code === 'I' ||
+    code === 'MA'
+  ) {
+    return true;
+  }
+
+  // MLB schedule can lag around midnight / west coast starts; fall back to wall clock.
+  if (game?.gameDate) {
+    const gameMs = new Date(game.gameDate).getTime();
+    const elapsed = Date.now() - gameMs;
+    if (elapsed >= 30 * 60 * 1000 && elapsed < 5.5 * 60 * 60 * 1000) return true;
+  }
+
+  return false;
+}
+
 const T = {
   en: {
     title:        'LIVE TRACKER',
@@ -680,29 +717,29 @@ export default function LiveTracker({ lang = 'en' }) {
   const fetchLiveData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Get today's games
-      const today    = getEasternDateString();
-      const gamesRes = await fetch(`${API_URL}/api/games?date=${today}`);
-      const gamesJson = await gamesRes.json();
-      const allGames  = gamesJson.success ? gamesJson.data : [];
+      // Check both the current and previous MLB calendar day so late west-coast
+      // games do not disappear right after midnight in Eastern time.
+      const today = getEasternDateString();
+      const previousDay = shiftDateString(today, -1);
+      const [todayRes, previousRes] = await Promise.all([
+        fetch(`${API_URL}/api/games?date=${today}`),
+        fetch(`${API_URL}/api/games?date=${previousDay}`),
+      ]);
+      const [todayJson, previousJson] = await Promise.all([
+        todayRes.json(),
+        previousRes.json(),
+      ]);
+      const mergedGames = [
+        ...(todayJson.success ? todayJson.data : []),
+        ...(previousJson.success ? previousJson.data : []),
+      ];
+      const allGames = Array.from(
+        new Map(mergedGames.map(game => [String(game.gamePk), game])).values()
+      );
 
       // 2. Filter live games
       const liveGamePks = allGames
-        .filter(g => {
-          const simplified = (g.status?.simplified ?? '').toLowerCase();
-          const abstract   = (g.status?.abstractGameState ?? '').toLowerCase();
-          const detailed   = (g.status?.detailedState ?? g.status?.description ?? '').toLowerCase();
-          const code       = g.status?.code ?? g.status?.codedGameState ?? '';
-          return (
-            simplified === 'live' ||
-            abstract   === 'live' ||
-            detailed   === 'in progress' ||
-            detailed   === 'warmup' ||
-            detailed   === 'manager challenge' ||
-            code       === 'I' ||
-            code       === 'MA'
-          );
-        })
+        .filter(isLiveCandidate)
         .map(g => g.gamePk);
 
       if (liveGamePks.length === 0) {

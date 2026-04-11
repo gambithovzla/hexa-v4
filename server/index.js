@@ -59,6 +59,40 @@ function getEasternDateString(value = new Date()) {
   return `${lookup.year}-${lookup.month}-${lookup.day}`;
 }
 
+function shiftDateString(dateString, days) {
+  const [year, month, day] = String(dateString).split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0));
+  return shifted.toISOString().slice(0, 10);
+}
+
+function buildFeatureStoreDateCandidates(preferredDate) {
+  const resolved = normalizeDateInput(preferredDate) ?? getEasternDateString();
+  const todayEt = getEasternDateString();
+  const candidates = [
+    resolved,
+    shiftDateString(resolved, -1),
+    shiftDateString(resolved, 1),
+    todayEt,
+    shiftDateString(todayEt, -1),
+    shiftDateString(todayEt, 1),
+  ];
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+async function findGameForFeatureStore(gamePk, preferredDate) {
+  const dateCandidates = buildFeatureStoreDateCandidates(preferredDate);
+
+  for (const date of dateCandidates) {
+    const games = await getTodayGames(date);
+    const gameData = games.find(g => String(g.gamePk) === String(gamePk));
+    if (gameData) {
+      return { gameData, resolvedDate: date };
+    }
+  }
+
+  return { gameData: null, resolvedDate: normalizeDateInput(preferredDate) ?? getEasternDateString() };
+}
+
 function parseJsonMaybe(value) {
   let parsed = value;
   for (let i = 0; i < 2; i++) {
@@ -93,10 +127,12 @@ async function saveFeatureStoreForGame({
   if (!gamePk) return false;
 
   try {
-    const games = await getTodayGames(resolvedDate);
-    const gameData = games.find(g => String(g.gamePk) === String(gamePk));
+    const { gameData, resolvedDate: matchedDate } = await findGameForFeatureStore(gamePk, resolvedDate);
     if (!gameData) {
-      console.warn(`[feature-store] Game ${gamePk} not found for ${resolvedDate}; skipping feature save`);
+      console.warn(
+        `[feature-store] Game ${gamePk} not found near ${resolvedDate}; ` +
+        `tried dates: ${buildFeatureStoreDateCandidates(resolvedDate).join(', ')}`
+      );
       return false;
     }
 
@@ -116,7 +152,7 @@ async function saveFeatureStoreForGame({
       pickId,
       backtestId,
       gamePk: Number(gamePk),
-      gameDate: resolvedDate,
+      gameDate: matchedDate,
       ...features,
       oddsData: features.oddsData ?? matchedOdds,
       pick,
@@ -1990,6 +2026,7 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
         recent: recent.rows,
         featureCoverage: featureCoverage.rows[0],
         winRateByTemperature: winRateByFeature.rows,
+        statcastCache: getCacheStatus(),
       },
     });
   } catch (err) {
@@ -1998,6 +2035,129 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
 });
 
 // ── Startup: run migrations → seed admin → start server ───────────────────────
+app.post('/api/admin/feature-store/backfill', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
+
+  const requestedLimit = Number(req.body?.limit);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(250, Math.floor(requestedLimit))) : 50;
+  const scope = String(req.body?.scope ?? 'all').toLowerCase();
+  const onlyMissing = req.body?.onlyMissing !== false;
+
+  const missingPredicate = `
+    pf.id IS NULL OR
+    pf.home_pitcher_xwoba IS NULL OR
+    pf.away_pitcher_xwoba IS NULL OR
+    pf.home_pitcher_whiff IS NULL OR
+    pf.away_pitcher_whiff IS NULL OR
+    pf.home_lineup_avg_xwoba IS NULL OR
+    pf.away_lineup_avg_xwoba IS NULL
+  `;
+
+  try {
+    const candidates = [];
+
+    if (scope === 'all' || scope === 'picks') {
+      const picksRes = await pool.query(`
+        SELECT
+          'pick' AS source,
+          p.id AS entity_id,
+          p.id AS pick_id,
+          NULL::INTEGER AS backtest_id,
+          p.game_pk,
+          p.game_date,
+          p.pick,
+          p.result,
+          p.odds_details
+        FROM picks p
+        LEFT JOIN pick_features pf ON pf.pick_id = p.id
+        WHERE p.deleted_at IS NULL
+          AND p.game_pk IS NOT NULL
+          ${onlyMissing ? `AND (${missingPredicate})` : ''}
+        ORDER BY p.created_at DESC
+        LIMIT $1
+      `, [limit]);
+      candidates.push(...picksRes.rows);
+    }
+
+    if (scope === 'all' || scope === 'backtests') {
+      const backtestsRes = await pool.query(`
+        SELECT
+          'backtest' AS source,
+          b.id AS entity_id,
+          NULL::INTEGER AS pick_id,
+          b.id AS backtest_id,
+          b.game_pk,
+          b.historical_date AS game_date,
+          b.pick,
+          b.actual_result AS result,
+          NULL::JSONB AS odds_details
+        FROM backtest_results b
+        LEFT JOIN pick_features pf ON pf.backtest_id = b.id
+        WHERE b.game_pk IS NOT NULL
+          ${onlyMissing ? `AND (${missingPredicate})` : ''}
+        ORDER BY b.created_at DESC
+        LIMIT $1
+      `, [limit]);
+      candidates.push(...backtestsRes.rows);
+    }
+
+    const deduped = Array.from(
+      new Map(candidates.map((row) => [`${row.source}:${row.entity_id}`, row])).values()
+    ).slice(0, limit);
+
+    let rebuilt = 0;
+    let failed = 0;
+    const failures = [];
+
+    for (const row of deduped) {
+      try {
+        const ok = await saveFeatureStoreForGame({
+          pickId: row.pick_id,
+          backtestId: row.backtest_id,
+          gamePk: row.game_pk,
+          gameDate: row.game_date,
+          pick: row.pick,
+          result: row.result,
+          oddsData: row.odds_details,
+        });
+
+        if (ok) rebuilt += 1;
+        else {
+          failed += 1;
+          failures.push({
+            source: row.source,
+            entity_id: row.entity_id,
+            game_pk: row.game_pk,
+            reason: 'game_not_found_or_feature_save_skipped',
+          });
+        }
+      } catch (err) {
+        failed += 1;
+        failures.push({
+          source: row.source,
+          entity_id: row.entity_id,
+          game_pk: row.game_pk,
+          reason: err.message,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        scanned: deduped.length,
+        rebuilt,
+        failed,
+        scope,
+        onlyMissing,
+        failures: failures.slice(0, 20),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 runMigrations()
   .then(() => seedAdminUser())
   .then(() => {
