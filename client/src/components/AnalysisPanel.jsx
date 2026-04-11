@@ -1081,6 +1081,7 @@ export default function AnalysisPanel({
               // Override matchup directly from the server response so it always works
               _matchupOverride: r.matchup,
               odds: r.odds ?? null,
+              featureStore: r.featureStore ?? null,
             });
           }
         }
@@ -1098,6 +1099,7 @@ export default function AnalysisPanel({
           model:    modelMode,
           language: lang,
           odds:     json.odds ?? null,
+          featureStore: json.featureStore ?? null,
         });
       }
     } catch (e) {
