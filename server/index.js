@@ -122,6 +122,55 @@ function buildFeatureStorePayload(gameData, requestedDate, features = {}) {
   };
 }
 
+function buildAnalysisMeta(features = {}) {
+  const homePitcherStatcast = features.homePitcherSavant ?? null;
+  const awayPitcherStatcast = features.awayPitcherSavant ?? null;
+  const savantBatters = features.savantBatters ?? { home: [], away: [] };
+
+  const countNonNull = (values) => values.filter((value) => value != null).length;
+  const hasLineupXwoba = (batters) => (batters ?? []).some((b) => b?.savant?.xwOBA != null);
+
+  return {
+    pitcher_profiles_loaded: countNonNull([homePitcherStatcast, awayPitcherStatcast]),
+    pitcher_xwoba_loaded: countNonNull([
+      homePitcherStatcast?.xwOBA_against,
+      awayPitcherStatcast?.xwOBA_against,
+    ]),
+    pitcher_whiff_loaded: countNonNull([
+      homePitcherStatcast?.whiff_percent,
+      awayPitcherStatcast?.whiff_percent,
+    ]),
+    lineup_xwoba_loaded: countNonNull([
+      hasLineupXwoba(savantBatters.home) ? 1 : null,
+      hasLineupXwoba(savantBatters.away) ? 1 : null,
+    ]),
+  };
+}
+
+function annotateAnalysisData(data, features = {}) {
+  if (!data || typeof data !== 'object') return data;
+
+  const analysisMeta = buildAnalysisMeta(features);
+  let alertFlags = Array.isArray(data.alert_flags) ? [...data.alert_flags] : [];
+
+  if (analysisMeta.pitcher_xwoba_loaded > 0) {
+    alertFlags = alertFlags.filter((flag) => (
+      !/no statcast xwoba data available for either pitcher/i.test(String(flag))
+    ));
+  }
+
+  const traceFlag = `Server check: P xwOBA ${analysisMeta.pitcher_xwoba_loaded}/2, Whiff ${analysisMeta.pitcher_whiff_loaded}/2, Lineups ${analysisMeta.lineup_xwoba_loaded}/2`;
+  if (!alertFlags.some((flag) => String(flag).startsWith('Server check:'))) {
+    alertFlags.push(traceFlag);
+  }
+
+  return {
+    ...data,
+    alert_flags: alertFlags,
+    analysis_meta: analysisMeta,
+  };
+}
+
 async function saveFeatureStoreForGame({
   pickId = null,
   backtestId = null,
@@ -487,7 +536,12 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       });
     }
 
-    const responseData = analysis.data ? { ...analysis.data, odds: matchedOdds ?? undefined } : null;
+    const responseData = analysis.data
+      ? {
+          ...annotateAnalysisData(analysis.data, featureStore?.features ?? {}),
+          odds: matchedOdds ?? undefined,
+        }
+      : null;
     res.json({
       success: true,
       data: responseData,
@@ -639,7 +693,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
           return {
             gameId: id,
             matchup: `${awayAbbr} @ ${homeAbbr}`,
-            data: analysis.data,
+            data: annotateAnalysisData(analysis.data, contextBuildResult._features ?? {}),
             rawText: analysis.rawText,
             parseError: analysis.parseError,
             odds: matchedOdds ?? undefined,
@@ -815,7 +869,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
             return {
               gameId: ctx.id,
               matchup: ctx.matchup,
-              data: analysis.data,
+              data: annotateAnalysisData(analysis.data, ctx.features ?? {}),
               rawText: analysis.rawText,
               parseError: analysis.parseError,
               odds: ctx.matchedOdds ?? undefined,
@@ -2037,7 +2091,9 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
         COUNT(home_pitcher_xwoba) as has_home_xwoba,
         COUNT(away_pitcher_xwoba) as has_away_xwoba,
         COUNT(home_pitcher_whiff) as has_home_whiff,
+        COUNT(away_pitcher_whiff) as has_away_whiff,
         COUNT(home_lineup_avg_xwoba) as has_home_lineup,
+        COUNT(away_lineup_avg_xwoba) as has_away_lineup,
         COUNT(temperature) as has_temperature,
         COUNT(odds_ml_home) as has_odds,
         COUNT(park_factor_overall) as has_park

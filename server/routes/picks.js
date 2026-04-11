@@ -15,17 +15,39 @@ const router = Router();
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+function parseJsonMaybe(value) {
+  if (!value || typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 /**
- * Detect pick type from the pick string.
- * Priority: over → under → runline → prop → moneyline
+ * Detect pick type from the saved payload first, then fall back to the pick text.
+ * This avoids misclassifying player props like "Under 0.5 Hits" as plain "under".
  */
-function detectPickType(pick) {
+function detectPickType(pick, bestPickRaw) {
+  const bestPick = parseJsonMaybe(bestPickRaw);
+  const bestType = String(bestPick?.type ?? '').toLowerCase().replace(/[\s_-]/g, '');
+
+  if (bestType.includes('playerprop')) return 'prop';
+  if (bestType.includes('runline')) return 'runline';
+  if (bestType.includes('moneyline')) return 'moneyline';
+  if (bestType.includes('overunder')) {
+    if (/Under/i.test(pick)) return 'under';
+    if (/Over/i.test(pick)) return 'over';
+  }
+
   if (!pick) return 'moneyline';
+
+  const propLike =
+    /\b[A-Z]\.\s+[A-Z][a-z]+|Total Bases|Strikeouts?|Home Runs?|Hits?\b|RBIs?|\bWalks?\b|Pitching Outs?|Earned Runs?|Stolen Bases?\b/i.test(pick);
+  if (propLike) return 'prop';
+  if (/Run Line|\+1\.5|-1\.5/i.test(pick)) return 'runline';
   if (/Over/i.test(pick)) return 'over';
   if (/Under/i.test(pick)) return 'under';
-  if (/Run Line|\+1\.5|-1\.5/i.test(pick)) return 'runline';
-  // Player prop heuristic: "F. Lastname" pattern or common prop keywords
-  if (/\b[A-Z]\.\s+[A-Z][a-z]+|Total Bases|Strikeouts?|Home Runs?|Hits?\b|RBIs?|\bWalks?\b|ERA\b|WHIP\b/i.test(pick)) return 'prop';
   return 'moneyline';
 }
 
@@ -92,7 +114,7 @@ router.get('/public-stats', async (req, res) => {
 
     // Fetch all resolved picks in the window, ordered for roiCurve
     const { rows } = await pool.query(`
-      SELECT id, pick, model, result, odds_at_pick, created_at
+      SELECT id, pick, best_pick, model, result, odds_at_pick, created_at
       FROM   picks
       WHERE  LOWER(result) IN ('won', 'lost', 'push', 'win', 'loss')
         AND  deleted_at IS NULL
@@ -137,7 +159,7 @@ router.get('/public-stats', async (req, res) => {
         modelStats[model].units += units;
 
         // ── Type breakdown ─────────────────────────────────────────────────────
-        const type = detectPickType(row.pick);
+        const type = detectPickType(row.pick, row.best_pick);
         if (!typeStats[type]) typeStats[type] = { wins: 0, losses: 0, pushes: 0, units: 0 };
         if (isWon)       typeStats[type].wins++;
         else if (isLost) typeStats[type].losses++;

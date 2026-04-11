@@ -397,7 +397,7 @@ export default function PerformanceDashboard({ onBack }) {
           letterSpacing: '1px',
           mb:            3,
         }}>
-          Verified picks. Real results. No cherry-picking.
+          Verified saved picks. Resolved results only. No cherry-picking.
         </Typography>
 
         {/* Period filters + timestamp row */}

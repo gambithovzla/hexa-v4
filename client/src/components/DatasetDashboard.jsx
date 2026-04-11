@@ -146,12 +146,17 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
             <CoverageBar label="Home P xwOBA" count={parseInt(fc?.has_home_xwoba ?? 0)} total={total} />
             <CoverageBar label="Away P xwOBA" count={parseInt(fc?.has_away_xwoba ?? 0)} total={total} />
             <CoverageBar label="Home P Whiff%" count={parseInt(fc?.has_home_whiff ?? 0)} total={total} />
+            <CoverageBar label="Away P Whiff%" count={parseInt(fc?.has_away_whiff ?? 0)} total={total} />
             <CoverageBar label="Home Lineup xwOBA" count={parseInt(fc?.has_home_lineup ?? 0)} total={total} />
+            <CoverageBar label="Away Lineup xwOBA" count={parseInt(fc?.has_away_lineup ?? 0)} total={total} />
             <CoverageBar label="Temperature" count={parseInt(fc?.has_temperature ?? 0)} total={total} />
             <CoverageBar label="Odds" count={parseInt(fc?.has_odds ?? 0)} total={total} />
             <CoverageBar label="Park Factor" count={parseInt(fc?.has_park ?? 0)} total={total} />
             <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: 1 }}>
               These bars measure what was saved into pick_features for ML training, not whether the live Statcast cache is loaded.
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: 0.5 }}>
+              Running analysis alone does not move these bars. A pick/backtest must be saved so a pick_features row exists.
             </Typography>
             <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: 0.5 }}>
               Goal: all bars at 90%+ before training ML model. Need 1,000+ records.
