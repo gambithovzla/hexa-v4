@@ -16,6 +16,27 @@ const MLB_BASE = 'https://statsapi.mlb.com';
 const _cache = new Map();
 const CACHE_TTL_MS = 20_000; // 20 seconds
 
+function isLiveDetailedState(status = {}) {
+  return ['In Progress', 'Manager Challenge', 'Review'].includes(status?.detailedState);
+}
+
+function isFinalDetailedState(status = {}) {
+  const detailedState = String(status?.detailedState ?? '').trim();
+  const abstractState = String(status?.abstractGameState ?? '').trim();
+  const codedState = String(status?.codedGameState ?? '').trim().toUpperCase();
+
+  return (
+    detailedState === 'Final' ||
+    detailedState === 'Game Over' ||
+    detailedState === 'Completed Early' ||
+    abstractState === 'Final' ||
+    codedState === 'F' ||
+    codedState === 'O' ||
+    codedState === 'C' ||
+    codedState === 'D'
+  );
+}
+
 /**
  * Fetch JSON from URL with timeout
  */
@@ -99,8 +120,8 @@ function normalizeLiveFeed(raw, gamePk) {
   const boxscore = ld?.boxscore ?? {};
 
   const status = gd?.status ?? {};
-  const isLive = ['In Progress', 'Manager Challenge', 'Review'].includes(status?.detailedState);
-  const isFinal = status?.detailedState === 'Final' || status?.codedGameState === 'F';
+  const isLive = isLiveDetailedState(status);
+  const isFinal = isFinalDetailedState(status);
   const isScheduled = !isLive && !isFinal;
 
   // ── Teams ──────────────────────────────────────────────────────────────────
@@ -244,8 +265,8 @@ function normalizePlayByPlay(raw, gamePk) {
   const plays = ld?.plays ?? {};
 
   const status = gd?.status ?? {};
-  const isLive = ['In Progress', 'Manager Challenge', 'Review'].includes(status?.detailedState);
-  const isFinal = status?.detailedState === 'Final' || status?.codedGameState === 'F';
+  const isLive = isLiveDetailedState(status);
+  const isFinal = isFinalDetailedState(status);
 
   const homeTeam = gd?.teams?.home ?? {};
   const awayTeam = gd?.teams?.away ?? {};

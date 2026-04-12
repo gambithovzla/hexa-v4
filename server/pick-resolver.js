@@ -10,6 +10,7 @@ import pool from './db.js';
 import { getTodayGames } from './mlb-api.js';
 import { getLiveGameData } from './live-feed.js';
 import { updatePickFeatureResult } from './feature-store.js';
+import { updateShadowModelRunsForGame } from './shadow-model.js';
 
 // ── Nickname → abbreviation (lowercase keys for case-insensitive lookup) ─────
 
@@ -366,6 +367,82 @@ export function resolvePickResult(parsed, game) {
   return null;
 }
 
+export function buildResolverGameFromLiveData(liveData, fallbackGameDate = null) {
+  return {
+    gamePk: liveData?.gamePk != null ? Number(liveData.gamePk) : null,
+    gameDate: fallbackGameDate ?? liveData?.lastUpdated ?? null,
+    status: { simplified: liveData?.status === 'final' ? 'final' : String(liveData?.status ?? 'scheduled') },
+    teams: {
+      home: {
+        id: liveData?.home?.id ?? null,
+        name: liveData?.home?.name ?? '',
+        abbreviation: liveData?.home?.abbreviation ?? '',
+        score: liveData?.home?.score ?? 0,
+      },
+      away: {
+        id: liveData?.away?.id ?? null,
+        name: liveData?.away?.name ?? '',
+        abbreviation: liveData?.away?.abbreviation ?? '',
+        score: liveData?.away?.score ?? 0,
+      },
+    },
+  };
+}
+
+export function resolvePickFromFinalState(pickText, game, playerStats = null) {
+  const parsed = parsePick(pickText);
+  const pickStr = String(pickText ?? '').toLowerCase();
+  const homeName = String(game?.teams?.home?.name ?? '');
+  const awayName = String(game?.teams?.away?.name ?? '');
+  const homeAbbr = String(game?.teams?.home?.abbreviation ?? '');
+  const awayAbbr = String(game?.teams?.away?.abbreviation ?? '');
+  const homeScore = Number(game?.teams?.home?.score ?? 0);
+  const awayScore = Number(game?.teams?.away?.score ?? 0);
+  const totalRuns = homeScore + awayScore;
+
+  if (parsed?.type === 'player_prop') {
+    const propResult = resolvePlayerPropPickResult(parsed, playerStats);
+    return { parsed, result: propResult?.result ?? null, propResult };
+  }
+
+  let result = parsed ? resolvePickResult(parsed, game) : null;
+
+  const ouMatch = pickStr.match(/^(over|under|más\s+de|mas\s+de|menos\s+de)\s+(\d+\.?\d*)/i);
+  if (!result && ouMatch) {
+    const dir = /^(?:over|m[aá]s)/i.test(ouMatch[1]) ? 'over' : 'under';
+    const line = parseFloat(ouMatch[2]);
+    if (dir === 'over') result = totalRuns > line ? 'win' : totalRuns < line ? 'loss' : 'push';
+    else result = totalRuns < line ? 'win' : totalRuns > line ? 'loss' : 'push';
+  }
+
+  if (!result && pickStr.match(/\bml\b|moneyline|a ganar/i)) {
+    const teamInPick = pickStr.replace(/\s*(ml|moneyline|a ganar).*$/i, '').trim();
+    const isHome = tokenMatchesTeam(teamInPick, homeName, homeAbbr);
+    const isAway = tokenMatchesTeam(teamInPick, awayName, awayAbbr);
+    if (isHome) result = homeScore > awayScore ? 'win' : homeScore < awayScore ? 'loss' : 'push';
+    else if (isAway) result = awayScore > homeScore ? 'win' : awayScore < homeScore ? 'loss' : 'push';
+  }
+
+  if (!result) {
+    const rlMatch = pickStr.match(/^(.+?)\s+([+-]?\d+\.?\d*)\s*(?:run\s*line|rl)?/i);
+    if (rlMatch && (rlMatch[2].includes('+') || rlMatch[2].includes('-') || rlMatch[2].includes('1.5'))) {
+      const teamInPick = rlMatch[1].trim();
+      const spread = parseFloat(rlMatch[2]);
+      const isHome = tokenMatchesTeam(teamInPick, homeName, homeAbbr);
+      const isAway = tokenMatchesTeam(teamInPick, awayName, awayAbbr);
+
+      if (isHome || isAway) {
+        const myScore = isHome ? homeScore : awayScore;
+        const oppScore = isHome ? awayScore : homeScore;
+        const adjusted = myScore + spread;
+        result = adjusted > oppScore ? 'win' : adjusted < oppScore ? 'loss' : 'push';
+      }
+    }
+  }
+
+  return { parsed, result, propResult: null };
+}
+
 // ── Main exported function ────────────────────────────────────────────────────
 
 /**
@@ -400,17 +477,27 @@ export function resolvePlayerPropPickResult(parsed, playerStats) {
  *
  * @returns {Promise<{ resolved: number, wins: number, losses: number, pushes: number, errors: string[] }>}
  */
-export async function resolvePendingPicks() {
+async function resolvePendingPicksLegacy() {
   const summary = { resolved: 0, wins: 0, losses: 0, pushes: 0, errors: [] };
+  const liveDataCache = new Map();
+  const shadowSyncedGames = new Set();
 
   // 1. Fetch all pending picks (system job — no user_id filter)
   const { rows: picks } = await pool.query(
-    "SELECT id, matchup, pick, created_at FROM picks WHERE result = 'pending'"
+    "SELECT id, matchup, pick, created_at FROM picks WHERE result = 'pending' AND deleted_at IS NULL"
   );
 
   if (picks.length === 0) {
     console.log('[pick-resolver] No pending picks found.');
     return summary;
+  }
+
+  async function getLiveDataCached(gamePk) {
+    const cacheKey = String(gamePk);
+    if (liveDataCache.has(cacheKey)) return liveDataCache.get(cacheKey);
+    const liveData = await getLiveGameData(gamePk);
+    liveDataCache.set(cacheKey, liveData);
+    return liveData;
   }
 
   console.log(`[pick-resolver] Found ${picks.length} pending pick(s). Starting resolution...`);
@@ -560,6 +647,148 @@ export async function resolvePendingPicks() {
 
   console.log(
     `[pick-resolver] Done — resolved: ${summary.resolved}, wins: ${summary.wins}, ` +
+    `losses: ${summary.losses}, pushes: ${summary.pushes}, errors: ${summary.errors.length}`
+  );
+  return summary;
+}
+
+export async function resolvePendingPicks() {
+  const summary = { resolved: 0, wins: 0, losses: 0, pushes: 0, errors: [] };
+  const liveDataCache = new Map();
+  const shadowSyncedGames = new Set();
+
+  async function getLiveDataCached(gamePk) {
+    const cacheKey = String(gamePk);
+    if (liveDataCache.has(cacheKey)) return liveDataCache.get(cacheKey);
+    const liveData = await getLiveGameData(gamePk);
+    liveDataCache.set(cacheKey, liveData);
+    return liveData;
+  }
+
+  const { rows: picks } = await pool.query(
+    "SELECT id, matchup, pick, created_at FROM picks WHERE result = 'pending' AND deleted_at IS NULL"
+  );
+
+  if (picks.length === 0) {
+    console.log('[pick-resolver] No pending picks found.');
+    return summary;
+  }
+
+  console.log(`[pick-resolver] Found ${picks.length} pending pick(s). Starting resolution...`);
+
+  const byDate = {};
+  for (const pick of picks) {
+    const pickDate = new Date(pick.created_at);
+    const date = pickDate.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    if (!byDate[date]) byDate[date] = [];
+    byDate[date].push(pick);
+  }
+
+  for (const [date, datePicks] of Object.entries(byDate)) {
+    let games;
+    try {
+      games = await getTodayGames(date);
+    } catch (err) {
+      const msg = `Failed to fetch games for ${date}: ${err.message}`;
+      console.error(`[pick-resolver] ${msg}`);
+      summary.errors.push(msg);
+      continue;
+    }
+
+    for (const pick of datePicks) {
+      try {
+        const game = findGame(pick.matchup, games);
+        if (!game) {
+          console.log(`[pick-resolver] Pick #${pick.id}: "${pick.matchup}" â€” no matching game found for ${date}`);
+          continue;
+        }
+
+        let finalGame = game;
+        let liveData = null;
+
+        if (String(game.status?.simplified ?? '').toLowerCase() !== 'final' && game.gamePk != null) {
+          liveData = await getLiveDataCached(game.gamePk);
+          if (liveData?.status === 'final') {
+            finalGame = buildResolverGameFromLiveData(liveData, game.gameDate);
+          }
+        }
+
+        if (String(finalGame.status?.simplified ?? '').toLowerCase() !== 'final') {
+          console.log(
+            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" â€” status: ${game.status?.simplified} (not final)`
+          );
+          continue;
+        }
+
+        if (!shadowSyncedGames.has(String(finalGame.gamePk))) {
+          try {
+            const shadowLiveData = liveData ?? await getLiveDataCached(finalGame.gamePk);
+            await updateShadowModelRunsForGame({
+              gamePk: finalGame.gamePk,
+              homeTeamId: shadowLiveData?.home?.id ?? finalGame.teams?.home?.id ?? null,
+              awayTeamId: shadowLiveData?.away?.id ?? finalGame.teams?.away?.id ?? null,
+              homeAbbr: shadowLiveData?.home?.abbreviation ?? finalGame.teams?.home?.abbreviation ?? null,
+              awayAbbr: shadowLiveData?.away?.abbreviation ?? finalGame.teams?.away?.abbreviation ?? null,
+              homeScore: shadowLiveData?.home?.score ?? finalGame.teams?.home?.score ?? null,
+              awayScore: shadowLiveData?.away?.score ?? finalGame.teams?.away?.score ?? null,
+            });
+            shadowSyncedGames.add(String(finalGame.gamePk));
+          } catch (shadowErr) {
+            console.warn(`[shadow-mode] Could not sync game ${finalGame.gamePk}: ${shadowErr.message}`);
+          }
+        }
+
+        if (!liveData && finalGame.gamePk != null) {
+          liveData = await getLiveDataCached(finalGame.gamePk);
+        }
+
+        const { parsed, result, propResult } = resolvePickFromFinalState(
+          pick.pick,
+          finalGame,
+          liveData?.playerStats ?? null
+        );
+
+        if (!parsed && !result) {
+          const msg = `Pick #${pick.id}: unparseable pick string "${pick.pick}"`;
+          console.warn(`[pick-resolver] ${msg}`);
+          summary.errors.push(msg);
+          continue;
+        }
+
+        if (!result) {
+          const msg = `Pick #${pick.id}: could not resolve "${pick.pick}" for matchup "${pick.matchup}"`;
+          console.warn(`[pick-resolver] ${msg}`);
+          summary.errors.push(msg);
+          continue;
+        }
+
+        await pool.query('UPDATE picks SET result = $1 WHERE id = $2', [result, pick.id]);
+        await updatePickFeatureResult({ pickId: pick.id, result });
+
+        if (propResult) {
+          console.log(
+            `[pick-resolver] Pick #${pick.id}: ${propResult.playerName} ${propResult.propType} = ${propResult.actual} vs ${propResult.direction} ${propResult.line} â†’ ${result}`
+          );
+        } else {
+          console.log(
+            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" â€” pick: "${pick.pick}" â€” result: ${result.toUpperCase()} (score: ${finalGame.teams.away.score}-${finalGame.teams.home.score})`
+          );
+        }
+
+        summary.resolved++;
+        if (result === 'win') summary.wins++;
+        if (result === 'loss') summary.losses++;
+        if (result === 'push') summary.pushes++;
+      } catch (err) {
+        const msg = `Pick #${pick.id}: unexpected error â€” ${err.message}`;
+        console.error(`[pick-resolver] ${msg}`);
+        summary.errors.push(msg);
+      }
+    }
+  }
+
+  console.log(
+    `[pick-resolver] Done â€” resolved: ${summary.resolved}, wins: ${summary.wins}, ` +
     `losses: ${summary.losses}, pushes: ${summary.pushes}, errors: ${summary.errors.length}`
   );
   return summary;

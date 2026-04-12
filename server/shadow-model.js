@@ -1,4 +1,5 @@
 import pool from './db.js';
+import { getLiveGameData } from './live-feed.js';
 
 const DISABLED_VALUES = new Set(['0', 'false', 'off', 'no']);
 const SHADOW_MODE_ENABLED = !DISABLED_VALUES.has(String(process.env.SHADOW_MODE_ENABLED ?? 'true').toLowerCase());
@@ -361,6 +362,42 @@ export async function updateShadowModelRunsForGame({
   );
 
   return result.rowCount ?? 0;
+}
+
+export async function refreshPendingShadowModelRuns(limit = 25) {
+  const safeLimit = Math.max(1, Math.min(100, toNumber(limit) ?? 25));
+  const pendingGamesRes = await pool.query(
+    `SELECT game_pk, MAX(created_at) AS last_seen
+     FROM shadow_model_runs
+     WHERE actual_status = 'pending'
+       AND game_pk IS NOT NULL
+     GROUP BY game_pk
+     ORDER BY last_seen DESC
+     LIMIT $1`,
+    [safeLimit]
+  );
+
+  let refreshed = 0;
+  for (const row of pendingGamesRes.rows) {
+    try {
+      const liveData = await getLiveGameData(row.game_pk);
+      if (liveData?.status !== 'final') continue;
+
+      refreshed += await updateShadowModelRunsForGame({
+        gamePk: row.game_pk,
+        homeTeamId: liveData.home?.id ?? null,
+        awayTeamId: liveData.away?.id ?? null,
+        homeAbbr: liveData.home?.abbreviation ?? null,
+        awayAbbr: liveData.away?.abbreviation ?? null,
+        homeScore: liveData.home?.score ?? null,
+        awayScore: liveData.away?.score ?? null,
+      });
+    } catch (err) {
+      console.warn(`[shadow-mode] Could not refresh pending game ${row.game_pk}: ${err.message}`);
+    }
+  }
+
+  return refreshed;
 }
 
 export async function getShadowModeDashboard(limit = 50) {

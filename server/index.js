@@ -31,6 +31,7 @@ import {
   buildShadowActualOutcome,
   getShadowModeDashboard,
   isShadowModeEnabled,
+  refreshPendingShadowModelRuns,
   recordShadowModelRun,
   updateShadowModelRunsForGame,
 } from './shadow-model.js';
@@ -2296,6 +2297,7 @@ app.get('/api/admin/shadow-model', verifyToken, async (req, res) => {
 
   try {
     const limit = Number(req.query.limit ?? 50);
+    await refreshPendingShadowModelRuns(Math.min(limit, 50));
     const data = await getShadowModeDashboard(limit);
     res.json({ success: true, data });
   } catch (err) {
