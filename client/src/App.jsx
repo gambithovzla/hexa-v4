@@ -31,6 +31,7 @@ import BatchScanPanel      from './components/BatchScanPanel';
 import BacktestDashboard  from './components/BacktestDashboard';
 import BacktestRunner     from './components/BacktestRunner';
 import DatasetDashboard  from './components/DatasetDashboardV2';
+import ShadowModeDashboard from './components/ShadowModeDashboard';
 import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import useHistory           from './hooks/useHistory';
@@ -138,6 +139,9 @@ export default function App() {
   }
   if (window.location.pathname === '/admin/dataset') {
     return <DatasetDashboard lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/shadow-model') {
+    return <ShadowModeDashboard onBack={() => { window.location.href = '/'; }} />;
   }
 
 

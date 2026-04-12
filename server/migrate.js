@@ -215,6 +215,57 @@ export async function runMigrations() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shadow_model_runs (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        pick_id INTEGER REFERENCES picks(id) ON DELETE SET NULL,
+        backtest_id INTEGER REFERENCES backtest_results(id) ON DELETE SET NULL,
+        source_type VARCHAR(20) NOT NULL DEFAULT 'analysis',
+        analysis_mode VARCHAR(20) NOT NULL DEFAULT 'single',
+        model_key VARCHAR(80) NOT NULL,
+        model_version VARCHAR(40),
+        game_pk INTEGER NOT NULL,
+        game_date DATE,
+        home_team_id INTEGER,
+        away_team_id INTEGER,
+        home_team_abbr VARCHAR(10),
+        away_team_abbr VARCHAR(10),
+        oracle_pick TEXT,
+        oracle_confidence DECIMAL(5,2),
+        oracle_home_win_prob DECIMAL(6,3),
+        oracle_predicted_winner_id TEXT,
+        oracle_predicted_winner_abbr VARCHAR(10),
+        shadow_score INTEGER,
+        shadow_confidence INTEGER,
+        shadow_home_win_prob DECIMAL(6,3),
+        shadow_predicted_winner_id TEXT,
+        shadow_predicted_winner_abbr VARCHAR(10),
+        agree_with_oracle BOOLEAN,
+        actual_winner_id TEXT,
+        actual_winner_abbr VARCHAR(10),
+        actual_home_score INTEGER,
+        actual_away_score INTEGER,
+        actual_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        feature_snapshot JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shadow_model_runs_game_pk ON shadow_model_runs(game_pk)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shadow_model_runs_created_at ON shadow_model_runs(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shadow_model_runs_status ON shadow_model_runs(actual_status)`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_shadow_model_runs_pick_unique
+      ON shadow_model_runs(pick_id, model_key)
+      WHERE pick_id IS NOT NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_shadow_model_runs_backtest_unique
+      ON shadow_model_runs(backtest_id, model_key)
+      WHERE backtest_id IS NOT NULL
+    `);
+
     await client.query('COMMIT');
 
     await pool.query(`
