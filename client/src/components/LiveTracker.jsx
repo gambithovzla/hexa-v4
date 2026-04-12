@@ -36,6 +36,21 @@ function isLiveCandidate(game) {
   const abstract = String(game?.status?.abstractGameState ?? '').toLowerCase();
   const detailed = String(game?.status?.detailedState ?? game?.status?.description ?? '').toLowerCase();
   const code = String(game?.status?.code ?? game?.status?.codedGameState ?? '').toUpperCase();
+  const explicitlyFinal =
+    simplified === 'final' ||
+    abstract === 'final' ||
+    detailed === 'final' ||
+    detailed === 'game over' ||
+    detailed === 'completed early' ||
+    detailed === 'postponed' ||
+    detailed === 'cancelled' ||
+    detailed === 'suspended' ||
+    code === 'F' ||
+    code === 'O' ||
+    code === 'C' ||
+    code === 'D';
+
+  if (explicitlyFinal) return false;
 
   if (
     simplified === 'live' ||
@@ -756,11 +771,14 @@ export default function LiveTracker({ lang = 'en' }) {
         body:    JSON.stringify({ gamePks: liveGamePks }),
       });
       const liveJson = await liveRes.json();
-      if (liveJson.success) setLiveGames(liveJson.data);
+      const fetchedGames = Array.isArray(liveJson?.data) ? liveJson.data : [];
+      if (liveJson.success) {
+        setLiveGames(fetchedGames.filter(game => game?.status === 'live'));
+      }
 
       // Auto-resolve picks for games that just finished
-      if (token && liveJson?.data) {
-        for (const game of liveJson.data) {
+      if (token && fetchedGames.length > 0) {
+        for (const game of fetchedGames) {
           if (game.status === 'final') {
             try {
               await fetch(`${API_URL}/api/picks/resolve-game`, {
