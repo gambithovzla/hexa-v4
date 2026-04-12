@@ -195,6 +195,11 @@ export default function useHistory() {
   // ── addPick ────────────────────────────────────────────────────────────────
 
   async function addPick(payload) {
+    if (payload?.savedPick) {
+      setHistory(prev => [dbRowToEntry(payload.savedPick), ...prev]);
+      return;
+    }
+
     const hexaData             = payload?.result ?? null;
     const { pick, confidence } = extractPickAndConfidence(hexaData);
     const matchup              = extractMatchup(payload);

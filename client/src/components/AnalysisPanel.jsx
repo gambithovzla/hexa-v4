@@ -1082,6 +1082,7 @@ export default function AnalysisPanel({
               _matchupOverride: r.matchup,
               odds: r.odds ?? null,
               featureStore: r.featureStore ?? null,
+              savedPick: r.savedPick ?? null,
             });
           }
         }
@@ -1100,6 +1101,7 @@ export default function AnalysisPanel({
           language: lang,
           odds:     json.odds ?? null,
           featureStore: json.featureStore ?? null,
+          savedPick: json.savedPick ?? null,
         });
       }
     } catch (e) {

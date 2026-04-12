@@ -123,6 +123,12 @@ function normalizePickResult(result) {
   return value;
 }
 
+function normalizeOracleConfidence(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed);
+}
+
 function buildFeatureStorePayload(gameData, requestedDate, features = {}) {
   return {
     gamePk: gameData?.gamePk ?? null,
@@ -263,6 +269,98 @@ async function saveFeatureStoreForGame({
     console.warn(`[feature-store] Could not save features for game ${gamePk}: ${err.message}`);
     return false;
   }
+}
+
+async function persistAnalysisPick({
+  userId,
+  type = 'single',
+  matchup,
+  analysisData,
+  model = 'deep',
+  language = 'en',
+  gamePk = null,
+  gameDate = null,
+  oddsData = null,
+  featureStore = null,
+}) {
+  if (!userId || !analysisData) return null;
+
+  const mp = analysisData.master_prediction ?? analysisData.safe_pick ?? {};
+  const bp = analysisData.best_pick ?? {};
+  const pickText = mp.pick ?? bp.detail ?? null;
+  const oracleConfidence = normalizeOracleConfidence(mp.oracle_confidence ?? mp.hit_probability ?? null);
+  const oddsAtPick = analysisData.value_breakdown?.odds ?? null;
+  const impliedProbAtPick = oddsAtPick != null
+    ? calculateImpliedProbability(oddsAtPick)
+    : null;
+
+  const { rows } = await pool.query(
+    `INSERT INTO picks (
+       user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
+       oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
+       model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
+       game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method
+     )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+     RETURNING *`,
+    [
+      userId,
+      type,
+      matchup ?? null,
+      pickText,
+      oracleConfidence,
+      mp.bet_value ?? null,
+      analysisData.model_risk ?? null,
+      analysisData.oracle_report ?? analysisData.safe_pick?.reasoning ?? null,
+      analysisData.hexa_hunch ?? null,
+      JSON.stringify(analysisData.alert_flags ?? []),
+      JSON.stringify(analysisData.probability_model ?? {}),
+      JSON.stringify(analysisData.best_pick ?? {}),
+      model,
+      language,
+      oddsAtPick,
+      impliedProbAtPick,
+      oddsData != null ? JSON.stringify(oddsData) : null,
+      analysisData.kelly_recommendation ?? null,
+      gamePk ?? null,
+      normalizeDateInput(gameDate),
+      analysisData.value_breakdown != null ? JSON.stringify(analysisData.value_breakdown) : null,
+      analysisData.safe_candidates != null ? JSON.stringify(analysisData.safe_candidates) : null,
+      analysisData.safe_scope ?? null,
+      analysisData.selection_method ?? null,
+    ]
+  );
+
+  const savedPick = rows[0] ?? null;
+  if (!savedPick) return null;
+
+  const parsedFeatureStore = parseJsonMaybe(featureStore);
+  const directFeatureGamePk = parsedFeatureStore?.gamePk ?? gamePk;
+  const directFeatureGameDate = parsedFeatureStore?.gameDate ?? gameDate;
+  const directFeatures = parsedFeatureStore?.features ?? null;
+
+  if (directFeatureGamePk && directFeatures) {
+    await savePickFeatures({
+      pickId: savedPick.id,
+      gamePk: Number(directFeatureGamePk),
+      gameDate: normalizeDateInput(directFeatureGameDate),
+      ...directFeatures,
+      oddsData: directFeatures.oddsData ?? oddsData,
+      pick: savedPick.pick,
+      result: savedPick.result,
+    });
+  } else if (gamePk) {
+    await saveFeatureStoreForGame({
+      pickId: savedPick.id,
+      gamePk,
+      gameDate,
+      pick: savedPick.pick,
+      result: savedPick.result,
+      oddsData,
+    });
+  }
+
+  return savedPick;
 }
 
 const app = express();
@@ -743,6 +841,26 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             }
           }
 
+          let savedPick = null;
+          if (deterministicSafe && !analysis.parseError) {
+            try {
+              savedPick = await persistAnalysisPick({
+                userId: req.user.id,
+                type: 'safe',
+                matchup: `${awayAbbr} @ ${homeAbbr}`,
+                analysisData: annotateAnalysisData(deterministicSafe, shadowFeatures, gameData),
+                model: 'deep',
+                language: lang,
+                gamePk: gameData.gamePk,
+                gameDate: resolvedDate,
+                oddsData: matchedOdds ?? null,
+                featureStore: buildFeatureStorePayload(gameData, resolvedDate, shadowFeatures),
+              });
+            } catch (saveErr) {
+              console.warn('[safe-persist] Could not auto-save safe pick:', saveErr.message);
+            }
+          }
+
           return {
             gameId: id,
             matchup: `${awayAbbr} @ ${homeAbbr}`,
@@ -751,6 +869,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             parseError: analysis.parseError,
             odds: matchedOdds ?? undefined,
             featureStore: buildFeatureStorePayload(gameData, resolvedDate, shadowFeatures),
+            savedPick,
           };
         } catch (err) {
           return {
@@ -785,6 +904,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
         data: single.data,
         odds: single.odds ?? null,
         featureStore: single.featureStore ?? null,
+        savedPick: single.savedPick ?? null,
         parseError: single.parseError,
         rawText: single.rawText,
         credits: updatedUser.credits - (failCount * 2),
@@ -1435,7 +1555,7 @@ app.post('/api/picks', verifyToken, async (req, res) => {
        )
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
       [
-        req.user.id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
+        req.user.id, type, matchup, pick, normalizeOracleConfidence(oracle_confidence), bet_value, model_risk,
         oracle_report, hexa_hunch,
         JSON.stringify(alert_flags ?? []), JSON.stringify(probability_model ?? {}),
         JSON.stringify(best_pick ?? {}), model, language,
