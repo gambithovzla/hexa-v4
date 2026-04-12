@@ -8,6 +8,7 @@ const anthropic = new Anthropic({
 });
 
 const MODEL_ID = 'claude-sonnet-4-6';
+export const POSTMORTEM_SCHEMA_VERSION = 2;
 
 const SYSTEM_PROMPT = `You are H.E.X.A. Postmortem, an MLB betting review engine.
 
@@ -31,6 +32,10 @@ Rules:
 - If the pick WON, explain why the logic held.
 - If the pick LOST, explain what invalidated the original thesis.
 - If the pick PUSHED, explain why the edge was neutralized.
+- If gameSummary.pickOutcomeContext.thresholdEvent exists, that is the first play that satisfied the pick. Do not describe a later play as the fulfillment moment.
+- If gameSummary.pickOutcomeContext.breakEvent exists, that is the first play that broke the pick. Do not describe a later play as the failure trigger.
+- Treat gameSummary.recentPlays as late-game context only. They are not proof of when the pick was first decided.
+- If a relevant event includes pitcher.role = "starter" or "bullpen", preserve that distinction accurately.
 - "adjustment_signals" must be useful for future system learning, not user advice.
 - Keep every string single-line and plain text.
 - When lang=es, all values must be in Spanish. Keys stay in English.`;
@@ -73,6 +78,7 @@ function normalizeStringArray(value) {
 function normalizePostmortemPayload(payload) {
   const resolvedLang = normalizeLanguage(payload?.lang);
   return {
+    version: POSTMORTEM_SCHEMA_VERSION,
     lang: resolvedLang,
     summary: String(payload?.summary ?? '').replace(/\s+/g, ' ').trim(),
     key_factors: normalizeStringArray(payload?.key_factors),
