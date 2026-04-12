@@ -45,6 +45,11 @@ function renderOutcome(row) {
 }
 
 function renderOracleCell(row) {
+  const isSafeRun = String(row.analysis_mode ?? '').startsWith('safe');
+
+  if (isSafeRun && row.oracle_pick) {
+    return `PICK ONLY: ${row.oracle_pick}${row.oracle_confidence != null ? ` (${row.oracle_confidence})` : ''}`;
+  }
   if (row.oracle_predicted_winner_abbr) {
     return `${row.oracle_predicted_winner_abbr} ${row.oracle_confidence != null ? `(${row.oracle_confidence})` : ''}`.trim();
   }

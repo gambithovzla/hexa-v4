@@ -22,6 +22,7 @@ import { useAuth } from '../store/authStore';
 
 const STORAGE_KEY = 'hexa_history';
 const MAX_ENTRIES = 200;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function normalizePickResult(result) {
   const value = String(result ?? 'pending').toLowerCase();
@@ -179,7 +180,7 @@ export default function useHistory() {
       return;
     }
 
-    fetch(`${import.meta.env.VITE_API_URL}/api/picks`, {
+    fetch(`${API_URL}/api/picks`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
@@ -281,11 +282,10 @@ export default function useHistory() {
       odds_details:      oddsDetails ? JSON.stringify(oddsDetails) : null,
       game_pk:           payload.gamePk ?? featureGame?.gamePk ?? null,
       game_date:         payload.gameDate ?? payload.selectedDate ?? null,
-      feature_store:     payload.featureStore ?? null,
     };
 
     try {
-      const res  = await fetch(`${import.meta.env.VITE_API_URL}/api/picks`, {
+      const res  = await fetch(`${API_URL}/api/picks`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify(body),
@@ -315,7 +315,7 @@ export default function useHistory() {
     }
 
     try {
-      const res  = await fetch(`${import.meta.env.VITE_API_URL}/api/picks/${id}`, {
+      const res  = await fetch(`${API_URL}/api/picks/${id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ result: normalizedOutcome }),
@@ -348,7 +348,7 @@ export default function useHistory() {
     }
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/picks/${id}`, {
+      const res = await fetch(`${API_URL}/api/picks/${id}`, {
         method:  'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -371,7 +371,7 @@ export default function useHistory() {
     }
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/picks`, {
+      const res = await fetch(`${API_URL}/api/picks`, {
         method:  'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -388,7 +388,7 @@ export default function useHistory() {
     if (!isAuthenticated || !token) return null;
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/picks/${id}/postmortem`, {
+      const res = await fetch(`${API_URL}/api/picks/${id}/postmortem`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
