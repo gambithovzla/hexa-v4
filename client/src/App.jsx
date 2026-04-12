@@ -21,6 +21,7 @@ import GameSelector         from './components/GameSelector';
 import AnalysisPanel        from './components/AnalysisPanel';
 import HistoryPanel         from './components/HistoryPanel';
 import BankrollTracker      from './components/BankrollTracker';
+import OddsLab              from './components/OddsLab';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
 import LegalPage            from './components/LegalPage';
@@ -256,6 +257,10 @@ export default function App() {
 
           {activeTab === 'bankroll' && (
             <BankrollTracker lang={lang} />
+          )}
+
+          {activeTab === 'tools' && (
+            <OddsLab lang={lang} />
           )}
 
           {/* Live Tracker */}

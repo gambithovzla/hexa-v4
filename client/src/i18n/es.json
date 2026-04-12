@@ -7,7 +7,8 @@
     "game": "Análisis de Juego",
     "parlay": "Constructor de Parlay",
     "fullday": "Vista Completa del Día",
-    "history": "Historial"
+    "history": "Historial",
+    "tools": "Tools"
   },
   "gameSelector": {
     "title": "Seleccionar Juego",
@@ -109,5 +110,12 @@
     "combined": "Momios del Parlay",
     "parlayOdds": "Momios del Parlay",
     "noOdds": "Momios no disponibles"
+  },
+  "oddsLab": {
+    "title": "HEXA Tools",
+    "converter": "Conversor de Cuotas",
+    "betSlip": "Calculadora de Ticket",
+    "parlay": "Motor de Parlay",
+    "edge": "Hexa Edge + Kelly"
   }
 }
