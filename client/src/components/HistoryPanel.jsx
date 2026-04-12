@@ -341,6 +341,50 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
         </Box>
       )}
 
+      {entry.value_breakdown && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px', mt: '8px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.cyan }}>
+            {lang === 'es' ? 'MODELO' : 'MODEL'} {Number.isFinite(Number(entry.value_breakdown?.model_probability)) ? `${Number(entry.value_breakdown.model_probability).toFixed(1)}%` : '—'}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.amber }}>
+            VEGAS {Number.isFinite(Number(entry.value_breakdown?.implied_probability)) ? `${Number(entry.value_breakdown.implied_probability).toFixed(1)}%` : '—'}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: Number(entry.value_breakdown?.edge) > 0 ? C.green : C.textMuted }}>
+            EDGE {Number.isFinite(Number(entry.value_breakdown?.edge)) ? `${Number(entry.value_breakdown.edge) > 0 ? '+' : ''}${Number(entry.value_breakdown.edge).toFixed(1)}%` : '—'}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.accent }}>
+            {entry.value_breakdown?.value_tier ?? '—'}
+          </Typography>
+        </Box>
+      )}
+
+      {entry.safe_scope && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, lineHeight: 1.6, mt: '8px' }}>
+          {entry.safe_scope}
+        </Typography>
+      )}
+
+      {Array.isArray(entry.safe_candidates) && entry.safe_candidates.length > 1 && (
+        <Box sx={{
+          mt: '8px',
+          p: '8px 10px',
+          bgcolor: C.surfaceAlt,
+          border: `1px solid ${C.border}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+        }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.green, letterSpacing: '0.12em' }}>
+            {lang === 'es' ? 'ALTERNATIVAS SAFE // SOLO DATA' : 'SAFE ALTERNATIVES // DATA ONLY'}
+          </Typography>
+          {entry.safe_candidates.slice(1, 3).map((candidate, idx) => (
+            <Typography key={`${entry.id}-safe-alt-${idx}`} sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textSecondary, lineHeight: 1.5 }}>
+              #{candidate.rank ?? idx + 2} {candidate.pick} — {Number(candidate.hit_probability ?? 0).toFixed(1)}%
+            </Typography>
+          ))}
+        </Box>
+      )}
+
       {normalizedResult === 'pending' ? (
         <Box sx={{ display: 'flex', gap: '8px', pt: '2px', flexWrap: 'wrap' }}>
           <MarkBtn label={`✓ ${t.history.markWin}`} color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />

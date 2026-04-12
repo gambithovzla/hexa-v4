@@ -34,6 +34,12 @@ const L = {
     riskLevel:        'Risk Level',
     strategyNote:     'Strategy Note',
     daySummary:       'Day Summary',
+    modelProb:        'Model Prob',
+    impliedProb:      'Vegas Implied',
+    edge:             'Edge',
+    valueTier:        'Value Tier',
+    selectionScope:   'Selection Scope',
+    topCandidates:    'Top Candidates',
     parseError:       'The Oracle returned an unstructured response.',
     noData:           'No analysis data to display.',
     leg:              'Leg',
@@ -74,6 +80,12 @@ const L = {
     riskLevel:        'Nivel de Riesgo',
     strategyNote:     'Nota de Estrategia',
     daySummary:       'Resumen del Día',
+    modelProb:        'Prob. Modelo',
+    impliedProb:      'Implícita Vegas',
+    edge:             'Edge',
+    valueTier:        'Nivel de Valor',
+    selectionScope:   'Alcance de Selección',
+    topCandidates:    'Top Candidatos',
     parseError:       'El Oráculo devolvió una respuesta no estructurada.',
     noData:           'Sin datos de análisis.',
     leg:              'Pata',
@@ -230,6 +242,60 @@ function SectionLabel({ children }) {
       {children}
       <span style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
     </Typography>
+  );
+}
+
+function fmtPct(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? `${num.toFixed(1)}%` : '—';
+}
+
+function fmtAmericanOdds(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '—';
+  return num > 0 ? `+${num}` : `${num}`;
+}
+
+function BreakdownCell({ label, value, accent = C.cyan }) {
+  return (
+    <Box sx={{
+      minWidth: '92px',
+      p: '8px 10px',
+      bgcolor: C.surfaceAlt,
+      border: `1px solid ${C.border}`,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+    }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.48rem', color: C.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: accent }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function ValueBreakdownPanel({ breakdown, t }) {
+  if (!breakdown) return null;
+  const edgeValue = Number(breakdown.edge);
+  const edgeColor = !Number.isFinite(edgeValue)
+    ? C.textMuted
+    : edgeValue > 0
+      ? C.green
+      : C.red;
+
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+      <BreakdownCell label={t.modelProb ?? 'Model Prob'} value={fmtPct(breakdown.model_probability)} accent={C.cyan} />
+      <BreakdownCell label={t.impliedProb ?? 'Vegas Implied'} value={fmtPct(breakdown.implied_probability)} accent={C.amber} />
+      <BreakdownCell label={t.edge ?? 'Edge'} value={Number.isFinite(edgeValue) ? `${edgeValue > 0 ? '+' : ''}${edgeValue.toFixed(1)}%` : '—'} accent={edgeColor} />
+      <BreakdownCell label={t.valueTier ?? 'Value Tier'} value={breakdown.value_tier ?? '—'} accent={C.accent} />
+      {breakdown.odds != null ? (
+        <BreakdownCell label="Odds" value={fmtAmericanOdds(breakdown.odds)} accent={C.textPrimary} />
+      ) : null}
+    </Box>
   );
 }
 
@@ -878,6 +944,7 @@ function ProbabilityBar({ homeWins, awayWins, t }) {
 function SafePickResult({ data, lang, t }) {
   const sp          = data.safe_pick ?? {};
   const alts        = data.alternatives ?? [];
+  const candidates  = data.safe_candidates ?? [sp, ...alts].filter(Boolean);
   const hitProb     = Number(sp.hit_probability) || 0;
   const probColor   = hitProb >= 75 ? C.green : hitProb >= 55 ? C.amber : C.red;
   const circumference = 125.6;
@@ -1026,31 +1093,70 @@ function SafePickResult({ data, lang, t }) {
             </Typography>
           </Box>
         </Box>
+        <Box sx={{ mt: '14px' }}>
+          <ValueBreakdownPanel
+            breakdown={{
+              model_probability: sp.model_probability ?? sp.hit_probability ?? null,
+              implied_probability: sp.implied_probability ?? null,
+              edge: sp.edge ?? null,
+              value_tier: sp.edge != null
+                ? (Number(sp.edge) > 5 ? 'PLUS EV' : Number(sp.edge) > 0 ? 'SMALL EDGE' : 'SAFE ONLY')
+                : 'SAFE ONLY',
+              odds: sp.odds ?? null,
+            }}
+            t={t}
+          />
+        </Box>
       </Box>
 
       {/* ── ALTERNATIVES ── */}
-      {alts.length > 0 && (
+      {data.safe_scope && (
+        <Box sx={{ borderLeft: `2px solid ${C.greenLine}`, pl: '12px', py: '4px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: C.textSecondary, lineHeight: 1.7 }}>
+            <span style={{ color: C.green }}>{t.selectionScope ?? 'Selection Scope'}:</span> {data.safe_scope}
+          </Typography>
+        </Box>
+      )}
+
+      {candidates.length > 1 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <SectionLabel>{t.otherSafeOptions ?? 'OTHER SAFE OPTIONS'}</SectionLabel>
-          {alts.map((alt, i) => (
+          <SectionLabel>{t.topCandidates ?? 'Top Candidates'}</SectionLabel>
+          {candidates.slice(1, 4).map((alt, i) => (
             <Box key={i} sx={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               background: C.surface,
               border: `1px solid ${C.border}`,
               borderRadius: '0',
               p: '10px 12px',
+              gap: '12px',
             }}>
               <Box sx={{ flex: 1, minWidth: 0, mr: '12px' }}>
                 <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '14px', color: C.textPrimary, letterSpacing: '1px' }}>
-                  {alt.pick}
+                  #{alt.rank ?? i + 2} {alt.pick}
                 </Typography>
                 <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted, mt: '3px', lineHeight: 1.5 }}>
                   {alt.reasoning}
                 </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px', mt: '8px' }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.cyan }}>
+                    {t.modelProb ?? 'Model Prob'} {fmtPct(alt.model_probability ?? alt.hit_probability)}
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: C.amber }}>
+                    {t.impliedProb ?? 'Vegas Implied'} {fmtPct(alt.implied_probability)}
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: Number(alt.edge) > 0 ? C.green : C.textMuted }}>
+                    {t.edge ?? 'Edge'} {Number.isFinite(Number(alt.edge)) ? `${Number(alt.edge) > 0 ? '+' : ''}${Number(alt.edge).toFixed(1)}%` : '—'}
+                  </Typography>
+                </Box>
               </Box>
-              <Typography sx={{ fontFamily: MONO, fontSize: '13px', color: C.amber, flexShrink: 0, textShadow: `0 0 6px ${C.amber}` }}>
-                {alt.hit_probability}%
-              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '13px', color: C.amber, textShadow: `0 0 6px ${C.amber}` }}>
+                  {alt.hit_probability}%
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted }}>
+                  {fmtAmericanOdds(alt.odds)}
+                </Typography>
+              </Box>
             </Box>
           ))}
         </Box>
@@ -1090,6 +1196,7 @@ function SingleGameResult({ hexa, t }) {
   const mp         = hexa.master_prediction ?? {};
   const bp         = hexa.best_pick;
   const pm         = hexa.probability_model;
+  const valueBreakdown = hexa.value_breakdown ?? null;
   const confidence = Math.min(100, Math.max(0, Number(mp.oracle_confidence) || 0));
   const confColor  = confidence >= 75 ? C.green : confidence >= 50 ? C.amber : C.red;
 
@@ -1199,6 +1306,12 @@ function SingleGameResult({ hexa, t }) {
         </Box>
 
         {/* ── AGREGAR A BANCA ── */}
+        {valueBreakdown && (
+          <Box sx={{ mt: '12px' }}>
+            <ValueBreakdownPanel breakdown={valueBreakdown} t={t} />
+          </Box>
+        )}
+
         <AgregarABanca
           matchup={hexa.matchup ?? hexa.odds?.game ?? ''}
           pick={mp.pick ?? ''}

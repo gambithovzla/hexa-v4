@@ -97,6 +97,10 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem_generated_at TIMESTAMP`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem_requested_at TIMESTAMP`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS value_breakdown JSONB`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS safe_candidates JSONB`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS safe_scope TEXT`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS selection_method VARCHAR(80)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_picks_user_game_pk ON picks(user_id, game_pk)`);
 
     // ── odds_snapshots (P7 — Line Movement Tracking) ──────────────────────────

@@ -157,6 +157,10 @@ function dbRowToEntry(row) {
     postmortem:           row.postmortem ?? null,
     postmortem_summary:   row.postmortem_summary ?? null,
     postmortem_generated_at: row.postmortem_generated_at ?? null,
+    value_breakdown:      row.value_breakdown ?? null,
+    safe_candidates:      row.safe_candidates ?? null,
+    safe_scope:           row.safe_scope ?? null,
+    selection_method:     row.selection_method ?? null,
     gamePk:               row.game_pk ?? null,
     gameDate,
   };
@@ -224,10 +228,10 @@ export default function useHistory() {
     const sp = hexaData?.safe_pick ?? null;
 
     // Extract odds for the pick
-    let oddsAtPick = null;
+    let oddsAtPick = hexaData?.value_breakdown?.odds ?? null;
     let oddsDetails = null;
     const oddsData = payload.odds;
-    if (oddsData) {
+    if (oddsData && oddsAtPick == null) {
       const pickLower = (pick ?? '').toLowerCase();
       const odds = oddsData.odds ?? oddsData;
       const ml = odds.moneyline;
@@ -269,6 +273,10 @@ export default function useHistory() {
       model:             payload.model ?? null,
       language:          payload.language ?? 'en',
       kelly_recommendation: hexaData?.kelly_recommendation ?? null,
+      value_breakdown:   hexaData?.value_breakdown ?? null,
+      safe_candidates:   hexaData?.safe_candidates ?? null,
+      safe_scope:        hexaData?.safe_scope ?? null,
+      selection_method:  hexaData?.selection_method ?? null,
       odds_at_pick:      oddsAtPick ?? null,
       odds_details:      oddsDetails ? JSON.stringify(oddsDetails) : null,
       game_pk:           payload.gamePk ?? featureGame?.gamePk ?? null,

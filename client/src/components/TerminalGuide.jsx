@@ -89,16 +89,16 @@ const CONTENT = {
         },
         {
           heading: 'Markets Analyzed',
-          body: `The system evaluates four market dimensions in parallel:\n\n• Moneyline — outright winner probability vs. implied odds\n• Run Line (±1.5) — spread-adjusted edge calculation\n• Over/Under — total runs model vs. posted totals\n• Player Props — stat projection vs. prop line variance`,
+          body: `The current objective selector ranks the supported markets with real line support:\n\n• Moneyline — outright winner probability\n• Run Line (±1.5) — spread cover probability\n• Over/Under — projected total vs. posted total\n\nPlayer props remain outside the objective selector until a dedicated real-time props feed is integrated.`,
         },
         {
-          heading: 'Expected Value Engine',
-          body: `After scanning all four markets, the system applies the Expected Value formula (EV+) to each candidate:\n\nEV = (Win% × Net Profit) − (Loss% × Stake)\n\nThe market with the highest positive EV is returned as the Safe Pick. This is not a preference — it is the mathematically optimal selection given current conditions.`,
+          heading: 'Highest Hit Probability',
+          body: `Safe Pick is not the value/edge mode. Its job is to return the single supported market with the highest estimated probability of winning right now. The selector ranks all supported candidates deterministically and surfaces the top one, plus the next two for transparency.`,
           highlight: true,
         },
         {
           heading: 'When to use Safe Pick',
-          body: `Use Safe Pick Mode when you want a single, high-confidence recommendation without manually evaluating multiple markets. It is especially powerful for games with wide prop menus or inflated line movement where identifying true value is non-trivial.`,
+          body: `Use Safe Pick Mode when you want the cleanest high-probability play among the currently supported markets. If you want the mathematically best price/value gap instead, use Deep/Oracle mode.`,
         },
       ],
     },
@@ -112,16 +112,16 @@ const CONTENT = {
         },
         {
           heading: 'Mercados Analizados',
-          body: `El sistema evalúa cuatro dimensiones de mercado en paralelo:\n\n• Moneyline — probabilidad de ganador vs. momios implícitos\n• Run Line (±1.5) — cálculo de ventaja ajustada al spread\n• Over/Under — modelo de carreras totales vs. totales publicados\n• Props de Jugadores — proyección estadística vs. varianza de línea de prop`,
+          body: `El selector objetivo actual rankea los mercados soportados con líneas reales:\n\n• Moneyline — probabilidad de ganador\n• Run Line (±1.5) — probabilidad de cubrir el spread\n• Over/Under — total proyectado vs. total publicado\n\nLas props de jugadores quedan fuera del selector objetivo hasta integrar un feed real de props en tiempo real.`,
         },
         {
-          heading: 'Motor de Valor Esperado',
-          body: `Tras escanear los cuatro mercados, el sistema aplica la fórmula de Valor Esperado (EV+) a cada candidato:\n\nEV = (% Victoria × Ganancia Neta) − (% Derrota × Apuesta)\n\nEl mercado con el EV positivo más alto se devuelve como el Safe Pick. No es una preferencia — es la selección matemáticamente óptima dadas las condiciones actuales.`,
+          heading: 'Mayor Probabilidad de Acierto',
+          body: `Safe Pick no es el modo de valor/edge. Su trabajo es devolver el mercado soportado con la probabilidad estimada más alta de ganar en este momento. El selector rankea todos los candidatos soportados de forma determinista y muestra el top 1, más los dos siguientes para transparencia.`,
           highlight: true,
         },
         {
           heading: 'Cuándo usar Safe Pick',
-          body: `Usa el Safe Pick Mode cuando quieras una recomendación única de alta confianza sin evaluar manualmente múltiples mercados. Es especialmente poderoso para juegos con menús de props amplios o movimiento de línea inflado donde identificar valor real no es trivial.`,
+          body: `Usa Safe Pick Mode cuando quieras la jugada de mayor probabilidad entre los mercados actualmente soportados. Si lo que quieres es la mejor brecha matemática entre probabilidad real y precio de mercado, usa Deep/Oracle.`,
         },
       ],
     },

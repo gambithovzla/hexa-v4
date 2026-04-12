@@ -44,6 +44,23 @@ function renderOutcome(row) {
   return `${row.actual_winner_abbr ?? '—'} (${row.actual_away_score}-${row.actual_home_score})`;
 }
 
+function renderOracleCell(row) {
+  if (row.oracle_predicted_winner_abbr) {
+    return `${row.oracle_predicted_winner_abbr} ${row.oracle_confidence != null ? `(${row.oracle_confidence})` : ''}`.trim();
+  }
+  if (row.oracle_pick) {
+    return `PICK ONLY: ${row.oracle_pick}${row.oracle_confidence != null ? ` (${row.oracle_confidence})` : ''}`;
+  }
+  return 'N/A';
+}
+
+function renderShadowCell(row) {
+  if (row.shadow_predicted_winner_abbr) {
+    return `${row.shadow_predicted_winner_abbr} ${row.shadow_confidence != null ? `(${row.shadow_confidence})` : ''}`.trim();
+  }
+  return 'N/A';
+}
+
 export default function ShadowModeDashboard({ onBack }) {
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -197,13 +214,13 @@ export default function ShadowModeDashboard({ onBack }) {
                       {row.away_team_abbr} @ {row.home_team_abbr}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.cyan }}>
-                      {row.oracle_predicted_winner_abbr ?? '—'} {row.oracle_confidence != null ? `(${row.oracle_confidence})` : ''}
+                      {renderOracleCell(row)}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: '#FF9900' }}>
-                      {row.shadow_predicted_winner_abbr ?? '—'} {row.shadow_confidence != null ? `(${row.shadow_confidence})` : ''}
+                      {renderShadowCell(row)}
                     </Typography>
-                    <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: row.agree_with_oracle ? C.green : C.red }}>
-                      {row.agree_with_oracle == null ? '—' : row.agree_with_oracle ? 'YES' : 'NO'}
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: row.agree_with_oracle == null ? C.textMuted : row.agree_with_oracle ? C.green : C.red }}>
+                      {row.agree_with_oracle == null ? 'N/A' : row.agree_with_oracle ? 'YES' : 'NO'}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textPrimary }}>
                       {renderOutcome(row)}

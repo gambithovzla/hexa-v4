@@ -26,6 +26,7 @@ import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
 import { calculateParallelScore } from './services/xgboostValidator.js';
+import { buildDeterministicSafePayload, buildValueBreakdown } from './market-intelligence.js';
 import {
   buildShadowActualOutcome,
   getShadowModeDashboard,
@@ -181,7 +182,7 @@ function buildAnalysisMeta(features = {}) {
   };
 }
 
-function annotateAnalysisData(data, features = {}) {
+function annotateAnalysisData(data, features = {}, gameData = null) {
   if (!data || typeof data !== 'object') return data;
 
   const analysisMeta = buildAnalysisMeta(features);
@@ -198,10 +199,17 @@ function annotateAnalysisData(data, features = {}) {
     alertFlags.push(traceFlag);
   }
 
+  const valueBreakdown = buildValueBreakdown({
+    data,
+    oddsData: features?.oddsData ?? null,
+    gameData,
+  });
+
   return {
     ...data,
     alert_flags: alertFlags,
     analysis_meta: analysisMeta,
+    value_breakdown: valueBreakdown ?? data.value_breakdown ?? null,
   };
 }
 
@@ -535,7 +543,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
 
     const responseData = analysis.data
       ? {
-          ...annotateAnalysisData(analysis.data, featureStore?.features ?? {}),
+          ...annotateAnalysisData(analysis.data, featureStore?.features ?? {}, gameData),
           odds: matchedOdds ?? undefined,
         }
       : null;
@@ -705,11 +713,19 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
           const shadowFeatures = contextBuildResult._features ?? {};
           const shadowStatcastData = buildShadowStatcastData(shadowFeatures);
           const xgboostResult = calculateParallelScore(shadowStatcastData, gameData);
+          const deterministicSafe = buildDeterministicSafePayload({
+            gameData,
+            features: shadowFeatures,
+            oddsData: matchedOdds ?? shadowFeatures?.oddsData ?? null,
+            xgboostResult,
+            lang,
+            llmData: analysis.data,
+          });
 
           const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
           const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
 
-          if (isShadowModeEnabled() && analysis?.data && xgboostResult) {
+          if (isShadowModeEnabled() && deterministicSafe && xgboostResult) {
             try {
               await recordShadowModelRun({
                 userId: req.user.id,
@@ -717,7 +733,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
                 analysisMode: isMulti ? 'safe_multi' : 'safe_single',
                 gameData,
                 gameDate: normalizeDateInput(resolvedDate ?? gameData?.gameDate),
-                analysisData: analysis.data,
+                analysisData: deterministicSafe,
                 xgboostResult,
                 statcastData: shadowStatcastData,
                 features: shadowFeatures,
@@ -730,7 +746,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
           return {
             gameId: id,
             matchup: `${awayAbbr} @ ${homeAbbr}`,
-            data: annotateAnalysisData(analysis.data, shadowFeatures),
+            data: annotateAnalysisData(deterministicSafe, shadowFeatures, gameData),
             rawText: analysis.rawText,
             parseError: analysis.parseError,
             odds: matchedOdds ?? undefined,
@@ -906,7 +922,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
             return {
               gameId: ctx.id,
               matchup: ctx.matchup,
-              data: annotateAnalysisData(analysis.data, ctx.features ?? {}),
+              data: annotateAnalysisData(analysis.data, ctx.features ?? {}, ctx.gameData ?? null),
               rawText: analysis.rawText,
               parseError: analysis.parseError,
               odds: ctx.matchedOdds ?? undefined,
@@ -955,7 +971,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
           const mp = d.master_prediction ?? d.safe_pick ?? {};
           const bp = d.best_pick ?? {};
 
-          const oddsAtPick = value.odds?.moneyline?.home ?? value.odds?.moneyline?.away ?? null;
+          const oddsAtPick = d.value_breakdown?.odds ?? value.odds?.moneyline?.home ?? value.odds?.moneyline?.away ?? null;
           const impliedProbAtPick = oddsAtPick != null
             ? (oddsAtPick < 0
                 ? Math.abs(oddsAtPick) / (Math.abs(oddsAtPick) + 100)
@@ -965,8 +981,9 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
           const pickResult = await pool.query(
             `INSERT INTO picks (user_id, type, matchup, pick, oracle_confidence, bet_value,
              model_risk, oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
-             model, language, odds_at_pick, implied_prob_at_pick, odds_details)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+             model, language, odds_at_pick, implied_prob_at_pick, odds_details, value_breakdown,
+             safe_candidates, safe_scope, selection_method)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
              RETURNING id`,
             [
               req.user.id,
@@ -986,6 +1003,10 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
               oddsAtPick,
               impliedProbAtPick,
               JSON.stringify(value.odds ?? {}),
+              d.value_breakdown != null ? JSON.stringify(d.value_breakdown) : null,
+              d.safe_candidates != null ? JSON.stringify(d.safe_candidates) : null,
+              d.safe_scope ?? null,
+              d.selection_method ?? null,
             ]
           );
 
@@ -1393,6 +1414,7 @@ app.post('/api/picks', verifyToken, async (req, res) => {
       model_risk, oracle_report, hexa_hunch, alert_flags,
       probability_model, best_pick, model, language,
       odds_at_pick, odds_details, kelly_recommendation,
+      value_breakdown, safe_candidates, safe_scope, selection_method,
       game_pk, gamePk, game_id, gameId, game_date, gameDate, date,
       feature_store, featureStore,
     } = req.body;
@@ -1409,9 +1431,9 @@ app.post('/api/picks', verifyToken, async (req, res) => {
          user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
          oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
          model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
-         game_pk, game_date
+         game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
       [
         req.user.id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
         oracle_report, hexa_hunch,
@@ -1423,6 +1445,10 @@ app.post('/api/picks', verifyToken, async (req, res) => {
         kelly_recommendation ?? null,
         game_pk ?? gamePk ?? game_id ?? gameId ?? null,
         normalizeDateInput(game_date ?? gameDate ?? date),
+        value_breakdown != null ? JSON.stringify(value_breakdown) : null,
+        safe_candidates != null ? JSON.stringify(safe_candidates) : null,
+        safe_scope ?? null,
+        selection_method ?? null,
       ]
     );
     const savedPick = rows[0];
