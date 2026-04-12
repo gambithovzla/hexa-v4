@@ -22,6 +22,7 @@ import { useAuth } from '../store/authStore';
 
 const STORAGE_KEY = 'hexa_history';
 const MAX_ENTRIES = 200;
+const REMOTE_HISTORY_LIMIT = 100;
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function normalizePickResult(result) {
@@ -169,14 +170,55 @@ function dbRowToEntry(row) {
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
+function buildStatsFromEntries(entries) {
+  const normalized = entries.map(e => normalizePickResult(e.result));
+  const total = entries.length;
+  const wins = normalized.filter(result => result === 'win').length;
+  const losses = normalized.filter(result => result === 'loss').length;
+  const pushes = normalized.filter(result => result === 'push').length;
+  const pending = normalized.filter(result => result === 'pending').length;
+  const resolved = wins + losses; // pushes excluded from win rate
+  const winRate = resolved > 0 ? Math.round((wins / resolved) * 100) : 0;
+  return { total, wins, losses, pushes, pending, winRate, shown: total, hasMore: false };
+}
+
+function normalizeRemoteStats(summary, shownCount) {
+  if (!summary || typeof summary !== 'object') {
+    return {
+      total: shownCount,
+      wins: 0,
+      losses: 0,
+      pushes: 0,
+      pending: 0,
+      winRate: 0,
+      shown: shownCount,
+      hasMore: false,
+    };
+  }
+
+  return {
+    total: Number(summary.total ?? shownCount),
+    wins: Number(summary.wins ?? 0),
+    losses: Number(summary.losses ?? 0),
+    pushes: Number(summary.pushes ?? 0),
+    pending: Number(summary.pending ?? 0),
+    winRate: Number(summary.winRate ?? 0),
+    shown: Number(summary.shown ?? shownCount),
+    hasMore: Boolean(summary.hasMore),
+  };
+}
+
 export default function useHistory() {
   const { token, isAuthenticated } = useAuth();
   const [history, setHistory] = useState([]);
+  const [stats, setStats] = useState(() => buildStatsFromEntries([]));
 
   // Load history on mount / when auth state changes
   const loadHistory = useCallback(() => {
     if (!isAuthenticated || !token) {
-      setHistory(load().map(normalizeEntry));
+      const entries = load().map(normalizeEntry);
+      setHistory(entries);
+      setStats(buildStatsFromEntries(entries));
       return;
     }
 
@@ -185,7 +227,11 @@ export default function useHistory() {
     })
       .then(r => r.json())
       .then(json => {
-        if (json.success) setHistory(json.data.map(dbRowToEntry));
+        if (json.success) {
+          const entries = json.data.map(dbRowToEntry);
+          setHistory(entries);
+          setStats(normalizeRemoteStats(json.summary, entries.length));
+        }
       })
       .catch(() => {});
   }, [token, isAuthenticated]);
@@ -196,7 +242,9 @@ export default function useHistory() {
 
   async function addPick(payload) {
     if (payload?.savedPick) {
-      setHistory(prev => [dbRowToEntry(payload.savedPick), ...prev]);
+      const entry = dbRowToEntry(payload.savedPick);
+      setHistory(prev => [entry, ...prev].slice(0, REMOTE_HISTORY_LIMIT));
+      if (isAuthenticated && token) loadHistory();
       return;
     }
 
@@ -224,6 +272,7 @@ export default function useHistory() {
       setHistory(prev => {
         const next = [entry, ...prev].slice(0, MAX_ENTRIES);
         save(next);
+        setStats(buildStatsFromEntries(next));
         return next;
       });
       return;
@@ -297,7 +346,7 @@ export default function useHistory() {
       });
       const json = await res.json();
       if (json.success) {
-        setHistory(prev => [dbRowToEntry(json.data), ...prev]);
+        loadHistory();
       } else {
         console.error('[useHistory] POST /api/picks failed:', json);
       }
@@ -314,6 +363,7 @@ export default function useHistory() {
       setHistory(prev => {
         const next = prev.map(e => e.id === id ? { ...e, result: normalizedOutcome } : e);
         save(next);
+        setStats(buildStatsFromEntries(next));
         return next;
       });
       return;
@@ -327,13 +377,7 @@ export default function useHistory() {
       });
       const json = await res.json();
       if (json.success) {
-        setHistory(prev => prev.map(e => e.id === id ? {
-          ...e,
-          result: normalizePickResult(json.data?.result ?? normalizedOutcome),
-          postmortem: null,
-          postmortem_summary: null,
-          postmortem_generated_at: null,
-        } : e));
+        loadHistory();
       }
     } catch {
       // ignore
@@ -347,6 +391,7 @@ export default function useHistory() {
       setHistory(prev => {
         const next = prev.filter(e => e.id !== id);
         save(next);
+        setStats(buildStatsFromEntries(next));
         return next;
       });
       return;
@@ -359,7 +404,7 @@ export default function useHistory() {
       });
       const json = await res.json();
       if (json.success) {
-        setHistory(prev => prev.filter(e => e.id !== id));
+        loadHistory();
       }
     } catch {
       // ignore network errors
@@ -372,6 +417,7 @@ export default function useHistory() {
     if (!isAuthenticated || !token) {
       setHistory([]);
       save([]);
+      setStats(buildStatsFromEntries([]));
       return;
     }
 
@@ -382,7 +428,7 @@ export default function useHistory() {
       });
       const json = await res.json();
       if (json.success) {
-        setHistory([]);
+        loadHistory();
       }
     } catch {
       // ignore network errors
@@ -424,15 +470,7 @@ export default function useHistory() {
   // ── getStats ───────────────────────────────────────────────────────────────
 
   function getStats() {
-    const normalized = history.map(e => normalizePickResult(e.result));
-    const total    = history.length;
-    const wins     = normalized.filter(result => result === 'win').length;
-    const losses   = normalized.filter(result => result === 'loss').length;
-    const pushes   = normalized.filter(result => result === 'push').length;
-    const pending  = normalized.filter(result => result === 'pending').length;
-    const resolved = wins + losses; // pushes excluded from win rate
-    const winRate  = resolved > 0 ? Math.round((wins / resolved) * 100) : 0;
-    return { total, wins, losses, pushes, pending, winRate };
+    return stats ?? buildStatsFromEntries(history);
   }
 
   return { history, addPick, markResult, deletePick, clearHistory, getStats, loadHistory, requestPostmortem };

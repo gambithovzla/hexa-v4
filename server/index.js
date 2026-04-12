@@ -1695,11 +1695,47 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
 // GET /api/picks — obtiene el historial del usuario
 app.get('/api/picks', verifyToken, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100',
-      [req.user.id]
-    );
-    res.json({ success: true, data: rows });
+    const [historyResult, summaryResult] = await Promise.all([
+      pool.query(
+        'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100',
+        [req.user.id]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) AS total_picks,
+           COUNT(*) FILTER (WHERE result = 'win') AS wins,
+           COUNT(*) FILTER (WHERE result = 'loss') AS losses,
+           COUNT(*) FILTER (WHERE result = 'push') AS pushes,
+           COUNT(*) FILTER (WHERE result = 'pending' OR result IS NULL) AS pending
+         FROM picks
+         WHERE user_id = $1 AND deleted_at IS NULL`,
+        [req.user.id]
+      ),
+    ]);
+
+    const summaryRow = summaryResult.rows[0] ?? {};
+    const total = Number(summaryRow.total_picks ?? 0);
+    const wins = Number(summaryRow.wins ?? 0);
+    const losses = Number(summaryRow.losses ?? 0);
+    const pushes = Number(summaryRow.pushes ?? 0);
+    const pending = Number(summaryRow.pending ?? 0);
+    const resolved = wins + losses;
+    const winRate = resolved > 0 ? Math.round((wins / resolved) * 100) : 0;
+
+    res.json({
+      success: true,
+      data: historyResult.rows,
+      summary: {
+        total,
+        wins,
+        losses,
+        pushes,
+        pending,
+        winRate,
+        shown: historyResult.rows.length,
+        hasMore: total > historyResult.rows.length,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
