@@ -25,6 +25,7 @@ import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from '.
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
+import { calculateParallelScore } from './services/xgboostValidator.js';
 import {
   buildShadowActualOutcome,
   getShadowModeDashboard,
@@ -701,18 +702,39 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
           const contextBuildResult = await buildContext(gameData, matchedOdds);
           const contextString = contextBuildResult.context ?? contextBuildResult;
           const analysis = await analyzeSafe({ contextString, lang });
+          const shadowFeatures = contextBuildResult._features ?? {};
+          const shadowStatcastData = buildShadowStatcastData(shadowFeatures);
+          const xgboostResult = calculateParallelScore(shadowStatcastData, gameData);
 
           const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
           const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
 
+          if (isShadowModeEnabled() && analysis?.data && xgboostResult) {
+            try {
+              await recordShadowModelRun({
+                userId: req.user.id,
+                sourceType: 'analysis',
+                analysisMode: isMulti ? 'safe_multi' : 'safe_single',
+                gameData,
+                gameDate: normalizeDateInput(resolvedDate ?? gameData?.gameDate),
+                analysisData: analysis.data,
+                xgboostResult,
+                statcastData: shadowStatcastData,
+                features: shadowFeatures,
+              });
+            } catch (shadowErr) {
+              console.warn('[shadow-mode] Could not persist safe analysis run:', shadowErr.message);
+            }
+          }
+
           return {
             gameId: id,
             matchup: `${awayAbbr} @ ${homeAbbr}`,
-            data: annotateAnalysisData(analysis.data, contextBuildResult._features ?? {}),
+            data: annotateAnalysisData(analysis.data, shadowFeatures),
             rawText: analysis.rawText,
             parseError: analysis.parseError,
             odds: matchedOdds ?? undefined,
-            featureStore: buildFeatureStorePayload(gameData, resolvedDate, contextBuildResult._features ?? {}),
+            featureStore: buildFeatureStorePayload(gameData, resolvedDate, shadowFeatures),
           };
         } catch (err) {
           return {
