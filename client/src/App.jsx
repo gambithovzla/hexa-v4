@@ -30,7 +30,7 @@ import PerformancePage      from './components/PerformancePage';
 import BatchScanPanel      from './components/BatchScanPanel';
 import BacktestDashboard  from './components/BacktestDashboard';
 import BacktestRunner     from './components/BacktestRunner';
-import DatasetDashboard  from './components/DatasetDashboard';
+import DatasetDashboard  from './components/DatasetDashboardV2';
 import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import useHistory           from './hooks/useHistory';

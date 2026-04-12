@@ -21,10 +21,10 @@ import { handleBMCWebhook } from './bmc-webhook.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
-import { parseLivePick, calculatePickProgress } from './pick-tracker.js';
+import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
-import { generatePickPostmortem } from './pick-postmortem.js';
+import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
 
 dotenv.config();
 
@@ -1592,10 +1592,12 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
       requestedLang ?? pickRow.postmortem?.lang ?? pickRow.language,
       storedPostmortemLang
     );
+    const storedPostmortemVersion = Number(pickRow.postmortem?.version ?? 1);
     const shouldReuseStoredPostmortem =
       Boolean(pickRow.postmortem) &&
       !force &&
-      storedPostmortemLang === effectiveLang;
+      storedPostmortemLang === effectiveLang &&
+      storedPostmortemVersion >= POSTMORTEM_SCHEMA_VERSION;
 
     if (shouldReuseStoredPostmortem) {
       await pool.query(
@@ -1619,16 +1621,26 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
       getEasternDateString(pickRow.created_at);
 
     let liveData = null;
+    let playByPlay = null;
     if (gamePk) {
       try {
         liveData = await getLiveGameData(gamePk);
       } catch {
         liveData = null;
       }
+
+      try {
+        playByPlay = await getGamePlayByPlay(gamePk);
+      } catch {
+        playByPlay = null;
+      }
     }
 
     const parsedPick = parseLivePick(pickRow.pick);
     const progress = liveData ? calculatePickProgress(parsedPick, liveData) : null;
+    const pickOutcomeContext = (liveData && playByPlay)
+      ? buildPickOutcomeContext(parsedPick, liveData, playByPlay)
+      : null;
 
     const gameSummary = liveData ? {
       gamePk: liveData.gamePk,
@@ -1644,11 +1656,13 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
         score: liveData.home?.score ?? null,
       },
       pickProgress: progress,
+      pickOutcomeContext,
       recentPlays: Array.isArray(liveData.recentPlays) ? liveData.recentPlays.slice(0, 5) : [],
     } : {
       gamePk,
       gameDate,
       pickProgress: null,
+      pickOutcomeContext: null,
     };
 
     const featureSnapshot = {
@@ -2055,6 +2069,11 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
 app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
   if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
   try {
+    const requestedMonth = String(req.query.month ?? '').trim();
+    if (requestedMonth && !/^\d{4}-\d{2}$/.test(requestedMonth)) {
+      return res.status(400).json({ success: false, error: 'Invalid month format. Use YYYY-MM.' });
+    }
+
     const summary = await pool.query(`
       SELECT
         COUNT(*) as total_records,
@@ -2072,18 +2091,52 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
       FROM pick_features
     `);
 
-    const recent = await pool.query(`
-      SELECT game_date, game_pk, pick, result,
-        home_pitcher_xwoba, away_pitcher_xwoba,
-        home_pitcher_whiff, away_pitcher_whiff,
-        home_lineup_avg_xwoba, away_lineup_avg_xwoba,
-        park_factor_overall, temperature, wind_speed,
-        data_quality_score, signal_coherence_score,
-        odds_ml_home, odds_ml_away, odds_ou_total
+    const monthOptions = await pool.query(`
+      SELECT
+        TO_CHAR(game_date::date, 'YYYY-MM') as month_key,
+        MIN(game_date::date) as month_start,
+        COUNT(*) as total_records,
+        COUNT(*) FILTER (WHERE result = 'win') as wins,
+        COUNT(*) FILTER (WHERE result = 'loss') as losses,
+        COUNT(*) FILTER (WHERE result IS NULL) as pending
       FROM pick_features
-      ORDER BY created_at DESC
-      LIMIT 50
+      WHERE game_date IS NOT NULL
+      GROUP BY 1
+      ORDER BY month_key DESC
     `);
+
+    const selectedMonth = requestedMonth || monthOptions.rows[0]?.month_key || null;
+
+    const dailySummaries = selectedMonth
+      ? await pool.query(`
+          SELECT
+            TO_CHAR(game_date::date, 'YYYY-MM-DD') as day_key,
+            COUNT(*) as total_records,
+            COUNT(*) FILTER (WHERE result = 'win') as wins,
+            COUNT(*) FILTER (WHERE result = 'loss') as losses,
+            COUNT(*) FILTER (WHERE result IS NULL) as pending
+          FROM pick_features
+          WHERE TO_CHAR(game_date::date, 'YYYY-MM') = $1
+          GROUP BY 1
+          ORDER BY day_key DESC
+        `, [selectedMonth])
+      : { rows: [] };
+
+    const monthRecords = selectedMonth
+      ? await pool.query(`
+          SELECT game_date, game_pk, pick, result,
+            home_pitcher_xwoba, away_pitcher_xwoba,
+            home_pitcher_whiff, away_pitcher_whiff,
+            home_lineup_avg_xwoba, away_lineup_avg_xwoba,
+            park_factor_overall, temperature, wind_speed,
+            data_quality_score, signal_coherence_score,
+            odds_ml_home, odds_ml_away, odds_ou_total
+          FROM pick_features
+          WHERE TO_CHAR(game_date::date, 'YYYY-MM') = $1
+          ORDER BY game_date DESC, created_at DESC
+          LIMIT 750
+        `, [selectedMonth])
+      : { rows: [] };
 
     const featureCoverage = await pool.query(`
       SELECT
@@ -2115,7 +2168,10 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
       success: true,
       data: {
         summary: summary.rows[0],
-        recent: recent.rows,
+        selectedMonth,
+        monthOptions: monthOptions.rows,
+        dailySummaries: dailySummaries.rows,
+        records: monthRecords.rows,
         featureCoverage: featureCoverage.rows[0],
         winRateByTemperature: winRateByFeature.rows,
         statcastCache: getCacheStatus(),

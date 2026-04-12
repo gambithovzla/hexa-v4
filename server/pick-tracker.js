@@ -121,6 +121,205 @@ function findPlayer(pickName, players) {
   }) ?? null;
 }
 
+function normalizeName(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getLastName(value) {
+  const parts = normalizeName(value).split(/\s+/).filter(Boolean);
+  return parts[parts.length - 1] ?? '';
+}
+
+function matchesTrackedPlayer(trackedPlayer, candidate) {
+  if (!trackedPlayer || !candidate) return false;
+
+  if (trackedPlayer.id != null && candidate.id != null) {
+    return String(trackedPlayer.id) === String(candidate.id);
+  }
+
+  const trackedName = normalizeName(trackedPlayer.name);
+  const candidateName = normalizeName(candidate.name);
+  if (!trackedName || !candidateName) return false;
+  if (trackedName === candidateName) return true;
+
+  const trackedLast = getLastName(trackedName);
+  const candidateLast = getLastName(candidateName);
+  return Boolean(trackedLast) && trackedLast === candidateLast;
+}
+
+function resolveTrackedPlayer(parsedPick, liveData, playByPlayData) {
+  if (!parsedPick?.playerName) return null;
+
+  const allPitchers = [
+    ...(liveData?.playerStats?.home?.pitchers ?? []),
+    ...(liveData?.playerStats?.away?.pitchers ?? []),
+  ];
+  const allBatters = [
+    ...(liveData?.playerStats?.home?.batters ?? []),
+    ...(liveData?.playerStats?.away?.batters ?? []),
+  ];
+
+  const isPitcherProp = parsedPick.stat === 'strikeOuts';
+  const primaryPool = isPitcherProp ? allPitchers : allBatters;
+  const secondaryPool = isPitcherProp ? allBatters : allPitchers;
+  const fromBoxscore = findPlayer(parsedPick.playerName, primaryPool) ?? findPlayer(parsedPick.playerName, secondaryPool);
+  if (fromBoxscore) return fromBoxscore;
+
+  const plays = Array.isArray(playByPlayData?.plays) ? playByPlayData.plays : [];
+  const playPool = plays.flatMap((play) => {
+    const player = isPitcherProp ? play?.pitcher : play?.batter;
+    return player?.name ? [{ id: player.id ?? null, name: player.name }] : [];
+  });
+
+  return findPlayer(parsedPick.playerName, playPool);
+}
+
+function getPlayerPropEventIncrement(stat, play, trackedPlayer) {
+  if (!play || !trackedPlayer) return 0;
+
+  if (stat === 'strikeOuts') {
+    if (!matchesTrackedPlayer(trackedPlayer, play.pitcher)) return 0;
+    const strikeoutText = `${play.eventType ?? ''} ${play.event ?? ''}`.toLowerCase();
+    return strikeoutText.includes('strikeout') ? 1 : 0;
+  }
+
+  if (!matchesTrackedPlayer(trackedPlayer, play.batter)) return 0;
+
+  switch (stat) {
+    case 'hits':
+      return play.hasHit ? 1 : 0;
+    case 'homeRuns':
+      return play.eventType === 'home_run' ? 1 : 0;
+    case 'totalBases': {
+      const basesByEvent = {
+        single: 1,
+        double: 2,
+        triple: 3,
+        home_run: 4,
+      };
+      return basesByEvent[play.eventType] ?? 0;
+    }
+    case 'rbi':
+      return Number(play.rbi ?? 0);
+    default:
+      return 0;
+  }
+}
+
+function resolveStarterContext(plays, trackedPlayer, stat) {
+  if (!Array.isArray(plays) || stat === 'strikeOuts') return null;
+
+  const firstTrackedPlay = plays.find((play) => matchesTrackedPlayer(trackedPlayer, play?.batter));
+  const battingTeamId = firstTrackedPlay?.batter?.teamId ?? null;
+  if (!battingTeamId) return null;
+
+  const starterPlay = plays.find((play) => String(play?.batter?.teamId ?? '') === String(battingTeamId) && play?.pitcher?.name);
+  if (!starterPlay?.pitcher?.name) return null;
+
+  return {
+    id: starterPlay.pitcher.id ?? null,
+    name: starterPlay.pitcher.name,
+  };
+}
+
+function formatRelevantPlay(play, increment, cumulative, opposingStarter = null) {
+  const pitcher = play?.pitcher?.name ? {
+    id: play.pitcher.id ?? null,
+    name: play.pitcher.name,
+    role: opposingStarter
+      ? (matchesTrackedPlayer(opposingStarter, play.pitcher) ? 'starter' : 'bullpen')
+      : null,
+  } : null;
+
+  return {
+    inning: play?.inning ?? null,
+    halfInning: play?.halfInning ?? null,
+    inningLabel: play?.inningLabel ?? null,
+    event: play?.event ?? null,
+    eventType: play?.eventType ?? null,
+    description: play?.description ?? null,
+    increment,
+    cumulative,
+    batter: play?.batter?.name ? {
+      id: play.batter.id ?? null,
+      name: play.batter.name,
+    } : null,
+    pitcher,
+  };
+}
+
+export function buildPickOutcomeContext(parsedPick, liveData, playByPlayData) {
+  if (parsedPick?.type !== 'player_prop' || !liveData || !Array.isArray(playByPlayData?.plays)) {
+    return null;
+  }
+
+  const trackedPlayer = resolveTrackedPlayer(parsedPick, liveData, playByPlayData);
+  if (!trackedPlayer) return null;
+
+  const plays = playByPlayData.plays.filter((play) => play?.isComplete !== false);
+  const opposingStarter = resolveStarterContext(plays, trackedPlayer, parsedPick.stat);
+  const relevantEvents = [];
+  let cumulative = 0;
+
+  for (const play of plays) {
+    const increment = getPlayerPropEventIncrement(parsedPick.stat, play, trackedPlayer);
+    if (!increment) continue;
+    cumulative += increment;
+    relevantEvents.push(formatRelevantPlay(play, increment, cumulative, opposingStarter));
+  }
+
+  const thresholdValue = Math.floor(Number(parsedPick.line ?? 0)) + 1;
+  const thresholdEvent = parsedPick.direction === 'over'
+    ? (relevantEvents.find((event) => event.cumulative >= thresholdValue) ?? null)
+    : null;
+  const breakEvent = parsedPick.direction === 'under'
+    ? (relevantEvents.find((event) => event.cumulative >= thresholdValue) ?? null)
+    : null;
+
+  const statLabelByKey = {
+    strikeOuts: 'K',
+    hits: 'H',
+    homeRuns: 'HR',
+    totalBases: 'TB',
+    rbi: 'RBI',
+    stolenBases: 'SB',
+  };
+
+  const finalValue = Number(
+    trackedPlayer?.[parsedPick.stat] ??
+    relevantEvents[relevantEvents.length - 1]?.cumulative ??
+    0
+  );
+
+  return {
+    type: parsedPick.type,
+    stat: parsedPick.stat,
+    statLabel: statLabelByKey[parsedPick.stat] ?? parsedPick.stat,
+    direction: parsedPick.direction,
+    line: parsedPick.line,
+    thresholdValue,
+    finalValue,
+    player: {
+      id: trackedPlayer.id ?? null,
+      name: trackedPlayer.name ?? parsedPick.playerName,
+    },
+    opposingStarter,
+    thresholdEvent,
+    breakEvent,
+    relevantEvents,
+    analysisHint: thresholdEvent
+      ? 'Use thresholdEvent as the first play that satisfied the prop. Do not describe a later relevant play as the fulfillment moment.'
+      : breakEvent
+        ? 'Use breakEvent as the first play that invalidated the prop. Do not describe a later relevant play as the failure trigger.'
+        : 'Use relevantEvents for event sequencing. Do not infer fulfillment timing from recentPlays alone.',
+  };
+}
+
 /**
  * Calculate live progress for a single pick against live game data.
  *
