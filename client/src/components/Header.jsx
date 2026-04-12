@@ -31,6 +31,7 @@ const TABS = [
   { value: 'game',    en: 'Single Game', es: 'Juego Individual' },
   { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           adminOnly: true },
   { value: 'bankroll', en: 'Bankroll',    es: 'Bankroll'         },
+  { value: 'tools',   en: 'Tools',       es: 'Tools'            },
   { value: 'history', en: 'History',     es: 'Historial'        },
   { value: 'live',    en: 'Live',        es: 'En Vivo'          },
   { value: 'gameday', en: 'Gameday',     es: 'Detalle'          },
