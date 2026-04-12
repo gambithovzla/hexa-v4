@@ -699,6 +699,14 @@ function AnalisisTab({ lang }) {
         <StatCard value={`${stats.winRate}%`}  label={t.history.winRate}    color={C.accent}      />
       </Box>
 
+      {stats.hasMore && (
+        <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textMuted }}>
+          {lang === 'es'
+            ? `Mostrando los ${stats.shown} picks mas recientes de ${stats.total}.`
+            : `Showing the latest ${stats.shown} of ${stats.total} picks.`}
+        </Typography>
+      )}
+
       {/* Pick list */}
       {history.length === 0 ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10, gap: '14px', minHeight: 260 }}>
