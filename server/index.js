@@ -9,7 +9,7 @@ import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat } from './oracle.js';
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
-import { getCacheStatus, refreshCache, getPitcherStatcast, getBatterStatcast } from './savant-fetcher.js';
+import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
@@ -25,6 +25,13 @@ import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from '.
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
+import {
+  buildShadowActualOutcome,
+  getShadowModeDashboard,
+  isShadowModeEnabled,
+  recordShadowModelRun,
+  updateShadowModelRunsForGame,
+} from './shadow-model.js';
 
 dotenv.config();
 
@@ -119,6 +126,32 @@ function buildFeatureStorePayload(gameData, requestedDate, features = {}) {
     gamePk: gameData?.gamePk ?? null,
     gameDate: normalizeDateInput(requestedDate ?? gameData?.gameDate) ?? null,
     features: features ?? {},
+  };
+}
+
+function buildShadowStatcastData(features = {}) {
+  const savantBatters = features.savantBatters ?? { home: [], away: [] };
+
+  const summarizeLineup = (batters) => {
+    const withData = (batters ?? []).filter((b) => b?.savant?.xwOBA != null);
+    if (!withData.length) {
+      return { avg_xwOBA: null, avg_woba_7d: null };
+    }
+
+    const avg_xwOBA = withData.reduce((sum, batter) => sum + Number(batter.savant.xwOBA ?? 0), 0) / withData.length;
+    const avg_woba_7d = withData.reduce((sum, batter) => {
+      const rolling = batter?.savant?.rolling_woba_7d ?? batter?.savant?.rolling_windows?.woba_7d ?? batter?.savant?.xwOBA ?? 0;
+      return sum + Number(rolling);
+    }, 0) / withData.length;
+
+    return { avg_xwOBA, avg_woba_7d };
+  };
+
+  return {
+    homePitcher: features.homePitcherSavant ?? null,
+    awayPitcher: features.awayPitcherSavant ?? null,
+    homeLineup: summarizeLineup(savantBatters.home),
+    awayLineup: summarizeLineup(savantBatters.away),
   };
 }
 
@@ -475,48 +508,11 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
     try {
       const contextResult = await buildContext(gameData, matchedOdds);
       const context = contextResult.context ?? contextResult;
-      featureStore = buildFeatureStorePayload(gameData, date, contextResult._features ?? {});
+      const shadowFeatures = contextResult._features ?? {};
+      featureStore = buildFeatureStorePayload(gameData, date, shadowFeatures);
       const matchup = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
 
-      // Construir statcastData para el validador XGBoost.
-      // Los datos ya están en caché desde buildContext, por lo que no hay overhead.
-      let statcastData = null;
-      try {
-        const homePitcherName = gameData.teams?.home?.probablePitcher?.fullName;
-        const awayPitcherName = gameData.teams?.away?.probablePitcher?.fullName;
-
-        const [homePitcherStat, awayPitcherStat] = await Promise.all([
-          homePitcherName ? getPitcherStatcast(homePitcherName) : Promise.resolve(null),
-          awayPitcherName ? getPitcherStatcast(awayPitcherName) : Promise.resolve(null),
-        ]);
-
-        // Calcular xwOBA y wOBA promedios de la alineación local y visitante
-        const buildLineupStats = async (lineupArr) => {
-          if (!lineupArr?.length) return { avg_xwOBA: null, avg_woba_7d: null };
-          const stats = await Promise.all(
-            lineupArr.slice(0, 5).map(p => getBatterStatcast(p.fullName).catch(() => null))
-          );
-          const valid = stats.filter(s => s?.xwOBA != null);
-          if (!valid.length) return { avg_xwOBA: null, avg_woba_7d: null };
-          const avg_xwOBA  = valid.reduce((s, p) => s + p.xwOBA, 0) / valid.length;
-          const avg_woba_7d = valid.reduce((s, p) => s + (p.rolling_windows?.woba_7d ?? p.xwOBA), 0) / valid.length;
-          return { avg_xwOBA, avg_woba_7d };
-        };
-
-        const [homeLineup, awayLineup] = await Promise.all([
-          buildLineupStats(gameData.lineups?.home),
-          buildLineupStats(gameData.lineups?.away),
-        ]);
-
-        statcastData = {
-          homePitcher: homePitcherStat,
-          awayPitcher: awayPitcherStat,
-          homeLineup,
-          awayLineup,
-        };
-      } catch (statcastErr) {
-        console.warn('[index] statcastData build failed (non-critical):', statcastErr.message);
-      }
+      const statcastData = buildShadowStatcastData(shadowFeatures);
 
       analysis = await analyzeGame({
         matchup, betType, context, riskProfile,
@@ -542,6 +538,25 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
           odds: matchedOdds ?? undefined,
         }
       : null;
+
+    if (isShadowModeEnabled() && analysis?.data && analysis?.xgboostResult && gameData) {
+      try {
+        await recordShadowModelRun({
+          userId: req.user.id,
+          sourceType: 'analysis',
+          analysisMode: 'single',
+          gameData,
+          gameDate: normalizeDateInput(date ?? gameData?.gameDate),
+          analysisData: analysis.data,
+          xgboostResult: analysis.xgboostResult,
+          statcastData: buildShadowStatcastData(featureStore?.features ?? {}),
+          features: featureStore?.features ?? {},
+        });
+      } catch (shadowErr) {
+        console.warn('[shadow-mode] Could not persist analysis run:', shadowErr.message);
+      }
+    }
+
     res.json({
       success: true,
       data: responseData,
@@ -1328,6 +1343,20 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
       }
     }
 
+    try {
+      await updateShadowModelRunsForGame({
+        gamePk,
+        homeTeamId: liveData.home?.id ?? null,
+        awayTeamId: liveData.away?.id ?? null,
+        homeAbbr: liveData.home?.abbreviation ?? null,
+        awayAbbr: liveData.away?.abbreviation ?? null,
+        homeScore,
+        awayScore,
+      });
+    } catch (shadowErr) {
+      console.warn('[shadow-mode] Could not resolve shadow runs for game:', shadowErr.message);
+    }
+
     res.json({ success: true, resolved, totalRuns, homeScore, awayScore });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -1954,9 +1983,13 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
 
     const contextResult2 = await buildContext(gameData, matchedOdds);
     const context = contextResult2.context ?? contextResult2;
+    const shadowFeatures = contextResult2._features ?? {};
+    const shadowStatcastData = buildShadowStatcastData(shadowFeatures);
     const analysis = await analyzeGame({
       mode: 'single', matchup, context, lang: 'en',
       betType: betType || 'all', riskProfile: 'balanced', webSearch: false, model: 'deep', timeoutMs: 90000,
+      statcastData: shadowStatcastData,
+      mlbApiData: gameData,
     });
 
     const latency = Date.now() - start;
@@ -2054,6 +2087,30 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
         pick,
         result: actualResult,
       });
+
+      if (isShadowModeEnabled() && analysis?.data && analysis?.xgboostResult) {
+        try {
+          await recordShadowModelRun({
+            backtestId,
+            sourceType: 'backtest',
+            analysisMode: 'single',
+            gameData,
+            gameDate: normalizeDateInput(date ?? gameData?.gameDate),
+            analysisData: analysis.data,
+            xgboostResult: analysis.xgboostResult,
+            statcastData: shadowStatcastData,
+            features: shadowFeatures,
+            actual: buildShadowActualOutcome({
+              gameData,
+              actualResult,
+              homeScore,
+              awayScore,
+            }),
+          });
+        } catch (shadowErr) {
+          console.warn('[shadow-mode] Could not persist backtest run:', shadowErr.message);
+        }
+      }
     }
 
     res.json({
@@ -2062,6 +2119,19 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/admin/shadow-model — view shadow model dashboard (admin only)
+app.get('/api/admin/shadow-model', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
+
+  try {
+    const limit = Number(req.query.limit ?? 50);
+    const data = await getShadowModeDashboard(limit);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 

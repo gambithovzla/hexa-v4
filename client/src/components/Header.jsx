@@ -602,6 +602,20 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           </Box>
         )}
 
+        {isAdmin && (
+          <Box component="button" onClick={() => { window.location.href = '/admin/shadow-model'; }} sx={{
+            px: '10px', py: '5px',
+            border: '1px solid rgba(0,255,255,0.3)',
+            background: 'rgba(0,255,255,0.08)',
+            color: '#00E5FF',
+            fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '1.5px',
+            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            '&:hover': { background: 'rgba(0,255,255,0.15)', borderColor: 'rgba(0,255,255,0.5)' },
+          }}>
+            SHADOW
+          </Box>
+        )}
+
         {/* Credit Manager button + panel — admin only */}
         {isAdmin && (
           <Box sx={{ position: 'relative', flexShrink: 0 }}>
