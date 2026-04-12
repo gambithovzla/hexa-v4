@@ -125,7 +125,13 @@ function buildPayload({
   const agreeWithOracle = oracle.predictedWinnerId && xgboostResult?.predicted_winner
     ? String(oracle.predictedWinnerId) === String(xgboostResult.predicted_winner)
     : null;
-  const masterPrediction = analysisData?.master_prediction ?? {};
+  const masterPrediction = analysisData?.master_prediction ?? null;
+  const safePrediction = analysisData?.safe_pick ?? null;
+  const oraclePick = masterPrediction?.pick ?? safePrediction?.pick ?? null;
+  const oracleConfidence = toNumber(
+    masterPrediction?.oracle_confidence ??
+    safePrediction?.hit_probability
+  );
 
   return {
     user_id: userId,
@@ -141,8 +147,8 @@ function buildPayload({
     away_team_id: toNumber(away?.id),
     home_team_abbr: normalizeAbbr(home?.abbreviation, 'HOME'),
     away_team_abbr: normalizeAbbr(away?.abbreviation, 'AWAY'),
-    oracle_pick: masterPrediction.pick ?? null,
-    oracle_confidence: toNumber(masterPrediction.oracle_confidence),
+    oracle_pick: oraclePick,
+    oracle_confidence: oracleConfidence,
     oracle_home_win_prob: oracle.homeWinProb,
     oracle_predicted_winner_id: oracle.predictedWinnerId,
     oracle_predicted_winner_abbr: oracle.predictedWinnerAbbr,
