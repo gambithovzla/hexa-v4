@@ -1791,6 +1791,8 @@ export async function buildContext(gameData, oddsData = null) {
   const result = {
     context: contextString,
     _features: {
+      homePitcher,
+      awayPitcher,
       homePitcherSavant,
       awayPitcherSavant,
       homePitcherStats,
@@ -1798,6 +1800,7 @@ export async function buildContext(gameData, oddsData = null) {
       homeHitting,
       awayHitting,
       savantBatters,
+      batterSplitsMap,
       parkFactorData,
       weatherData,
       dataQuality,

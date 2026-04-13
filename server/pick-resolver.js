@@ -63,6 +63,20 @@ function normalizeLooseText(value) {
     .trim();
 }
 
+function normalizeDateKey(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+function getPickResolutionDate(pick) {
+  return normalizeDateKey(pick?.game_date) ?? normalizeDateKey(pick?.created_at);
+}
+
 // ── Team matching helpers ─────────────────────────────────────────────────────
 
 /**
@@ -137,6 +151,16 @@ export function findGame(matchup, games) {
     if (direct || reversed) return game;
   }
   return null;
+}
+
+function findGameForPick(pick, games) {
+  const targetGamePk = pick?.game_pk != null ? Number(pick.game_pk) : null;
+  if (Number.isFinite(targetGamePk)) {
+    const gameByPk = games.find((game) => Number(game?.gamePk) === targetGamePk);
+    if (gameByPk) return gameByPk;
+  }
+
+  return findGame(pick?.matchup, games);
 }
 
 // ── Player prop helpers ───────────────────────────────────────────────────────
@@ -484,7 +508,22 @@ async function resolvePendingPicksLegacy() {
 
   // 1. Fetch all pending picks (system job — no user_id filter)
   const { rows: picks } = await pool.query(
-    "SELECT id, matchup, pick, created_at FROM picks WHERE result = 'pending' AND deleted_at IS NULL"
+    `SELECT
+       p.id,
+       p.matchup,
+       p.pick,
+       p.created_at,
+       COALESCE(p.game_pk, pf.game_pk) AS game_pk,
+       COALESCE(p.game_date::text, pf.game_date::text) AS game_date
+     FROM picks p
+     LEFT JOIN LATERAL (
+       SELECT game_pk, game_date
+       FROM pick_features
+       WHERE pick_id = p.id
+       ORDER BY created_at DESC
+       LIMIT 1
+     ) pf ON TRUE
+     WHERE p.result = 'pending' AND p.deleted_at IS NULL`
   );
 
   if (picks.length === 0) {
@@ -502,13 +541,14 @@ async function resolvePendingPicksLegacy() {
 
   console.log(`[pick-resolver] Found ${picks.length} pending pick(s). Starting resolution...`);
 
-  // 2. Group picks by date (YYYY-MM-DD from created_at)
+  // 2. Group picks by scheduled game date whenever possible.
   const byDate = {};
   for (const pick of picks) {
-    // Use ET date from created_at (MLB games are scheduled in ET)
-    // This prevents the UTC midnight boundary from shifting the date
-    const pickDate = new Date(pick.created_at);
-    const date = pickDate.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const date = getPickResolutionDate(pick);
+    if (!date) {
+      summary.errors.push(`Pick #${pick.id}: missing resolvable game date`);
+      continue;
+    }
     if (!byDate[date]) byDate[date] = [];
     byDate[date].push(pick);
   }
@@ -528,10 +568,10 @@ async function resolvePendingPicksLegacy() {
     for (const pick of datePicks) {
       try {
         // a. Find the game for this matchup
-        const game = findGame(pick.matchup, games);
+        const game = findGameForPick(pick, games);
         if (!game) {
           console.log(
-            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" — no matching game found for ${date}`
+            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" — no matching game found for ${date} (gamePk: ${pick.game_pk ?? 'n/a'})`
           );
           continue;
         }
@@ -567,9 +607,9 @@ async function resolvePendingPicksLegacy() {
           }
 
           // Find the game for this pick
-          const ppGame = findGame(pick.matchup, games);
+          const ppGame = findGameForPick(pick, games);
           if (!ppGame) {
-            console.log(`[pick-resolver] Pick #${pick.id}: no matching game for "${pick.matchup}"`);
+            console.log(`[pick-resolver] Pick #${pick.id}: no matching game for "${pick.matchup}" (gamePk: ${pick.game_pk ?? 'n/a'})`);
             continue;
           }
 
@@ -666,7 +706,22 @@ export async function resolvePendingPicks() {
   }
 
   const { rows: picks } = await pool.query(
-    "SELECT id, matchup, pick, created_at FROM picks WHERE result = 'pending' AND deleted_at IS NULL"
+    `SELECT
+       p.id,
+       p.matchup,
+       p.pick,
+       p.created_at,
+       COALESCE(p.game_pk, pf.game_pk) AS game_pk,
+       COALESCE(p.game_date::text, pf.game_date::text) AS game_date
+     FROM picks p
+     LEFT JOIN LATERAL (
+       SELECT game_pk, game_date
+       FROM pick_features
+       WHERE pick_id = p.id
+       ORDER BY created_at DESC
+       LIMIT 1
+     ) pf ON TRUE
+     WHERE p.result = 'pending' AND p.deleted_at IS NULL`
   );
 
   if (picks.length === 0) {
@@ -678,8 +733,11 @@ export async function resolvePendingPicks() {
 
   const byDate = {};
   for (const pick of picks) {
-    const pickDate = new Date(pick.created_at);
-    const date = pickDate.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const date = getPickResolutionDate(pick);
+    if (!date) {
+      summary.errors.push(`Pick #${pick.id}: missing resolvable game date`);
+      continue;
+    }
     if (!byDate[date]) byDate[date] = [];
     byDate[date].push(pick);
   }
@@ -697,7 +755,7 @@ export async function resolvePendingPicks() {
 
     for (const pick of datePicks) {
       try {
-        const game = findGame(pick.matchup, games);
+        const game = findGameForPick(pick, games);
         if (!game) {
           console.log(`[pick-resolver] Pick #${pick.id}: "${pick.matchup}" â€” no matching game found for ${date}`);
           continue;

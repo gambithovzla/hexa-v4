@@ -39,12 +39,12 @@ const CONTENT = {
           body: `The Oracle is H.E.X.A.'s core processing system — a proprietary algorithmic engine that ingests and cross-references over 26,000 Statcast variables in real time. Built on advanced statistical modeling, it converts raw baseball data into quantified edges and actionable probability signals.`,
         },
         {
-          heading: 'Standard Mode',
-          body: `Standard Mode delivers rapid analysis by processing the most impactful Statcast variables: exit velocity, xFIP, barrel rate, BABIP, sprint speed, park factors, and current-season weighted metrics. Results are returned in seconds, giving you a sharp, data-driven read on any matchup.`,
+          heading: 'Deep Analytics Mode',
+          body: `Deep Analytics Mode is now the only Oracle engine exposed to users. Every Oracle run goes through the full multi-layer processing stack instead of a reduced standard pass.`,
         },
         {
-          heading: 'Deep Analytics Mode',
-          body: `Deep Analytics Mode unlocks the full power of the Advanced Processing System. It runs multi-layer cross-referencing across historical databases, situational splits (day/night, L/R, home/away), pitcher fatigue curves, lineup construction patterns, umpire tendencies, and weather-adjusted trajectory models. This mode provides the highest-confidence output the system can generate.`,
+          heading: 'Deep Coverage',
+          body: `Deep cross-references historical databases, situational splits (day/night, L/R, home/away), pitcher fatigue curves, lineup construction patterns, umpire tendencies, and weather-adjusted trajectory models. This is the highest-confidence output the system can generate when the data quality supports it.`,
           highlight: true,
         },
         {
@@ -62,12 +62,12 @@ const CONTENT = {
           body: `The Oracle es el sistema central de procesamiento de H.E.X.A. — un motor algorítmico propietario que ingiere y cruza más de 26,000 variables de Statcast en tiempo real. Construido sobre modelos estadísticos avanzados, convierte datos crudos de béisbol en ventajas cuantificadas y señales de probabilidad accionables.`,
         },
         {
-          heading: 'Standard Mode',
-          body: `El Modo Estándar entrega análisis rápidos procesando las variables Statcast de mayor impacto: velocidad de salida, xFIP, tasa de barril, BABIP, velocidad de carrera, factores de estadio y métricas ponderadas de la temporada actual. Los resultados se generan en segundos, brindando una lectura precisa y basada en datos de cualquier enfrentamiento.`,
+          heading: 'Deep Analytics Mode',
+          body: `Deep Analytics Mode es ahora el único motor de Oracle expuesto al usuario. Cada corrida de Oracle pasa por la pila completa de procesamiento multicapa en lugar de una ruta estándar reducida.`,
         },
         {
-          heading: 'Deep Analytics Mode',
-          body: `El Modo Deep Analytics desbloquea la potencia completa del Sistema de Procesamiento Avanzado. Ejecuta cruces multicapa sobre bases de datos históricas, splits situacionales (día/noche, L/D, local/visitante), curvas de fatiga del lanzador, patrones de construcción de alineación, tendencias de árbitros y modelos de trayectoria ajustados al clima. Este modo genera el output de mayor confianza que el sistema puede producir.`,
+          heading: 'Alcance de Deep',
+          body: `Deep cruza bases de datos históricas, splits situacionales (día/noche, L/D, local/visitante), curvas de fatiga del lanzador, patrones de construcción de alineación, tendencias de árbitros y modelos de trayectoria ajustados al clima. Este es el output de mayor confianza que el sistema puede generar cuando la calidad de datos lo permite.`,
           highlight: true,
         },
         {
@@ -89,7 +89,7 @@ const CONTENT = {
         },
         {
           heading: 'Markets Analyzed',
-          body: `The current objective selector ranks the supported markets with real line support:\n\n• Moneyline — outright winner probability\n• Run Line (±1.5) — spread cover probability\n• Over/Under — projected total vs. posted total\n\nPlayer props remain outside the objective selector until a dedicated real-time props feed is integrated.`,
+          body: `Safe Pick scans the supported betting markets available for that matchup and can surface the highest-hit-probability route among team markets or player props when the required lines and player data are available.\n\nCommon outputs include:\n\n• Moneyline — outright winner probability\n• Run Line (±1.5) — spread cover probability\n• Over/Under — projected total vs. posted total\n• Player Props — hits, strikeouts, total bases, HR or similar markets when enough data and pricing support exist.`,
         },
         {
           heading: 'Highest Hit Probability',
@@ -112,7 +112,7 @@ const CONTENT = {
         },
         {
           heading: 'Mercados Analizados',
-          body: `El selector objetivo actual rankea los mercados soportados con líneas reales:\n\n• Moneyline — probabilidad de ganador\n• Run Line (±1.5) — probabilidad de cubrir el spread\n• Over/Under — total proyectado vs. total publicado\n\nLas props de jugadores quedan fuera del selector objetivo hasta integrar un feed real de props en tiempo real.`,
+          body: `Safe Pick escanea los mercados soportados disponibles para ese matchup y puede devolver la ruta de mayor probabilidad de acierto entre mercados de equipo o props de jugadores cuando existen las líneas y los datos necesarios.\n\nLas salidas más comunes incluyen:\n\n• Moneyline — probabilidad de ganador\n• Run Line (±1.5) — probabilidad de cubrir el spread\n• Over/Under — total proyectado vs. total publicado\n• Player Props — hits, ponches, bases totales, HR u otros mercados similares cuando hay suficientes datos y pricing real.`,
         },
         {
           heading: 'Mayor Probabilidad de Acierto',
@@ -134,7 +134,7 @@ const CONTENT = {
       sections: [
         {
           heading: 'Overview',
-          body: `The Advanced Processing System does not output raw probabilities alone — it overlays a three-tier flag system to communicate signal quality, risk level, and confidence grade in a format that is immediately actionable.`,
+          body: `The Advanced Processing System does not output raw probabilities alone — it overlays a four-color flag system to communicate signal quality, risk level, and confidence grade in a format that is immediately actionable.`,
         },
         {
           heading: '🔴  Red Flags — Danger / Regression Signal',
@@ -153,6 +153,11 @@ const CONTENT = {
           flagColor: C.green,
           highlight: true,
         },
+        {
+          heading: '⚪  Gray Flags — Informational / Unclassified Context',
+          body: `Gray Flags are neutral context markers. They appear when the system wants to surface something relevant that is not strong enough to be classified as green, amber, or red:\n\n• Informational notes without a directional edge\n• Context that still needs user interpretation\n• Secondary signals that do not change the final grading on their own\n\nGray Flags are not bullish or bearish by themselves — they are there to keep the readout transparent.`,
+          flagColor: '#666666',
+        },
       ],
     },
     es: {
@@ -161,7 +166,7 @@ const CONTENT = {
       sections: [
         {
           heading: 'Visión General',
-          body: `El Sistema de Procesamiento Avanzado no genera solo probabilidades brutas — superpone un sistema de banderas de tres niveles para comunicar calidad de señal, nivel de riesgo y grado de confianza en un formato inmediatamente accionable.`,
+          body: `El Sistema de Procesamiento Avanzado no genera solo probabilidades brutas — superpone un sistema de banderas de cuatro colores para comunicar calidad de señal, nivel de riesgo y grado de confianza en un formato inmediatamente accionable.`,
         },
         {
           heading: '🔴  Banderas Rojas — Peligro / Señal de Regresión',
@@ -178,6 +183,11 @@ const CONTENT = {
           body: `Las Banderas Verdes son los marcadores de mayor confianza del sistema. Se activan cuando múltiples flujos de datos independientes convergen en la misma conclusión:\n\n• Fuerte alineación de xStats con rendimiento real\n• Apilamiento favorable de platoon y factor de estadio\n• Movimiento de dinero inteligente en la misma dirección\n• Precedente histórico que respalda el resultado proyectado\n\nLas Banderas Verdes representan las ventajas más claras que el sistema identifica.`,
           flagColor: C.green,
           highlight: true,
+        },
+        {
+          heading: '⚪  Banderas Grises — Contexto Informativo / Sin Clasificar',
+          body: `Las Banderas Grises son marcadores neutrales de contexto. Aparecen cuando el sistema quiere mostrar algo relevante pero todavía no lo clasifica como verde, ámbar o rojo:\n\n• Notas informativas sin una ventaja direccional clara\n• Contexto que aún requiere interpretación del usuario\n• Señales secundarias que por sí solas no cambian la calificación final\n\nLas Banderas Grises no son alcistas ni bajistas por sí mismas — están para mantener la lectura transparente.`,
+          flagColor: '#666666',
         },
       ],
     },

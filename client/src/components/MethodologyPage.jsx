@@ -481,8 +481,9 @@ function SectionTitle({ children }) {
       sx={{
         fontFamily:    BARLOW,
         fontSize:      { xs: '1.5rem', md: '2rem' },
-        letterSpacing: '4px',
+        letterSpacing: { xs: '2px', md: '4px' },
         textTransform: 'uppercase',
+        lineHeight:    1.12,
         color:         C.textPrimary,
         mb:            { xs: 3, md: 5 },
         textShadow:    `0 0 20px rgba(0,217,255,0.2)`,
@@ -609,22 +610,35 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
             component="button"
             onClick={onToggleLang}
             sx={{
-              background:    C.cyanDim,
-              border:        `1px solid ${C.cyanLine}`,
-              color:         C.cyan,
+              bgcolor:       'rgba(0,255,136,0.12)',
+              border:        '1px solid rgba(0,255,136,0.4)',
+              color:         C.green,
               minWidth:      '122px',
-              padding:       '8px 18px',
+              px:            '16px',
+              py:            '6px',
               borderRadius:  0,
               fontFamily:    MONO,
               fontSize:      '0.72rem',
-              letterSpacing: '1px',
+              fontWeight:    700,
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
               cursor:        'pointer',
               flexShrink:    0,
-              transition:    'all 0.15s',
-              '&:hover':     { boxShadow: C.cyanGlow },
+              whiteSpace:    'nowrap',
+              transition:    'all 0.2s ease',
+              '@keyframes methodologyLangPulse': {
+                '0%, 100%': { boxShadow: '0 0 6px rgba(0,255,136,0.3)' },
+                '50%':      { boxShadow: '0 0 14px rgba(0,255,136,0.6), 0 0 28px rgba(0,255,136,0.15)' },
+              },
+              animation: 'methodologyLangPulse 2.4s ease-in-out infinite',
+              '&:hover': {
+                bgcolor:     'rgba(0,255,136,0.25)',
+                borderColor: 'rgba(0,255,136,0.6)',
+                boxShadow:   '0 0 14px rgba(0,255,136,0.6), 0 0 28px rgba(0,255,136,0.15)',
+              },
             }}
           >
-            {lang === 'es' ? 'English' : 'Español'}
+            {lang === 'es' ? 'ENGLISH' : 'ESPANOL'}
           </Box>
         )}
       </Box>
@@ -671,10 +685,10 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
           component="h1"
           sx={{
             fontFamily:    BARLOW,
-            fontSize:      { xs: '2.2rem', sm: '3.2rem', md: '4rem' },
-            letterSpacing: '6px',
+            fontSize:      { xs: '2.05rem', sm: '3.1rem', md: '4rem' },
+            letterSpacing: { xs: '3px', sm: '5px', md: '6px' },
             textTransform: 'uppercase',
-            lineHeight:    1,
+            lineHeight:    1.08,
             color:         C.textPrimary,
             mb:            '24px',
             textShadow:    `0 0 30px rgba(0,217,255,0.15)`,
@@ -727,7 +741,7 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         <div style={{ marginBottom: '0.75rem', fontFamily: GM, fontSize: '0.6rem', letterSpacing: 4, textTransform: 'uppercase', color: GC.textMuted }}>
           <span style={{ color: GC.textDim }}>[ </span>{lang === 'es' ? '02 — JERARQUÍA DE SEÑALES' : '02 — SIGNAL HIERARCHY'}<span style={{ color: GC.textDim }}> ]</span>
         </div>
-        <h2 style={{ fontFamily: GB, fontSize: 'clamp(1.5rem, 4vw, 2.4rem)', color: GC.textPrimary, letterSpacing: 4, textTransform: 'uppercase', lineHeight: 1.1, marginBottom: '1rem', textShadow: '0 0 20px rgba(0,217,255,0.15)' }}>
+        <h2 style={{ fontFamily: GB, fontSize: 'clamp(1.5rem, 4vw, 2.4rem)', color: GC.textPrimary, letterSpacing: 4, textTransform: 'uppercase', lineHeight: 1.18, marginBottom: '1rem', textShadow: '0 0 20px rgba(0,217,255,0.15)' }}>
           {lang === 'es' ? <>Cuando los datos se contradicen,<br/>H.E.X.A. sabe cuál manda.</> : <>When data conflicts,<br/>H.E.X.A. knows which signal wins.</>}
         </h2>
         <p style={{ fontFamily: GM, fontSize: '0.8rem', lineHeight: 1.8, color: GC.textMuted, maxWidth: 600, marginBottom: '3rem' }}>
@@ -784,65 +798,75 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         <div style={{ marginBottom: '0.75rem', fontFamily: GM, fontSize: '0.6rem', letterSpacing: 4, textTransform: 'uppercase', color: GC.textMuted }}>
           <span style={{ color: GC.textDim }}>[ </span>{lang === 'es' ? '03 — INTEGRIDAD DE DATOS' : '03 — DATA INTEGRITY'}<span style={{ color: GC.textDim }}> ]</span>
         </div>
-        <h2 style={{ fontFamily: GB, fontSize: 'clamp(1.5rem, 4vw, 2.4rem)', color: GC.textPrimary, letterSpacing: 4, textTransform: 'uppercase', lineHeight: 1.1, marginBottom: '1rem', textShadow: '0 0 20px rgba(0,217,255,0.15)' }}>
+        <h2 style={{ fontFamily: GB, fontSize: 'clamp(1.5rem, 4vw, 2.4rem)', color: GC.textPrimary, letterSpacing: 4, textTransform: 'uppercase', lineHeight: 1.18, marginBottom: '1rem', textShadow: '0 0 20px rgba(0,217,255,0.15)' }}>
           {lang === 'es' ? <>Si los datos son incompletos,<br/>la confianza baja. Siempre.</> : <>If data is incomplete,<br/>confidence drops. Always.</>}
         </h2>
         <p style={{ fontFamily: GM, fontSize: '0.8rem', lineHeight: 1.8, color: GC.textMuted, maxWidth: 600, marginBottom: '3rem' }}>
           {lang === 'es'
-            ? 'Antes de cada análisis, H.E.X.A. calcula un score de calidad de datos (0-100) que determina qué tipos de apuesta están disponibles y cuánto se penaliza la confianza. Sin teatro.'
-            : 'Before every analysis, H.E.X.A. calculates a data quality score (0-100) that determines which bet types are available and how much confidence is penalized. No theater.'}
+            ? 'Antes de cada análisis, H.E.X.A. calcula un score de calidad de datos (0-100) que determina qué mercados quedan habilitados y cuánto se penaliza la confianza. Ojo: este score no es la confianza final del pick.'
+            : 'Before every analysis, H.E.X.A. calculates a data quality score (0-100) that determines which markets stay enabled and how much confidence is penalized. Important: this score is not the pick confidence itself.'}
         </p>
         <div style={{ background: GC.surface, border: `1px solid ${GC.cyanLine}`, borderRadius: 0, padding: '2rem', position: 'relative' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, width: 14, height: 14, borderTop: `2px solid ${GC.cyan}`, borderLeft: `2px solid ${GC.cyan}` }} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 1, background: GC.cyanLine, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, background: 'transparent', overflow: 'hidden', alignItems: 'stretch' }}>
             {/* FULL */}
-            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', borderRight: `1px solid ${GC.cyanLine}` }}>
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', border: `1px solid ${GC.cyanLine}`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', minHeight: '100%' }}>
               <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.green, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.green}66` }}>80-100</div>
               <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS_COMPLETO' : 'FULL_ANALYSIS'}
+                {lang === 'es' ? 'DEEP_COMPLETO' : 'DEEP_FULL'}
               </div>
               <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
-                  ? 'Todos los datos disponibles. Todos los tipos de apuesta habilitados. Máxima confianza.'
-                  : 'All data available. All bet types enabled. Maximum confidence.'}
+                  ? 'Deep con cobertura completa de datos. Se habilita el abanico máximo de mercados, pero la confianza final del pick sigue calibrada por separado.'
+                  : 'Deep with full data coverage. The widest market menu is enabled, but final pick confidence is still calibrated separately.'}
               </p>
             </div>
             {/* STANDARD */}
-            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', borderRight: `1px solid ${GC.cyanLine}` }}>
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', border: `1px solid ${GC.cyanLine}`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', minHeight: '100%' }}>
               <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.cyan, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.cyan}66` }}>60-79</div>
               <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS_ESTÁNDAR' : 'STANDARD_ANALYSIS'}
+                {lang === 'es' ? 'DEEP_PARCIAL' : 'DEEP_PARTIAL'}
               </div>
               <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
-                  ? 'Props solo con datos Statcast confirmados del jugador. Confianza ajustada.'
-                  : 'Props only with confirmed player Statcast data. Adjusted confidence.'}
+                  ? 'Deep sigue activo, pero con datos parciales. Algunas props pueden seguir disponibles si el Statcast del jugador está confirmado. Confianza ajustada.'
+                  : 'Deep remains active, but with partial data. Some props can still stay available if player Statcast is confirmed. Confidence is adjusted.'}
               </p>
             </div>
             {/* LIMITED */}
-            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', borderRight: `1px solid ${GC.cyanLine}` }}>
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', border: `1px solid ${GC.cyanLine}`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', minHeight: '100%' }}>
               <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.accent, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.accent}66` }}>40-59</div>
               <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS_LIMITADO' : 'LIMITED_ANALYSIS'}
+                {lang === 'es' ? 'DEEP_LIMITADO' : 'DEEP_LIMITED'}
               </div>
               <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
-                  ? 'Solo Moneyline y Over/Under. Confianza penalizada -15%. Riesgo elevado.'
-                  : 'Moneyline and Over/Under only. Confidence penalized -15%. Elevated risk.'}
+                  ? 'Deep entra en modo restringido: se reducen mercados, sube el riesgo y la confianza recibe una penalización operativa.'
+                  : 'Deep enters a restricted mode: markets narrow, risk rises, and confidence takes an operational penalty.'}
               </p>
             </div>
             {/* MINIMAL */}
-            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center' }}>
+            <div style={{ background: GC.bg, padding: '1.5rem', textAlign: 'center', border: `1px solid ${GC.cyanLine}`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', minHeight: '100%' }}>
               <div style={{ fontFamily: GM, fontSize: '1.6rem', color: GC.red, marginBottom: '0.5rem', textShadow: `0 0 12px ${GC.red}66` }}>0-39</div>
               <div style={{ fontFamily: GM, fontSize: '0.6rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.textMuted, marginBottom: '0.75rem' }}>
-                {lang === 'es' ? 'ANÁLISIS_MÍNIMO' : 'MINIMAL_ANALYSIS'}
+                {lang === 'es' ? 'DEEP_MINIMO' : 'DEEP_MINIMAL'}
               </div>
               <p style={{ fontFamily: GM, fontSize: '0.72rem', lineHeight: 1.6, color: GC.textMuted }}>
                 {lang === 'es'
-                  ? 'Solo Moneyline. Confianza -25%. Riesgo alto obligatorio. Máxima transparencia.'
-                  : 'Moneyline only. Confidence -25%. High risk mandatory. Maximum transparency.'}
+                  ? 'Solo queda una lectura mínima de Deep. Normalmente se fuerza el riesgo alto y la confianza queda severamente limitada.'
+                  : 'Only a minimal Deep read remains. High risk is typically forced and confidence becomes severely limited.'}
               </p>
             </div>
+          </div>
+          <div style={{ marginTop: '1rem', border: `1px solid ${GC.cyanLine}`, background: GC.bg, padding: '1rem 1.25rem' }}>
+            <div style={{ fontFamily: GM, fontSize: '0.62rem', letterSpacing: 3, textTransform: 'uppercase', color: GC.accent, marginBottom: '0.5rem' }}>
+              {lang === 'es' ? 'NOTA DE CALIBRACION' : 'CALIBRATION NOTE'}
+            </div>
+            <p style={{ fontFamily: GM, fontSize: '0.74rem', lineHeight: 1.75, color: GC.textMuted, margin: 0 }}>
+              {lang === 'es'
+                ? 'El score verde de 80-100 mide integridad de datos, no una confianza final de 80%-100%. En MLB, Oracle calibra la confianza del pick por separado y la mantiene topeada cerca de 70; para rozar 66-70 hacen falta datos completos, lineups confirmados, señales coherentes, pocas alertas y una ventaja estadística realmente excepcional.'
+                : 'The green 80-100 score measures data integrity, not an 80%-100% final pick confidence. In MLB, Oracle calibrates pick confidence separately and keeps it capped near 70; getting close to 66-70 requires full data, confirmed lineups, coherent signals, very few flags, and a truly exceptional statistical edge.'}
+            </p>
           </div>
         </div>
       </section>
