@@ -155,7 +155,7 @@ const COPY = {
     edges: [
       { label: 'Data recency',    body: 'Statcast refreshes prevent stale signals from skewing output.' },
       { label: 'No gut picks',    body: 'Every recommendation is traceable to specific model inputs — no black boxes.' },
-      { label: 'Parlay integrity',body: 'Parlay legs are checked for correlation risk before bundling.' },
+      { label: 'Quality filter',  body: 'Only high-conviction spots survive the final threshold before reaching the user.' },
       { label: 'Bankroll aware',  body: 'The built-in tracker surfaces ROI and unit trends to keep you disciplined.' },
     ],
 
@@ -225,7 +225,7 @@ const COPY = {
     edges: [
       { label: 'Actualidad de datos',  body: 'Las actualizaciones de Statcast evitan que señales obsoletas distorsionen la salida.' },
       { label: 'Sin picks intuitivos', body: 'Cada recomendación es rastreable a entradas de modelo específicas — sin cajas negras.' },
-      { label: 'Integridad del parlay',body: 'Las patas del parlay se verifican por riesgo de correlación antes de agruparse.' },
+      { label: 'Filtro de calidad',    body: 'Solo los spots de alta convicción sobreviven el umbral final antes de llegar al usuario.' },
       { label: 'Bankroll consciente',  body: 'El rastreador integrado muestra ROI y tendencias de unidades para mantener la disciplina.' },
     ],
 
@@ -612,18 +612,19 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
               background:    C.cyanDim,
               border:        `1px solid ${C.cyanLine}`,
               color:         C.cyan,
-              padding:       '6px 12px',
+              minWidth:      '122px',
+              padding:       '8px 18px',
               borderRadius:  0,
               fontFamily:    MONO,
-              fontSize:      '0.65rem',
-              letterSpacing: '2px',
+              fontSize:      '0.72rem',
+              letterSpacing: '1px',
               cursor:        'pointer',
               flexShrink:    0,
               transition:    'all 0.15s',
               '&:hover':     { boxShadow: C.cyanGlow },
             }}
           >
-            {lang === 'es' ? 'EN' : 'ES'}
+            {lang === 'es' ? 'English' : 'Español'}
           </Box>
         )}
       </Box>
