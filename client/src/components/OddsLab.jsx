@@ -108,7 +108,7 @@ const LABELS = {
     },
   },
   es: {
-    title: 'HEXA Tools',
+    title: 'HEXA Herramientas',
     subtitle: 'Una capa premium de utilidades para convertir cuotas, calcular apuestas, combinar parlays y detectar valor.',
     status: 'Suite de utilidades activa',
     converter: {

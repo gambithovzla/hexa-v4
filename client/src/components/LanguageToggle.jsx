@@ -12,7 +12,8 @@ const MONO = '"JetBrains Mono", "Fira Code", monospace';
 
 export default function LanguageToggle({ lang, onToggle }) {
   const target = lang === 'en' ? 'es' : 'en';
-  const label  = lang === 'en' ? 'ES'  : 'EN';
+  const nextLanguageLabel = lang === 'en' ? 'Espa\u00f1ol' : 'English';
+  const label  = lang === 'en' ? 'Español' : 'English';
 
   return (
     <button
@@ -22,15 +23,16 @@ export default function LanguageToggle({ lang, onToggle }) {
         display:        'inline-flex',
         alignItems:     'center',
         justifyContent: 'center',
-        padding:        '5px 14px',
+        minWidth:       '122px',
+        padding:        '8px 18px',
         background:     '#111827',
         border:         '1px solid #1e293b',
         borderRadius:   '999px',
         color:          '#e2e8f0',
         fontFamily:     MONO,
-        fontSize:       '12px',
+        fontSize:       '13px',
         fontWeight:     600,
-        letterSpacing:  '0.06em',
+        letterSpacing:  '0.03em',
         cursor:         'pointer',
         transition:     'border-color 0.15s, color 0.15s',
         whiteSpace:     'nowrap',
@@ -45,7 +47,7 @@ export default function LanguageToggle({ lang, onToggle }) {
         e.currentTarget.style.color       = '#e2e8f0';
       }}
     >
-      {label}
+      {nextLanguageLabel}
     </button>
   );
 }

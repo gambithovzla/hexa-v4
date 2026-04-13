@@ -96,7 +96,7 @@ function AppFooter() {
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [lang,              setLang]              = useState('en');
+  const [lang,              setLang]              = useState(() => localStorage.getItem('hexa_lang') || 'es');
   const [activeTab,         setActiveTab]         = useState('game');
   const [singleGame,        setSingleGame]        = useState(null);
   const [parlayGames,       setParlayGames]       = useState([]);
@@ -120,6 +120,10 @@ export default function App() {
         .catch(() => setIsAdmin(false));
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('hexa_lang', lang);
+  }, [lang]);
 
   // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
   // HistoryPanel reads history via its own hook instance (remounts each visit).
