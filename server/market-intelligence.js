@@ -207,6 +207,288 @@ function averageXwoba(batters = []) {
   return total / withData.length;
 }
 
+function averageRollingWindow(batters = [], key = 'woba_7d') {
+  const withData = (batters ?? []).filter((batter) => batter?.savant?.rolling_windows?.[key] != null);
+  if (!withData.length) return null;
+  const total = withData.reduce((sum, batter) => sum + Number(batter.savant.rolling_windows?.[key] ?? 0), 0);
+  return total / withData.length;
+}
+
+function getLineupPlayers(gameData, side) {
+  const fromTeams = gameData?.teams?.[side]?.lineup;
+  if (Array.isArray(fromTeams) && fromTeams.length) return fromTeams;
+  const fromRoot = gameData?.lineups?.[side];
+  return Array.isArray(fromRoot) ? fromRoot : [];
+}
+
+function playerLabel(player) {
+  return String(player?.fullName ?? player?.name ?? '').trim();
+}
+
+function samePlayerName(left, right) {
+  const a = normalizeText(left);
+  const b = normalizeText(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const aParts = a.split(' ').filter(Boolean);
+  const bParts = b.split(' ').filter(Boolean);
+  if (!aParts.length || !bParts.length) return false;
+
+  const aLast = aParts[aParts.length - 1];
+  const bLast = bParts[bParts.length - 1];
+  return aLast === bLast;
+}
+
+function findSavantBatterByName(batters = [], name) {
+  return (batters ?? []).find((entry) => samePlayerName(entry?.name, name)) ?? null;
+}
+
+function findSplitEntry(splitPool = [], player = null) {
+  const playerId = player?.id ?? player?.playerId ?? null;
+  if (playerId != null) {
+    const byId = (splitPool ?? []).find((entry) => String(entry?.id) === String(playerId));
+    if (byId) return byId;
+  }
+
+  const name = playerLabel(player);
+  return (splitPool ?? []).find((entry) => samePlayerName(entry?.name, name)) ?? null;
+}
+
+function getMatchupSplit(splitEntry, pitcherHand = null) {
+  if (!splitEntry?.splits) return null;
+  if (pitcherHand === 'L') return splitEntry.splits.vsLHP ?? null;
+  if (pitcherHand === 'R') return splitEntry.splits.vsRHP ?? null;
+  return splitEntry.splits.vsRHP ?? splitEntry.splits.vsLHP ?? null;
+}
+
+function estimatePitcherKLine({ whiffPercent, kPercent }) {
+  const whiff = toNumber(whiffPercent) ?? 24;
+  const kRate = toNumber(kPercent) ?? 22;
+
+  if (whiff >= 33 || kRate >= 30) return 7.5;
+  if (whiff >= 30 || kRate >= 27) return 6.5;
+  if (whiff >= 26 || kRate >= 24) return 5.5;
+  if (whiff >= 23 || kRate >= 21) return 4.5;
+  return 3.5;
+}
+
+function buildHitsPropReasoning({
+  lang,
+  playerName,
+  matchupHand,
+  splitOps,
+  xwoba,
+  rolling7,
+  pitcherXwoba,
+  pitcherName,
+}) {
+  const handLabel = matchupHand === 'L' ? 'LHP' : matchupHand === 'R' ? 'RHP' : 'starter';
+  if (lang === 'es') {
+    return `${playerName} Over 0.5 Hits se sostiene por xwOBA ${xwoba ?? 'N/A'}, forma 7d ${rolling7 ?? 'N/A'} y split ${handLabel} OPS ${splitOps ?? 'N/A'} frente a ${pitcherName ?? 'TBD'} (xwOBA permitida ${pitcherXwoba ?? 'N/A'}).`;
+  }
+  return `${playerName} Over 0.5 Hits is backed by xwOBA ${xwoba ?? 'N/A'}, 7d form ${rolling7 ?? 'N/A'} and ${handLabel} split OPS ${splitOps ?? 'N/A'} versus ${pitcherName ?? 'TBD'} (xwOBA allowed ${pitcherXwoba ?? 'N/A'}).`;
+}
+
+function buildKPropReasoning({
+  lang,
+  pitcherName,
+  line,
+  direction,
+  whiff,
+  kRate,
+  opponentAvgXwoba,
+  weakCount,
+}) {
+  if (lang === 'es') {
+    if (direction === 'over') {
+      return `${pitcherName} Over ${line} Strikeouts sube por Whiff% ${whiff ?? 'N/A'}, K% ${kRate ?? 'N/A'} y lineup rival xwOBA ${opponentAvgXwoba ?? 'N/A'} con ${weakCount} bates flojos.`;
+    }
+    return `${pitcherName} Under ${line} Strikeouts gana peso por un techo K mas bajo frente a lineup rival xwOBA ${opponentAvgXwoba ?? 'N/A'} aun con Whiff% ${whiff ?? 'N/A'}.`;
+  }
+
+  if (direction === 'over') {
+    return `${pitcherName} Over ${line} Strikeouts rises on Whiff% ${whiff ?? 'N/A'}, K% ${kRate ?? 'N/A'} and an opponent lineup xwOBA of ${opponentAvgXwoba ?? 'N/A'} with ${weakCount} weak bats.`;
+  }
+  return `${pitcherName} Under ${line} Strikeouts gains value on a softer K ceiling versus an opponent lineup xwOBA of ${opponentAvgXwoba ?? 'N/A'} even with Whiff% ${whiff ?? 'N/A'}.`;
+}
+
+function canUseProps(features = {}) {
+  const strategy = String(features?.dataQuality?.strategy ?? '');
+  return strategy === 'FULL_ANALYSIS' || strategy === 'STANDARD_ANALYSIS';
+}
+
+function buildBatterPropCandidates({ gameData, features = {}, lang = 'en' }) {
+  if (!canUseProps(features)) return [];
+
+  const parkOverall = toNumber(features?.parkFactorData?.park_factor_overall);
+  const qualityScore = features?.dataQuality?.score;
+  const homePitcher = features?.homePitcher ?? null;
+  const awayPitcher = features?.awayPitcher ?? null;
+  const splitPools = features?.batterSplitsMap ?? { home: [], away: [] };
+  const savantPools = features?.savantBatters ?? { home: [], away: [] };
+
+  return ['home', 'away'].flatMap((side) => {
+    const lineup = getLineupPlayers(gameData, side).slice(0, 9);
+    const opponentPitcher = side === 'home' ? awayPitcher : homePitcher;
+    const opponentPitcherSavant = side === 'home' ? features?.awayPitcherSavant : features?.homePitcherSavant;
+    const matchupHand = opponentPitcher?.throwingHand ?? null;
+    const splitPool = splitPools?.[side] ?? [];
+    const savantPool = savantPools?.[side] ?? [];
+    const pitcherXwoba = toNumber(opponentPitcherSavant?.xwOBA_against);
+    const pitcherWhiff = toNumber(opponentPitcherSavant?.whiff_percent);
+
+    return lineup.map((player, index) => {
+      const name = playerLabel(player);
+      const savantEntry = findSavantBatterByName(savantPool, name);
+      const savant = savantEntry?.savant ?? null;
+      if (!name || !savant) return null;
+
+      const splitEntry = findSplitEntry(splitPool, player);
+      const matchupSplit = getMatchupSplit(splitEntry, matchupHand);
+      const xwoba = toNumber(savant?.xwOBA);
+      const xba = toNumber(savant?.xBA);
+      const rolling7 = toNumber(savant?.rolling_windows?.woba_7d ?? savant?.rolling_woba_30d);
+      const splitOps = toNumber(matchupSplit?.ops);
+      const splitAvg = toNumber(matchupSplit?.avg);
+      const splitAb = toNumber(matchupSplit?.atBats);
+      const avgExitVelocity = toNumber(savant?.avg_exit_velocity);
+
+      let probability = 0.54;
+      if (xwoba != null) probability += (xwoba - 0.315) * 1.15;
+      if (xba != null) probability += (xba - 0.245) * 0.9;
+      if (rolling7 != null) probability += (rolling7 - 0.320) * 0.6;
+      if (splitOps != null) probability += (splitOps - 0.720) * 0.09;
+      if (splitAvg != null) probability += (splitAvg - 0.245) * 0.35;
+      if (pitcherXwoba != null) probability += (pitcherXwoba - 0.315) * 0.75;
+      if (pitcherWhiff != null) probability -= Math.max(0, pitcherWhiff - 24) * 0.004;
+      if (avgExitVelocity != null) probability += (avgExitVelocity - 89) * 0.003;
+      if (parkOverall != null) probability += (parkOverall - 100) * 0.002;
+      if (index <= 4) probability += 0.01;
+      if (index >= 7) probability -= 0.01;
+      if (splitAb != null && splitAb > 0 && splitAb < 40) probability -= 0.015;
+
+      probability = shrinkTowardsCoinFlip(probability, qualityScore);
+      probability = clamp(probability, 0.45, 0.74);
+      if (probability < 0.57) return null;
+
+      return {
+        pick: `${name} Over 0.5 Hits`,
+        type: 'PlayerProp',
+        hit_probability: round(probability * 100, 1),
+        odds: null,
+        market_type: 'playerprop',
+        side,
+        prop_kind: 'hits',
+        reasoning: buildHitsPropReasoning({
+          lang,
+          playerName: name,
+          matchupHand,
+          splitOps: round(splitOps, 3),
+          xwoba: round(xwoba, 3),
+          rolling7: round(rolling7, 3),
+          pitcherXwoba: round(pitcherXwoba, 3),
+          pitcherName: opponentPitcher?.fullName ?? opponentPitcher?.name ?? null,
+        }),
+      };
+    }).filter(Boolean);
+  });
+}
+
+function buildPitcherPropCandidates({ features = {}, lang = 'en' }) {
+  if (!canUseProps(features)) return [];
+
+  const qualityScore = features?.dataQuality?.score;
+  const parkOverall = toNumber(features?.parkFactorData?.park_factor_overall);
+
+  return [
+    {
+      pitcher: features?.homePitcher ?? null,
+      savant: features?.homePitcherSavant ?? null,
+      opponentBatters: features?.savantBatters?.away ?? [],
+      side: 'home',
+    },
+    {
+      pitcher: features?.awayPitcher ?? null,
+      savant: features?.awayPitcherSavant ?? null,
+      opponentBatters: features?.savantBatters?.home ?? [],
+      side: 'away',
+    },
+  ].flatMap(({ pitcher, savant, opponentBatters, side }) => {
+    if (!pitcher?.fullName || !savant) return [];
+
+    const whiff = toNumber(savant?.whiff_percent);
+    const kRate = toNumber(savant?.k_percent);
+    const csw = toNumber(savant?.csw_percent);
+    const chase = toNumber(savant?.o_swing_percent);
+    const pitcherXwoba = toNumber(savant?.xwOBA_against);
+    const opponentAvgXwoba = averageXwoba(opponentBatters);
+    const weakCount = (opponentBatters ?? []).filter((batter) => toNumber(batter?.savant?.xwOBA) != null && toNumber(batter?.savant?.xwOBA) < 0.31).length;
+    const estimatedLine = estimatePitcherKLine({ whiffPercent: whiff, kPercent: kRate });
+
+    let overProbability = 0.48;
+    if (whiff != null) overProbability += (whiff - 24) * 0.008;
+    if (kRate != null) overProbability += (kRate - 22) * 0.007;
+    if (csw != null) overProbability += (csw - 28) * 0.004;
+    if (chase != null) overProbability += (chase - 30) * 0.003;
+    if (pitcherXwoba != null) overProbability -= (pitcherXwoba - 0.315) * 0.35;
+    if (opponentAvgXwoba != null) overProbability -= (opponentAvgXwoba - 0.315) * 0.9;
+    overProbability += weakCount * 0.006;
+    if (parkOverall != null && parkOverall < 100) overProbability += (100 - parkOverall) * 0.002;
+
+    overProbability = shrinkTowardsCoinFlip(overProbability, qualityScore);
+    overProbability = clamp(overProbability, 0.38, 0.71);
+    const underProbability = clamp(1 - overProbability + 0.03, 0.37, 0.68);
+
+    const candidates = [];
+    if (overProbability >= 0.58) {
+      candidates.push({
+        pick: `${pitcher.fullName} Over ${estimatedLine} Strikeouts`,
+        type: 'PlayerProp',
+        hit_probability: round(overProbability * 100, 1),
+        odds: null,
+        market_type: 'playerprop',
+        side,
+        prop_kind: 'strikeouts',
+        reasoning: buildKPropReasoning({
+          lang,
+          pitcherName: pitcher.fullName,
+          line: estimatedLine,
+          direction: 'over',
+          whiff: round(whiff, 1),
+          kRate: round(kRate, 1),
+          opponentAvgXwoba: round(opponentAvgXwoba, 3),
+          weakCount,
+        }),
+      });
+    }
+
+    if (underProbability >= 0.58) {
+      candidates.push({
+        pick: `${pitcher.fullName} Under ${estimatedLine} Strikeouts`,
+        type: 'PlayerProp',
+        hit_probability: round(underProbability * 100, 1),
+        odds: null,
+        market_type: 'playerprop',
+        side,
+        prop_kind: 'strikeouts',
+        reasoning: buildKPropReasoning({
+          lang,
+          pitcherName: pitcher.fullName,
+          line: estimatedLine,
+          direction: 'under',
+          whiff: round(whiff, 1),
+          kRate: round(kRate, 1),
+          opponentAvgXwoba: round(opponentAvgXwoba, 3),
+          weakCount,
+        }),
+      });
+    }
+
+    return candidates;
+  });
+}
+
 function buildMoneylineProbabilities({ features = {}, xgboostResult = null }) {
   const validatorProb = toNumber(xgboostResult?.score) != null
     ? toNumber(xgboostResult.score) / 100
@@ -303,12 +585,12 @@ function buildSafeScope({ oddsData, lang }) {
   const estimated = oddsData?.source === 'estimated_spring_training';
   if (lang === 'es') {
     return estimated
-      ? 'Top-1 objetivo entre Moneyline, Run Line y Totales soportados. Las props quedan fuera hasta integrar lineas reales; esta corrida usa lineas estimadas.'
-      : 'Top-1 objetivo entre Moneyline, Run Line y Totales soportados. Las props quedan fuera hasta integrar lineas reales.';
+      ? 'Top-1 objetivo entre los mercados soportados disponibles para este juego, incluyendo props cuando existan lineas y datos suficientes; esta corrida usa lineas estimadas.'
+      : 'Top-1 objetivo entre los mercados soportados disponibles para este juego, incluyendo props cuando existan lineas y datos suficientes.';
   }
   return estimated
-    ? 'Objective top-1 across supported Moneyline, Run Line and Totals markets. Props stay excluded until a real props feed is integrated; this run uses estimated lines.'
-    : 'Objective top-1 across supported Moneyline, Run Line and Totals markets. Props stay excluded until a real props feed is integrated.';
+    ? 'Objective top-1 across the supported markets available for this game, including props when enough lines and player data exist; this run uses estimated lines.'
+    : 'Objective top-1 across the supported markets available for this game, including props when enough lines and player data exist.';
 }
 
 export function buildDeterministicSafePayload({
@@ -339,6 +621,11 @@ export function buildDeterministicSafePayload({
     marketTotal: toNumber(ou.total) ?? 8.5,
     features,
   });
+
+  const playerPropCandidates = [
+    ...buildBatterPropCandidates({ gameData, features, lang }),
+    ...buildPitcherPropCandidates({ features, lang }),
+  ];
 
   const candidates = [
     {
@@ -389,6 +676,7 @@ export function buildDeterministicSafePayload({
       market_type: 'overunder',
       side: 'under',
     },
+    ...playerPropCandidates,
   ]
     .map((candidate) => {
       const impliedProbability = candidate.odds != null
@@ -440,8 +728,8 @@ export function buildDeterministicSafePayload({
 
   const alertFlags = Array.isArray(llmData?.alert_flags) ? [...llmData.alert_flags] : [];
   const deterministicFlag = lang === 'es'
-    ? 'Safe selector: ranking determinista ML/RL/OU activo'
-    : 'Safe selector: deterministic ML/RL/OU ranking active';
+    ? 'Safe selector: ranking determinista de mercados soportados activo'
+    : 'Safe selector: deterministic supported-market ranking active';
   if (!alertFlags.includes(deterministicFlag)) {
     alertFlags.push(deterministicFlag);
   }
@@ -487,7 +775,7 @@ export function buildDeterministicSafePayload({
     game_overview: gameOverview,
     alert_flags: alertFlags,
     model_risk: llmData?.model_risk ?? 'medium',
-    selection_method: 'deterministic_markets_v1',
+    selection_method: 'deterministic_supported_markets_v2',
     safe_scope: buildSafeScope({ oddsData, lang }),
   };
 }
