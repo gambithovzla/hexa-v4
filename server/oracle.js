@@ -388,10 +388,14 @@ export async function analyzeGame(params) {
   });
 
   // ── Premium tier enhancements ───────────────────────────────────────────
-  let systemPrompt = SYSTEM_PROMPT;
+  // The base SYSTEM_PROMPT is static and large (>1K tokens), so we split the
+  // `system` param into two blocks: the base gets cache_control=ephemeral so
+  // it is billed at ~10% after the first call; the variable tail (premium
+  // additions + lang suffix) stays uncached because it changes per call.
+  let systemSuffix = '';
 
   if (model === 'premium') {
-    systemPrompt += `
+    systemSuffix += `
 
 ## PREMIUM ANALYSIS MODE — ENHANCED OUTPUT
 You are running in PREMIUM mode. The user paid extra for deeper analysis. You MUST provide noticeably more thorough output than standard Deep mode:
@@ -411,13 +415,20 @@ These additions make Premium feel substantially different from Deep. The user sh
   }
 
   if (lang === 'es') {
-    systemPrompt += '\n\nIMPORTANT: Respond ALL text content in Spanish (español). All fields: oracle_report, hexa_hunch, alert_flags, pick descriptions, strategy_note, day_summary — everything in Spanish. JSON keys remain in English.';
+    systemSuffix += '\n\nIMPORTANT: Respond ALL text content in Spanish (español). All fields: oracle_report, hexa_hunch, alert_flags, pick descriptions, strategy_note, day_summary — everything in Spanish. JSON keys remain in English.';
+  }
+
+  const systemBlocks = [
+    { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+  ];
+  if (systemSuffix) {
+    systemBlocks.push({ type: 'text', text: systemSuffix });
   }
 
   const requestBody = {
     model:      modelId,
     max_tokens: maxTokens,
-    system:     systemPrompt,
+    system:     systemBlocks,
     messages:   [{ role: 'user', content: userMessage }],
   };
 
@@ -432,8 +443,12 @@ These additions make Premium feel substantially different from Deep. The user sh
     console.log('Mode:', mode);
     console.log('Web Intel:', webSearch);
     console.log('Model:', modelId);
-    console.log('--- SYSTEM PROMPT ---');
-    console.log(systemPrompt);
+    console.log('--- SYSTEM PROMPT (base cached) ---');
+    console.log(SYSTEM_PROMPT);
+    if (systemSuffix) {
+      console.log('--- SYSTEM SUFFIX (uncached) ---');
+      console.log(systemSuffix);
+    }
     console.log('--- USER PROMPT / CONTEXT ---');
     console.log(userMessage);
     console.log('=== END DEBUG ===');
@@ -583,7 +598,9 @@ export async function analyzeSafe({ contextString, lang = 'en' }) {
   const response = await anthropic.messages.create({
     model:      modelConfig.id,
     max_tokens: modelConfig.maxTokens,
-    system:     SAFE_PICK_PROMPT,
+    system: [
+      { type: 'text', text: SAFE_PICK_PROMPT, cache_control: { type: 'ephemeral' } },
+    ],
     messages:   [{ role: 'user', content: userMessage }],
   });
 
@@ -630,7 +647,9 @@ export async function analyzeChat({ contextString, question, conversationHistory
   const response = await anthropic.messages.create({
     model: modelConfig.id,
     max_tokens: 2000,
-    system: CHAT_PROMPT,
+    system: [
+      { type: 'text', text: CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
+    ],
     messages,
   });
 
