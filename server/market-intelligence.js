@@ -354,23 +354,23 @@ function buildBatterPropCandidates({ gameData, features = {}, lang = 'en' }) {
       const splitAb = toNumber(matchupSplit?.atBats);
       const avgExitVelocity = toNumber(savant?.avg_exit_velocity);
 
-      let probability = 0.54;
-      if (xwoba != null) probability += (xwoba - 0.315) * 1.15;
-      if (xba != null) probability += (xba - 0.245) * 0.9;
-      if (rolling7 != null) probability += (rolling7 - 0.320) * 0.6;
-      if (splitOps != null) probability += (splitOps - 0.720) * 0.09;
-      if (splitAvg != null) probability += (splitAvg - 0.245) * 0.35;
-      if (pitcherXwoba != null) probability += (pitcherXwoba - 0.315) * 0.75;
-      if (pitcherWhiff != null) probability -= Math.max(0, pitcherWhiff - 24) * 0.004;
-      if (avgExitVelocity != null) probability += (avgExitVelocity - 89) * 0.003;
-      if (parkOverall != null) probability += (parkOverall - 100) * 0.002;
-      if (index <= 4) probability += 0.01;
-      if (index >= 7) probability -= 0.01;
+      let probability = 0.52;
+      if (xwoba != null) probability += (xwoba - 0.315) * 0.80;
+      if (xba != null) probability += (xba - 0.245) * 0.55;
+      if (rolling7 != null) probability += (rolling7 - 0.320) * 0.40;
+      if (splitOps != null) probability += (splitOps - 0.720) * 0.06;
+      if (splitAvg != null) probability += (splitAvg - 0.245) * 0.22;
+      if (pitcherXwoba != null) probability += (pitcherXwoba - 0.315) * 0.50;
+      if (pitcherWhiff != null) probability -= Math.max(0, pitcherWhiff - 24) * 0.003;
+      if (avgExitVelocity != null) probability += (avgExitVelocity - 89) * 0.002;
+      if (parkOverall != null) probability += (parkOverall - 100) * 0.0015;
+      if (index <= 4) probability += 0.008;
+      if (index >= 7) probability -= 0.012;
       if (splitAb != null && splitAb > 0 && splitAb < 40) probability -= 0.015;
 
       probability = shrinkTowardsCoinFlip(probability, qualityScore);
-      probability = clamp(probability, 0.45, 0.74);
-      if (probability < 0.57) return null;
+      probability = clamp(probability, 0.42, 0.68);
+      if (probability < 0.55) return null;
 
       return {
         pick: `${name} Over 0.5 Hits`,

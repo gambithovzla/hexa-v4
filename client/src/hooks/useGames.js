@@ -3,7 +3,9 @@ import { useState, useEffect } from 'react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export default function useGames() {
-  const today = new Date().toISOString().split('T')[0];
+  // Local date — avoids UTC drift that pushes late-evening users a day ahead
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const [date, setDate] = useState(today);
   const [games, setGames] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(false);
