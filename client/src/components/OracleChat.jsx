@@ -11,10 +11,12 @@ export default function OracleChat({ lang = 'en', onBack }) {
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
 
-  // Fetch today's games
+  // Fetch today's games (use local date, not UTC — MLB games are scheduled
+  // in ET/PT, and using toISOString() would skip to tomorrow after ~8pm ET)
   useEffect(() => {
     const token = localStorage.getItem('hexa_token');
-    const date = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     fetch(`${API_URL}/api/games?date=${date}`, {
       headers: { Authorization: `Bearer ${token}` },
     })

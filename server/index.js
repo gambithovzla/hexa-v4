@@ -212,6 +212,31 @@ function annotateAnalysisData(data, features = {}, gameData = null) {
     gameData,
   });
 
+  // Coherence enforcement: keep bet_value and Kelly aligned with the computed edge.
+  // Claude sometimes outputs "HIGH VALUE" on a negative-edge pick or a positive
+  // Kelly when the implied probability actually exceeds the model's — that
+  // breaks user trust. We override the tier server-side when we can compute the
+  // real edge from the market odds.
+  const mp = data.master_prediction ?? null;
+  const edgeNum = valueBreakdown?.edge != null ? Number(valueBreakdown.edge) : null;
+  if (mp && Number.isFinite(edgeNum)) {
+    let tier;
+    if (edgeNum > 5) tier = 'HIGH VALUE';
+    else if (edgeNum > 2) tier = 'MODERATE VALUE';
+    else if (edgeNum > 0) tier = 'MARGINAL VALUE';
+    else tier = 'NO VALUE';
+    mp.bet_value = tier;
+    if (valueBreakdown) valueBreakdown.value_tier = tier;
+
+    // Force negative-edge Kelly to "no mathematical edge"
+    if (edgeNum <= 0 && data.kelly_recommendation) {
+      const isSpanish = /recomendaci|ventaja|apostar|bankroll/i.test(String(data.kelly_recommendation));
+      data.kelly_recommendation = isSpanish
+        ? 'RECOMENDACIÓN KELLY: Sin ventaja matemática — No apostar.'
+        : 'KELLY RECOMMENDATION: No mathematical edge — Do not bet.';
+    }
+  }
+
   return {
     ...data,
     alert_flags: alertFlags,
@@ -1184,16 +1209,20 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
   }
 
   try {
-    const resolvedDate = date || new Date().toISOString().split('T')[0];
+    const resolvedDate = date || getEasternDateString();
     let games    = await getTodayGames(resolvedDate);
     let gameData = games.find(g => String(g.gamePk) === String(gameId));
 
     if (!gameData) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      if (todayStr !== resolvedDate) {
-        const retryGames = await getTodayGames(todayStr);
+      // Widen the search to yesterday/tomorrow ET — covers edge cases around
+      // day boundaries and schedules that wrap past midnight.
+      for (const candidate of [shiftDateString(resolvedDate, -1), shiftDateString(resolvedDate, 1)]) {
+        const retryGames = await getTodayGames(candidate);
         gameData = retryGames.find(g => String(g.gamePk) === String(gameId));
-        if (gameData) games = retryGames;
+        if (gameData) {
+          games = retryGames;
+          break;
+        }
       }
     }
 
