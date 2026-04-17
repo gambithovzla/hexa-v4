@@ -371,10 +371,10 @@ export default function OddsLab({ lang = 'en' }) {
     }
 
     setConverterInputs({
-      decimal: converted.decimal,
-      american: converted.american,
-      fractional: converted.fractional,
-      probability: converted.probability.replace('%', ''),
+      decimal: type === 'decimal' ? rawValue : converted.decimal,
+      american: type === 'american' ? rawValue : converted.american,
+      fractional: type === 'fractional' ? rawValue : converted.fractional,
+      probability: type === 'probability' ? rawValue : converted.probability.replace('%', ''),
     });
     setConverterError('');
   }
