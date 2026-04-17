@@ -332,6 +332,14 @@ export default function App() {
   const selectedMatchupLabel = getMatchupLabel(singleGame);
   const showMobileAnalysisFull = isMobileExperience && activeTab === 'game' && Boolean(singleGame);
 
+  // When mobile switches into analysis view (game selected), jump to top so the
+  // MobileBackBar is the first thing the user sees instead of mid-panel scroll.
+  useEffect(() => {
+    if (showMobileAnalysisFull) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, [showMobileAnalysisFull]);
+
   // Performance landing — admin always, public only when toggle is ON
   if (window.location.pathname === '/performance') {
     if (!isAdmin && !performancePublic) {
