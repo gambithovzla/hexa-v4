@@ -8,7 +8,7 @@
  *   defaultTab — 'login' | 'register'  (optional)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
 
@@ -61,6 +61,13 @@ const L = {
     verifyResending: 'Sending…',
     verifySentOk:    'Code resent!',
     verifySkip:      'Verify later',
+    verifyCoachTitle:'Registration complete',
+    verifyCoachBody: 'Enter the 6-digit code in this same window to finish activating your account.',
+    verifyCoachHint: 'Check your inbox, spam, or promotions tab if the email takes a moment.',
+    verifyCoachCta:  'Enter code now',
+    verifyHelper:    'Paste the 6 digits below.',
+    verifyPlaceholder:'6-digit code',
+    verifyStepLabel: 'STEP 2 // EMAIL CODE',
   },
   es: {
     login:           'Iniciar sesión',
@@ -85,6 +92,13 @@ const L = {
     verifyResending: 'Enviando…',
     verifySentOk:    '¡Código reenviado!',
     verifySkip:      'Verificar después',
+    verifyCoachTitle:'Registro completado',
+    verifyCoachBody: 'Ingresa el codigo de 6 digitos en esta misma ventana para activar tu cuenta.',
+    verifyCoachHint: 'Revisa bandeja principal, spam o promociones si el correo tarda un poco.',
+    verifyCoachCta:  'Ingresar codigo',
+    verifyHelper:    'Pega abajo los 6 digitos.',
+    verifyPlaceholder:'Codigo de 6 digitos',
+    verifyStepLabel: 'PASO 2 // CODIGO EMAIL',
   },
 };
 
@@ -187,7 +201,18 @@ function TabBar({ tab, setTab, t }) {
 }
 
 // ── Neon input field ──────────────────────────────────────────────────────────
-function InputField({ label, type, value, onChange, disabled }) {
+function InputField({
+  label,
+  type,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  inputMode,
+  maxLength,
+  inputRef,
+  autoFocus = false,
+}) {
   const [focused, setFocused] = useState(false);
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -202,10 +227,15 @@ function InputField({ label, type, value, onChange, disabled }) {
         {label}
       </Typography>
       <input
+        ref={inputRef}
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        autoFocus={autoFocus}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={{
@@ -231,6 +261,78 @@ function InputField({ label, type, value, onChange, disabled }) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
+function VerifyCoachOverlay({ open, t, email, onClose }) {
+  if (!open) return null;
+
+  return (
+    <Box
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 10001,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        px: '20px',
+        background: 'rgba(0,0,0,0.82)',
+        backdropFilter: 'blur(4px)',
+      }}
+    >
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: '320px',
+          bgcolor: NC.surface,
+          border: `1px solid ${NC.orangeLine}`,
+          borderLeft: `3px solid ${NC.orange}`,
+          p: '18px 16px',
+          boxShadow: `0 0 30px rgba(0,0,0,0.92), 0 0 24px rgba(255,102,0,0.12)`,
+        }}
+      >
+        <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
+          // EMAIL VERIFICATION
+        </Typography>
+        <Typography sx={{ fontFamily: DISPLAY, fontSize: '12px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '10px' }}>
+          {t.verifyCoachTitle}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7, mb: '10px' }}>
+          {t.verifyCoachBody}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.orange, lineHeight: 1.7, mb: '10px' }}>
+          {email}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.textDim, lineHeight: 1.7, mb: '16px' }}>
+          {t.verifyCoachHint}
+        </Typography>
+        <Box
+          component="button"
+          onClick={onClose}
+          sx={{
+            width: '100%',
+            py: '11px',
+            border: `1px solid ${NC.orangeLine}`,
+            bgcolor: NC.orangeDim,
+            color: NC.orange,
+            fontFamily: MONO,
+            fontSize: '10px',
+            letterSpacing: '3px',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+            boxShadow: NC.orangeGlow,
+            transition: 'all 0.2s',
+            '&:hover': {
+              color: '#ffffff',
+              bgcolor: 'rgba(255,102,0,0.18)',
+            },
+          }}
+        >
+          {t.verifyCoachCta}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'login' }) {
   const t = L[lang] ?? L.en;
   const { login, register, verifyEmail, resendCode } = useAuth();
@@ -243,8 +345,11 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
   const [verifyStep,    setVerifyStep]    = useState(false);
   const [verifyEmail_,  setVerifyEmail_]  = useState('');
   const [verifyCode,    setVerifyCode]    = useState('');
+  const [verifySource,  setVerifySource]  = useState('login');
+  const [showVerifyCoachmark, setShowVerifyCoachmark] = useState(false);
   const [resendStatus,  setResendStatus]  = useState('idle'); // 'idle' | 'sending' | 'sent'
   const [ageConfirmed,  setAgeConfirmed]  = useState(false);
+  const verifyInputRef = useRef(null);
 
   // Reset form on open / tab change
   useEffect(() => {
@@ -255,12 +360,24 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
       setError('');
       setLoading(false);
       setVerifyStep(false);
+      setVerifySource('login');
+      setShowVerifyCoachmark(false);
+      setVerifyEmail_('');
       setVerifyCode('');
       setResendStatus('idle');
+      setAgeConfirmed(false);
     }
   }, [open, defaultTab]);
 
   useEffect(() => { setError(''); }, [tab]);
+
+  useEffect(() => {
+    if (!verifyStep || showVerifyCoachmark) return undefined;
+    const focusTimer = setTimeout(() => {
+      verifyInputRef.current?.focus?.();
+    }, 50);
+    return () => clearTimeout(focusTimer);
+  }, [verifyStep, showVerifyCoachmark]);
 
   if (!open) return null;
 
@@ -273,14 +390,18 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
         const user = await login(email, password);
         if (user && user.email_verified === false) {
           setVerifyEmail_(email);
+          setVerifySource('login');
+          setShowVerifyCoachmark(false);
           setVerifyStep(true);
           setLoading(false);
           return;
         }
         onClose();
       } else {
-        const user = await register(email, password);
+        await register(email, password);
         setVerifyEmail_(email);
+        setVerifySource('register');
+        setShowVerifyCoachmark(true);
         setVerifyStep(true);
       }
     } catch (err) {
@@ -295,7 +416,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     setError('');
     setLoading(true);
     try {
-      await verifyEmail(verifyCode);
+      await verifyEmail(verifyCode.trim());
       onClose();
     } catch (err) {
       setError(err.message ?? 'Verification failed');
@@ -407,17 +528,45 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
         {/* Boot sequence header */}
         <BootHeader lang={lang} />
 
+        <VerifyCoachOverlay
+          open={verifyStep && showVerifyCoachmark}
+          t={t}
+          email={verifyEmail_}
+          onClose={() => setShowVerifyCoachmark(false)}
+        />
+
         {verifyStep ? (
           /* ── Verification step ── */
           <Box component="form" onSubmit={handleVerify} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Box sx={{ border: `1px solid ${NC.orangeLine}`, bgcolor: NC.orangeDim, px: '12px', py: '10px' }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '4px' }}>
+                {t.verifyStepLabel}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.textMuted, lineHeight: 1.7 }}>
+                {verifySource === 'register' ? t.verifyCoachBody : t.verifyHelper}
+              </Typography>
+            </Box>
             <Typography sx={{ fontFamily: DISPLAY, fontSize: '11px', color: NC.cyan, letterSpacing: '3px', textTransform: 'uppercase', mb: '4px' }}>
               {t.verifyTitle}
             </Typography>
             <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, letterSpacing: '0.04em' }}>
               {t.verifySent(verifyEmail_)}
             </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.orange, letterSpacing: '0.04em' }}>
+              {t.verifyHelper}
+            </Typography>
 
-            <InputField label={t.verifyCode} type="text" value={verifyCode} onChange={setVerifyCode} disabled={loading} />
+            <InputField
+              label={t.verifyCode}
+              type="text"
+              value={verifyCode}
+              onChange={(value) => setVerifyCode(value.replace(/\D/g, '').slice(0, 6))}
+              disabled={loading}
+              placeholder={t.verifyPlaceholder}
+              inputMode="numeric"
+              maxLength={6}
+              inputRef={verifyInputRef}
+            />
 
             {/* Error */}
             {error && (

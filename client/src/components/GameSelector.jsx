@@ -28,6 +28,7 @@ const L = {
     analyze:     'Analyze Game',
     analyzing:   'Analyzing…',
     selectHint:  'Select a game to continue',
+    selected:    'Selected',
     tbd:         'TBD',
     live:        'LIVE',
     final:       'FINAL',
@@ -48,6 +49,7 @@ const L = {
     analyze:     'Analizar Juego',
     analyzing:   'Analizando…',
     selectHint:  'Selecciona un juego para continuar',
+    selected:    'Seleccionado',
     tbd:         'TBD',
     live:        'EN VIVO',
     final:       'FINAL',
@@ -250,13 +252,38 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         p:            '14px',
         cursor:       blocked ? 'not-allowed' : 'pointer',
         opacity:      status === 'final' ? 0.5 : 1,
-        transition:   'border-color 0.15s, opacity 0.15s',
+        boxShadow:    isSelected ? `0 0 0 1px rgba(255,102,0,0.12), 0 0 20px rgba(255,102,0,0.1)` : 'none',
+        transform:    isSelected ? 'translateY(-1px)' : 'none',
+        transition:   'border-color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s',
         '&:hover': blocked ? {} : {
           borderColor: isSelected ? C.accentLine : C.border,
           background:  isSelected ? C.accentDim : C.elevated,
         },
       }}
     >
+      {isSelected && (
+        <Box
+          component="span"
+          sx={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            px: '6px',
+            py: '2px',
+            border: `1px solid ${C.accentLine}`,
+            bgcolor: C.accentDim,
+            color: C.accent,
+            fontFamily: BARLOW,
+            fontSize: '0.56rem',
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {t.selected}
+        </Box>
+      )}
+
       {/* Header row: [STATUS BADGE]  ────  [TIME PILL] [CHECKBOX] */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '12px' }}>
         <StatusBadge status={status} t={t} />
@@ -510,6 +537,9 @@ export default function GameSelector({
     setFetchErr(null);
     setSingleGame(null);
     setSelectedIds(new Set());
+    onSelectGame?.(null);
+    onSelect?.(null);
+    onSelectMultiple?.([]);
 
     fetch(`${API_URL}/api/games?date=${date}`)
       .then(r => r.json())

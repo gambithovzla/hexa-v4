@@ -181,7 +181,21 @@ function AuthButton({ lang }) {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
   const [modalOpen, setModalOpen]       = useState(false);
   const [showPricing, setShowPricing]   = useState(false);
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const isEs = lang === 'es';
+  const logoutCopy = isEs
+    ? {
+        title: 'Cerrar sesion',
+        body: 'Vas a cerrar la sesion actual en este dispositivo.',
+        cancel: 'Cancelar',
+        confirm: 'Si, cerrar',
+      }
+    : {
+        title: 'Sign out',
+        body: 'This will close your current session on this device.',
+        cancel: 'Cancel',
+        confirm: 'Yes, sign out',
+      };
 
   if (isLoading) return null;
 
@@ -274,7 +288,7 @@ function AuthButton({ lang }) {
       {/* Logout button */}
       <Box
         component="button"
-        onClick={logout}
+        onClick={() => setConfirmLogoutOpen(true)}
         title={isEs ? 'Cerrar sesión' : 'Sign out'}
         sx={{
           display:        'inline-flex',
@@ -295,11 +309,155 @@ function AuthButton({ lang }) {
       </Box>
     </Box>
     {showPricing && <PricingModal onClose={() => setShowPricing(false)} lang={lang} />}
+    <ActionConfirmModal
+      open={confirmLogoutOpen}
+      title={logoutCopy.title}
+      body={logoutCopy.body}
+      cancelLabel={logoutCopy.cancel}
+      confirmLabel={logoutCopy.confirm}
+      onClose={() => setConfirmLogoutOpen(false)}
+      onConfirm={() => {
+        logout();
+        setConfirmLogoutOpen(false);
+      }}
+    />
     </>
   );
 }
 
 // ── Tab button ────────────────────────────────────────────────────────────────
+
+function ActionConfirmModal({
+  open,
+  title,
+  body,
+  cancelLabel,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}) {
+  if (!open) return null;
+
+  return (
+    <Box
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      sx={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: 'rgba(0,0,0,0.84)',
+        backdropFilter: 'blur(6px)',
+        px: 2,
+      }}
+    >
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: '380px',
+          bgcolor: C.surface,
+          border: `1px solid ${C.accentLine}`,
+          borderLeft: `3px solid ${C.accent}`,
+          boxShadow: `0 0 28px rgba(0,0,0,0.88), 0 0 26px rgba(255,102,0,0.08)`,
+          p: { xs: '20px', sm: '24px' },
+        }}
+      >
+        <Typography
+          sx={{
+            fontFamily: MONO,
+            fontSize: '0.66rem',
+            color: C.accent,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            mb: 1,
+          }}
+        >
+          // SESSION CONTROL
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily: BARLOW,
+            fontSize: '0.98rem',
+            fontWeight: 800,
+            color: C.textPrimary,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            mb: 1.5,
+          }}
+        >
+          {title}
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily: MONO,
+            fontSize: '0.72rem',
+            lineHeight: 1.7,
+            color: C.textSecondary,
+            mb: 3,
+          }}
+        >
+          {body}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1.25 }}>
+          <Box
+            component="button"
+            onClick={onClose}
+            sx={{
+              flex: 1,
+              py: '10px',
+              border: `1px solid ${C.border}`,
+              bgcolor: 'transparent',
+              color: C.textMuted,
+              fontFamily: BARLOW,
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              '&:hover': {
+                color: C.textPrimary,
+                borderColor: C.cyanLine,
+                bgcolor: C.cyanDim,
+              },
+            }}
+          >
+            {cancelLabel}
+          </Box>
+          <Box
+            component="button"
+            onClick={onConfirm}
+            sx={{
+              flex: 1,
+              py: '10px',
+              border: `1px solid ${C.accentLine}`,
+              bgcolor: C.accentDim,
+              color: C.accent,
+              fontFamily: BARLOW,
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              boxShadow: C.accentGlow,
+              transition: 'all 0.2s',
+              '&:hover': {
+                color: '#ffffff',
+                bgcolor: 'rgba(255,102,0,0.18)',
+              },
+            }}
+          >
+            {confirmLabel}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
 
 function TabButton({ tab, active, lang, onClick, disabled = false }) {
   const label = lang === 'es' ? tab.es : tab.en;
