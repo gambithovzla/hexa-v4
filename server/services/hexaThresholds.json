@@ -1,0 +1,47 @@
+{
+  "_description": "Tunable thresholds for H.E.X.A. Smart Signals. Editable without code changes — hexaSmartSignalsService loads this at require time.",
+
+  "team_streaks": {
+    "hot_streak_min_wins": 4,
+    "cold_streak_min_losses": 4,
+    "lookback_games": 10
+  },
+
+  "offense": {
+    "hot_offense_window_games": 4,
+    "hot_offense_min_total_runs": 24,
+    "cold_offense_window_games": 3,
+    "cold_offense_max_total_runs": 5
+  },
+
+  "bullpen": {
+    "bullpen_heavy_usage_min_pitchers": 6,
+    "bullpen_heavy_usage_min_ip_yesterday": 5
+  },
+
+  "batter": {
+    "hit_streak_min_games": 3,
+    "hit_streak_lookback": 7,
+    "cold_batter_min_games_no_hit": 3,
+    "cold_batter_min_at_bats_per_game": 2,
+    "max_batters_per_team": 4
+  },
+
+  "matchup": {
+    "high_scoring_min_team_runs_last3": 14
+  },
+
+  "output": {
+    "max_insights": 30,
+    "priority_weights": {
+      "team_streak_hot":     90,
+      "team_streak_cold":    70,
+      "hot_offense":         85,
+      "cold_offense":        60,
+      "bullpen_heavy":       75,
+      "hit_streak":          80,
+      "cold_batter":         55,
+      "high_scoring_matchup": 95
+    }
+  }
+}

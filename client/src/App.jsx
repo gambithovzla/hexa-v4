@@ -35,6 +35,8 @@ import DatasetDashboard  from './components/DatasetDashboardV2';
 import ShadowModeDashboard from './components/ShadowModeDashboard';
 import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
+import HexaBoard           from './components/HexaBoard';
+import LearningCenter      from './components/LearningCenter';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
 
@@ -97,7 +99,7 @@ function AppFooter() {
 
 export default function App() {
   const [lang,              setLang]              = useState(() => localStorage.getItem('hexa_lang') || 'es');
-  const [activeTab,         setActiveTab]         = useState('game');
+  const [activeTab,         setActiveTab]         = useState('pizarra');
   const [singleGame,        setSingleGame]        = useState(null);
   const [parlayGames,       setParlayGames]       = useState([]);
   const [batchGames,        setBatchGames]        = useState([]);
@@ -239,6 +241,11 @@ export default function App() {
             width:     '100%',
           }}
         >
+          {/* Pizarra H.E.X.A. — landing tab */}
+          {activeTab === 'pizarra' && (
+            <HexaBoard lang={lang} />
+          )}
+
           {/* Single game */}
           {activeTab === 'game' && (
             <Box sx={TAB_LAYOUT}>
@@ -300,6 +307,11 @@ export default function App() {
           {/* Gameday play-by-play detail */}
           {activeTab === 'gameday' && (
             <GameDayDetail lang={lang} />
+          )}
+
+          {/* Guía H.E.X.A. — learning center */}
+          {activeTab === 'guide' && (
+            <LearningCenter lang={lang} />
           )}
 
           {/* Batch Scan (admin only) */}

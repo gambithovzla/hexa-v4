@@ -35,6 +35,7 @@ const COPY = {
     outsAfter: 'outs',
     source: 'MLB Gameday feed',
     refresh: 'Refresh',
+    viewHighlight: 'View official highlights',
   },
   es: {
     title: 'DETALLE GAMEDAY',
@@ -65,6 +66,7 @@ const COPY = {
     outsAfter: 'outs',
     source: 'Feed Gameday MLB',
     refresh: 'Actualizar',
+    viewHighlight: 'Ver highlights oficiales',
   },
 };
 
@@ -446,6 +448,53 @@ function PlayTimeline({ plays, lang, t }) {
   );
 }
 
+/**
+ * HighlightLinkButton — conditional "View official highlights" external link.
+ * Renders nothing unless the backend confirms MLB highlights exist for the
+ * game. We never embed video or expose CDN URLs — only a link to mlb.com.
+ */
+function HighlightLinkButton({ gamePk, label }) {
+  const [info, setInfo] = useState(null);
+
+  useEffect(() => {
+    if (!gamePk) { setInfo(null); return; }
+    let cancelled = false;
+    fetch(`${API_URL}/api/games/${gamePk}/highlights-link`)
+      .then(r => r.json())
+      .then(j => { if (!cancelled && j?.success) setInfo(j.data); })
+      .catch(() => { /* silent */ });
+    return () => { cancelled = true; };
+  }, [gamePk]);
+
+  if (!info?.available || !info.externalUrl) return null;
+
+  return (
+    <Box
+      component="a"
+      href={info.externalUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      sx={{
+        display: 'inline-flex', alignItems: 'center', gap: '8px',
+        alignSelf: 'flex-start',
+        px: '14px', py: '8px',
+        border: `1px solid ${C.accentLine}`,
+        bgcolor: C.accentDim,
+        color: C.accent,
+        fontFamily: BARLOW,
+        fontSize: '0.72rem',
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+        textDecoration: 'none',
+        transition: 'all 0.2s',
+        '&:hover': { borderColor: C.accent, boxShadow: C.accentGlow, color: '#fff' },
+      }}
+    >
+      ▶ {label} ↗
+    </Box>
+  );
+}
+
 export default function GameDayDetail({ lang = 'en' }) {
   const t = COPY[lang] ?? COPY.en;
 
@@ -632,6 +681,8 @@ export default function GameDayDetail({ lang = 'en' }) {
           ) : (
             <>
               <GameSummary data={gameData} t={t} />
+
+              <HighlightLinkButton gamePk={selectedGame.gamePk} label={t.viewHighlight} />
 
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                 <Box>

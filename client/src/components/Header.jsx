@@ -28,6 +28,7 @@ const SUBTITLE = {
 };
 
 const TABS = [
+  { value: 'pizarra', en: 'Board',       es: 'Pizarra'          },
   { value: 'game',    en: 'Single Game', es: 'Juego Individual' },
   { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           adminOnly: true },
   { value: 'bankroll', en: 'Bankroll',    es: 'Bankroll'         },
@@ -35,6 +36,7 @@ const TABS = [
   { value: 'history', en: 'History',     es: 'Historial'        },
   { value: 'live',    en: 'Live',        es: 'En Vivo'          },
   { value: 'gameday', en: 'Gameday',     es: 'Detalle'          },
+  { value: 'guide',   en: 'Guide',       es: 'Guía'             },
   { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan', adminOnly: true },
 ];
 
