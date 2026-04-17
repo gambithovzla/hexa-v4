@@ -47,6 +47,15 @@ const L = {
       parlay:  'Select 2–6 games on the left to build your parlay.',
     },
     readyHint:    'Configure your options and run the Oracle.',
+    quickStart: {
+      title: 'QUICK START',
+      steps: [
+        'Pick a game or matchup from the list.',
+        'Choose your bet focus (moneyline, totals, props…).',
+        'Hit Run Oracle — get odds, edge, and reasoning.',
+      ],
+      guideHint: 'New here? Check the Guide tab for a walkthrough.',
+    },
     parseError:   'Analysis could not be processed. Please retry.',
     lineupDialog: {
       title:    '⚠️ Unconfirmed Lineups',
@@ -87,6 +96,15 @@ const L = {
       parlay:  'Selecciona 2–6 juegos a la izquierda para tu parlay.',
     },
     readyHint:    'Configura las opciones y ejecuta el Oráculo.',
+    quickStart: {
+      title: 'INICIO RÁPIDO',
+      steps: [
+        'Elige un partido o matchup de la lista.',
+        'Selecciona tu enfoque de apuesta (moneyline, totales, props…).',
+        'Presiona Ejecutar Oráculo — recibes odds, edge y razonamiento.',
+      ],
+      guideHint: '¿Primera vez? Mira la pestaña Guía para un recorrido.',
+    },
     parseError:   'No se pudo procesar el análisis. Por favor, reintenta.',
     lineupDialog: {
       title:    '⚠️ Alineación no confirmada',
@@ -550,6 +568,7 @@ function ErrorDisplay({ error, onRetry, t }) {
 
 function EmptyState({ mode, canAnalyze, t }) {
   const msg = !canAnalyze ? (t.emptyHint[mode] ?? t.emptyHint.single) : t.readyHint;
+  const showQuickStart = !canAnalyze;
   return (
     <Box
       sx={{
@@ -557,24 +576,110 @@ function EmptyState({ mode, canAnalyze, t }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        py: 8,
-        gap: '14px',
+        py: 6,
+        gap: '18px',
         minHeight: 240,
       }}
     >
-      <Typography sx={{ fontSize: '2rem', lineHeight: 1 }}>⚾</Typography>
+      <Box
+        sx={{
+          fontSize:   '2.4rem',
+          lineHeight: 1,
+          '@keyframes hexaPulse': {
+            '0%,100%': { opacity: 0.55 },
+            '50%':     { opacity: 1 },
+          },
+          animation: 'hexaPulse 2.4s ease-in-out infinite',
+        }}
+      >
+        ⚾
+      </Box>
       <Typography
         sx={{
           fontFamily: SANS,
-          fontSize: '0.82rem',
-          color: C.textMuted,
+          fontSize: '0.88rem',
+          color: C.textSecondary,
           textAlign: 'center',
-          maxWidth: 300,
-          lineHeight: 1.65,
+          maxWidth: 320,
+          lineHeight: 1.55,
         }}
       >
         {msg}
       </Typography>
+
+      {showQuickStart && t.quickStart && (
+        <Box
+          sx={{
+            mt:           '8px',
+            width:        '100%',
+            maxWidth:     360,
+            border:       `1px solid ${C.cyanLine}`,
+            borderLeft:   `3px solid ${C.accent}`,
+            bgcolor:      'rgba(0,229,255,0.04)',
+            borderRadius: '4px',
+            p:            '14px 16px',
+            display:      'flex',
+            flexDirection:'column',
+            gap:          '10px',
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily:    MONO,
+              fontSize:      '0.6rem',
+              color:         C.accent,
+              letterSpacing: '0.18em',
+              fontWeight:    700,
+            }}
+          >
+            {t.quickStart.title}
+          </Typography>
+          <Box component="ol" sx={{ m: 0, pl: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {t.quickStart.steps.map((step, i) => (
+              <Box
+                key={i}
+                component="li"
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}
+              >
+                <Box
+                  sx={{
+                    flexShrink:    0,
+                    width:         '18px',
+                    height:        '18px',
+                    borderRadius:  '50%',
+                    border:        `1px solid ${C.cyan}`,
+                    color:         C.cyan,
+                    fontFamily:    MONO,
+                    fontSize:      '0.62rem',
+                    fontWeight:    700,
+                    display:       'flex',
+                    alignItems:    'center',
+                    justifyContent:'center',
+                    lineHeight:    1,
+                    mt:            '1px',
+                  }}
+                >
+                  {i + 1}
+                </Box>
+                <Typography sx={{ fontFamily: SANS, fontSize: '0.78rem', color: C.textPrimary, lineHeight: 1.5 }}>
+                  {step}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Typography
+            sx={{
+              mt:         '2px',
+              fontFamily: MONO,
+              fontSize:   '0.62rem',
+              color:      C.textMuted,
+              lineHeight: 1.5,
+            }}
+          >
+            {t.quickStart.guideHint}
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 }

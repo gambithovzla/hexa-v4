@@ -137,9 +137,10 @@ function PlanCard({ plan, lang }) {
   );
 }
 
-export default function PricingModal({ onClose, lang = 'es' }) {
+export default function PricingModal({ onClose, lang = 'es', onRequestVerify }) {
   const { user } = useAuth();
   const isEs = lang === 'es';
+  const needsVerification = Boolean(user) && user.email_verified === false;
 
   return (
     /* Overlay */
@@ -215,20 +216,77 @@ export default function PricingModal({ onClose, lang = 'es' }) {
           </Box>
         </Box>
 
-        {/* Plan grid */}
-        <Box
-          sx={{
-            display:             'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
-            gap:                 '1px',
-            p:                   '24px',
-            bgcolor:             C.border,
-          }}
-        >
-          {PLANS.map(plan => (
-            <PlanCard key={plan.id} plan={plan} lang={lang} />
-          ))}
-        </Box>
+        {/* Verify-first gate — blocks purchase until email verified */}
+        {needsVerification ? (
+          <Box sx={{ p: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <Box
+              sx={{
+                border:      `1px solid ${C.accentLine}`,
+                borderLeft:  `3px solid ${C.accent}`,
+                bgcolor:     C.accentDim,
+                p:           '18px',
+                display:     'flex',
+                flexDirection: 'column',
+                gap:         '10px',
+              }}
+            >
+              <Typography sx={{ fontFamily: BARLOW, fontSize: '0.9rem', fontWeight: 800, color: C.accent, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                {isEs ? '🔒 Verifica tu email primero' : '🔒 Verify your email first'}
+              </Typography>
+              <Typography sx={{ fontFamily: DM, fontSize: '0.78rem', color: C.textPrimary, lineHeight: 1.6 }}>
+                {isEs
+                  ? 'Por seguridad, antes de comprar créditos necesitas verificar el correo que usaste al registrarte. Te enviamos un código de 6 dígitos al crear tu cuenta.'
+                  : 'For your security, verify the email you registered with before purchasing credits. We sent a 6-digit code when you created your account.'}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: C.textMuted, lineHeight: 1.6 }}>
+                {isEs
+                  ? 'Revisa bandeja principal, spam o promociones. Puedes reenviar el código si no lo recibiste.'
+                  : 'Check inbox, spam, or promotions. You can resend the code if it did not arrive.'}
+              </Typography>
+              <Box
+                component="button"
+                onClick={() => {
+                  onClose?.();
+                  onRequestVerify?.();
+                }}
+                sx={{
+                  mt:             '4px',
+                  alignSelf:      'flex-start',
+                  px:             '18px',
+                  py:             '10px',
+                  border:         `1px solid ${C.accent}`,
+                  borderRadius:   0,
+                  bgcolor:        C.accentDim,
+                  color:          C.accent,
+                  fontFamily:     BARLOW,
+                  fontSize:       '0.72rem',
+                  fontWeight:     800,
+                  letterSpacing:  '0.14em',
+                  textTransform:  'uppercase',
+                  cursor:         'pointer',
+                  transition:     'all 0.15s',
+                  '&:hover':      { bgcolor: 'rgba(79,195,247,0.15)', color: '#ffffff' },
+                }}
+              >
+                {isEs ? '→ Verificar ahora' : '→ Verify now'}
+              </Box>
+            </Box>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              display:             'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
+              gap:                 '1px',
+              p:                   '24px',
+              bgcolor:             C.border,
+            }}
+          >
+            {PLANS.map(plan => (
+              <PlanCard key={plan.id} plan={plan} lang={lang} />
+            ))}
+          </Box>
+        )}
 
         {/* Footer note */}
         <Box sx={{ px: '24px', pb: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>

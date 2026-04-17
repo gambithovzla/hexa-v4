@@ -88,18 +88,31 @@ export default function AdminCreditPanel({ lang = 'en', onClose }) {
 
   return (
     <Box
+      onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
       sx={{
-        position:     'absolute',
-        top:          'calc(100% + 6px)',
-        right:        0,
-        zIndex:       2000,
-        width:        '300px',
+        position:        'fixed',
+        inset:           0,
+        zIndex:          10050,
+        display:         'flex',
+        alignItems:      { xs: 'flex-end', sm: 'center' },
+        justifyContent:  'center',
+        bgcolor:         'rgba(0,0,0,0.72)',
+        backdropFilter:  'blur(4px)',
+        px:              { xs: 0, sm: '16px' },
+      }}
+    >
+    <Box
+      sx={{
+        width:        { xs: '100%', sm: '360px' },
+        maxWidth:     '100%',
+        maxHeight:    { xs: '94vh', sm: '92vh' },
+        overflowY:    'auto',
         background:   C.bg,
         border:       `1px solid ${C.border}`,
         borderTop:    `2px solid ${C.accent}`,
-        borderRadius: '0 0 4px 4px',
+        borderRadius: { xs: '10px 10px 0 0', sm: '4px' },
         p:            '18px',
-        boxShadow:    '0 8px 24px rgba(0,0,0,0.5)',
+        boxShadow:    '0 8px 32px rgba(0,0,0,0.6)',
       }}
     >
       {/* ── Title row ── */}
@@ -240,6 +253,7 @@ export default function AdminCreditPanel({ lang = 'en', onClose }) {
             : (isEs ? 'ASIGNAR CRÉDITOS' : 'GRANT CREDITS')}
         </Box>
       </Box>
+    </Box>
     </Box>
   );
 }

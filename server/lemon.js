@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import pool from './db.js';
+import { verifyToken } from './middleware/auth-middleware.js';
 
 const router = express.Router();
 
@@ -15,10 +16,28 @@ const VARIANT_CREDITS = {
 };
 
 // POST /api/lemon/checkout — creates a Lemon Squeezy checkout URL
-router.post('/checkout', async (req, res) => {
+// Authenticated; requires a verified email before allowing a payment to be created.
+router.post('/checkout', verifyToken, async (req, res) => {
   try {
-    const { variantId, userEmail, userId } = req.body;
-    if (!variantId || !userEmail || !userId) return res.status(400).json({ error: 'Faltan parámetros' });
+    const { variantId } = req.body;
+    if (!variantId) return res.status(400).json({ error: 'Faltan parámetros' });
+
+    const userCheck = await pool.query(
+      'SELECT id, email, email_verified FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const dbUser = userCheck.rows[0];
+    if (!dbUser) return res.status(401).json({ error: 'Unauthorized' });
+    if (!dbUser.email_verified) {
+      return res.status(403).json({
+        error:             'EMAIL_NOT_VERIFIED',
+        message:           'Verify your email before purchasing credits.',
+        requiresVerification: true,
+      });
+    }
+
+    const userId    = dbUser.id;
+    const userEmail = dbUser.email;
 
     const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
       method: 'POST',

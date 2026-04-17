@@ -10,6 +10,7 @@
  */
 
 import jwt from 'jsonwebtoken';
+import pool from '../db.js';
 
 export function verifyToken(req, res, next) {
   const authHeader = req.headers['authorization'] ?? '';
@@ -35,4 +36,36 @@ export function requireAdmin(req, res, next) {
     return res.status(403).json({ success: false, error: 'Admin access required' });
   }
   next();
+}
+
+/**
+ * requireVerifiedEmail — must follow verifyToken.
+ * Looks up the current user and rejects if email_verified is not true.
+ * Admins are always allowed through so ops work isn't blocked.
+ */
+export async function requireVerifiedEmail(req, res, next) {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (req.user.is_admin === true) return next();
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT email_verified FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    if (rows[0].email_verified !== true) {
+      return res.status(403).json({
+        success: false,
+        error:   'EMAIL_NOT_VERIFIED',
+        message: 'Verify your email before saving picks.',
+      });
+    }
+    next();
+  } catch {
+    return res.status(500).json({ success: false, error: 'Verification check failed' });
+  }
 }

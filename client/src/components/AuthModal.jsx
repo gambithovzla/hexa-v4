@@ -68,6 +68,9 @@ const L = {
     verifyHelper:    'Paste the 6 digits below.',
     verifyPlaceholder:'6-digit code',
     verifyStepLabel: 'STEP 2 // EMAIL CODE',
+    verifyResendCountdown: (s) => `Resend in ${s}s`,
+    verifyCancelRegister: 'Cancel registration',
+    verifyBlockedHint:    'You must verify your email to activate your account.',
   },
   es: {
     login:           'Iniciar sesión',
@@ -99,6 +102,9 @@ const L = {
     verifyHelper:    'Pega abajo los 6 digitos.',
     verifyPlaceholder:'Codigo de 6 digitos',
     verifyStepLabel: 'PASO 2 // CODIGO EMAIL',
+    verifyResendCountdown: (s) => `Reenviar en ${s}s`,
+    verifyCancelRegister: 'Cancelar registro',
+    verifyBlockedHint:    'Debes verificar tu email para activar tu cuenta.',
   },
 };
 
@@ -260,82 +266,114 @@ function InputField({
   );
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
-function VerifyCoachOverlay({ open, t, email, onClose }) {
-  if (!open) return null;
+// ── 6-digit OTP input (mobile-friendly, auto-advance, paste support) ─────────
+function OTPInput({ value, onChange, length = 6, disabled, autoFocus }) {
+  const refs = useRef([]);
+  const digits = Array.from({ length }, (_, i) => value[i] ?? '');
+
+  function updateValue(next) {
+    onChange(next.replace(/\D/g, '').slice(0, length));
+  }
+
+  function handleChange(idx, raw) {
+    const digit = raw.replace(/\D/g, '').slice(-1);
+    const arr = digits.slice();
+    arr[idx] = digit;
+    updateValue(arr.join(''));
+    if (digit && idx < length - 1) {
+      refs.current[idx + 1]?.focus();
+      refs.current[idx + 1]?.select?.();
+    }
+  }
+
+  function handleKeyDown(idx, e) {
+    if (e.key === 'Backspace') {
+      if (!digits[idx] && idx > 0) {
+        e.preventDefault();
+        const arr = digits.slice();
+        arr[idx - 1] = '';
+        updateValue(arr.join(''));
+        refs.current[idx - 1]?.focus();
+      }
+      return;
+    }
+    if (e.key === 'ArrowLeft' && idx > 0) {
+      e.preventDefault();
+      refs.current[idx - 1]?.focus();
+      refs.current[idx - 1]?.select?.();
+    }
+    if (e.key === 'ArrowRight' && idx < length - 1) {
+      e.preventDefault();
+      refs.current[idx + 1]?.focus();
+      refs.current[idx + 1]?.select?.();
+    }
+  }
+
+  function handlePaste(e) {
+    const pasted = (e.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, length);
+    if (!pasted) return;
+    e.preventDefault();
+    updateValue(pasted);
+    const nextIdx = Math.min(pasted.length, length - 1);
+    setTimeout(() => {
+      refs.current[nextIdx]?.focus();
+      refs.current[nextIdx]?.select?.();
+    }, 0);
+  }
 
   return (
-    <Box
-      sx={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 10001,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        px: '20px',
-        background: 'rgba(0,0,0,0.82)',
-        backdropFilter: 'blur(4px)',
-      }}
-    >
-      <Box
-        sx={{
-          width: '100%',
-          maxWidth: '320px',
-          bgcolor: NC.surface,
-          border: `1px solid ${NC.orangeLine}`,
-          borderLeft: `3px solid ${NC.orange}`,
-          p: '18px 16px',
-          boxShadow: `0 0 30px rgba(0,0,0,0.92), 0 0 24px rgba(255,102,0,0.12)`,
-        }}
-      >
-        <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
-          // EMAIL VERIFICATION
-        </Typography>
-        <Typography sx={{ fontFamily: DISPLAY, fontSize: '12px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '10px' }}>
-          {t.verifyCoachTitle}
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7, mb: '10px' }}>
-          {t.verifyCoachBody}
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.orange, lineHeight: 1.7, mb: '10px' }}>
-          {email}
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.textDim, lineHeight: 1.7, mb: '16px' }}>
-          {t.verifyCoachHint}
-        </Typography>
-        <Box
-          component="button"
-          onClick={onClose}
-          sx={{
-            width: '100%',
-            py: '11px',
-            border: `1px solid ${NC.orangeLine}`,
-            bgcolor: NC.orangeDim,
-            color: NC.orange,
-            fontFamily: MONO,
-            fontSize: '10px',
-            letterSpacing: '3px',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            boxShadow: NC.orangeGlow,
-            transition: 'all 0.2s',
-            '&:hover': {
-              color: '#ffffff',
-              bgcolor: 'rgba(255,102,0,0.18)',
-            },
-          }}
-        >
-          {t.verifyCoachCta}
-        </Box>
-      </Box>
+    <Box sx={{ display: 'flex', gap: { xs: '6px', sm: '8px' }, justifyContent: 'center', width: '100%' }}>
+      {digits.map((d, i) => {
+        const filled = Boolean(d);
+        return (
+          <input
+            key={i}
+            ref={(el) => { refs.current[i] = el; }}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={1}
+            value={d}
+            disabled={disabled}
+            autoFocus={autoFocus && i === 0}
+            onChange={(e) => handleChange(i, e.target.value)}
+            onKeyDown={(e) => handleKeyDown(i, e)}
+            onPaste={handlePaste}
+            onFocus={(e) => e.target.select?.()}
+            aria-label={`digit ${i + 1}`}
+            style={{
+              flex:          '1 1 0',
+              minWidth:      0,
+              maxWidth:      '52px',
+              aspectRatio:   '1 / 1.2',
+              textAlign:     'center',
+              background:    filled ? 'rgba(255,102,0,0.08)' : NC.cyanDim,
+              border:        `1px solid ${filled ? NC.orange : NC.cyanLine}`,
+              borderRadius:  '0',
+              color:         NC.textPrimary,
+              fontFamily:    MONO,
+              fontSize:      '22px',
+              fontWeight:    700,
+              letterSpacing: '0',
+              padding:       '0',
+              outline:       'none',
+              colorScheme:   'dark',
+              opacity:       disabled ? 0.5 : 1,
+              boxShadow:     filled ? `0 0 10px rgba(255,102,0,0.35)` : 'none',
+              transition:    'border-color 0.15s, box-shadow 0.15s, background 0.15s',
+            }}
+          />
+        );
+      })}
     </Box>
   );
 }
 
-export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'login' }) {
+// ── Main export ───────────────────────────────────────────────────────────────
+
+export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'login', initialView = null }) {
   const t = L[lang] ?? L.en;
-  const { login, register, verifyEmail, resendCode } = useAuth();
+  const { login, register, logout, verifyEmail, resendCode, user } = useAuth();
 
   const [tab,           setTab]           = useState(defaultTab);
   const [email,         setEmail]         = useState('');
@@ -346,10 +384,11 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
   const [verifyEmail_,  setVerifyEmail_]  = useState('');
   const [verifyCode,    setVerifyCode]    = useState('');
   const [verifySource,  setVerifySource]  = useState('login');
-  const [showVerifyCoachmark, setShowVerifyCoachmark] = useState(false);
   const [resendStatus,  setResendStatus]  = useState('idle'); // 'idle' | 'sending' | 'sent'
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [ageConfirmed,  setAgeConfirmed]  = useState(false);
-  const verifyInputRef = useRef(null);
+
+  const isBlockingVerify = verifyStep && verifySource === 'register';
 
   // Reset form on open / tab change
   useEffect(() => {
@@ -359,25 +398,33 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
       setPassword('');
       setError('');
       setLoading(false);
-      setVerifyStep(false);
-      setVerifySource('login');
-      setShowVerifyCoachmark(false);
-      setVerifyEmail_('');
       setVerifyCode('');
       setResendStatus('idle');
       setAgeConfirmed(false);
+      if (initialView === 'verify' && user && user.email_verified === false) {
+        setVerifyEmail_(user.email ?? '');
+        setVerifySource('login');
+        setVerifyStep(true);
+        setResendCooldown(0);
+      } else {
+        setVerifyStep(false);
+        setVerifySource('login');
+        setVerifyEmail_('');
+        setResendCooldown(0);
+      }
     }
-  }, [open, defaultTab]);
+  }, [open, defaultTab, initialView, user]);
 
   useEffect(() => { setError(''); }, [tab]);
 
+  // Countdown tick for resend cooldown
   useEffect(() => {
-    if (!verifyStep || showVerifyCoachmark) return undefined;
-    const focusTimer = setTimeout(() => {
-      verifyInputRef.current?.focus?.();
-    }, 50);
-    return () => clearTimeout(focusTimer);
-  }, [verifyStep, showVerifyCoachmark]);
+    if (resendCooldown <= 0) return undefined;
+    const id = setInterval(() => {
+      setResendCooldown((s) => (s <= 1 ? 0 : s - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [resendCooldown]);
 
   if (!open) return null;
 
@@ -391,8 +438,8 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
         if (user && user.email_verified === false) {
           setVerifyEmail_(email);
           setVerifySource('login');
-          setShowVerifyCoachmark(false);
           setVerifyStep(true);
+          setResendCooldown(0);
           setLoading(false);
           return;
         }
@@ -401,8 +448,8 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
         await register(email, password);
         setVerifyEmail_(email);
         setVerifySource('register');
-        setShowVerifyCoachmark(true);
         setVerifyStep(true);
+        setResendCooldown(60);
       }
     } catch (err) {
       setError(err.message ?? 'Authentication failed');
@@ -426,17 +473,25 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
   }
 
   async function handleResend() {
+    if (resendCooldown > 0 || resendStatus === 'sending') return;
     setResendStatus('sending');
     try {
       await resendCode();
       setResendStatus('sent');
+      setResendCooldown(60);
       setTimeout(() => setResendStatus('idle'), 3000);
     } catch {
       setResendStatus('idle');
     }
   }
 
+  function handleCancelRegister() {
+    logout();
+    onClose();
+  }
+
   function handleBackdropClick(e) {
+    if (isBlockingVerify) return;
     if (e.target === e.currentTarget) onClose();
   }
 
@@ -497,76 +552,92 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
           },
         }}
       >
-        {/* Close button */}
-        <Box
-          component="button"
-          onClick={onClose}
-          title={t.close}
-          sx={{
-            position:       'absolute',
-            top:            '12px',
-            right:          '12px',
-            width:          '24px',
-            height:         '24px',
-            border:         `1px solid ${NC.cyanLine}`,
-            bgcolor:        'transparent',
-            color:          NC.textMuted,
-            fontFamily:     MONO,
-            fontSize:       '10px',
-            cursor:         'pointer',
-            display:        'flex',
-            alignItems:     'center',
-            justifyContent: 'center',
-            borderRadius:   '0',
-            transition:     'all 0.15s',
-            '&:hover':      { color: NC.cyan, borderColor: NC.cyan, boxShadow: NC.cyanGlow },
-          }}
-        >
-          ✕
-        </Box>
+        {/* Close button — hidden while blocking post-register verification */}
+        {!isBlockingVerify && (
+          <Box
+            component="button"
+            onClick={onClose}
+            title={t.close}
+            sx={{
+              position:       'absolute',
+              top:            '12px',
+              right:          '12px',
+              width:          '24px',
+              height:         '24px',
+              border:         `1px solid ${NC.cyanLine}`,
+              bgcolor:        'transparent',
+              color:          NC.textMuted,
+              fontFamily:     MONO,
+              fontSize:       '10px',
+              cursor:         'pointer',
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              borderRadius:   '0',
+              transition:     'all 0.15s',
+              '&:hover':      { color: NC.cyan, borderColor: NC.cyan, boxShadow: NC.cyanGlow },
+            }}
+          >
+            ✕
+          </Box>
+        )}
 
         {/* Boot sequence header */}
         <BootHeader lang={lang} />
 
-        <VerifyCoachOverlay
-          open={verifyStep && showVerifyCoachmark}
-          t={t}
-          email={verifyEmail_}
-          onClose={() => setShowVerifyCoachmark(false)}
-        />
-
         {verifyStep ? (
           /* ── Verification step ── */
-          <Box component="form" onSubmit={handleVerify} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <Box sx={{ border: `1px solid ${NC.orangeLine}`, bgcolor: NC.orangeDim, px: '12px', py: '10px' }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '4px' }}>
+          <Box component="form" onSubmit={handleVerify} sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Prominent banner — post-register celebratory / blocking message */}
+            <Box
+              sx={{
+                border: `1px solid ${NC.orangeLine}`,
+                borderLeft: `3px solid ${NC.orange}`,
+                bgcolor: NC.orangeDim,
+                px: '14px',
+                py: '12px',
+                boxShadow: `0 0 18px rgba(255,102,0,0.12)`,
+              }}
+            >
+              <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '6px' }}>
                 {t.verifyStepLabel}
               </Typography>
-              <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.textMuted, lineHeight: 1.7 }}>
-                {verifySource === 'register' ? t.verifyCoachBody : t.verifyHelper}
+              <Typography sx={{ fontFamily: DISPLAY, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
+                {verifySource === 'register' ? t.verifyCoachTitle : t.verifyTitle}
               </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7, mb: '4px' }}>
+                {t.verifySent(verifyEmail_)}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.textDim, lineHeight: 1.7 }}>
+                {t.verifyCoachHint}
+              </Typography>
+              {isBlockingVerify && (
+                <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.orange, letterSpacing: '0.04em', mt: '8px' }}>
+                  ⚠ {t.verifyBlockedHint}
+                </Typography>
+              )}
             </Box>
-            <Typography sx={{ fontFamily: DISPLAY, fontSize: '11px', color: NC.cyan, letterSpacing: '3px', textTransform: 'uppercase', mb: '4px' }}>
-              {t.verifyTitle}
-            </Typography>
-            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, letterSpacing: '0.04em' }}>
-              {t.verifySent(verifyEmail_)}
-            </Typography>
-            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.orange, letterSpacing: '0.04em' }}>
-              {t.verifyHelper}
-            </Typography>
 
-            <InputField
-              label={t.verifyCode}
-              type="text"
-              value={verifyCode}
-              onChange={(value) => setVerifyCode(value.replace(/\D/g, '').slice(0, 6))}
-              disabled={loading}
-              placeholder={t.verifyPlaceholder}
-              inputMode="numeric"
-              maxLength={6}
-              inputRef={verifyInputRef}
-            />
+            {/* 6-digit OTP */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', mt: '6px' }}>
+              <Typography sx={{
+                fontFamily:    MONO,
+                fontSize:      '7px',
+                color:         NC.textMuted,
+                textTransform: 'uppercase',
+                letterSpacing: '3px',
+                textAlign:     'center',
+              }}>
+                {t.verifyCode}
+              </Typography>
+              <OTPInput
+                value={verifyCode}
+                onChange={setVerifyCode}
+                length={6}
+                disabled={loading}
+                autoFocus
+              />
+            </Box>
 
             {/* Error */}
             {error && (
@@ -599,24 +670,30 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
               {loading ? t.loading : t.verifySubmit}
             </Box>
 
-            {/* Resend + skip */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Resend + cancel/skip */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <Typography
-                onClick={resendStatus === 'idle' ? handleResend : undefined}
+                onClick={resendCooldown === 0 && resendStatus !== 'sending' ? handleResend : undefined}
                 sx={{
                   fontFamily:    MONO,
                   fontSize:      '9px',
-                  color:         resendStatus === 'sent' ? NC.green : NC.textMuted,
-                  cursor:        resendStatus === 'idle' ? 'pointer' : 'default',
+                  color:         resendStatus === 'sent' ? NC.green : resendCooldown > 0 ? NC.textDim : NC.textMuted,
+                  cursor:        resendCooldown === 0 && resendStatus !== 'sending' ? 'pointer' : 'default',
                   letterSpacing: '0.04em',
-                  '&:hover':     resendStatus === 'idle' ? { color: NC.cyan } : {},
+                  '&:hover':     resendCooldown === 0 && resendStatus !== 'sending' ? { color: NC.cyan } : {},
                   transition:    'color 0.2s',
                 }}
               >
-                {resendStatus === 'sending' ? t.verifyResending : resendStatus === 'sent' ? t.verifySentOk : t.verifyResend}
+                {resendStatus === 'sending'
+                  ? t.verifyResending
+                  : resendStatus === 'sent'
+                  ? t.verifySentOk
+                  : resendCooldown > 0
+                  ? t.verifyResendCountdown(resendCooldown)
+                  : t.verifyResend}
               </Typography>
               <Typography
-                onClick={onClose}
+                onClick={isBlockingVerify ? handleCancelRegister : onClose}
                 sx={{
                   fontFamily:    MONO,
                   fontSize:      '9px',
@@ -627,7 +704,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
                   transition:    'color 0.2s',
                 }}
               >
-                {t.verifySkip}
+                {isBlockingVerify ? t.verifyCancelRegister : t.verifySkip}
               </Typography>
             </Box>
           </Box>

@@ -11,7 +11,7 @@ import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat } from './oracle.j
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
-import { verifyToken } from './middleware/auth-middleware.js';
+import { verifyToken, requireVerifiedEmail } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
 import pool from './db.js';
@@ -1629,8 +1629,8 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/picks — guarda un pick en el historial
-app.post('/api/picks', verifyToken, async (req, res) => {
+// POST /api/picks — guarda un pick en el historial (requiere email verificado)
+app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
   try {
     const {
       type, matchup, pick, oracle_confidence, bet_value,

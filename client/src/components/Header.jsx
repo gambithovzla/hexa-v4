@@ -180,6 +180,7 @@ function StatcastBadge({ lang }) {
 function AuthButton({ lang }) {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
   const [modalOpen, setModalOpen]       = useState(false);
+  const [authView, setAuthView]         = useState(null);
   const [showPricing, setShowPricing]   = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   const isEs = lang === 'es';
@@ -308,7 +309,26 @@ function AuthButton({ lang }) {
         ⏏
       </Box>
     </Box>
-    {showPricing && <PricingModal onClose={() => setShowPricing(false)} lang={lang} />}
+    {showPricing && (
+      <PricingModal
+        onClose={() => setShowPricing(false)}
+        lang={lang}
+        onRequestVerify={() => {
+          setShowPricing(false);
+          setAuthView('verify');
+          setModalOpen(true);
+        }}
+      />
+    )}
+    <AuthModal
+      open={modalOpen}
+      onClose={() => {
+        setModalOpen(false);
+        setAuthView(null);
+      }}
+      lang={lang}
+      initialView={authView}
+    />
     <ActionConfirmModal
       open={confirmLogoutOpen}
       title={logoutCopy.title}

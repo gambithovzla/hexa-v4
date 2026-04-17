@@ -23,6 +23,8 @@ const L = {
     masterPick:       'Master Pick',
     confidence:       'Oracle Confidence',
     oracleReport:     'Oracle Report',
+    explainPick:      'Explain Pick',
+    hideExplanation:  'Hide Explanation',
     hexaHunch:        'H.E.X.A. Hunch',
     alertFlags:       'Alert Flags',
     probabilityModel: 'Win Probability',
@@ -69,6 +71,8 @@ const L = {
     masterPick:       'Pick Principal',
     confidence:       'Confianza del Oráculo',
     oracleReport:     'Reporte del Oráculo',
+    explainPick:      'Explicar Pick',
+    hideExplanation:  'Ocultar Explicación',
     hexaHunch:        'Corazonada H.E.X.A.',
     alertFlags:       'Alertas',
     probabilityModel: 'Probabilidad de Victoria',
@@ -242,6 +246,60 @@ function SectionLabel({ children }) {
       {children}
       <span style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
     </Typography>
+  );
+}
+
+// Collapsible explanation block: label + toggle button that reveals the body.
+// Used for oracle_report so casual users see the pick first and can opt in to
+// read the full statistical reasoning.
+function ExplainPickSection({ label, body, t }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Box sx={{ borderBottom: `1px solid ${C.border}`, pb: '16px' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', mb: open ? '10px' : '0' }}>
+        <SectionLabel>{label}</SectionLabel>
+        <Box
+          component="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          sx={{
+            flexShrink:    0,
+            display:       'inline-flex',
+            alignItems:    'center',
+            gap:           '6px',
+            px:            '10px',
+            py:            '5px',
+            border:        `1px solid ${C.accentLine}`,
+            bgcolor:       open ? C.accentDim : 'transparent',
+            color:         C.accent,
+            fontFamily:    MONO,
+            fontSize:      '10px',
+            fontWeight:    700,
+            letterSpacing: '1.5px',
+            textTransform: 'uppercase',
+            cursor:        'pointer',
+            transition:    'all 0.15s',
+            mb:            '8px',
+            '&:hover':     { bgcolor: C.accentDim, borderColor: C.accent },
+          }}
+        >
+          <span style={{ opacity: 0.85 }}>{open ? '−' : '+'}</span>
+          {open ? t.hideExplanation : t.explainPick}
+        </Box>
+      </Box>
+      {open && (
+        <Typography
+          sx={{
+            fontFamily: SANS,
+            fontSize:   '13px',
+            color:      C.textSecondary,
+            lineHeight: 1.8,
+          }}
+        >
+          {body}
+        </Typography>
+      )}
+    </Box>
   );
 }
 
@@ -1473,21 +1531,9 @@ function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
         />
       </Box>
 
-      {/* ── Oracle Report ── */}
+      {/* ── Oracle Report (collapsed by default — user opts in via Explain Pick) ── */}
       {hexa.oracle_report && (
-        <Box sx={{ borderBottom: `1px solid ${C.border}`, pb: '16px' }}>
-          <SectionLabel>{t.oracleReport}</SectionLabel>
-          <Typography
-            sx={{
-              fontFamily: SANS,
-              fontSize:   '13px',
-              color:      C.textSecondary,
-              lineHeight: 1.8,
-            }}
-          >
-            {hexa.oracle_report}
-          </Typography>
-        </Box>
+        <ExplainPickSection label={t.oracleReport} body={hexa.oracle_report} t={t} />
       )}
 
       {/* ── Kelly Recommendation ── */}
