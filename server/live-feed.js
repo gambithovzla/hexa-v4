@@ -494,7 +494,7 @@ export async function getGameHighlightsAvailability(gamePk) {
   const cached = _highlightsCache.get(key);
   if (cached && Date.now() - cached.timestamp < HIGHLIGHTS_TTL_MS) return cached.data;
 
-  const url = `${MLB_BASE}/api/v1.1/game/${gamePk}/feed/live`;
+  const url = `${MLB_BASE}/api/v1/game/${gamePk}/content`;
   let raw;
   try {
     raw = await fetchJSON(url);
@@ -504,7 +504,7 @@ export async function getGameHighlightsAvailability(gamePk) {
     return data;
   }
 
-  const items = raw?.liveData?.highlights?.highlights?.items ?? [];
+  const items = raw?.highlights?.highlights?.items ?? [];
   const hasItems = Array.isArray(items) && items.length > 0;
 
   // Public MLB.com landing for the game — does NOT embed video here.
