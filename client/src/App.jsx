@@ -112,6 +112,77 @@ function getMatchupLabel(game) {
   return `${away} @ ${home}`;
 }
 
+// Compact onboarding card shown on mobile before a game is selected.
+// Desktop shows the equivalent inside AnalysisPanel's EmptyState.
+function MobileOnboardingCard({ lang }) {
+  const isEs = lang === 'es';
+  const title = isEs ? 'INICIO RÁPIDO' : 'QUICK START';
+  const steps = isEs
+    ? [
+        'Elige un partido de la lista.',
+        'Selecciona tu enfoque (moneyline, totales, props…).',
+        'Presiona Ejecutar Oráculo — recibes odds, edge y razonamiento.',
+      ]
+    : [
+        'Pick a game from the list.',
+        'Choose your bet focus (moneyline, totals, props…).',
+        'Hit Run Oracle — get odds, edge, and reasoning.',
+      ];
+  const hint = isEs ? '¿Primera vez? Mira la pestaña Guía para un recorrido.' : 'New here? Check the Guide tab for a walkthrough.';
+
+  return (
+    <Box
+      sx={{
+        mb:           '14px',
+        border:       `1px solid ${C.cyanLine}`,
+        borderLeft:   `3px solid ${C.accent}`,
+        bgcolor:      'rgba(0,229,255,0.04)',
+        borderRadius: '4px',
+        p:            '14px 16px',
+        display:      'flex',
+        flexDirection:'column',
+        gap:          '10px',
+      }}
+    >
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.accent, letterSpacing: '0.18em', fontWeight: 700 }}>
+        {title}
+      </Typography>
+      <Box component="ol" sx={{ m: 0, pl: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {steps.map((step, i) => (
+          <Box key={i} component="li" sx={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <Box
+              sx={{
+                flexShrink:    0,
+                width:         '18px',
+                height:        '18px',
+                borderRadius:  '50%',
+                border:        `1px solid ${C.cyan}`,
+                color:         C.cyan,
+                fontFamily:    MONO,
+                fontSize:      '0.62rem',
+                fontWeight:    700,
+                display:       'flex',
+                alignItems:    'center',
+                justifyContent:'center',
+                lineHeight:    1,
+                mt:            '1px',
+              }}
+            >
+              {i + 1}
+            </Box>
+            <Typography sx={{ fontFamily: BARLOW, fontSize: '0.8rem', color: C.textPrimary, lineHeight: 1.5 }}>
+              {step}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+      <Typography sx={{ mt: '2px', fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, lineHeight: 1.5 }}>
+        {hint}
+      </Typography>
+    </Box>
+  );
+}
+
 // Back bar shown on mobile when analysis view has taken over the screen.
 // Tapping "back" returns the user to the game selector.
 function MobileBackBar({ lang, matchup, onBack }) {
@@ -388,6 +459,7 @@ export default function App() {
               </Box>
             ) : (
               <Box sx={isMobileExperience ? { display: 'block' } : TAB_LAYOUT}>
+                {isMobileExperience && <MobileOnboardingCard lang={lang} />}
                 <GameSelector
                   mode="single"
                   onSelectGame={setSingleGame}
