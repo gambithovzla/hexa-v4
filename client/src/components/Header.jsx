@@ -481,7 +481,7 @@ function MethodologyLink({ lang, onClick }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, onPerformance, isAdmin = false, onOracleChat }) {
+export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, onPerformance, isAdmin = false, performancePublic = false, onOracleChat }) {
   const [showCreditPanel, setShowCreditPanel] = useState(false);
 
   return (
@@ -660,8 +660,8 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         {/* Guide button */}
         <GuideButton lang={lang} />
 
-        {/* Performance link — public, visible to all users */}
-        <PerformanceLink />
+        {/* Performance link — admin always, public only when toggle is ON */}
+        {(isAdmin || performancePublic) && <PerformanceLink />}
 
         {/* Methodology link */}
         <MethodologyLink lang={lang} onClick={onMethodology} />

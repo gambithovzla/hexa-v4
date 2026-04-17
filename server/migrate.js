@@ -270,6 +270,19 @@ export async function runMigrations() {
       WHERE backtest_id IS NOT NULL
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key VARCHAR(64) PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      INSERT INTO app_settings (key, value)
+      VALUES ('performance_public', 'false'::jsonb)
+      ON CONFLICT (key) DO NOTHING
+    `);
+
     await client.query('COMMIT');
 
     await pool.query(`
