@@ -379,7 +379,7 @@ function HelpButton({ lang }) {
 
 function GuideButton({ lang }) {
   const [open, setOpen] = useState(false);
-  const label = lang === 'es' ? '[ GUÍA ]' : '[ GUIDE ]';
+  const label = '[ MANUAL ]';
   return (
     <>
       <Box
