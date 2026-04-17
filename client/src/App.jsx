@@ -27,6 +27,7 @@ import MethodologyPage      from './components/MethodologyPage';
 import LegalPage            from './components/LegalPage';
 import OracleChat          from './components/OracleChat';
 import PerformanceDashboard from './pages/PerformanceDashboard';
+import DevUIShowcase       from './pages/DevUIShowcase';
 import PerformancePage      from './components/PerformancePage';
 import BatchScanPanel      from './components/BatchScanPanel';
 import BacktestDashboard  from './components/BacktestDashboard';
@@ -357,6 +358,16 @@ export default function App() {
       );
     }
     return <PerformancePage />;
+  }
+
+  // Premium UI lab — showcase route for the component library (Fase 1).
+  if (window.location.pathname === '/dev/ui') {
+    return (
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
+        <DevUIShowcase />
+      </ThemeProvider>
+    );
   }
 
   if (window.location.pathname === '/terms') return <LegalPage page="terms" lang={lang} />;
