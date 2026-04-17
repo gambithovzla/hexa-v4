@@ -35,6 +35,8 @@ import {
   recordShadowModelRun,
   updateShadowModelRunsForGame,
 } from './shadow-model.js';
+import { buildHexaBoard } from './services/hexaBoardService.js';
+import { getGameHighlightsAvailability } from './live-feed.js';
 
 dotenv.config();
 
@@ -577,6 +579,32 @@ app.get('/api/games', async (req, res) => {
     res.json({ success: true, data: games });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/hexa/board?date=YYYY-MM-DD&force=0|1
+// Public endpoint — no auth. Heavy lift is cached until 04:00 ET.
+app.get('/api/hexa/board', async (req, res) => {
+  try {
+    const date  = req.query.date || undefined;
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const board = await buildHexaBoard({ date, force });
+    res.json({ success: true, data: board });
+  } catch (err) {
+    console.error('[hexa/board] failed:', err.message);
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/games/:gamePk/highlights-link — safe external link only (Tarea 4)
+// Returns { available, externalUrl } — never serves video URLs directly.
+app.get('/api/games/:gamePk/highlights-link', async (req, res) => {
+  try {
+    const info = await getGameHighlightsAvailability(req.params.gamePk);
+    res.json({ success: true, data: info });
+  } catch (err) {
+    // Fail-soft: treat errors as "no highlights available"
+    res.json({ success: true, data: { available: false, externalUrl: null, reason: 'fetch_failed' } });
   }
 });
 

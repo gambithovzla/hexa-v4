@@ -1017,3 +1017,103 @@ export async function getPitcherRestDays(pitcherId, gameDateStr) {
 
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// getTeamRecentSchedule — last N finished games of a team with W/L + runs
+// Used by H.E.X.A. Smart Signals (streaks + hot/cold offense).
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the last `lookbackDays` days of finished games for a team,
+ * normalized as { date, gamePk, result: 'W'|'L', scored, allowed, opponentId, opponentAbbr }.
+ *
+ * @param {number|string} teamId
+ * @param {number} [lookbackDays=14]  — window in days (regular season only)
+ * @returns {Promise<Array>}
+ */
+export async function getTeamRecentSchedule(teamId, lookbackDays = 14) {
+  if (!teamId) return [];
+
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const start = new Date();
+  start.setDate(start.getDate() - lookbackDays);
+  const startStr = start.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+  const url =
+    `${MLB_BASE}/schedule?teamId=${teamId}` +
+    `&startDate=${startStr}&endDate=${today}&sportId=1&gameType=R`;
+
+  try {
+    const data = await fetchJSON(url);
+    const games = [];
+    for (const d of (data.dates ?? [])) {
+      for (const g of (d.games ?? [])) {
+        if (g.status?.abstractGameState !== 'Final') continue;
+        const homeId  = g.teams?.home?.team?.id;
+        const isHome  = Number(homeId) === Number(teamId);
+        const mySide  = isHome ? g.teams?.home : g.teams?.away;
+        const oppSide = isHome ? g.teams?.away : g.teams?.home;
+        const scored  = mySide?.score ?? null;
+        const allowed = oppSide?.score ?? null;
+        if (scored == null || allowed == null) continue;
+        games.push({
+          date:         d.date,
+          gamePk:       g.gamePk,
+          result:       scored > allowed ? 'W' : 'L',
+          scored,
+          allowed,
+          opponentId:   oppSide?.team?.id ?? null,
+          opponentAbbr: oppSide?.team?.abbreviation ?? null,
+          isHome,
+        });
+      }
+    }
+    // Ensure chronological order, oldest → newest
+    games.sort((a, b) => a.date.localeCompare(b.date));
+    return games;
+  } catch (err) {
+    console.warn(`[MLB API] getTeamRecentSchedule(${teamId}) failed: ${err.message}`);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// getBatterGameLog — hit streak detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the player's last N hitting gameLog entries (chronological).
+ * Each entry: { date, atBats, hits, homeRuns, rbi }.
+ *
+ * @param {number|string} playerId
+ * @param {number} [lastN=7]
+ * @returns {Promise<Array>}
+ */
+export async function getBatterGameLog(playerId, lastN = 7) {
+  if (!playerId) return [];
+
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url = `${MLB_BASE}/people/${playerId}/stats?stats=gameLog&group=hitting&season=${season}`;
+      const data = await fetchJSON(url);
+      const logBlock = (data.stats ?? []).find(s => s.type?.displayName === 'gameLog');
+      const entries = logBlock?.splits ?? [];
+      if (entries.length === 0) continue;
+
+      const mapped = entries.map(e => ({
+        date:     e.date ?? e.gameDate ?? null,
+        atBats:   Number(e.stat?.atBats ?? 0),
+        hits:     Number(e.stat?.hits ?? 0),
+        homeRuns: Number(e.stat?.homeRuns ?? 0),
+        rbi:      Number(e.stat?.rbi ?? 0),
+      })).filter(e => e.date);
+
+      mapped.sort((a, b) => a.date.localeCompare(b.date));
+      return mapped.slice(-lastN);
+    } catch (err) {
+      console.log(`[MLB API] Season ${season} batter gameLog failed for ${playerId}: ${err.message}`);
+    }
+  }
+
+  return [];
+}

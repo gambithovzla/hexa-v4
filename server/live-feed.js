@@ -477,3 +477,47 @@ function extractPlayerStats(boxscore) {
 
   return result;
 }
+
+// ── Safe highlights availability (Tarea 4) ──────────────────────────────────
+//
+// We do NOT expose MLB CDN video URLs, we do NOT embed video, we do NOT
+// cache or store any media. We only check whether official MLB highlights
+// exist for the game and, if so, return the public MLB.com page URL so the
+// frontend can offer a "[ View official highlight ↗ ]" external link.
+//
+// Cache 5 min — highlights can populate during/after games.
+const _highlightsCache = new Map();
+const HIGHLIGHTS_TTL_MS = 5 * 60 * 1000;
+
+export async function getGameHighlightsAvailability(gamePk) {
+  const key = String(gamePk);
+  const cached = _highlightsCache.get(key);
+  if (cached && Date.now() - cached.timestamp < HIGHLIGHTS_TTL_MS) return cached.data;
+
+  const url = `${MLB_BASE}/api/v1.1/game/${gamePk}/feed/live`;
+  let raw;
+  try {
+    raw = await fetchJSON(url);
+  } catch {
+    const data = { available: false, externalUrl: null, reason: 'feed_unavailable' };
+    _highlightsCache.set(key, { data, timestamp: Date.now() });
+    return data;
+  }
+
+  const items = raw?.liveData?.highlights?.highlights?.items ?? [];
+  const hasItems = Array.isArray(items) && items.length > 0;
+
+  // Public MLB.com landing for the game — does NOT embed video here.
+  const externalUrl = hasItems
+    ? `https://www.mlb.com/gameday/${gamePk}/final/video`
+    : null;
+
+  const data = {
+    available:    hasItems,
+    externalUrl,
+    count:        hasItems ? items.length : 0,
+    reason:       hasItems ? null : 'no_items',
+  };
+  _highlightsCache.set(key, { data, timestamp: Date.now() });
+  return data;
+}
