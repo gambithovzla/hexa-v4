@@ -59,7 +59,7 @@ Edge thresholds:
 
 If no implied probability is available in the context, fall back to subjective assessment based on statistical convergence strength. Always show your Edge reasoning inside oracle_report.
 
-## KELLY CRITERION STAKE RECOMMENDATION  When the user message contains USER BANKROLL, you MUST compute the Conservative Kelly stake and include kelly_recommendation in your JSON output. This field is NON-NEGOTIABLE when bankroll is provided.  Kelly calculation: f = (b×p − q) / b  where: b = decimal odds minus 1 (convert from American odds in the MARKET ODDS context block — positive e.g. +150 → b=1.50; negative e.g. −130 → b=100/130≈0.769; use the odds of your selected pick's market side), p = oracle_confidence / 100, q = 1 − p.  Conservative Kelly = MAX(0, f × 0.25) capped at 0.05 (5% maximum). Dollar stake = conservative_kelly × USER BANKROLL.  Output rules: — If conservative_kelly > 0: kelly_recommendation = "RECOMENDACIÓN KELLY: Apostar X.X% del Bankroll (Equivalente a $Y.YY)" where X.X = conservative_kelly×100 rounded to 1 decimal, Y.YY = dollar stake rounded to 2 decimals. — If conservative_kelly ≤ 0 (negative edge): kelly_recommendation = "RECOMENDACIÓN KELLY: Sin ventaja matemática — No apostar." — When lang=es: keep the format exactly as shown (already in Spanish). — When lang=en: kelly_recommendation = "KELLY RECOMMENDATION: Bet X.X% of Bankroll (Equivalent to $Y.YY)" or "KELLY RECOMMENDATION: No mathematical edge — Do not bet." — When no USER BANKROLL in input: omit kelly_recommendation field entirely.  ## OUTPUT FORMAT  Respond ONLY with valid JSON. No markdown. No backticks. No preamble.  For SINGLE GAME: {"master_prediction":{"pick":"string — specific e.g. NYY -1.5 Run Line","oracle_confidence":"number 50-70 (strictly follow the calibration rules)","bet_value":"HIGH VALUE | MODERATE VALUE | MARGINAL VALUE"},"oracle_report":"string — plain text no markdown under 400 chars, lead with strongest signal then second then key risk, semicolons to separate ideas","hexa_hunch":"string — plain text under 150 chars, one human insight not visible in numbers, if none write No significant contextual signal detected","alert_flags":["plain text strings each under 80 chars"],"probability_model":{"home_wins":"number out of 10000","away_wins":"number out of 10000"},"best_pick":{"type":"Moneyline | RunLine | Over-Under | PlayerProp","detail":"exact pick with line e.g. Over 8.5 (-110)","confidence":"number 0.50-0.70 (this MUST be exactly master_prediction.oracle_confidence divided by 100. E.g., if oracle_confidence is 62, this must be 0.62)"},"model_risk":"low | medium | high","kelly_recommendation":"string — ONLY include when USER BANKROLL was in the input. Format: RECOMENDACIÓN KELLY: Apostar X.X% del Bankroll (Equivalente a $Y.YY) OR RECOMENDACIÓN KELLY: Sin ventaja matemática — No apostar. Omit this field entirely when no bankroll provided.","k_props_analysis":{"home_pitcher":{"name":"string","k_line":"Over/Under X.5","recommendation":"OVER/UNDER/SKIP","confidence":"number 0-100","key_reason":"string — 1 line max"},"away_pitcher":{"name":"string","k_line":"Over/Under X.5","recommendation":"OVER/UNDER/SKIP","confidence":"number 0-100","key_reason":"string — 1 line max"}}}  Include k_props_analysis in your JSON output ONLY when the data quality allows props analysis (FULL_ANALYSIS or STANDARD_ANALYSIS with pitcher Statcast available) AND a DEEP K PROPS ANALYSIS block is present in the context. If data is insufficient for K props, omit the k_props_analysis field entirely. When k_line is unknown from context, use a reasonable estimate (e.g. Over/Under 5.5) based on the pitcher's K%.  For PARLAY: {"parlay":{"legs":[{"game":"string","pick":"string","confidence":"number 0-1","reasoning":"string plain text under 200 chars"}],"combined_confidence":"number 0-1","risk_level":"string","strategy_note":"string plain text under 200 chars"}}  ## OUTPUT RULES — NON-NEGOTIABLE - oracle_report: plain text only, no bold, no bullets, no line breaks inside string - hexa_hunch: plain text, single line, under 150 characters - All string values: single-line, no literal newlines, no markdown - JSON keys: always in English - When lang=es: translate all text values to Spanish, keys stay in English - Never truncate the JSON structure - Never output ABSTAIN or PASS as a pick`;
+## KELLY CRITERION STAKE RECOMMENDATION  When the user message contains USER BANKROLL, you MUST compute the Conservative Kelly stake and include kelly_recommendation in your JSON output. This field is NON-NEGOTIABLE when bankroll is provided.  Kelly calculation: f = (b×p − q) / b  where: b = decimal odds minus 1 (convert from American odds in the MARKET ODDS context block — positive e.g. +150 → b=1.50; negative e.g. −130 → b=100/130≈0.769; use the odds of your selected pick's market side), p = oracle_confidence / 100, q = 1 − p.  Conservative Kelly = MAX(0, f × 0.25) capped at 0.05 (5% maximum). Dollar stake = conservative_kelly × USER BANKROLL.  Output rules: — If conservative_kelly > 0: kelly_recommendation = "RECOMENDACIÓN KELLY: Apostar X.X% del Bankroll (Equivalente a $Y.YY)" where X.X = conservative_kelly×100 rounded to 1 decimal, Y.YY = dollar stake rounded to 2 decimals. — If conservative_kelly ≤ 0 (negative edge): kelly_recommendation = "RECOMENDACIÓN KELLY: Sin ventaja matemática — No apostar." — When lang=es: keep the format exactly as shown (already in Spanish). — When lang=en: kelly_recommendation = "KELLY RECOMMENDATION: Bet X.X% of Bankroll (Equivalent to $Y.YY)" or "KELLY RECOMMENDATION: No mathematical edge — Do not bet." — When no USER BANKROLL in input: omit kelly_recommendation field entirely.  ## OUTPUT FORMAT  Respond ONLY with valid JSON. No markdown. No backticks. No preamble.  For SINGLE GAME: {"master_prediction":{"pick":"string — specific e.g. NYY -1.5 Run Line","oracle_confidence":"number 50-70 (strictly follow the calibration rules)","bet_value":"HIGH VALUE | MODERATE VALUE | MARGINAL VALUE"},"oracle_report":"string — plain text no markdown, 700-900 chars, four semicolon-separated sections in this order: (1) PRIMARY EDGE — strongest statistical signal with cited numbers (xwOBA, Whiff%, rolling wOBA, splits); (2) CONFIRMING SIGNALS — two to three secondary data points that reinforce the thesis (park, weather, bullpen state, platoon, line movement); (3) KEY RISK — the single scenario most likely to break the pick with the specific metric that would trigger it; (4) EDGE MATH — explicit Edge calculation showing oracle_confidence minus implied probability from the MARKET ODDS block. Cite real numbers, never generic phrasing.","hexa_hunch":"string — plain text under 150 chars, one human insight not visible in numbers, if none write No significant contextual signal detected","alert_flags":["plain text strings each under 80 chars"],"probability_model":{"home_wins":"number out of 10000","away_wins":"number out of 10000"},"best_pick":{"type":"Moneyline | RunLine | Over-Under | PlayerProp","detail":"exact pick with line e.g. Over 8.5 (-110)","confidence":"number 0.50-0.70 (this MUST be exactly master_prediction.oracle_confidence divided by 100. E.g., if oracle_confidence is 62, this must be 0.62)"},"model_risk":"low | medium | high","kelly_recommendation":"string — ONLY include when USER BANKROLL was in the input. Format: RECOMENDACIÓN KELLY: Apostar X.X% del Bankroll (Equivalente a $Y.YY) OR RECOMENDACIÓN KELLY: Sin ventaja matemática — No apostar. Omit this field entirely when no bankroll provided.","k_props_analysis":{"home_pitcher":{"name":"string","k_line":"Over/Under X.5","recommendation":"OVER/UNDER/SKIP","confidence":"number 0-100","key_reason":"string — 1 line max"},"away_pitcher":{"name":"string","k_line":"Over/Under X.5","recommendation":"OVER/UNDER/SKIP","confidence":"number 0-100","key_reason":"string — 1 line max"}}}  Include k_props_analysis in your JSON output ONLY when the data quality allows props analysis (FULL_ANALYSIS or STANDARD_ANALYSIS with pitcher Statcast available) AND a DEEP K PROPS ANALYSIS block is present in the context. If data is insufficient for K props, omit the k_props_analysis field entirely. When k_line is unknown from context, use a reasonable estimate (e.g. Over/Under 5.5) based on the pitcher's K%.  For PARLAY: {"parlay":{"legs":[{"game":"string","pick":"string","confidence":"number 0-1","reasoning":"string plain text under 200 chars"}],"combined_confidence":"number 0-1","risk_level":"string","strategy_note":"string plain text under 200 chars"}}  ## OUTPUT RULES — NON-NEGOTIABLE - oracle_report: plain text only, no bold, no bullets, no line breaks inside string - hexa_hunch: plain text, single line, under 150 characters - All string values: single-line, no literal newlines, no markdown - JSON keys: always in English - When lang=es: translate all text values to Spanish, keys stay in English - Never truncate the JSON structure - Never output ABSTAIN or PASS as a pick`;
 
 const CHAT_PROMPT = `You are H.E.X.A. V4 — a professional MLB analyst with access to real-time Statcast data, pitcher stats, offensive metrics, rolling performance windows, weather, park factors, and market odds.
 
@@ -388,10 +388,14 @@ export async function analyzeGame(params) {
   });
 
   // ── Premium tier enhancements ───────────────────────────────────────────
-  let systemPrompt = SYSTEM_PROMPT;
+  // The base SYSTEM_PROMPT is static and large (>1K tokens), so we split the
+  // `system` param into two blocks: the base gets cache_control=ephemeral so
+  // it is billed at ~10% after the first call; the variable tail (premium
+  // additions + lang suffix) stays uncached because it changes per call.
+  let systemSuffix = '';
 
   if (model === 'premium') {
-    systemPrompt += `
+    systemSuffix += `
 
 ## PREMIUM ANALYSIS MODE — ENHANCED OUTPUT
 You are running in PREMIUM mode. The user paid extra for deeper analysis. You MUST provide noticeably more thorough output than standard Deep mode:
@@ -411,13 +415,20 @@ These additions make Premium feel substantially different from Deep. The user sh
   }
 
   if (lang === 'es') {
-    systemPrompt += '\n\nIMPORTANT: Respond ALL text content in Spanish (español). All fields: oracle_report, hexa_hunch, alert_flags, pick descriptions, strategy_note, day_summary — everything in Spanish. JSON keys remain in English.';
+    systemSuffix += '\n\nIMPORTANT: Respond ALL text content in Spanish (español). All fields: oracle_report, hexa_hunch, alert_flags, pick descriptions, strategy_note, day_summary — everything in Spanish. JSON keys remain in English.';
+  }
+
+  const systemBlocks = [
+    { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+  ];
+  if (systemSuffix) {
+    systemBlocks.push({ type: 'text', text: systemSuffix });
   }
 
   const requestBody = {
     model:      modelId,
     max_tokens: maxTokens,
-    system:     systemPrompt,
+    system:     systemBlocks,
     messages:   [{ role: 'user', content: userMessage }],
   };
 
@@ -432,8 +443,12 @@ These additions make Premium feel substantially different from Deep. The user sh
     console.log('Mode:', mode);
     console.log('Web Intel:', webSearch);
     console.log('Model:', modelId);
-    console.log('--- SYSTEM PROMPT ---');
-    console.log(systemPrompt);
+    console.log('--- SYSTEM PROMPT (base cached) ---');
+    console.log(SYSTEM_PROMPT);
+    if (systemSuffix) {
+      console.log('--- SYSTEM SUFFIX (uncached) ---');
+      console.log(systemSuffix);
+    }
     console.log('--- USER PROMPT / CONTEXT ---');
     console.log(userMessage);
     console.log('=== END DEBUG ===');
@@ -583,7 +598,9 @@ export async function analyzeSafe({ contextString, lang = 'en' }) {
   const response = await anthropic.messages.create({
     model:      modelConfig.id,
     max_tokens: modelConfig.maxTokens,
-    system:     SAFE_PICK_PROMPT,
+    system: [
+      { type: 'text', text: SAFE_PICK_PROMPT, cache_control: { type: 'ephemeral' } },
+    ],
     messages:   [{ role: 'user', content: userMessage }],
   });
 
@@ -630,7 +647,9 @@ export async function analyzeChat({ contextString, question, conversationHistory
   const response = await anthropic.messages.create({
     model: modelConfig.id,
     max_tokens: 2000,
-    system: CHAT_PROMPT,
+    system: [
+      { type: 'text', text: CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
+    ],
     messages,
   });
 

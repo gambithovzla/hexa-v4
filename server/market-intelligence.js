@@ -714,7 +714,37 @@ export function buildDeterministicSafePayload({
     }));
 
   const topPick = candidates[0];
-  const alternatives = candidates.slice(1, 3).map((candidate) => ({
+
+  // Market-family diversity: alternatives should come from different families
+  // than the top pick so the user sees genuinely different angles instead of
+  // three variations of the same hits prop or both sides of the same total.
+  const familyOf = (candidate) => {
+    if (candidate?.market_type === 'moneyline' || candidate?.market_type === 'runline') return 'team-outcome';
+    if (candidate?.market_type === 'overunder') return 'totals';
+    if (candidate?.market_type === 'playerprop') return `prop-${candidate?.prop_kind ?? 'other'}`;
+    return candidate?.market_type ?? 'other';
+  };
+
+  const topFamily = familyOf(topPick);
+  const usedFamilies = new Set([topFamily]);
+  const diversifiedAlternatives = [];
+  for (const candidate of candidates.slice(1)) {
+    if (diversifiedAlternatives.length >= 2) break;
+    const family = familyOf(candidate);
+    if (usedFamilies.has(family)) continue;
+    usedFamilies.add(family);
+    diversifiedAlternatives.push(candidate);
+  }
+  // Backfill up to two alternatives even if families repeat, but keep the
+  // diversified ones first so the UX favors genuine variety.
+  for (const candidate of candidates.slice(1)) {
+    if (diversifiedAlternatives.length >= 2) break;
+    if (!diversifiedAlternatives.includes(candidate)) {
+      diversifiedAlternatives.push(candidate);
+    }
+  }
+
+  const alternatives = diversifiedAlternatives.map((candidate) => ({
     pick: candidate.pick,
     type: candidate.type,
     hit_probability: candidate.hit_probability,
@@ -726,12 +756,25 @@ export function buildDeterministicSafePayload({
     rank: candidate.rank,
   }));
 
+  // No-pick threshold: Safe Pick is a highest-hit-probability mode. If no
+  // candidate clears 58%, there is no defensible safe pick for this game.
+  const SAFE_PROBABILITY_THRESHOLD = 58;
+  const belowThreshold = (topPick?.hit_probability ?? 0) < SAFE_PROBABILITY_THRESHOLD;
+
   const alertFlags = Array.isArray(llmData?.alert_flags) ? [...llmData.alert_flags] : [];
   const deterministicFlag = lang === 'es'
     ? 'Safe selector: ranking determinista de mercados soportados activo'
     : 'Safe selector: deterministic supported-market ranking active';
   if (!alertFlags.includes(deterministicFlag)) {
     alertFlags.push(deterministicFlag);
+  }
+  if (belowThreshold) {
+    const thresholdFlag = lang === 'es'
+      ? `Sin Safe Pick claro: ningun mercado supera ${SAFE_PROBABILITY_THRESHOLD}% de probabilidad`
+      : `No clear Safe Pick: no market clears ${SAFE_PROBABILITY_THRESHOLD}% hit probability`;
+    if (!alertFlags.includes(thresholdFlag)) {
+      alertFlags.push(thresholdFlag);
+    }
   }
 
   const gameOverview = llmData?.game_overview ??
@@ -764,9 +807,13 @@ export function buildDeterministicSafePayload({
       model_probability: topPick.model_probability,
       implied_probability: topPick.implied_probability,
       edge: topPick.edge,
-      value_tier: topPick.edge != null
-        ? (topPick.edge > 5 ? 'PLUS EV' : topPick.edge > 0 ? 'SMALL EDGE' : 'SAFE ONLY')
-        : 'SAFE ONLY',
+      value_tier: belowThreshold
+        ? 'NO VALUE'
+        : (topPick.edge != null
+          ? (topPick.edge > 5 ? 'PLUS EV' : topPick.edge > 0 ? 'SMALL EDGE' : 'SAFE ONLY')
+          : 'SAFE ONLY'),
+      below_safe_threshold: belowThreshold,
+      safe_threshold: SAFE_PROBABILITY_THRESHOLD,
     },
     probability_model: {
       home_wins: Math.round((mlProbabilities.home / 100) * 10000),

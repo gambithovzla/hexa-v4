@@ -525,6 +525,50 @@ function isAdmin(req, res, next) {
   next();
 }
 
+// ── App settings (site-wide flags) ─────────────────────────────────────────────
+
+async function getAppSetting(key, fallback) {
+  try {
+    const { rows } = await pool.query('SELECT value FROM app_settings WHERE key = $1', [key]);
+    if (rows.length === 0) return fallback;
+    return rows[0].value;
+  } catch (err) {
+    console.warn(`[app-settings] read failed for ${key}:`, err.message);
+    return fallback;
+  }
+}
+
+async function setAppSetting(key, value) {
+  await pool.query(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES ($1, $2::jsonb, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [key, JSON.stringify(value)]
+  );
+}
+
+export async function isPerformancePublic() {
+  const raw = await getAppSetting('performance_public', false);
+  return raw === true || raw === 'true';
+}
+
+// Public: anyone can read the flag so the UI knows whether to render the page.
+app.get('/api/settings/performance-public', async (_req, res) => {
+  const enabled = await isPerformancePublic();
+  res.json({ success: true, enabled });
+});
+
+// Admin-only: flip the flag.
+app.put('/api/settings/performance-public', verifyToken, isAdmin, async (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  try {
+    await setAppSetting('performance_public', enabled);
+    res.json({ success: true, enabled });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // GET /api/games?date=YYYY-MM-DD
 app.get('/api/games', async (req, res) => {
   try {

@@ -107,6 +107,7 @@ export default function App() {
   const [showOracleChat,    setShowOracleChat]    = useState(false);
   const [showPerformance,   setShowPerformance]   = useState(false);
   const [isAdmin,           setIsAdmin]           = useState(false);
+  const [performancePublic, setPerformancePublic] = useState(false);
 
   // Check admin status on mount
   useEffect(() => {
@@ -121,6 +122,14 @@ export default function App() {
     }
   }, []);
 
+  // Fetch the performance-public flag so we know whether to expose the page
+  useEffect(() => {
+    fetch(`${API_URL}/api/settings/performance-public`)
+      .then(r => r.json())
+      .then(data => setPerformancePublic(Boolean(data?.enabled)))
+      .catch(() => setPerformancePublic(false));
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('hexa_lang', lang);
   }, [lang]);
@@ -129,8 +138,22 @@ export default function App() {
   // HistoryPanel reads history via its own hook instance (remounts each visit).
   const { addPick } = useHistory();
 
-  // Public landing — /performance is accessible without login
+  // Performance landing — admin always, public only when toggle is ON
   if (window.location.pathname === '/performance') {
+    if (!isAdmin && !performancePublic) {
+      return (
+        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: C.bg, color: C.textPrimary, fontFamily: BARLOW, p: 3, textAlign: 'center' }}>
+          <Box>
+            <Typography sx={{ fontFamily: BARLOW, fontWeight: 800, letterSpacing: '2px', fontSize: '1.1rem', color: C.accent, mb: 1 }}>
+              PERFORMANCE DASHBOARD
+            </Typography>
+            <Typography sx={{ fontFamily: BARLOW, color: C.textMuted, fontSize: '0.9rem' }}>
+              {lang === 'es' ? 'Esta página aún no es pública.' : 'This page is not yet public.'}
+            </Typography>
+          </Box>
+        </Box>
+      );
+    }
     return <PerformancePage />;
   }
 
@@ -155,12 +178,13 @@ export default function App() {
     return <OracleChat lang={lang} onBack={() => setShowOracleChat(false)} />;
   }
 
-  // Render Performance Dashboard as a full-page takeover (public — no auth required)
-  if (showPerformance) {
+  // Render Performance Dashboard as a full-page takeover (admin always;
+  // public only when the performance_public flag is enabled)
+  if (showPerformance && (isAdmin || performancePublic)) {
     return (
       <ThemeProvider theme={muiTheme}>
         <CssBaseline />
-        <PerformanceDashboard onBack={() => setShowPerformance(false)} />
+        <PerformanceDashboard onBack={() => setShowPerformance(false)} isAdmin={isAdmin} performancePublic={performancePublic} onTogglePublic={setPerformancePublic} />
       </ThemeProvider>
     );
   }
@@ -199,6 +223,7 @@ export default function App() {
           onMethodology={() => setShowMethodology(true)}
           onPerformance={() => setShowPerformance(true)}
           isAdmin={isAdmin}
+          performancePublic={performancePublic}
           onOracleChat={() => setShowOracleChat(true)}
         />
 

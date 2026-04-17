@@ -273,7 +273,7 @@ function signedU(n) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PerformanceDashboard({ onBack }) {
+export default function PerformanceDashboard({ onBack, isAdmin = false, performancePublic = false, onTogglePublic }) {
   const [period,    setPeriod]    = useState('30');
   const [data,      setData]      = useState(null);
   const [loading,   setLoading]   = useState(true);
@@ -284,7 +284,10 @@ export default function PerformanceDashboard({ onBack }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/picks/public-stats?period=${p}`);
+      const token = localStorage.getItem('hexa_token');
+      const res = await fetch(`${API_URL}/api/picks/public-stats?period=${p}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Unknown error');
@@ -427,6 +430,52 @@ export default function PerformanceDashboard({ onBack }) {
         }}>
           LAST UPDATED: {fetchedAt ? fmtTs(fetchedAt) : '—'}
         </Typography>
+
+        {isAdmin && (
+          <Box sx={{
+            mt: '14px',
+            p: '10px 14px',
+            border: `1px solid ${C.accentLine}`,
+            background: C.accentDim,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', letterSpacing: '2px', color: C.accent, textTransform: 'uppercase' }}>
+              ADMIN · PUBLIC VISIBILITY
+            </Typography>
+            <Box
+              component="button"
+              onClick={async () => {
+                const next = !performancePublic;
+                try {
+                  const token = localStorage.getItem('hexa_token');
+                  const res = await fetch(`${API_URL}/api/settings/performance-public`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ enabled: next }),
+                  });
+                  const json = await res.json();
+                  if (json.success && typeof onTogglePublic === 'function') onTogglePublic(Boolean(json.enabled));
+                } catch { /* noop */ }
+              }}
+              sx={{
+                fontFamily: MONO,
+                fontSize: '10px',
+                letterSpacing: '2px',
+                px: '10px',
+                py: '4px',
+                border: `1px solid ${performancePublic ? CYAN : C.border}`,
+                background: performancePublic ? `${CYAN}22` : 'transparent',
+                color: performancePublic ? CYAN : MUTED,
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+              }}
+            >
+              {performancePublic ? 'PUBLIC · ON' : 'PUBLIC · OFF'}
+            </Box>
+          </Box>
+        )}
       </Box>
 
       {/* ── ERROR STATE ──────────────────────────────────────────────────────── */}
