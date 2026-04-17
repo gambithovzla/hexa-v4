@@ -7,8 +7,19 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const MODEL_ID = 'claude-sonnet-4-6';
+const PRIMARY_MODEL = 'claude-haiku-4-5-20251001';
+const FALLBACK_MODEL = 'claude-sonnet-4-6';
+const MAX_TOKENS = 1200;
+const TEMPERATURE = 0.2;
+
 export const POSTMORTEM_SCHEMA_VERSION = 2;
+
+// Shadow log: run both models in parallel for the first N postmortems and log
+// a coincidence score, so we can validate Haiku quality before committing.
+// Gated by POSTMORTEM_SHADOW_LOG=1; defaults to first 20 runs per process.
+const SHADOW_LOG_ENABLED = process.env.POSTMORTEM_SHADOW_LOG === '1';
+const SHADOW_LOG_MAX = Number.parseInt(process.env.POSTMORTEM_SHADOW_MAX ?? '20', 10) || 20;
+let shadowLogCount = 0;
 
 const SYSTEM_PROMPT = `You are H.E.X.A. Postmortem, an MLB betting review engine.
 
@@ -67,6 +78,25 @@ function cleanJsonResponse(text) {
   return cleaned;
 }
 
+function tryParseJson(raw) {
+  if (!raw) return null;
+  const cleaned = cleanJsonResponse(raw);
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // ignore
+  }
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 function normalizeStringArray(value) {
   if (!Array.isArray(value)) return [];
   return value
@@ -89,6 +119,71 @@ function normalizePostmortemPayload(payload) {
   };
 }
 
+async function callModel({ model, userMessage }) {
+  const response = await anthropic.messages.create({
+    model,
+    max_tokens: MAX_TOKENS,
+    temperature: TEMPERATURE,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userMessage }],
+  });
+  return extractRawText(response);
+}
+
+async function generateWithModel({ model, userMessage }) {
+  const raw = await callModel({ model, userMessage });
+  const parsed = tryParseJson(raw);
+  if (!parsed) {
+    const err = new Error(`postmortem: invalid JSON from ${model}`);
+    err.rawPreview = (raw || '').slice(0, 200);
+    throw err;
+  }
+  return parsed;
+}
+
+// Jaccard similarity on word sets — cheap proxy for semantic overlap.
+function jaccard(a, b) {
+  const setA = new Set(String(a ?? '').toLowerCase().split(/\W+/).filter(Boolean));
+  const setB = new Set(String(b ?? '').toLowerCase().split(/\W+/).filter(Boolean));
+  if (!setA.size && !setB.size) return 1;
+  const intersection = [...setA].filter((x) => setB.has(x)).length;
+  const union = new Set([...setA, ...setB]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function scoreCoincidence(a, b) {
+  if (!a || !b) return null;
+  const summarySim = jaccard(a.summary, b.summary);
+  const takeawaySim = jaccard(a.training_takeaway, b.training_takeaway);
+  const factorsSim = jaccard(
+    (a.key_factors || []).join(' '),
+    (b.key_factors || []).join(' ')
+  );
+  return {
+    summary: Number(summarySim.toFixed(3)),
+    training_takeaway: Number(takeawaySim.toFixed(3)),
+    key_factors: Number(factorsSim.toFixed(3)),
+    average: Number(((summarySim + takeawaySim + factorsSim) / 3).toFixed(3)),
+  };
+}
+
+async function runShadowComparison({ userMessage, pickId, haikuResult }) {
+  try {
+    const sonnetRaw = await callModel({ model: FALLBACK_MODEL, userMessage });
+    const sonnetParsed = tryParseJson(sonnetRaw);
+    const coincidence = scoreCoincidence(haikuResult, sonnetParsed);
+    console.log('[postmortem:shadow]', JSON.stringify({
+      pickId: pickId ?? null,
+      run: shadowLogCount,
+      haiku_ok: Boolean(haikuResult),
+      sonnet_ok: Boolean(sonnetParsed),
+      coincidence,
+    }));
+  } catch (err) {
+    console.log('[postmortem:shadow] error', err?.message || err);
+  }
+}
+
 export async function generatePickPostmortem({
   lang = 'en',
   pick,
@@ -108,16 +203,21 @@ export async function generatePickPostmortem({
     2
   );
 
-  const response = await anthropic.messages.create({
-    model: MODEL_ID,
-    max_tokens: 900,
-    temperature: 0.2,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMessage }],
-  });
+  let parsed;
+  let modelUsed = PRIMARY_MODEL;
+  try {
+    parsed = await generateWithModel({ model: PRIMARY_MODEL, userMessage });
+  } catch (primaryErr) {
+    console.log('[postmortem] haiku failed, falling back to sonnet:', primaryErr?.message);
+    parsed = await generateWithModel({ model: FALLBACK_MODEL, userMessage });
+    modelUsed = FALLBACK_MODEL;
+  }
 
-  const raw = extractRawText(response);
-  const cleaned = cleanJsonResponse(raw);
-  const parsed = JSON.parse(cleaned);
+  if (SHADOW_LOG_ENABLED && shadowLogCount < SHADOW_LOG_MAX && modelUsed === PRIMARY_MODEL) {
+    shadowLogCount += 1;
+    // Fire-and-forget: don't block the user response on the shadow comparison.
+    runShadowComparison({ userMessage, pickId: pick?.id, haikuResult: parsed });
+  }
+
   return normalizePostmortemPayload({ ...parsed, lang: resolvedLang });
 }
