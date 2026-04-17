@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -56,6 +56,7 @@ const LABELS = {
       subtitle: 'Stack legs in mixed formats and get the combined price instantly.',
       addLeg: 'Add leg',
       addCurrent: 'Add converter as leg',
+      addHexa: 'Add latest Hexa pick',
       remove: 'Remove',
       invalid: 'Add at least one valid leg to price the parlay.',
     },
@@ -68,6 +69,9 @@ const LABELS = {
       bankrollHint: 'Bankroll unlocks a recommended quarter-Kelly stake.',
       positive: 'Value detected',
       negative: 'Market is too expensive',
+      importHexa: 'Import last Hexa pick',
+      importedFrom: 'Imported from',
+      importEmpty: 'No Hexa picks available to import',
     },
     reference: {
       eyebrow: 'Reference Grid',
@@ -132,6 +136,7 @@ const LABELS = {
       subtitle: 'Combina patas en formatos mixtos y obtén la cuota total al instante.',
       addLeg: 'Agregar pata',
       addCurrent: 'Agregar cuota actual',
+      addHexa: 'Agregar último pick Hexa',
       remove: 'Quitar',
       invalid: 'Agrega al menos una pata válida para cotizar el parlay.',
     },
@@ -144,6 +149,9 @@ const LABELS = {
       bankrollHint: 'El bankroll desbloquea una recomendación de quarter-Kelly.',
       positive: 'Valor detectado',
       negative: 'El mercado está caro',
+      importHexa: 'Importar último pick Hexa',
+      importedFrom: 'Importado de',
+      importEmpty: 'No hay picks de Hexa para importar',
     },
     reference: {
       eyebrow: 'Tabla de referencia',
@@ -267,8 +275,35 @@ function StatBlock({ label, value, accent = C.cyan }) {
   );
 }
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+function americanFromEntry(entry) {
+  const raw = entry?.value_breakdown?.odds;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n > 0 ? `+${Math.round(n)}` : String(Math.round(n));
+}
+
 export default function OddsLab({ lang = 'en' }) {
   const t = LABELS[lang] ?? LABELS.en;
+
+  const [hexaPicks, setHexaPicks] = useState([]);
+  const [importedLabel, setImportedLabel] = useState('');
+
+  useEffect(() => {
+    const token = localStorage.getItem('hexa_token');
+    if (!token) return;
+    fetch(`${API_URL}/api/picks?limit=10`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(json => {
+        if (json?.success && Array.isArray(json.data)) {
+          setHexaPicks(json.data.filter(row => americanFromEntry(row) != null));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [converterInputs, setConverterInputs] = useState({
     decimal: '1.91',
@@ -557,6 +592,38 @@ export default function OddsLab({ lang = 'en' }) {
               </Button>
             </Box>
 
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
+              <Button
+                variant="outlined"
+                disabled={hexaPicks.length === 0}
+                onClick={() => {
+                  const latest = hexaPicks[0];
+                  if (!latest) return;
+                  const american = americanFromEntry(latest);
+                  const confidence = Number(latest.oracle_confidence);
+                  setEdgeForm(prev => ({
+                    ...prev,
+                    oddsFormat: 'american',
+                    marketOdds: american ?? prev.marketOdds,
+                    confidence: Number.isFinite(confidence) && confidence > 0 ? String(confidence) : prev.confidence,
+                  }));
+                  setImportedLabel(latest.pick ?? latest.matchup ?? '');
+                }}
+              >
+                {t.edge.importHexa}
+              </Button>
+              {importedLabel && (
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: C.textMuted }}>
+                  {t.edge.importedFrom}: {importedLabel}
+                </Typography>
+              )}
+              {hexaPicks.length === 0 && (
+                <Typography sx={{ fontFamily: MONO, fontSize: 10, color: C.textMuted }}>
+                  {t.edge.importEmpty}
+                </Typography>
+              )}
+            </Stack>
+
             <Box sx={{ mt: 2 }}>
               <Typography sx={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.2em', mb: 1 }}>
                 {t.edge.confidence}: {edgeForm.confidence || '--'}%
@@ -668,6 +735,27 @@ export default function OddsLab({ lang = 'en' }) {
               onClick={() => addParlayLeg({ oddsFormat: 'american', oddsValue: converterInputs.american || '' })}
             >
               {t.parlay.addCurrent}
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={hexaPicks.length === 0}
+              onClick={() => {
+                const latest = hexaPicks[0];
+                if (!latest) return;
+                const american = americanFromEntry(latest);
+                if (!american) return;
+                setParlayLegs(prev => ([
+                  ...prev,
+                  {
+                    id: Date.now() + prev.length,
+                    label: (latest.pick ?? `HEXA ${prev.length + 1}`).slice(0, 24).toUpperCase(),
+                    oddsFormat: 'american',
+                    oddsValue: american,
+                  },
+                ]));
+              }}
+            >
+              {t.parlay.addHexa}
             </Button>
           </Stack>
 
