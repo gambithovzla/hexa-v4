@@ -395,6 +395,96 @@ function sanitizeOdds(n) {
   return isValidOdds(num) ? num : null;
 }
 
+function normalizePickText(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s.+-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildTeamAliases(team = {}) {
+  const name = String(team?.name ?? '').trim();
+  const abbreviation = String(team?.abbreviation ?? team?.team?.abbreviation ?? '').trim();
+  const words = name.split(/\s+/).filter(Boolean);
+  const nickname = words.length ? words[words.length - 1] : '';
+  const city = words.length > 1 ? words.slice(0, -1).join(' ') : '';
+
+  return [abbreviation, name, nickname, city]
+    .map((entry) => normalizePickText(entry))
+    .filter(Boolean);
+}
+
+function extractAmericanOddsFromText(text) {
+  const match = String(text ?? '').match(/([+-]\d{3,4})/);
+  return sanitizeOdds(match ? Number(match[1]) : null);
+}
+
+function pickContainsAny(text, aliases = []) {
+  return aliases.some((alias) => alias && text.includes(alias));
+}
+
+function inferBankrollMarketType({ pick, bestPickType = null }) {
+  const type = normalizePickText(bestPickType);
+  const normalizedPick = normalizePickText(pick);
+
+  if (type.includes('moneyline')) return 'moneyline';
+  if (type.includes('runline')) return 'runline';
+  if (type.includes('over-under') || type.includes('overunder') || type.includes('totals')) return 'overunder';
+  if (type.includes('playerprop') || type.includes('prop')) return 'playerprop';
+
+  if (/\bover\b|\bunder\b|\bmas\b|\bmenos\b/.test(normalizedPick)) {
+    if (/\bhits?\b|\bstrikeouts?\b|\bhr\b|\bhome run\b|\btotal bases?\b|\brbi\b|\bsb\b/.test(normalizedPick)) {
+      return 'playerprop';
+    }
+    return 'overunder';
+  }
+
+  if (normalizedPick.includes('run line') || normalizedPick.includes('linea')) return 'runline';
+  if (normalizedPick.includes('moneyline') || normalizedPick.includes(' ml')) return 'moneyline';
+  return 'moneyline';
+}
+
+function inferBankrollOdds({ pick, bestPickType, oddsData, gameData }) {
+  const odds = oddsData?.odds ?? oddsData ?? {};
+  const marketType = inferBankrollMarketType({ pick, bestPickType });
+  const normalizedPick = normalizePickText(pick);
+  const embeddedOdds = extractAmericanOddsFromText(pick);
+
+  if (marketType === 'playerprop') return embeddedOdds;
+  if (marketType === 'overunder') {
+    const isUnder = /\bunder\b|\bmenos\b|\bbaja\b/.test(normalizedPick);
+    return sanitizeOdds(isUnder ? odds?.overUnder?.underPrice : odds?.overUnder?.overPrice) ?? embeddedOdds;
+  }
+
+  const homeAliases = buildTeamAliases(gameData?.teams?.home);
+  const awayAliases = buildTeamAliases(gameData?.teams?.away);
+  const referencesHome = pickContainsAny(normalizedPick, homeAliases);
+  const referencesAway = pickContainsAny(normalizedPick, awayAliases);
+
+  if (marketType === 'runline') {
+    if (referencesHome && !referencesAway) return sanitizeOdds(odds?.runLine?.home?.price) ?? embeddedOdds;
+    if (referencesAway && !referencesHome) return sanitizeOdds(odds?.runLine?.away?.price) ?? embeddedOdds;
+    return embeddedOdds;
+  }
+
+  if (marketType === 'moneyline') {
+    if (referencesHome && !referencesAway) return sanitizeOdds(odds?.moneyline?.home) ?? embeddedOdds;
+    if (referencesAway && !referencesHome) return sanitizeOdds(odds?.moneyline?.away) ?? embeddedOdds;
+  }
+
+  return embeddedOdds;
+}
+
+function getGameMatchupLabel(game) {
+  if (!game) return '';
+  const away = game.teams?.away?.abbreviation ?? game.teams?.away?.team?.abbreviation ?? 'AWAY';
+  const home = game.teams?.home?.abbreviation ?? game.teams?.home?.team?.abbreviation ?? 'HOME';
+  return `${away} @ ${home}`;
+}
+
 /**
  * Determines the most relevant American odds for a parlay leg from The Odds API data only.
  * Never reads from leg.odds or any Claude-generated field.
@@ -707,7 +797,7 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
 
 // ── AgregarABanca button + inline form ───────────────────────────────────────
 
-function AgregarABanca({ matchup, pick, odds, confidence }) {
+function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
   const { isAuthenticated, token } = useAuth();
   const [open,            setOpen]            = useState(false);
   const [stake,           setStake]           = useState('');
@@ -715,14 +805,44 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
   const [success,         setSuccess]         = useState(false);
   const [err,             setErr]             = useState('');
   const [kellySuggestion, setKellySuggestion] = useState(null);
+  const normalizedOdds = sanitizeOdds(odds);
+  const canRegister = Boolean(matchup && pick && normalizedOdds != null);
+  const pickIncludesOdds = extractAmericanOddsFromText(pick) != null;
+  const copy = lang === 'es'
+    ? {
+        add: '+ AGREGAR A BANCA',
+        saved: 'Apuesta registrada en tu banca',
+        invalidStake: 'Ingresa un monto valido',
+        missingBetMeta: 'No se pudo registrar este pick porque faltan el partido o los momios.',
+        missingBetMetaHint: 'Este pick todavia no tiene el partido o los momios detectados para registrarlo.',
+        submitError: 'Error al registrar',
+        matchup: 'PARTIDO',
+        pick: 'PICK',
+        stake: 'STAKE',
+        cancel: 'Cancelar',
+        submit: 'Registrar',
+      }
+    : {
+        add: '+ ADD TO BANKROLL',
+        saved: 'Bet saved to your bankroll',
+        invalidStake: 'Enter a valid stake',
+        missingBetMeta: 'This pick cannot be saved yet because matchup or odds are missing.',
+        missingBetMetaHint: 'This pick still does not have a detected matchup or odds for bankroll tracking.',
+        submitError: 'Error while saving',
+        matchup: 'MATCHUP',
+        pick: 'PICK',
+        stake: 'STAKE',
+        cancel: 'Cancel',
+        submit: 'Save',
+      };
 
   if (!isAuthenticated) return null;
 
   async function fetchKelly() {
-    if (!odds || !confidence) return;
+    if (normalizedOdds == null || !confidence) return;
     try {
       const res  = await fetch(
-        `${API_URL}/api/bankroll/kelly?odds=${odds}&confidence=${confidence}`,
+        `${API_URL}/api/bankroll/kelly?odds=${normalizedOdds}&confidence=${confidence}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const json = await res.json();
@@ -732,6 +852,7 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!canRegister) { setErr(copy.missingBetMeta); return; }
     const s = Number(stake);
     if (!s || s <= 0) { setErr('Ingresa un monto válido'); return; }
     setBusy(true);
@@ -740,17 +861,24 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
       const res = await fetch(`${API_URL}/api/bankroll/bet`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ matchup, pick, odds, stake: s, source: 'hexa' }),
+        body:    JSON.stringify({ matchup, pick, odds: normalizedOdds, stake: s, source: 'hexa' }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Error al registrar');
+      if (!res.ok) throw new Error(json.error ?? copy.submitError);
       setSuccess(true);
       setOpen(false);
       setStake('');
       setKellySuggestion(null);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
-      setErr(e.message);
+      const message = String(e?.message ?? '');
+      if (/matchup,\s*pick,\s*odds,\s*and stake are required/i.test(message)) {
+        setErr(copy.missingBetMeta);
+      } else if (/stake must be positive/i.test(message)) {
+        setErr(copy.invalidStake);
+      } else {
+        setErr(message || copy.submitError);
+      }
     } finally {
       setBusy(false);
     }
@@ -778,27 +906,40 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
           </Typography>
         </Box>
       ) : !open ? (
+        <>
         <Box
           component="button"
-          onClick={() => { setOpen(true); fetchKelly(); }}
+          disabled={!canRegister}
+          onClick={() => {
+            if (!canRegister) return;
+            setOpen(true);
+            fetchKelly();
+          }}
           sx={{
             display: 'inline-flex', alignItems: 'center', gap: '5px',
             px: '12px', py: '5px',
-            bgcolor: C.surfaceAlt,
+            bgcolor: canRegister ? C.surfaceAlt : C.bg,
             border: `1px solid ${C.border}`,
             borderRadius: '3px',
-            color: C.accent,
+            color: canRegister ? C.accent : C.textDim,
             fontFamily: BARLOW,
             fontSize: '12px',
             fontWeight: 700,
             letterSpacing: '2px',
-            cursor: 'pointer',
+            cursor: canRegister ? 'pointer' : 'not-allowed',
+            opacity: canRegister ? 1 : 0.55,
             transition: 'all 0.15s',
-            '&:hover': { bgcolor: C.accentDim, borderColor: C.accentLine },
+            '&:hover': canRegister ? { bgcolor: C.accentDim, borderColor: C.accentLine } : {},
           }}
         >
-          + AGREGAR A BANCA
+          {copy.add}
         </Box>
+        {!canRegister && (
+          <Typography sx={{ fontFamily: SANS, fontSize: '0.68rem', color: C.textMuted, mt: '6px' }}>
+            {copy.missingBetMetaHint}
+          </Typography>
+        )}
+        </>
       ) : (
         <Box
           component="form"
@@ -810,7 +951,7 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
           }}
         >
           <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted, flexShrink: 0 }}>
-            STAKE:
+            {copy.stake}:
           </Typography>
           <input
             type="number"
@@ -822,8 +963,13 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
             onChange={e => setStake(e.target.value)}
             style={inputSx}
           />
+          {matchup && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted, width: '100%' }}>
+              {copy.matchup}: <span style={{ color: C.textSecondary }}>{matchup}</span>
+            </Typography>
+          )}
           <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-            PICK: <span style={{ color: C.textSecondary, marginLeft: '4px' }}>{pick}</span>
+            {copy.pick}: <span style={{ color: C.textSecondary, marginLeft: '4px' }}>{pick}</span>
             {kellySuggestion && (
               <Box
                 component="span"
@@ -845,9 +991,11 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
               </Box>
             )}
           </Typography>
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textMuted, flexShrink: 0 }}>
-            {odds > 0 ? `+${odds}` : odds}
-          </Typography>
+          {!pickIncludesOdds && normalizedOdds != null && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textMuted, flexShrink: 0 }}>
+              {fmtAmericanOdds(normalizedOdds)}
+            </Typography>
+          )}
           {err && <Typography sx={{ fontFamily: SANS, fontSize: '0.65rem', color: C.red, width: '100%' }}>{err}</Typography>}
           <Box sx={{ display: 'flex', gap: '6px', ml: 'auto', flexShrink: 0 }}>
             <Box
@@ -856,7 +1004,7 @@ function AgregarABanca({ matchup, pick, odds, confidence }) {
               onClick={() => { setOpen(false); setErr(''); setStake(''); }}
               sx={{ px: '10px', py: '4px', bgcolor: 'transparent', border: `1px solid ${C.border}`, borderRadius: '2px', color: C.textMuted, fontFamily: MONO, fontSize: '0.68rem', cursor: 'pointer' }}
             >
-              Cancelar
+              {copy.cancel}
             </Box>
             <Box
               component="button"
@@ -1192,13 +1340,17 @@ function SafePickResult({ data, lang, t }) {
   );
 }
 
-function SingleGameResult({ hexa, t }) {
+function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
   const mp         = hexa.master_prediction ?? {};
   const bp         = hexa.best_pick;
   const pm         = hexa.probability_model;
   const valueBreakdown = hexa.value_breakdown ?? null;
   const confidence = Math.min(100, Math.max(0, Number(mp.oracle_confidence) || 0));
   const confColor  = confidence >= 75 ? C.green : confidence >= 50 ? C.amber : C.red;
+  const pickText   = mp.pick ?? bp?.detail ?? '';
+  const bankrollMatchup = String(hexa.matchup ?? hexa.odds?.game ?? getGameMatchupLabel(selectedGame) ?? '').trim();
+  const bankrollOdds = sanitizeOdds(valueBreakdown?.odds)
+    ?? inferBankrollOdds({ pick: pickText, bestPickType: bp?.type, oddsData: hexa.odds, gameData: selectedGame });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1313,10 +1465,11 @@ function SingleGameResult({ hexa, t }) {
         )}
 
         <AgregarABanca
-          matchup={hexa.matchup ?? hexa.odds?.game ?? ''}
-          pick={mp.pick ?? ''}
-          odds={hexa.odds?.odds?.moneyline?.home ?? null}
+          matchup={bankrollMatchup}
+          pick={pickText}
+          odds={bankrollOdds}
           confidence={confidence}
+          lang={lang}
         />
       </Box>
 
@@ -1822,7 +1975,7 @@ function FullDayResult({ hexa, t }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function ResultCard({ data, lang = 'en' }) {
+export default function ResultCard({ data, lang = 'en', selectedGames = [] }) {
   const t = L[lang] ?? L.en;
 
   if (!data) {
@@ -2027,7 +2180,7 @@ export default function ResultCard({ data, lang = 'en' }) {
 
   // Single game
   if (data.master_prediction) {
-    return <SingleGameResult hexa={data} t={t} />;
+    return <SingleGameResult hexa={data} t={t} lang={lang} selectedGame={selectedGames[0] ?? null} />;
   }
 
   // Parlay
