@@ -1357,7 +1357,7 @@ export default function AnalysisPanel({
 
       {/* ── Result ── */}
       {!loading && !error && hexaData && (
-        <ResultCard data={hexaData} lang={lang} />
+        <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} />
       )}
 
       {/* ── Empty state ── */}

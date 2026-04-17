@@ -265,9 +265,8 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         <Box
           component="span"
           sx={{
-            position: 'absolute',
-            top: '10px',
-            right: '10px',
+            display: 'inline-flex',
+            mb: '8px',
             px: '6px',
             py: '2px',
             border: `1px solid ${C.accentLine}`,

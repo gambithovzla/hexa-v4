@@ -740,6 +740,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
     const responseData = analysis.data
       ? {
           ...annotateAnalysisData(analysis.data, featureStore?.features ?? {}, gameData),
+          matchup: `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`,
           odds: matchedOdds ?? undefined,
         }
       : null;
