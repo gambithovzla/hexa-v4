@@ -68,7 +68,7 @@ function priorityFor(type, boost = 0) {
 // ── Signal 1: Team win/loss streak ───────────────────────────────────────────
 
 /**
- * @param {{teamName:string, teamAbbr:string}} team
+ * @param {{id:number, teamName:string, teamAbbr:string}} team
  * @param {Array<{date, result:'W'|'L'}>} recentSchedule  — chronological (oldest → newest)
  */
 export function detectTeamStreaks(team, recentSchedule) {
@@ -95,7 +95,7 @@ export function detectTeamStreaks(team, recentSchedule) {
         en: `${team.teamName} come in on a ${streak}-game win streak`,
       },
       priority: priorityFor('team_streak_hot', Math.min(10, streak - cfg.hot_streak_min_wins)),
-      meta:     { teamAbbr: team.teamAbbr, streak, type: 'wins' },
+      meta:     { teamId: team.id, teamAbbr: team.teamAbbr, teamName: team.teamName, streak, type: 'wins' },
     });
   } else if (first.result === 'L' && streak >= cfg.cold_streak_min_losses) {
     out.push({
@@ -106,7 +106,7 @@ export function detectTeamStreaks(team, recentSchedule) {
         en: `${team.teamName} have dropped ${streak} in a row`,
       },
       priority: priorityFor('team_streak_cold', Math.min(10, streak - cfg.cold_streak_min_losses)),
-      meta:     { teamAbbr: team.teamAbbr, streak, type: 'losses' },
+      meta:     { teamId: team.id, teamAbbr: team.teamAbbr, teamName: team.teamName, streak, type: 'losses' },
     });
   }
   return out;
@@ -135,7 +135,7 @@ export function detectHotOffense(team, recentSchedule) {
       en: `${team.teamName} have scored ${totalRuns} runs over their last ${window.length} games`,
     },
     priority: priorityFor('hot_offense'),
-    meta:     { teamAbbr: team.teamAbbr, runs: totalRuns, games: window.length },
+    meta:     { teamId: team.id, teamAbbr: team.teamAbbr, teamName: team.teamName, runs: totalRuns, games: window.length },
   }];
 }
 
@@ -156,7 +156,7 @@ export function detectColdOffense(team, recentSchedule) {
       en: `${team.teamName} have been quiet: ${totalRuns} runs across their last ${window.length} games`,
     },
     priority: priorityFor('cold_offense'),
-    meta:     { teamAbbr: team.teamAbbr, runs: totalRuns, games: window.length },
+    meta:     { teamId: team.id, teamAbbr: team.teamAbbr, teamName: team.teamName, runs: totalRuns, games: window.length },
   }];
 }
 
@@ -190,7 +190,7 @@ export function detectBullpenFatigue(team, bullpenUsage) {
       en: `${team.teamName} bullpen may be taxed after using ${pitchersYesterday} pitcher(s) yesterday`,
     },
     priority: priorityFor('bullpen_heavy'),
-    meta:     { teamAbbr: team.teamAbbr, pitchersYesterday, ipYesterday },
+    meta:     { teamId: team.id, teamAbbr: team.teamAbbr, teamName: team.teamName, pitchersYesterday, ipYesterday },
   }];
 }
 
@@ -227,7 +227,7 @@ export function detectHitStreak(batter, gameLog) {
       en: `${batter.fullName} has hit safely in ${streak} straight games`,
     },
     priority: priorityFor('hit_streak', Math.min(10, streak - cfg.hit_streak_min_games)),
-    meta:     { playerId: batter.id, teamAbbr: batter.teamAbbr, streak },
+    meta:     { playerId: batter.id, playerName: batter.fullName, teamId: batter.teamId, teamAbbr: batter.teamAbbr, streak },
   }];
 }
 
@@ -253,7 +253,7 @@ export function detectColdBatter(batter, gameLog) {
       en: `${batter.fullName} is hitless across his last ${slump} games`,
     },
     priority: priorityFor('cold_batter'),
-    meta:     { playerId: batter.id, teamAbbr: batter.teamAbbr, slump },
+    meta:     { playerId: batter.id, playerName: batter.fullName, teamId: batter.teamId, teamAbbr: batter.teamAbbr, slump },
   }];
 }
 
@@ -297,6 +297,10 @@ export function detectHighScoringMatchup(bundle, bullpens = {}) {
     },
     priority: priorityFor('high_scoring_matchup'),
     meta:     {
+      homeId:   bundle.home.id,
+      awayId:   bundle.away.id,
+      homeName: bundle.home.teamName,
+      awayName: bundle.away.teamName,
       awayAbbr: bundle.away.teamAbbr,
       homeAbbr: bundle.home.teamAbbr,
       homeLast3,

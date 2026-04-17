@@ -9,6 +9,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
 import { C, BARLOW, MONO } from '../theme';
+import TeamLogo from './TeamLogo';
+import PlayerHeadshot from './PlayerHeadshot';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -65,8 +67,114 @@ function minutesAgo(iso) {
   return m;
 }
 
+// ── Avatar selector ──────────────────────────────────────────────────────────
+// Picks the right visual (team logo / headshot / matchup duo) for each insight.
+function InsightAvatar({ insight, color }) {
+  const m = insight.meta ?? {};
+  const isPlayer = insight.type === 'hit_streak' || insight.type === 'cold_batter';
+
+  if (isPlayer && m.playerId) {
+    return <PlayerHeadshot playerId={m.playerId} name={m.playerName} size={44} color={color} />;
+  }
+  if (m.teamId || m.teamAbbr) {
+    return <TeamLogo teamId={m.teamId} abbr={m.teamAbbr} size={40} color={color} />;
+  }
+  // Fallback → emoji (legacy)
+  return (
+    <Typography sx={{ fontSize: '1.4rem', lineHeight: 1, userSelect: 'none', width: 40, textAlign: 'center' }}>
+      {insight.icon}
+    </Typography>
+  );
+}
+
+// ── Expanded matchup card ────────────────────────────────────────────────────
+// Two logos + centered VS — used for high_scoring_matchup insights.
+function MatchupCard({ insight, lang, color }) {
+  const m = insight.meta ?? {};
+  const text = insight.text?.[lang] ?? insight.text?.en ?? '';
+  const last3Label = lang === 'es' ? 'últimos 3' : 'last 3';
+
+  return (
+    <Box
+      sx={{
+        position:     'relative',
+        display:      'flex',
+        alignItems:   'center',
+        gap:          { xs: '10px', sm: '18px' },
+        px:           { xs: '14px', sm: '20px' },
+        py:           '14px',
+        bgcolor:      C.surface,
+        border:       `1px solid ${C.border}`,
+        borderLeft:   `3px solid ${color}`,
+        transition:   'all 0.18s',
+        overflow:     'hidden',
+        '&:hover':    { bgcolor: C.elevated, borderColor: color, boxShadow: `0 0 12px ${color}33` },
+        '&::before': {
+          content:    '""',
+          position:   'absolute',
+          inset:      0,
+          background: `radial-gradient(circle at 50% 50%, ${color}0C 0%, transparent 55%)`,
+          pointerEvents: 'none',
+        },
+      }}
+    >
+      {/* Away team */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', position: 'relative', zIndex: 1 }}>
+        <TeamLogo teamId={m.awayId} abbr={m.awayAbbr} size={52} color={color} />
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, letterSpacing: '0.1em' }}>
+          {m.awayAbbr}
+        </Typography>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.7rem', color, letterSpacing: '0.08em', fontWeight: 700 }}>
+          {m.awayLast3 ?? '—'}R
+        </Typography>
+      </Box>
+
+      {/* VS */}
+      <Typography sx={{
+        fontFamily:    BARLOW,
+        fontSize:      { xs: '0.8rem', sm: '1rem' },
+        fontWeight:    800,
+        color,
+        letterSpacing: '0.2em',
+        textShadow:    `0 0 8px ${color}66`,
+        userSelect:    'none',
+        position:      'relative',
+        zIndex:        1,
+      }}>
+        VS
+      </Typography>
+
+      {/* Home team */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', position: 'relative', zIndex: 1 }}>
+        <TeamLogo teamId={m.homeId} abbr={m.homeAbbr} size={52} color={color} />
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, letterSpacing: '0.1em' }}>
+          {m.homeAbbr}
+        </Typography>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.7rem', color, letterSpacing: '0.08em', fontWeight: 700 }}>
+          {m.homeLast3 ?? '—'}R
+        </Typography>
+      </Box>
+
+      {/* Copy */}
+      <Box sx={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1, ml: { xs: 0, sm: 1 } }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.92rem', color: C.textPrimary, lineHeight: 1.4 }}>
+          {text}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.1em', mt: '3px' }}>
+          HIGH SCORING MATCHUP · {last3Label.toUpperCase()}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 function InsightCard({ insight, lang }) {
   const color = TYPE_COLOR[insight.type] ?? C.cyan;
+
+  if (insight.type === 'high_scoring_matchup') {
+    return <MatchupCard insight={insight} lang={lang} color={color} />;
+  }
+
   const text = insight.text?.[lang] ?? insight.text?.en ?? '';
   return (
     <Box
@@ -80,17 +188,25 @@ function InsightCard({ insight, lang }) {
         border:       `1px solid ${C.border}`,
         borderLeft:   `3px solid ${color}`,
         transition:   'all 0.18s',
-        '&:hover':    { bgcolor: C.elevated, borderColor: color },
+        '&:hover':    { bgcolor: C.elevated, borderColor: color, boxShadow: `0 0 10px ${color}22` },
       }}
     >
-      <Typography sx={{ fontSize: '1.5rem', lineHeight: 1, userSelect: 'none' }}>
-        {insight.icon}
-      </Typography>
+      <InsightAvatar insight={insight} color={color} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.92rem', color: C.textPrimary, lineHeight: 1.4 }}>
           {text}
         </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, letterSpacing: '0.08em', mt: '2px' }}>
+        <Typography sx={{
+          fontFamily:    MONO,
+          fontSize:      '0.6rem',
+          color:         C.textMuted,
+          letterSpacing: '0.08em',
+          mt:            '2px',
+          display:       'flex',
+          alignItems:    'center',
+          gap:           '6px',
+        }}>
+          <Box component="span" sx={{ fontSize: '0.85em', opacity: 0.8 }}>{insight.icon}</Box>
           {insight.type.replace(/_/g, ' ').toUpperCase()}
         </Typography>
       </Box>
