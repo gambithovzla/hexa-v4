@@ -111,8 +111,8 @@ export async function buildHexaBoard({ date, force = false } = {}) {
     const homeLineup = g.lineups?.home ?? [];
     const awayLineup = g.lineups?.away ?? [];
     const lineupPicks = [
-      ...homeLineup.slice(0, maxBatters).map(p => ({ ...p, teamAbbr: g.teams?.home?.abbreviation })),
-      ...awayLineup.slice(0, maxBatters).map(p => ({ ...p, teamAbbr: g.teams?.away?.abbreviation })),
+      ...homeLineup.slice(0, maxBatters).map(p => ({ ...p, teamId: g.teams?.home?.id, teamAbbr: g.teams?.home?.abbreviation })),
+      ...awayLineup.slice(0, maxBatters).map(p => ({ ...p, teamId: g.teams?.away?.id, teamAbbr: g.teams?.away?.abbreviation })),
     ];
 
     for (const batter of lineupPicks) {
@@ -136,8 +136,8 @@ export async function buildHexaBoard({ date, force = false } = {}) {
     if (!homeData || !awayData) continue;
     insights.push(...detectHighScoringMatchup(
       {
-        home: { teamName: homeData.team.teamName, teamAbbr: homeData.team.teamAbbr, recent: homeData.recent },
-        away: { teamName: awayData.team.teamName, teamAbbr: awayData.team.teamAbbr, recent: awayData.recent },
+        home: { id: homeData.team.id, teamName: homeData.team.teamName, teamAbbr: homeData.team.teamAbbr, recent: homeData.recent },
+        away: { id: awayData.team.id, teamName: awayData.team.teamName, teamAbbr: awayData.team.teamAbbr, recent: awayData.recent },
       },
       {
         home: { pitchersYesterday: countPitchersYesterday(homeData.bullpen) },
