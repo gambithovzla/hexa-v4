@@ -23,8 +23,9 @@ const anthropic = new Anthropic({
 });
 
 const MODELS = {
-  deep:    { id: 'claude-opus-4-7',    maxTokens: 8000  },
-  premium: { id: 'claude-opus-4-7',    maxTokens: 10000 },
+  deep:    { id: 'claude-opus-4-7',         maxTokens: 8000  },
+  premium: { id: 'claude-opus-4-7',         maxTokens: 10000 },
+  haiku:   { id: 'claude-haiku-4-5-20251001', maxTokens: 1000  },
 };
 
 // ---------------------------------------------------------------------------
@@ -661,6 +662,141 @@ export async function analyzeChat({ contextString, question, conversationHistory
     max_tokens: 2000,
     system: [
       { type: 'text', text: CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
+    ],
+    messages,
+  });
+
+  return response.content?.[0]?.text ?? 'No response generated.';
+}
+
+// ---------------------------------------------------------------------------
+// JORNADA MODE — Brief prompt (Haiku) + Cross-game analysis prompt (Opus 4.7)
+// ---------------------------------------------------------------------------
+
+const JORNADA_BRIEF_PROMPT = `You are a data compression engine for a professional MLB betting analysis system.
+
+Your job: take raw game context data and compress it into a concise game brief for a senior analyst.
+
+REQUIRED OUTPUT STRUCTURE (plain text, bullet points, under 350 words):
+
+MATCHUP: [Away] @ [Home]
+PITCHERS:
+- Away starter: name, ERA, xwOBA_against, Whiff%, recent form (woba_against_7d/14d)
+- Home starter: name, ERA, xwOBA_against, Whiff%, recent form (woba_against_7d/14d)
+
+OFFENSES:
+- Away offense: xwOBA, rolling wOBA 7d/14d, platoon edge if any
+- Home offense: xwOBA, rolling wOBA 7d/14d, platoon edge if any
+
+KEY SIGNALS:
+- Bullpen fatigue (if any)
+- Weather/park factors (if relevant)
+- Line movement or sharp money signal (if present)
+
+MARKET:
+- ML: Away odds / Home odds (implied probabilities)
+- O/U line
+
+DATA QUALITY: lineup status, any missing data gaps
+
+Be data-dense, not conversational. Omit any section where data is absent.`;
+
+const JORNADA_CHAT_PROMPT = `You are H.E.X.A. V4 — Hybrid Expert X-Analysis, the Sports Oracle.
+
+You are in JORNADA MODE — analyzing multiple MLB games simultaneously for the system administrator. You have compressed data briefs for each selected game.
+
+## YOUR ROLE IN JORNADA MODE
+- Compare starting pitchers, lineups, and market signals across all selected games
+- Rank games by pick confidence (50-70% range per oracle calibration)
+- Identify the safest pick of the day and the highest-value pick
+- Spot cross-game patterns (e.g., "3 of 5 games favor UNDER today")
+- Answer specific cross-game questions with data backing
+
+## SIGNAL PRIORITY (same as Oracle mode)
+1. Statcast current season (xwOBA, Whiff%, barrel%)
+2. Recent form — rolling wOBA 7d/14d
+3. Season averages
+4. Market odds as reference
+5. Weather + park factors
+
+## CONFIDENCE CALIBRATION
+- 50-54%: Marginal edge
+- 55-59%: Moderate edge
+- 60-65%: High edge
+- 66-70%: Exceptional (reserved for statistical anomalies)
+Never exceed 70%. Always cite the specific numbers behind your confidence.
+
+## RESPONSE FORMAT
+Plain text. Direct and analytical — no hedging.
+- Lead with your direct answer to the question
+- Use game labels (e.g., "NYY @ BOS") to identify games
+- When ranking picks, list them ordered by confidence with a brief reason each
+- Cite specific numbers (xwOBA, Whiff%, woba_7d) for recommended picks
+- Under 700 words total
+- When asked in Spanish, respond in Spanish. When in English, respond in English.`;
+
+/**
+ * Summarize a single game context into a brief using Haiku (cheap).
+ * Called in parallel for each selected game in Jornada mode.
+ *
+ * @param {object} params
+ * @param {string} params.contextString — full context from buildContext()
+ * @param {string} params.matchup       — "AWAY @ HOME" label
+ * @param {string} [params.lang]        — "en" | "es"
+ * @returns {Promise<string>} — compressed brief text
+ */
+export async function summarizeGameBrief({ contextString, matchup, lang = 'en' }) {
+  const model = MODELS.haiku;
+
+  const userMessage = lang === 'es'
+    ? `Comprime el siguiente contexto del partido "${matchup}" en un brief estructurado:\n\n${contextString}`
+    : `Compress the following game context for "${matchup}" into a structured brief:\n\n${contextString}`;
+
+  const response = await anthropic.messages.create({
+    model: model.id,
+    max_tokens: model.maxTokens,
+    system: [
+      { type: 'text', text: JORNADA_BRIEF_PROMPT, cache_control: { type: 'ephemeral' } },
+    ],
+    messages: [{ role: 'user', content: userMessage }],
+  });
+
+  return response.content?.[0]?.text ?? `[Brief unavailable for ${matchup}]`;
+}
+
+/**
+ * Cross-game chat for Jornada mode using Opus 4.7.
+ *
+ * @param {object}   params
+ * @param {string[]} params.gameBriefs          — array of compressed briefs (one per game)
+ * @param {string}   params.question            — user question
+ * @param {Array}    [params.conversationHistory] — [{question, answer}]
+ * @param {string}   [params.lang]              — "en" | "es"
+ * @returns {Promise<string>} — conversational answer
+ */
+export async function analyzeChatJornada({ gameBriefs, question, conversationHistory = [], lang = 'en' }) {
+  const modelConfig = MODELS.deep;
+
+  const briefsBlock = gameBriefs.join('\n\n---\n\n');
+
+  const messages = [];
+
+  for (const turn of conversationHistory) {
+    messages.push({ role: 'user', content: turn.question });
+    messages.push({ role: 'assistant', content: turn.answer });
+  }
+
+  const currentMessage = lang === 'es'
+    ? `BRIEFS DE LOS PARTIDOS SELECCIONADOS:\n\n${briefsBlock}\n\nMi pregunta: ${question}`
+    : `SELECTED GAME BRIEFS:\n\n${briefsBlock}\n\nMy question: ${question}`;
+
+  messages.push({ role: 'user', content: currentMessage });
+
+  const response = await anthropic.messages.create({
+    model: modelConfig.id,
+    max_tokens: 2000,
+    system: [
+      { type: 'text', text: JORNADA_CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
     ],
     messages,
   });
