@@ -1736,8 +1736,7 @@ export async function buildContext(gameData, oddsData = null) {
       const flags = weatherData.analysis ?? [];
       blocks.push(`⚠️ WEATHER FLAGS: ${flags.length > 0 ? flags.join(' | ') : 'No significant weather factors'}`);
       blocks.push(
-        'ORACLE INSTRUCTION: Factor wind speed and direction into OVER/UNDER analysis. ' +
-        'Wind > 15mph toward outfield = OVER bias. Cold < 50°F = UNDER bias. Rain > 60% = reduce confidence.'
+        'ORACLE INSTRUCTION: Wind and temperature are contextual background only — do NOT use as OVER/UNDER bias. Rain > 60% = reduce confidence.'
       );
     }
   }

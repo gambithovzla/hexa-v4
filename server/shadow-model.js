@@ -108,6 +108,7 @@ function buildActualOutcome({ gameData, actualResult, homeScore, awayScore }) {
 
 function buildPayload({
   userId = null,
+  userEmail = null,
   pickId = null,
   backtestId = null,
   sourceType = 'analysis',
@@ -136,6 +137,7 @@ function buildPayload({
 
   return {
     user_id: userId,
+    user_email: userEmail,
     pick_id: pickId,
     backtest_id: backtestId,
     source_type: sourceType,
@@ -240,8 +242,9 @@ export async function recordShadowModelRun(params) {
            actual_away_score = $25,
            actual_status = $26,
            feature_snapshot = $27,
+           user_email = $28,
            updated_at = NOW()
-       WHERE id = $28`,
+       WHERE id = $29`,
       [
         payload.user_id,
         payload.source_type,
@@ -270,6 +273,7 @@ export async function recordShadowModelRun(params) {
         payload.actual_away_score,
         payload.actual_status,
         JSON.stringify(payload.feature_snapshot),
+        payload.user_email,
         existingId,
       ]
     );
@@ -284,9 +288,9 @@ export async function recordShadowModelRun(params) {
        oracle_pick, oracle_confidence, oracle_home_win_prob, oracle_predicted_winner_id, oracle_predicted_winner_abbr,
        shadow_score, shadow_confidence, shadow_home_win_prob, shadow_predicted_winner_id, shadow_predicted_winner_abbr,
        agree_with_oracle, actual_winner_id, actual_winner_abbr, actual_home_score, actual_away_score,
-       actual_status, feature_snapshot
+       actual_status, feature_snapshot, user_email, pick_time_lima
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
      RETURNING id`,
     [
       payload.user_id,
@@ -319,6 +323,7 @@ export async function recordShadowModelRun(params) {
       payload.actual_away_score,
       payload.actual_status,
       JSON.stringify(payload.feature_snapshot),
+      payload.user_email,
     ]
   );
 

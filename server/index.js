@@ -303,6 +303,7 @@ async function saveFeatureStoreForGame({
 
 async function persistAnalysisPick({
   userId,
+  userEmail = null,
   type = 'single',
   matchup,
   analysisData,
@@ -329,9 +330,10 @@ async function persistAnalysisPick({
        user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
        oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
        model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
-       game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method
+       game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method,
+       user_email, pick_time_lima
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
      RETURNING *`,
     [
       userId,
@@ -358,6 +360,7 @@ async function persistAnalysisPick({
       analysisData.safe_candidates != null ? JSON.stringify(analysisData.safe_candidates) : null,
       analysisData.safe_scope ?? null,
       analysisData.selection_method ?? null,
+      userEmail ?? null,
     ]
   );
 
@@ -378,6 +381,7 @@ async function persistAnalysisPick({
       oddsData: directFeatures.oddsData ?? oddsData,
       pick: savedPick.pick,
       result: savedPick.result,
+      userEmail: userEmail ?? null,
     });
   } else if (gamePk) {
     await saveFeatureStoreForGame({
@@ -753,6 +757,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       try {
         await recordShadowModelRun({
           userId: req.user.id,
+          userEmail: req.user.email ?? null,
           sourceType: 'analysis',
           analysisMode: 'single',
           gameData,
@@ -930,6 +935,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             try {
               await recordShadowModelRun({
                 userId: req.user.id,
+                userEmail: req.user.email ?? null,
                 sourceType: 'analysis',
                 analysisMode: isMulti ? 'safe_multi' : 'safe_single',
                 gameData,
@@ -949,6 +955,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             try {
               savedPick = await persistAnalysisPick({
                 userId: req.user.id,
+                userEmail: req.user.email ?? null,
                 type: 'safe',
                 matchup: `${awayAbbr} @ ${homeAbbr}`,
                 analysisData: annotateAnalysisData(deterministicSafe, shadowFeatures, gameData),
@@ -1205,8 +1212,8 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
             `INSERT INTO picks (user_id, type, matchup, pick, oracle_confidence, bet_value,
              model_risk, oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
              model, language, odds_at_pick, implied_prob_at_pick, odds_details, value_breakdown,
-             safe_candidates, safe_scope, selection_method)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+             safe_candidates, safe_scope, selection_method, user_email, pick_time_lima)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
              RETURNING id`,
             [
               req.user.id,
@@ -1230,6 +1237,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
               d.safe_candidates != null ? JSON.stringify(d.safe_candidates) : null,
               d.safe_scope ?? null,
               d.selection_method ?? null,
+              req.user.email ?? null,
             ]
           );
 
@@ -1243,6 +1251,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
               oddsData: value._featureStore?.features?.oddsData ?? value.odds ?? null,
               pick: mp.pick ?? bp.detail ?? null,
               result: null,
+              userEmail: req.user.email ?? null,
             });
           }
         } catch (saveErr) {
@@ -1779,9 +1788,10 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
          user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
          oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
          model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
-         game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method
+         game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method,
+         user_email, pick_time_lima
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP) RETURNING *`,
       [
         req.user.id, type, matchup, pick, normalizeOracleConfidence(oracle_confidence), bet_value, model_risk,
         oracle_report, hexa_hunch,
@@ -1797,6 +1807,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
         safe_candidates != null ? JSON.stringify(safe_candidates) : null,
         safe_scope ?? null,
         selection_method ?? null,
+        req.user.email ?? null,
       ]
     );
     const savedPick = rows[0];
@@ -1815,6 +1826,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
         oddsData: directFeatures.oddsData ?? parsedOddsDetails,
         pick: savedPick.pick,
         result: savedPick.result,
+        userEmail: req.user.email ?? null,
       });
     } else if (featureGamePk) {
       await saveFeatureStoreForGame({
