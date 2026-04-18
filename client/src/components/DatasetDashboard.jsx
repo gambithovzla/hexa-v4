@@ -188,15 +188,20 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
             RECENT RECORDS ({(data.recent ?? []).length} latest)
           </Typography>
           <Box sx={{ border: `1px solid ${C.border}`, overflowX: 'auto' }}>
-            <Box sx={{ minWidth: '700px' }}>
+            <Box sx={{ minWidth: '1100px' }}>
               <Box sx={{ display: 'flex', p: '6px 10px', borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-                {['DATE', 'PICK', 'RESULT', 'H.xwOBA', 'A.xwOBA', 'H.Whiff', 'TEMP', 'DQ', 'ML.H', 'O/U'].map(h => (
-                  <Typography key={h} sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, letterSpacing: '0.08em', flex: h === 'PICK' ? 2 : 1, minWidth: h === 'PICK' ? '120px' : '50px' }}>{h}</Typography>
+                {['DATE', 'HORA LIMA', 'USUARIO', 'PARTIDO', 'PICK', 'RESULT', 'H.xwOBA', 'A.xwOBA', 'H.Whiff', 'TEMP', 'DQ', 'ML.H', 'O/U'].map(h => (
+                  <Typography key={h} sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, letterSpacing: '0.08em', flex: h === 'PICK' || h === 'PARTIDO' || h === 'USUARIO' ? 2 : 1, minWidth: h === 'PICK' || h === 'PARTIDO' ? '120px' : h === 'USUARIO' ? '140px' : '50px' }}>{h}</Typography>
                 ))}
               </Box>
               {(data.recent ?? []).map((row, i) => (
                 <Box key={i} sx={{ display: 'flex', p: '5px 10px', borderBottom: `1px solid ${C.border}`, '&:hover': { background: C.surface } }}>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.game_date?.split('T')[0]?.slice(5)}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>
+                    {row.pick_time_lima ? new Date(row.pick_time_lima).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, flex: 2, minWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.user_email ?? '—'}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.matchup ?? '—'}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.cyan, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.pick}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', flex: 1, minWidth: '50px', fontWeight: 700,
                     color: row.result === 'win' ? C.green : row.result === 'loss' ? C.red : C.textMuted

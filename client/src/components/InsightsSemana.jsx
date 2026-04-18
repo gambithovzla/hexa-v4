@@ -577,7 +577,9 @@ function CuratorModal({ onClose, onPublished, weekStart }) {
           explanation: editExplanation,
           pick_id: selected?.id,
           pick_data: selected,
-          week_start: weekStart,
+          week_start: selected?.game_date
+            ? getWeekStart(new Date(selected.game_date + 'T12:00:00Z'))
+            : weekStart,
         }),
       });
       const d = await res.json();

@@ -439,7 +439,8 @@ export async function getShadowModeDashboard(limit = 50) {
          home_team_abbr, away_team_abbr,
          oracle_pick, oracle_confidence, oracle_predicted_winner_abbr,
          shadow_confidence, shadow_predicted_winner_abbr, agree_with_oracle,
-         actual_winner_abbr, actual_home_score, actual_away_score, actual_status
+         actual_winner_abbr, actual_home_score, actual_away_score, actual_status,
+         user_email, pick_time_lima
        FROM shadow_model_runs
        ORDER BY created_at DESC
        LIMIT $1`,

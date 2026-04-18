@@ -181,16 +181,16 @@ export default function ShadowModeDashboard({ onBack }) {
               <Box sx={{ overflowX: 'auto' }}>
                 <Box
                   sx={{
-                    minWidth: '980px',
+                    minWidth: '1200px',
                     display: 'grid',
-                    gridTemplateColumns: '130px 90px 110px 120px 120px 90px 110px 90px',
+                    gridTemplateColumns: '110px 130px 150px 110px 120px 120px 80px 110px 80px',
                     gap: 1,
                     pb: 1,
                     borderBottom: `1px solid ${C.border}`,
                     mb: 1,
                   }}
                 >
-                  {['Time', 'Source', 'Matchup', 'Oracle', 'Shadow', 'Agree', 'Outcome', 'Status'].map((label) => (
+                  {['Hora Lima', 'Usuario', 'Matchup', 'Source', 'Oracle', 'Shadow', 'Agree', 'Outcome', 'Status'].map((label) => (
                     <Typography key={label} sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                       {label}
                     </Typography>
@@ -201,22 +201,27 @@ export default function ShadowModeDashboard({ onBack }) {
                   <Box
                     key={row.id}
                     sx={{
-                      minWidth: '980px',
+                      minWidth: '1200px',
                       display: 'grid',
-                      gridTemplateColumns: '130px 90px 110px 120px 120px 90px 110px 90px',
+                      gridTemplateColumns: '110px 130px 150px 110px 120px 120px 80px 110px 80px',
                       gap: 1,
                       py: '8px',
                       borderBottom: `1px solid ${C.borderSoft || C.border}`,
                     }}
                   >
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>
-                      {formatDateTime(row.created_at)}
+                      {row.pick_time_lima
+                        ? new Date(row.pick_time_lima).toLocaleString('es-PE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+                        : formatDateTime(row.created_at)}
                     </Typography>
-                    <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textPrimary }}>
-                      {row.source_type?.toUpperCase()}
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {row.user_email ?? '—'}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textPrimary }}>
                       {row.away_team_abbr} @ {row.home_team_abbr}
+                    </Typography>
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textPrimary }}>
+                      {row.source_type?.toUpperCase()}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.cyan }}>
                       {renderOracleCell(row)}
