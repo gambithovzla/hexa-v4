@@ -24,7 +24,7 @@
 import { useId } from 'react';
 import { Box, Typography } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { C, MONO, DISPLAY, SCALE, INTENT, SPACE, EASE, DURATION } from '../../theme';
+import { useHexaTheme } from '../../themeProvider';
 import { fadeUp, hoverLift, drillDown, usePrefersReducedMotion, reducedVariant } from '../../motion';
 
 export default function InsightCard({
@@ -40,6 +40,7 @@ export default function InsightCard({
   children,
 }) {
   const reduced = usePrefersReducedMotion();
+  const { C, MONO, DISPLAY, SCALE, INTENT, SPACE, EASE, DURATION } = useHexaTheme();
   const tone = INTENT[intent] || INTENT.data;
   const layoutId = useId();
   const clickable = Boolean(onToggle || onClick);

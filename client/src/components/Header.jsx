@@ -12,6 +12,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import LanguageToggle from './LanguageToggle';
+import ThemeToggle    from './ThemeToggle';
 import AuthModal from './AuthModal';
 import HexaHelpModal from './HexaHelpModal';
 import PricingModal from './PricingModal';
@@ -848,6 +849,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Help button */}
         <HelpButton lang={lang} />
+
+        {/* Theme toggle (LIGHT / SYSTEM / DARK) */}
+        <ThemeToggle lang={lang} layout="pill" />
 
         {/* Language toggle */}
         <LanguageToggle lang={lang} onToggle={onLangToggle} />

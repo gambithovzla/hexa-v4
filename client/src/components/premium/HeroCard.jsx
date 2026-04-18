@@ -20,24 +20,8 @@
 
 import { Box, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
-import { C, MONO, DISPLAY, SCALE, GRAD, SHADOW, INTENT, SPACE } from '../../theme';
+import { useHexaTheme } from '../../themeProvider';
 import { heroPop, hoverLift, usePrefersReducedMotion, reducedVariant } from '../../motion';
-
-const INTENT_GRAD = {
-  action:  GRAD.heroOrange,
-  warn:    GRAD.heroOrange,
-  danger:  GRAD.heroOrange,
-  data:    GRAD.heroCyan,
-  success: GRAD.heroGreen,
-};
-
-const INTENT_SHADOW = {
-  action:  SHADOW.heroOrange,
-  warn:    SHADOW.heroOrange,
-  danger:  SHADOW.heroOrange,
-  data:    SHADOW.heroCyan,
-  success: SHADOW.heroGreen,
-};
 
 export default function HeroCard({
   intent = 'action',
@@ -51,8 +35,24 @@ export default function HeroCard({
   children,
 }) {
   const reduced = usePrefersReducedMotion();
+  const { C, MONO, DISPLAY, SCALE, GRAD, SHADOW, INTENT, SPACE } = useHexaTheme();
   const tone = INTENT[intent] || INTENT.action;
   const clickable = Boolean(onClick || cta?.onClick);
+
+  const intentGrad = {
+    action:  GRAD.heroOrange,
+    warn:    GRAD.heroOrange,
+    danger:  GRAD.heroOrange,
+    data:    GRAD.heroCyan,
+    success: GRAD.heroGreen,
+  };
+  const intentShadow = {
+    action:  SHADOW.heroOrange,
+    warn:    SHADOW.heroOrange,
+    danger:  SHADOW.heroOrange,
+    data:    SHADOW.heroCyan,
+    success: SHADOW.heroGreen,
+  };
 
   const handleClick = (e) => {
     if (onClick) onClick(e);
@@ -83,7 +83,7 @@ export default function HeroCard({
           background:      C.surface,
           border:          `1px solid ${tone.line}`,
           borderLeft:      `3px solid ${tone.base}`,
-          boxShadow:       INTENT_SHADOW[intent] || SHADOW.heroOrange,
+          boxShadow:       intentShadow[intent] || SHADOW.heroOrange,
           p:               { xs: SPACE.lg, md: SPACE.xl },
           display:         'flex',
           flexDirection:   'column',
@@ -94,7 +94,7 @@ export default function HeroCard({
             content:    '""',
             position:   'absolute',
             inset:      0,
-            background: INTENT_GRAD[intent] || GRAD.heroOrange,
+            background: intentGrad[intent] || GRAD.heroOrange,
             pointerEvents: 'none',
             transition: 'opacity 0.4s ease',
           },
