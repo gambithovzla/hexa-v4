@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { getTodayGames, getTeams } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
-import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat } from './oracle.js';
+import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat, summarizeGameBrief, analyzeChatJornada } from './oracle.js';
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
@@ -1325,6 +1325,85 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
   } catch (err) {
     console.error('[Oracle Chat] Error:', err);
     res.status(500).json({ error: 'Chat failed', details: safeError(err) });
+  }
+});
+
+// POST /api/analyze/chat-jornada — Multi-game jornada chat (admin only)
+// Map: each gameId → buildContext() → summarizeGameBrief() via Haiku (parallel)
+// Reduce: all briefs → analyzeChatJornada() via Opus 4.7 (single call)
+app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
+  const { gameIds, question, conversationHistory = [], lang = 'en', date } = req.body;
+
+  if (!question || !question.trim()) {
+    return res.status(400).json({ error: 'Question is required' });
+  }
+  if (!Array.isArray(gameIds) || gameIds.length < 2) {
+    return res.status(400).json({ error: 'At least 2 gameIds are required for jornada mode' });
+  }
+
+  try {
+    const resolvedDate = date || getEasternDateString();
+    let games = await getTodayGames(resolvedDate);
+
+    // Widen search to yesterday/tomorrow if needed (ET boundary edge cases)
+    if (games.length === 0) {
+      for (const candidate of [shiftDateString(resolvedDate, -1), shiftDateString(resolvedDate, 1)]) {
+        const retry = await getTodayGames(candidate);
+        if (retry.length > 0) { games = retry; break; }
+      }
+    }
+
+    // Resolve each gameId to its game data
+    const resolvedGames = gameIds.map(id => {
+      const game = games.find(g => String(g.gamePk) === String(id));
+      return game || null;
+    }).filter(Boolean);
+
+    if (resolvedGames.length === 0) {
+      return res.status(404).json({ success: false, error: 'No matching games found for provided gameIds' });
+    }
+
+    // Fetch all odds once, then match per game
+    let allOdds = [];
+    try { allOdds = await getGameOdds(); } catch { /* odds optional */ }
+
+    // MAP phase: build context + summarize with Haiku — all in parallel
+    const gameBriefs = await Promise.all(
+      resolvedGames.map(async (gameData) => {
+        const away = gameData.teams?.away?.abbreviation || gameData.teams?.away?.team?.abbreviation || '?';
+        const home = gameData.teams?.home?.abbreviation || gameData.teams?.home?.team?.abbreviation || '?';
+        const matchup = `${away} @ ${home}`;
+
+        let matchedOdds = null;
+        try {
+          matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+        } catch { /* odds optional per game */ }
+
+        const contextResult = await buildContext(gameData, matchedOdds);
+        const contextString = contextResult.context ?? contextResult;
+
+        const brief = await summarizeGameBrief({ contextString, matchup, lang });
+        return brief;
+      })
+    );
+
+    // REDUCE phase: single Opus 4.7 call across all briefs
+    const answer = await analyzeChatJornada({
+      gameBriefs,
+      question: question.trim(),
+      conversationHistory,
+      lang,
+    });
+
+    res.json({
+      success: true,
+      answer,
+      mode: 'jornada',
+      gamesAnalyzed: resolvedGames.length,
+    });
+  } catch (err) {
+    console.error('[Oracle Jornada Chat] Error:', err);
+    res.status(500).json({ error: 'Jornada chat failed', details: safeError(err) });
   }
 });
 
