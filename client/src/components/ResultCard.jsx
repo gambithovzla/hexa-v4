@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
 import { C, BARLOW, MONO, SANS } from '../theme';
+import DecisionCenter from './premium/DecisionCenter';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -1401,314 +1402,31 @@ function SafePickResult({ data, lang, t }) {
 function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
   const mp         = hexa.master_prediction ?? {};
   const bp         = hexa.best_pick;
-  const pm         = hexa.probability_model;
   const valueBreakdown = hexa.value_breakdown ?? null;
   const confidence = Math.min(100, Math.max(0, Number(mp.oracle_confidence) || 0));
-  const confColor  = confidence >= 75 ? C.green : confidence >= 50 ? C.amber : C.red;
   const pickText   = mp.pick ?? bp?.detail ?? '';
   const bankrollMatchup = String(hexa.matchup ?? hexa.odds?.game ?? getGameMatchupLabel(selectedGame) ?? '').trim();
   const bankrollOdds = sanitizeOdds(valueBreakdown?.odds)
     ?? inferBankrollOdds({ pick: pickText, bestPickType: bp?.type, oddsData: hexa.odds, gameData: selectedGame });
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-      {/* ── Master Pick ── */}
-      <Box
-        sx={{
-          background:   C.bg,
-          border:       `1px solid ${C.border}`,
-          borderRadius: '0',
-          p:            '20px',
-          position:     'relative',
-          '&::before': {
-            content:    '""',
-            position:   'absolute',
-            top:        0,
-            left:       0,
-            width:      '14px',
-            height:     '14px',
-            borderTop:  `2px solid ${C.cyan}`,
-            borderLeft: `2px solid ${C.cyan}`,
-          },
-          '&::after': {
-            content:      '""',
-            position:     'absolute',
-            bottom:       0,
-            right:        0,
-            width:        '14px',
-            height:       '14px',
-            borderBottom: `2px solid ${C.accent}`,
-            borderRight:  `2px solid ${C.accent}`,
-          },
-        }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '12px' }}>
-          <Typography
-            sx={{
-              fontFamily:    MONO,
-              fontSize:      '10px',
-              fontWeight:    700,
-              color:         C.accent,
-              textTransform: 'uppercase',
-              letterSpacing: '2px',
-            }}
-          >
-            {t.masterPick}
-          </Typography>
-          <RiskBadge risk={hexa.model_risk} t={t} />
-        </Box>
-
-        <Typography
-          sx={{
-            fontFamily:    BARLOW,
-            fontSize:      '24px',
-            fontWeight:    700,
-            color:         C.textPrimary,
-            lineHeight:    1.2,
-            letterSpacing: '2px',
-            mb:            '8px',
-            textShadow:    `0 0 20px rgba(255,102,0,0.2)`,
-          }}
-        >
-          {mp.pick ?? '—'}
-        </Typography>
-
-        {mp.bet_value && (
-          <Box
-            sx={{
-              display:      'inline-block',
-              bgcolor:      C.accentDim,
-              border:       `1px solid ${C.accentLine}`,
-              borderRadius: '3px',
-              px:           '14px',
-              py:           '8px',
-              mb:           '14px',
-            }}
-          >
-            <Typography sx={{ fontFamily: BARLOW, fontWeight: 800, fontSize: '14px', color: C.accent, letterSpacing: '1px' }}>
-              {mp.bet_value}
-            </Typography>
-          </Box>
-        )}
-
-        <Box
-          sx={{
-            display:      'flex',
-            alignItems:   'center',
-            gap:          '10px',
-            bgcolor:      C.surfaceAlt,
-            border:       `1px solid ${C.border}`,
-            borderRadius: '3px',
-            px:           '12px',
-            py:           '8px',
-          }}
-        >
-          <ConfidenceBar value={confidence} />
-          <Box>
-            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, letterSpacing: '1px', textTransform: 'uppercase' }}>
-              {t.confidence}
-            </Typography>
-            <Typography sx={{ fontFamily: MONO, fontSize: '0.82rem', fontWeight: 700, color: confColor }}>
-              {confidence}%
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* ── AGREGAR A BANCA ── */}
-        {valueBreakdown && (
-          <Box sx={{ mt: '12px' }}>
-            <ValueBreakdownPanel breakdown={valueBreakdown} t={t} />
-          </Box>
-        )}
-
-        <AgregarABanca
-          matchup={bankrollMatchup}
-          pick={pickText}
-          odds={bankrollOdds}
-          confidence={confidence}
-          lang={lang}
-        />
-      </Box>
-
-      {/* ── Oracle Report (collapsed by default — user opts in via Explain Pick) ── */}
-      {hexa.oracle_report && (
-        <ExplainPickSection label={t.oracleReport} body={hexa.oracle_report} t={t} />
-      )}
-
-      {/* ── Kelly Recommendation ── */}
-      {hexa.kelly_recommendation && (
-        <Box
-          sx={{
-            background:   C.accentDim,
-            border:       `1px solid ${C.accentLine}`,
-            borderRadius: '0',
-            p:            '14px 16px',
-            position:     'relative',
-            boxShadow:    `inset 0 0 20px rgba(0,0,0,0.6), 0 0 1px rgba(255,102,0,0.25)`,
-            '&::before': {
-              content:    '""',
-              position:   'absolute',
-              top:        0,
-              left:       0,
-              width:      '10px',
-              height:     '10px',
-              borderTop:  `1px solid ${C.accent}`,
-              borderLeft: `1px solid ${C.accent}`,
-            },
-            '&::after': {
-              content:      '""',
-              position:     'absolute',
-              bottom:       0,
-              right:        0,
-              width:        '10px',
-              height:       '10px',
-              borderBottom: `1px solid ${C.accent}`,
-              borderRight:  `1px solid ${C.accent}`,
-            },
-          }}
-        >
-          <Typography
-            sx={{
-              fontFamily:    MONO,
-              fontSize:      '8px',
-              color:         C.accent,
-              textTransform: 'uppercase',
-              letterSpacing: '3px',
-              mb:            '10px',
-              textShadow:    `0 0 8px rgba(255,102,0,0.6)`,
-            }}
-          >
-            [ KELLY_CRITERION_OUTPUT ]
-          </Typography>
-          <Typography
-            sx={{
-              fontFamily:    MONO,
-              fontSize:      '12px',
-              color:         C.textPrimary,
-              lineHeight:    1.7,
-              letterSpacing: '0.03em',
-            }}
-          >
-            {hexa.kelly_recommendation}
-          </Typography>
-        </Box>
-      )}
-
-      {/* ── H.E.X.A. Hunch ── */}
-      {hexa.hexa_hunch && (
-        <Box
-          sx={{
-            borderLeft:   `2px solid ${C.cyanLine}`,
-            background:   C.cyanDim,
-            padding:      '12px 16px',
-            borderRadius: '0',
-          }}
-        >
-          <Typography
-            sx={{
-              fontFamily:    MONO,
-              fontSize:      '8px',
-              letterSpacing: '3px',
-              color:         C.cyan,
-              textTransform: 'uppercase',
-              mb:            '8px',
-              textShadow:    `0 0 6px rgba(0,217,255,0.5)`,
-            }}
-          >
-            [ {t.hexaHunch} ]
-          </Typography>
-          <Typography
-            sx={{
-              fontFamily:    MONO,
-              fontSize:      '11px',
-              color:         C.textSecondary,
-              lineHeight:    1.7,
-              letterSpacing: '0.03em',
-            }}
-          >
-            ⬡ {hexa.hexa_hunch}
-          </Typography>
-        </Box>
-      )}
-
-      {/* ── Alert Flags ── */}
-      {hexa.alert_flags?.length > 0 && (
-        <Box>
-          <SectionLabel>{t.alertFlags}</SectionLabel>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {hexa.alert_flags.map((flag, i) => (
-              <AlertFlagBadge key={i} flag={flag} />
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* ── Probability Model ── */}
-      {pm && (
-        <Box
-          sx={{
-            bgcolor:  C.surface,
-            border:   `1px solid ${C.border}`,
-            borderRadius: '0',
-            p:        '14px',
-            position: 'relative',
-            '&::before': {
-              content:    '""',
-              position:   'absolute',
-              top:        0,
-              left:       0,
-              width:      '8px',
-              height:     '8px',
-              borderTop:  `1px solid ${C.cyan}`,
-              borderLeft: `1px solid ${C.cyan}`,
-            },
-          }}
-        >
-          <SectionLabel>{t.probabilityModel}</SectionLabel>
-          <ProbabilityBar homeWins={pm.home_wins} awayWins={pm.away_wins} t={t} />
-        </Box>
-      )}
-
-      {/* ── Best Pick ── */}
-      {bp && (
-        <Box
-          sx={{
-            background:   C.accentDim,
-            border:       `1px solid ${C.accentLine}`,
-            borderTop:    `2px solid ${C.accent}`,
-            borderRadius: '0',
-            p:            '12px 14px',
-            boxShadow:    C.accentGlow,
-          }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: '8px' }}>
-            <Typography sx={{
-              fontFamily:    MONO,
-              fontSize:      '8px',
-              color:         C.accent,
-              letterSpacing: '3px',
-              textTransform: 'uppercase',
-              textShadow:    `0 0 8px rgba(255,102,0,0.6)`,
-            }}>
-              BEST_PICK // {bp.type}
-            </Typography>
-            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.amber }}>
-              CONF: {Math.round(Number(bp.confidence) * 100)}%
-            </Typography>
-          </Box>
-          <Typography sx={{ fontFamily: MONO, fontSize: '13px', color: C.textPrimary, letterSpacing: '0.05em' }}>
-            {bp.detail}
-          </Typography>
-        </Box>
-      )}
-
-      {/* ── Market Odds + Bet Calculator ── */}
-      {hexa.odds?.odds && <OddsPanel odds={hexa.odds.odds} hexa={hexa} t={t} />}
-
-      {/* ── Disclaimers ── */}
-      <Disclaimers t={t} />
-    </Box>
+    <DecisionCenter
+      hexa={hexa}
+      lang={lang}
+      slots={{
+        bankroll: (
+          <AgregarABanca
+            matchup={bankrollMatchup}
+            pick={pickText}
+            odds={bankrollOdds}
+            confidence={confidence}
+            lang={lang}
+          />
+        ),
+        oddsPanel: hexa.odds?.odds ? <OddsPanel odds={hexa.odds.odds} hexa={hexa} t={t} /> : null,
+        disclaimers: <Disclaimers t={t} />,
+      }}
+    />
   );
 }
 
