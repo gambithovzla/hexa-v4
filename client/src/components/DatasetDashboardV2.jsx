@@ -364,10 +364,19 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
             DAY RECORDS {selectedDay ? `(${formatDayLabel(selectedDay, lang)})` : ''}
           </Typography>
           <Box sx={{ border: `1px solid ${C.border}`, overflowX: 'auto' }}>
-            <Box sx={{ minWidth: '700px' }}>
+            <Box sx={{ minWidth: '1150px' }}>
               <Box sx={{ display: 'flex', p: '6px 10px', borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-                {['DATE', 'PICK', 'RESULT', 'H.xwOBA', 'A.xwOBA', 'H.Whiff', 'TEMP', 'DQ', 'ML.H', 'O/U'].map((header) => (
-                  <Typography key={header} sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, letterSpacing: '0.08em', flex: header === 'PICK' ? 2 : 1, minWidth: header === 'PICK' ? '120px' : '50px' }}>{header}</Typography>
+                {['DATE', 'HORA LIMA', 'USUARIO', 'PARTIDO', 'PICK', 'RESULT', 'H.xwOBA', 'A.xwOBA', 'H.Whiff', 'TEMP', 'DQ', 'ML.H', 'O/U'].map((header) => (
+                  <Typography
+                    key={header}
+                    sx={{
+                      fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, letterSpacing: '0.08em',
+                      flex: header === 'PICK' || header === 'PARTIDO' || header === 'USUARIO' ? 2 : 1,
+                      minWidth: header === 'PICK' || header === 'PARTIDO' ? '120px' : header === 'USUARIO' ? '140px' : '50px',
+                    }}
+                  >
+                    {header}
+                  </Typography>
                 ))}
               </Box>
 
@@ -382,6 +391,13 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
               {selectedDayRecords.map((row, i) => (
                 <Box key={`${row.game_pk ?? 'game'}-${i}-${row.pick}`} sx={{ display: 'flex', p: '5px 10px', borderBottom: `1px solid ${C.border}`, '&:hover': { background: C.surface } }}>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{normalizeDayKey(row.game_date)?.slice(5)}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>
+                    {row.pick_time_lima
+                      ? new Date(row.pick_time_lima).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
+                      : '—'}
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, flex: 2, minWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.user_email ?? '—'}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.matchup ?? '—'}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.cyan, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.pick}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', flex: 1, minWidth: '50px', fontWeight: 700, color: row.result === 'win' ? C.green : row.result === 'loss' ? C.red : C.textMuted }}>
                     {row.result?.toUpperCase() ?? '—'}
