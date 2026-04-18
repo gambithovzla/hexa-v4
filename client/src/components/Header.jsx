@@ -30,6 +30,7 @@ const SUBTITLE = {
 
 const TABS = [
   { value: 'pizarra', en: 'Board',       es: 'Pizarra'          },
+  { value: 'semana',  en: 'Picks',       es: 'Semana',  highlight: true },
   { value: 'game',    en: 'Single Game', es: 'Juego Individual' },
   { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           adminOnly: true },
   { value: 'bankroll', en: 'Bankroll',    es: 'Bankroll'         },
@@ -482,6 +483,7 @@ function ActionConfirmModal({
 
 function TabButton({ tab, active, lang, onClick, disabled = false }) {
   const label = lang === 'es' ? tab.es : tab.en;
+  const isHighlight = tab.highlight && !active;
 
   return (
     <Box
@@ -491,14 +493,20 @@ function TabButton({ tab, active, lang, onClick, disabled = false }) {
         position:      'relative',
         display:       'inline-flex',
         alignItems:    'center',
+        gap:           isHighlight ? '5px' : '0',
         px:            '20px',
         py:            '11px',
-        background:    active ? C.cyanDim : 'transparent',
+        background:    active ? C.cyanDim : isHighlight ? 'rgba(0,255,136,0.05)' : 'transparent',
         border:        'none',
-        borderBottom:  active ? `1px solid ${C.cyan}` : `1px solid transparent`,
-        color:         active ? C.cyan : C.textMuted,
+        borderBottom:  active
+          ? `1px solid ${C.cyan}`
+          : isHighlight
+            ? '1px solid rgba(0,255,136,0.30)'
+            : '1px solid transparent',
+        color:         active ? C.cyan : isHighlight ? '#00FF88' : C.textMuted,
         fontFamily:    BARLOW,
         fontSize:      '0.72rem',
+        fontWeight:    isHighlight ? 700 : 'inherit',
         letterSpacing: '0.12em',
         textTransform: 'uppercase',
         cursor:        disabled ? 'default' : 'pointer',
@@ -506,14 +514,19 @@ function TabButton({ tab, active, lang, onClick, disabled = false }) {
         opacity:       disabled && !active ? 0.35 : 1,
         transition:    'all 0.2s',
         flexShrink:    0,
-        boxShadow:     active ? `0 1px 0 ${C.cyan}, 0 0 10px rgba(0,217,255,0.2)` : 'none',
+        boxShadow:     active
+          ? `0 1px 0 ${C.cyan}, 0 0 10px rgba(0,217,255,0.2)`
+          : isHighlight
+            ? '0 0 14px rgba(0,255,136,0.15)'
+            : 'none',
         '&:hover': {
-          color:      active ? C.cyan : C.textSecondary,
-          background: active ? C.cyanDim : 'rgba(0,217,255,0.04)',
-          textShadow: active ? `0 0 8px rgba(0,217,255,0.6)` : 'none',
+          color:      active ? C.cyan : isHighlight ? '#00FF88' : C.textSecondary,
+          background: active ? C.cyanDim : isHighlight ? 'rgba(0,255,136,0.10)' : 'rgba(0,217,255,0.04)',
+          textShadow: active ? `0 0 8px rgba(0,217,255,0.6)` : isHighlight ? '0 0 10px rgba(0,255,136,0.6)' : 'none',
         },
       }}
     >
+      {isHighlight && <span style={{ fontSize: '8px', opacity: 0.8 }}>✦</span>}
       {label}
     </Box>
   );
