@@ -16,6 +16,7 @@ import { useAuth } from '../store/authStore';
 import en from '../i18n/en.json';
 import es from '../i18n/es.json';
 import { C, BARLOW, MONO, SANS } from '../theme';
+import InsightsSemana from './InsightsSemana';
 
 const TRANSLATIONS = { en, es };
 
@@ -1252,10 +1253,50 @@ function BancaTab() {
 // MAIN EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 
+const TABS = [
+  { key: 'analisis', label: 'ANÁLISIS' },
+  { key: 'semana',   label: 'SEMANA' },
+];
+
 export default function HistoryPanel({ lang = 'en' }) {
+  const [activeTab, setActiveTab] = useState('analisis');
+
   return (
-    <Box sx={{ bgcolor: C.bg, minHeight: '60vh', p: 2, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <AnalisisTab lang={lang} />
+    <Box sx={{ bgcolor: C.bg, minHeight: '60vh', display: 'flex', flexDirection: 'column', gap: '0' }}>
+      {/* Tab bar */}
+      <Box sx={{
+        display: 'flex', borderBottom: `1px solid ${C.border}`,
+        mb: '16px', px: 2, pt: 2,
+      }}>
+        {TABS.map(tab => (
+          <Box
+            key={tab.key}
+            component="button"
+            onClick={() => setActiveTab(tab.key)}
+            sx={{
+              px: '18px', py: '8px',
+              fontFamily: MONO, fontSize: '10px', letterSpacing: '2px',
+              fontWeight: activeTab === tab.key ? 700 : 400,
+              color: activeTab === tab.key ? C.accent : C.textMuted,
+              background: 'transparent',
+              border: 'none',
+              borderBottom: `2px solid ${activeTab === tab.key ? C.accent : 'transparent'}`,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              mb: '-1px',
+              '&:hover': { color: activeTab === tab.key ? C.accent : C.textSecondary },
+            }}
+          >
+            {tab.label}
+          </Box>
+        ))}
+      </Box>
+
+      {/* Tab content */}
+      <Box sx={{ px: 2, pb: 2 }}>
+        {activeTab === 'analisis' && <AnalisisTab lang={lang} />}
+        {activeTab === 'semana'   && <InsightsSemana lang={lang} />}
+      </Box>
     </Box>
   );
 }

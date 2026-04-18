@@ -17,6 +17,8 @@ import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
 import pool from './db.js';
 import lemonRouter from './lemon.js';
 import picksRouter from './routes/picks.js';
+import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-history.js';
+import insightsRouter from './routes/insights.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
@@ -450,6 +452,8 @@ app.use('/api/auth',      authRouter);
 app.use('/api/bankroll',  bankrollRouter);
 app.use('/api/lemon',     lemonRouter);
 app.use('/api/picks',     picksRouter);
+app.use('/api/oracle',    oracleHistoryRouter);
+app.use('/api/insights',  insightsRouter);
 app.post('/api/bmc/webhook', handleBMCWebhook);
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
@@ -1275,7 +1279,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
 
 // POST /api/analyze/chat — Direct chat with Oracle (admin only, no credits)
 app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
-  const { gameId, question, conversationHistory = [], lang = 'en', date } = req.body;
+  const { gameId, question, conversationHistory = [], lang = 'en', date, sessionKey, matchups } = req.body;
 
   if (!question || !question.trim()) {
     return res.status(400).json({ error: 'Question is required' });
@@ -1322,6 +1326,27 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
       answer,
       mode: 'chat',
     });
+
+    // Persist conversation asynchronously — never blocks the response
+    if (sessionKey) {
+      const fullMessages = [
+        ...conversationHistory.flatMap(t => [
+          { role: 'user', text: t.question },
+          { role: 'assistant', text: t.answer },
+        ]),
+        { role: 'user', text: question.trim() },
+        { role: 'assistant', text: answer },
+      ];
+      upsertOracleSession({
+        userId: req.user.id,
+        sessionKey,
+        dateEt: getEasternDateString(),
+        mode: 'partido',
+        gameIds: [gameId],
+        matchups: matchups || String(gameId),
+        messages: fullMessages,
+      });
+    }
   } catch (err) {
     console.error('[Oracle Chat] Error:', err);
     res.status(500).json({ error: 'Chat failed', details: safeError(err) });
@@ -1332,7 +1357,7 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
 // Map: each gameId → buildContext() → summarizeGameBrief() via Haiku (parallel)
 // Reduce: all briefs → analyzeChatJornada() via Opus 4.7 (single call)
 app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
-  const { gameIds, question, conversationHistory = [], lang = 'en', date } = req.body;
+  const { gameIds, question, conversationHistory = [], lang = 'en', date, sessionKey, matchups } = req.body;
 
   if (!question || !question.trim()) {
     return res.status(400).json({ error: 'Question is required' });
@@ -1401,6 +1426,27 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
       mode: 'jornada',
       gamesAnalyzed: resolvedGames.length,
     });
+
+    // Persist jornada session asynchronously
+    if (sessionKey) {
+      const fullMessages = [
+        ...conversationHistory.flatMap(t => [
+          { role: 'user', text: t.question },
+          { role: 'assistant', text: t.answer },
+        ]),
+        { role: 'user', text: question.trim() },
+        { role: 'assistant', text: answer },
+      ];
+      upsertOracleSession({
+        userId: req.user.id,
+        sessionKey,
+        dateEt: getEasternDateString(),
+        mode: 'jornada',
+        gameIds,
+        matchups: matchups || gameIds.join(', '),
+        messages: fullMessages,
+      });
+    }
   } catch (err) {
     console.error('[Oracle Jornada Chat] Error:', err);
     res.status(500).json({ error: 'Jornada chat failed', details: safeError(err) });

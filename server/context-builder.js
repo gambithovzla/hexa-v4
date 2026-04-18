@@ -940,14 +940,14 @@ function calcSignalCoherence({
   } else {
     const temp = weatherData.temperature;
     const wind = weatherData.windSpeed;
-    if (temp > 85 && wind > 10) {
-      vote('Weather', 'OVER', `Temp ${temp}°F + wind ${wind}mph — ball carries`);
-    } else if (temp < 50) {
-      vote('Weather', 'UNDER', `Cold ${temp}°F — ball dies`);
+    // Temperature is contextual info only — it does not drive OVER/UNDER votes.
+    // Only wind speed justifies a directional signal (direction unknown at vote time).
+    if (wind > 15) {
+      vote('Weather', 'NEUTRAL', `Wind ${wind}mph at ${temp}°F — notable wind (direction determines impact)`);
     } else if (wind > 10) {
-      vote('Weather', 'NEUTRAL', `Wind ${wind}mph at ${temp}°F — direction indeterminate`);
+      vote('Weather', 'NEUTRAL', `Wind ${wind}mph at ${temp}°F — moderate wind, no strong directional signal`);
     } else {
-      vote('Weather', 'NEUTRAL', `Temp ${temp}°F, wind ${wind}mph — no strong bias`);
+      vote('Weather', 'NEUTRAL', `Temp ${temp}°F, wind ${wind}mph — weather not a significant factor`);
     }
   }
 

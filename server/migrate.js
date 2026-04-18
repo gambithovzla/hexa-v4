@@ -283,6 +283,40 @@ export async function runMigrations() {
       ON CONFLICT (key) DO NOTHING
     `);
 
+    // ── oracle_sessions (Oracle Chat History by day) ──────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS oracle_sessions (
+        id          SERIAL        PRIMARY KEY,
+        user_id     TEXT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        session_key VARCHAR(100)  UNIQUE NOT NULL,
+        date_et     DATE          NOT NULL,
+        mode        VARCHAR(20)   NOT NULL DEFAULT 'partido',
+        game_ids    JSONB         DEFAULT '[]',
+        matchups    TEXT,
+        messages    JSONB         NOT NULL DEFAULT '[]',
+        created_at  TIMESTAMP     DEFAULT NOW(),
+        updated_at  TIMESTAMP     DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_oracle_sessions_date ON oracle_sessions(date_et DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_oracle_sessions_user ON oracle_sessions(user_id, date_et DESC)`);
+
+    // ── hexa_insights (Weekly curated hits/misses for public feed) ────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hexa_insights (
+        id          SERIAL        PRIMARY KEY,
+        type        VARCHAR(20)   NOT NULL CHECK (type IN ('acierto', 'fallo')),
+        title       TEXT          NOT NULL,
+        explanation TEXT          NOT NULL,
+        pick_id     INTEGER       REFERENCES picks(id) ON DELETE SET NULL,
+        pick_data   JSONB         DEFAULT '{}',
+        week_start  DATE          NOT NULL,
+        created_at  TIMESTAMP     DEFAULT NOW(),
+        deleted_at  TIMESTAMP     DEFAULT NULL
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_insights_week ON hexa_insights(week_start, deleted_at)`);
+
     await client.query('COMMIT');
 
     await pool.query(`

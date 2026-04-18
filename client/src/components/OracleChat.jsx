@@ -1,11 +1,169 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, BARLOW, MONO, SANS } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+function genSessionKey() {
+  return `oracle_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function getEasternDate() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+// ─── History view ─────────────────────────────────────────────────────────────
+
+function OracleHistoryView({ lang }) {
+  const [days, setDays] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [loadingDays, setLoadingDays] = useState(true);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [expandedSession, setExpandedSession] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('hexa_token');
+    fetch(`${API_URL}/api/oracle/history`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setDays(d.days || []))
+      .catch(() => {})
+      .finally(() => setLoadingDays(false));
+  }, []);
+
+  function loadSessions(date) {
+    setSelectedDate(date);
+    setExpandedSession(null);
+    setLoadingSessions(true);
+    const token = localStorage.getItem('hexa_token');
+    fetch(`${API_URL}/api/oracle/history/${date}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setSessions(d.sessions || []))
+      .catch(() => {})
+      .finally(() => setLoadingSessions(false));
+  }
+
+  function formatDay(dateStr) {
+    try {
+      return new Date(dateStr + 'T12:00:00').toLocaleDateString('es-ES', {
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+      });
+    } catch { return dateStr; }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ fontFamily: MONO, fontSize: '9px', color: C.textDim, letterSpacing: '2px' }}>
+        HISTORIAL DE SESIONES ORACLE — ADMIN
+      </div>
+
+      {loadingDays && (
+        <div style={{ fontFamily: MONO, fontSize: '11px', color: C.textDim, textAlign: 'center', padding: '20px' }}>
+          Cargando historial...
+        </div>
+      )}
+
+      {!loadingDays && days.length === 0 && (
+        <div style={{ fontFamily: MONO, fontSize: '11px', color: C.textDim, textAlign: 'center', padding: '20px',
+          border: `1px dashed ${C.border}` }}>
+          Aún no hay sesiones guardadas. Las conversaciones futuras aparecerán aquí.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '12px' }}>
+        {/* Day list */}
+        <div style={{ width: '180px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {days.map(d => (
+            <button
+              key={d.date_et}
+              onClick={() => loadSessions(d.date_et)}
+              style={{
+                background: selectedDate === d.date_et ? C.accentDim : C.surface,
+                border: `1px solid ${selectedDate === d.date_et ? C.accentLine : C.border}`,
+                borderLeft: `2px solid ${selectedDate === d.date_et ? C.accent : C.border}`,
+                color: selectedDate === d.date_et ? C.accent : C.textMuted,
+                fontFamily: MONO, fontSize: '10px', padding: '8px 10px',
+                cursor: 'pointer', textAlign: 'left', width: '100%',
+                transition: 'all 0.12s',
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>{formatDay(d.date_et)}</div>
+              <div style={{ fontSize: '9px', opacity: 0.7, marginTop: '2px' }}>
+                {d.session_count} sesión{d.session_count !== 1 ? 'es' : ''}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Sessions panel */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+          {!selectedDate && (
+            <div style={{ fontFamily: MONO, fontSize: '11px', color: C.textDim, padding: '20px', textAlign: 'center',
+              border: `1px dashed ${C.border}` }}>
+              Selecciona un día para ver las conversaciones.
+            </div>
+          )}
+          {loadingSessions && (
+            <div style={{ fontFamily: MONO, fontSize: '11px', color: C.textDim, padding: '20px', textAlign: 'center' }}>
+              Cargando sesiones...
+            </div>
+          )}
+          {!loadingSessions && sessions.map(session => (
+            <div key={session.id} style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+              <button
+                onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
+                style={{
+                  width: '100%', background: 'transparent', border: 'none',
+                  padding: '10px 14px', cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontFamily: BARLOW, fontSize: '13px', color: C.textPrimary, fontWeight: 700 }}>
+                    {session.matchups || session.mode}
+                  </span>
+                  <span style={{ fontFamily: MONO, fontSize: '9px', color: C.textDim }}>
+                    {session.mode.toUpperCase()} · {Math.floor((session.messages?.length || 0) / 2)} pregunta(s)
+                  </span>
+                </div>
+                <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
+                  {expandedSession === session.id ? '▲' : '▼'}
+                </span>
+              </button>
+
+              {expandedSession === session.id && (
+                <div style={{ borderTop: `1px solid ${C.border}`, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {(session.messages || []).map((msg, i) => (
+                    <div key={i} style={{
+                      padding: '8px 12px',
+                      background: msg.role === 'user' ? C.surface : 'transparent',
+                      border: msg.role === 'user' ? `1px solid ${C.border}` : `1px solid ${C.borderLight || C.border}`,
+                      borderLeft: msg.role === 'assistant' ? `3px solid ${C.accent}` : 'none',
+                    }}>
+                      <div style={{ fontFamily: MONO, fontSize: '8px', color: msg.role === 'user' ? C.textDim : C.accent,
+                        letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        {msg.role === 'user' ? 'ADMIN' : 'ORACLE'}
+                      </div>
+                      <div style={{ fontFamily: SANS, fontSize: '12px', lineHeight: 1.7, color: C.textSecondary, whiteSpace: 'pre-wrap' }}>
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main OracleChat ──────────────────────────────────────────────────────────
+
 export default function OracleChat({ lang = 'en', onBack }) {
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
+  const [view, setView] = useState('chat'); // 'chat' | 'history'
 
   // Partido mode
   const [selectedGame, setSelectedGame] = useState(null);
@@ -17,6 +175,7 @@ export default function OracleChat({ lang = 'en', onBack }) {
   const [question, setQuestion] = useState('');
   const [conversation, setConversation] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [sessionKey] = useState(genSessionKey);
   const chatEndRef = useRef(null);
 
   // Fetch today's games (use local date, not UTC — MLB games are scheduled
@@ -75,6 +234,8 @@ export default function OracleChat({ lang = 'en', onBack }) {
           question: q,
           conversationHistory: buildHistory(),
           lang,
+          sessionKey,
+          matchups: getMatchup(selectedGame),
         }),
       });
       const data = await res.json();
@@ -102,6 +263,11 @@ export default function OracleChat({ lang = 'en', onBack }) {
 
     try {
       const token = localStorage.getItem('hexa_token');
+      const jornadaMatchups = games
+        .filter(g => selectedIds.has(g.gamePk || g.id))
+        .map(g => getMatchup(g))
+        .join(' | ');
+
       const res = await fetch(`${API_URL}/api/analyze/chat-jornada`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -110,6 +276,8 @@ export default function OracleChat({ lang = 'en', onBack }) {
           question: q,
           conversationHistory: buildHistory(),
           lang,
+          sessionKey,
+          matchups: jornadaMatchups,
         }),
       });
       const data = await res.json();
@@ -188,18 +356,38 @@ export default function OracleChat({ lang = 'en', onBack }) {
           </span>
         </div>
 
-        {inChat && (
-          <button onClick={resetAll} style={{
-            background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted,
-            padding: '6px 12px', borderRadius: '3px', fontFamily: MONO, fontSize: '10px',
-            cursor: 'pointer',
-          }}>
-            {mode === 'partido' ? 'CHANGE GAME' : 'CHANGE SELECTION'}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            onClick={() => setView(v => v === 'history' ? 'chat' : 'history')}
+            style={{
+              background: view === 'history' ? C.accentDim : 'transparent',
+              border: `1px solid ${view === 'history' ? C.accentLine : C.border}`,
+              color: view === 'history' ? C.accent : C.textMuted,
+              padding: '6px 14px', borderRadius: '3px', fontFamily: MONO, fontSize: '10px',
+              cursor: 'pointer', letterSpacing: '1px', transition: 'all 0.15s',
+            }}
+          >
+            {view === 'history' ? '← CHAT' : 'HISTORIAL'}
           </button>
-        )}
+          {inChat && view === 'chat' && (
+            <button onClick={resetAll} style={{
+              background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted,
+              padding: '6px 12px', borderRadius: '3px', fontFamily: MONO, fontSize: '10px',
+              cursor: 'pointer',
+            }}>
+              {mode === 'partido' ? 'CHANGE GAME' : 'CHANGE SELECTION'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+
+        {/* HISTORY VIEW */}
+        {view === 'history' && <OracleHistoryView lang={lang} />}
+
+        {/* CHAT VIEW */}
+        {view === 'chat' && <>
 
         {/* MODE TOGGLE — only show when not in an active chat */}
         {!inChat && (
@@ -487,6 +675,7 @@ export default function OracleChat({ lang = 'en', onBack }) {
             </div>
           </>
         )}
+        </>}
       </div>
 
       <style>{`
