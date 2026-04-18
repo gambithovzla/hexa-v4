@@ -426,10 +426,10 @@ function ValuePanel({ hexa, lang, t }) {
                   {t.away}
                 </Typography>
                 <Typography sx={{ fontFamily: MONO, fontSize: SCALE.label, color: INTENT.data.base, fontWeight: 700 }}>
-                  {fmtPct(pm.away_wins, 0)}
+                  {fmtPct((Number(pm.away_wins) || 0) / 100, 0)}
                 </Typography>
               </Box>
-              <EdgeBar percent={Number(pm.away_wins) || 0} intent="data" showValue={false} />
+              <EdgeBar percent={(Number(pm.away_wins) || 0) / 100} intent="data" showValue={false} />
             </Box>
             <Box sx={{ flex: 1 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: '2px' }}>
@@ -437,10 +437,10 @@ function ValuePanel({ hexa, lang, t }) {
                   {t.home}
                 </Typography>
                 <Typography sx={{ fontFamily: MONO, fontSize: SCALE.label, color: INTENT.action.base, fontWeight: 700 }}>
-                  {fmtPct(pm.home_wins, 0)}
+                  {fmtPct((Number(pm.home_wins) || 0) / 100, 0)}
                 </Typography>
               </Box>
-              <EdgeBar percent={Number(pm.home_wins) || 0} intent="action" showValue={false} />
+              <EdgeBar percent={(Number(pm.home_wins) || 0) / 100} intent="action" showValue={false} />
             </Box>
           </Box>
         </Box>
