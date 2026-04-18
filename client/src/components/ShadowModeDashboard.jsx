@@ -211,7 +211,7 @@ export default function ShadowModeDashboard({ onBack }) {
                   >
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>
                       {row.pick_time_lima
-                        ? new Date(row.pick_time_lima).toLocaleString('es-PE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+                        ? new Date(row.pick_time_lima).toLocaleString('es-PE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
                         : formatDateTime(row.created_at)}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

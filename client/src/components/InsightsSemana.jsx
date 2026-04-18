@@ -578,7 +578,7 @@ function CuratorModal({ onClose, onPublished, weekStart }) {
           pick_id: selected?.id,
           pick_data: selected,
           week_start: selected?.game_date
-            ? getWeekStart(new Date(selected.game_date + 'T12:00:00Z'))
+            ? getWeekStart(new Date(String(selected.game_date).slice(0, 10) + 'T12:00:00Z'))
             : weekStart,
         }),
       });
@@ -846,7 +846,9 @@ export default function InsightsSemana({ lang = 'es' }) {
         <CuratorModal
           weekStart={weekStart}
           onClose={() => setShowCurator(false)}
-          onPublished={newInsight => setInsights(prev => [newInsight, ...prev])}
+          onPublished={newInsight => {
+            setWeekStart(newInsight.week_start);
+          }}
         />
       )}
     </div>
