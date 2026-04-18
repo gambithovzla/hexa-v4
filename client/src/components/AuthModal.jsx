@@ -390,30 +390,32 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
 
   const isBlockingVerify = verifyStep && verifySource === 'register';
 
-  // Reset form on open / tab change
+  // Reset form when modal opens
   useEffect(() => {
-    if (open) {
-      setTab(defaultTab);
-      setEmail('');
-      setPassword('');
-      setError('');
-      setLoading(false);
-      setVerifyCode('');
-      setResendStatus('idle');
-      setAgeConfirmed(false);
-      if (initialView === 'verify' && user && user.email_verified === false) {
-        setVerifyEmail_(user.email ?? '');
-        setVerifySource('login');
-        setVerifyStep(true);
-        setResendCooldown(0);
-      } else {
-        setVerifyStep(false);
-        setVerifySource('login');
-        setVerifyEmail_('');
-        setResendCooldown(0);
-      }
-    }
-  }, [open, defaultTab, initialView, user]);
+    if (!open) return;
+    setTab(defaultTab);
+    setEmail('');
+    setPassword('');
+    setError('');
+    setLoading(false);
+    setVerifyCode('');
+    setResendStatus('idle');
+    setAgeConfirmed(false);
+    setVerifyStep(false);
+    setVerifySource('login');
+    setVerifyEmail_('');
+    setResendCooldown(0);
+  }, [open, defaultTab]);
+
+  // Handle initialView='verify' (e.g. from Header's "verify email" button)
+  useEffect(() => {
+    if (!open || initialView !== 'verify') return;
+    if (!user || user.email_verified !== false) return;
+    setVerifyEmail_(user.email ?? '');
+    setVerifySource('login');
+    setVerifyStep(true);
+    setResendCooldown(0);
+  }, [open, initialView, user]);
 
   useEffect(() => { setError(''); }, [tab]);
 
