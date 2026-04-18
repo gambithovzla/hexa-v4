@@ -10,6 +10,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { useAuth } from '../store/authStore';
 
 // ── Sci-Fi Design Tokens (aligned with Phase A global system) ─────────────────
@@ -218,8 +220,11 @@ function InputField({
   maxLength,
   inputRef,
   autoFocus = false,
+  showToggle = false,
 }) {
-  const [focused, setFocused] = useState(false);
+  const [focused,   setFocused]   = useState(false);
+  const [showPass,  setShowPass]  = useState(false);
+  const resolvedType = showToggle ? (showPass ? 'text' : 'password') : type;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       <Typography sx={{
@@ -232,36 +237,68 @@ function InputField({
       }}>
         {label}
       </Typography>
-      <input
-        ref={inputRef}
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        disabled={disabled}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        maxLength={maxLength}
-        autoFocus={autoFocus}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        style={{
-          background:   NC.cyanDim,
-          border:       `1px solid ${focused ? NC.cyan : NC.cyanLine}`,
-          borderRadius: '0',
-          color:        NC.textPrimary,
-          fontFamily:   MONO,
-          fontSize:     '12px',
-          letterSpacing:'0.06em',
-          padding:      '10px 14px',
-          outline:      'none',
-          width:        '100%',
-          boxSizing:    'border-box',
-          colorScheme:  'dark',
-          opacity:      disabled ? 0.5 : 1,
-          boxShadow:    focused ? NC.cyanGlow : 'none',
-          transition:   'border-color 0.2s, box-shadow 0.2s',
-        }}
-      />
+      <Box sx={{ position: 'relative' }}>
+        <input
+          ref={inputRef}
+          type={resolvedType}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          maxLength={maxLength}
+          autoFocus={autoFocus}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{
+            background:   NC.cyanDim,
+            border:       `1px solid ${focused ? NC.cyan : NC.cyanLine}`,
+            borderRadius: '0',
+            color:        NC.textPrimary,
+            fontFamily:   MONO,
+            fontSize:     '12px',
+            letterSpacing:'0.06em',
+            padding:      showToggle ? '10px 38px 10px 14px' : '10px 14px',
+            outline:      'none',
+            width:        '100%',
+            boxSizing:    'border-box',
+            colorScheme:  'dark',
+            opacity:      disabled ? 0.5 : 1,
+            boxShadow:    focused ? NC.cyanGlow : 'none',
+            transition:   'border-color 0.2s, box-shadow 0.2s',
+          }}
+        />
+        {showToggle && (
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setShowPass(s => !s)}
+            disabled={disabled}
+            tabIndex={-1}
+            sx={{
+              position:       'absolute',
+              right:          '10px',
+              top:            '50%',
+              transform:      'translateY(-50%)',
+              background:     'transparent',
+              border:         'none',
+              cursor:         disabled ? 'default' : 'pointer',
+              color:          focused ? NC.cyan : NC.textMuted,
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              p:              0,
+              opacity:        disabled ? 0.4 : 1,
+              transition:     'color 0.2s',
+              '&:hover':      { color: NC.cyan },
+            }}
+          >
+            {showPass
+              ? <VisibilityOffIcon sx={{ fontSize: '16px' }} />
+              : <VisibilityIcon    sx={{ fontSize: '16px' }} />}
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -718,7 +755,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
             {/* Form */}
             <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <InputField label={t.email}    type="email"    value={email}    onChange={setEmail}    disabled={loading} />
-              <InputField label={t.password} type="password" value={password} onChange={setPassword} disabled={loading} />
+              <InputField label={t.password} type="password" value={password} onChange={setPassword} disabled={loading} showToggle />
 
               {/* Error */}
               {error && (
