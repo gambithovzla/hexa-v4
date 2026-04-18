@@ -317,6 +317,14 @@ export async function runMigrations() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_insights_week ON hexa_insights(week_start, deleted_at)`);
 
+    // ── user_email + Lima timezone timestamp for auditing ─────────────────────
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT NULL`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS pick_time_lima TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT NULL`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS pick_time_lima TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT NULL`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS pick_time_lima TIMESTAMP DEFAULT NULL`);
+
     await client.query('COMMIT');
 
     await pool.query(`

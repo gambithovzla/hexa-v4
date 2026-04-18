@@ -34,6 +34,7 @@ export async function savePickFeatures({
   oddsData,
   pick,
   result,
+  userEmail = null,
 }) {
   try {
     // Calculate average lineup xwOBA
@@ -80,7 +81,7 @@ export async function savePickFeatures({
       features.temperature, features.wind_speed,
       features.data_quality_score, features.signal_coherence_score,
       features.odds_ml_home, features.odds_ml_away, features.odds_ou_total,
-      pick, normalizedResult,
+      pick, normalizedResult, userEmail ?? null,
     ];
 
     const existing = pickId != null
@@ -103,8 +104,9 @@ export async function savePickFeatures({
           temperature = $19, wind_speed = $20,
           data_quality_score = $21, signal_coherence_score = $22,
           odds_ml_home = $23, odds_ml_away = $24, odds_ou_total = $25,
-          pick = $26, result = $27
-        WHERE id = $28
+          pick = $26, result = $27, user_email = $28,
+          pick_time_lima = COALESCE(pick_time_lima, (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
+        WHERE id = $29
       `, [...values, existing.rows[0].id]);
     } else {
       await pool.query(`
@@ -114,8 +116,8 @@ export async function savePickFeatures({
           home_team_ops, away_team_ops, home_lineup_avg_xwoba, away_lineup_avg_xwoba,
           park_factor_overall, park_factor_hr, temperature, wind_speed,
           data_quality_score, signal_coherence_score,
-          odds_ml_home, odds_ml_away, odds_ou_total, pick, result)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+          odds_ml_home, odds_ml_away, odds_ou_total, pick, result, user_email, pick_time_lima)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
       `, values);
     }
 
