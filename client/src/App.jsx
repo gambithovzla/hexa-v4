@@ -19,6 +19,7 @@ import Header               from './components/Header';
 import GameSelector         from './components/GameSelector';
 import AnalysisPanel        from './components/AnalysisPanel';
 import HistoryPanel         from './components/HistoryPanel';
+import InsightsSemana       from './components/InsightsSemana';
 import BankrollTracker      from './components/BankrollTracker';
 import OddsLab              from './components/OddsLab';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
@@ -504,6 +505,11 @@ export default function App() {
                 setIsAnalyzing={setIsAnalyzing}
               />
             </Box>
+          )}
+
+          {/* Semana — public weekly showcase (no auth required) */}
+          {activeTab === 'semana' && (
+            <InsightsSemana lang={lang} />
           )}
 
           {/* History — remounts on each visit so it re-reads localStorage */}
