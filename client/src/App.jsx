@@ -14,8 +14,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { ThemeProvider, createTheme, CssBaseline, Box, Typography } from '@mui/material';
-import { theme as themeConfig } from './styles/theme';
+import { Box, Typography } from '@mui/material';
 import Header               from './components/Header';
 import GameSelector         from './components/GameSelector';
 import AnalysisPanel        from './components/AnalysisPanel';
@@ -43,7 +42,8 @@ import { C, MONO, BARLOW } from './theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-const muiTheme = createTheme(themeConfig);
+// MUI ThemeProvider + CssBaseline are mounted globally in main.jsx via the
+// HEXA ThemeProvider, so route-level wrappers were removed here.
 
 // Two-column layout used on game / parlay tabs
 const TAB_LAYOUT = {
@@ -362,12 +362,7 @@ export default function App() {
 
   // Premium UI lab — showcase route for the component library (Fase 1).
   if (window.location.pathname === '/dev/ui') {
-    return (
-      <ThemeProvider theme={muiTheme}>
-        <CssBaseline />
-        <DevUIShowcase />
-      </ThemeProvider>
-    );
+    return <DevUIShowcase />;
   }
 
   if (window.location.pathname === '/terms') return <LegalPage page="terms" lang={lang} />;
@@ -395,27 +390,19 @@ export default function App() {
   // public only when the performance_public flag is enabled)
   if (showPerformance && (isAdmin || performancePublic)) {
     return (
-      <ThemeProvider theme={muiTheme}>
-        <CssBaseline />
-        <PerformanceDashboard onBack={() => setShowPerformance(false)} isAdmin={isAdmin} performancePublic={performancePublic} onTogglePublic={setPerformancePublic} />
-      </ThemeProvider>
+      <PerformanceDashboard onBack={() => setShowPerformance(false)} isAdmin={isAdmin} performancePublic={performancePublic} onTogglePublic={setPerformancePublic} />
     );
   }
 
   // Render Methodology as a full-page takeover (no tab, no header)
   if (showMethodology) {
     return (
-      <ThemeProvider theme={muiTheme}>
-        <CssBaseline />
-        <MethodologyPage lang={lang} onBack={() => setShowMethodology(false)} onToggleLang={() => setLang(prev => prev === 'es' ? 'en' : 'es')} />
-      </ThemeProvider>
+      <MethodologyPage lang={lang} onBack={() => setShowMethodology(false)} onToggleLang={() => setLang(prev => prev === 'es' ? 'en' : 'es')} />
     );
   }
 
   return (
-    <ThemeProvider theme={muiTheme}>
-      <CssBaseline />
-      <Box
+    <Box
         sx={{
           minHeight:       '100vh',
           bgcolor:         C.bg,
@@ -567,6 +554,5 @@ export default function App() {
         {/* ── Footer ── */}
         <AppFooter />
       </Box>
-    </ThemeProvider>
   );
 }

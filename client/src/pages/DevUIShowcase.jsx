@@ -9,8 +9,9 @@
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
-import { C, MONO, DISPLAY, SCALE, SPACE } from '../theme';
+import { useHexaTheme } from '../themeProvider';
 import { HeroCard, InsightCard, DataChip, EdgeBar } from '../components/premium';
+import ThemeToggle from '../components/ThemeToggle';
 import { staggerContainer } from '../motion';
 
 const T = {
@@ -83,6 +84,7 @@ const T = {
 };
 
 function SectionHeader({ label, hint }) {
+  const { C, MONO, SCALE, SPACE } = useHexaTheme();
   return (
     <Box sx={{ mb: SPACE.md }}>
       <Typography
@@ -109,6 +111,7 @@ export default function DevUIShowcase() {
   const [expanded, setExpanded] = useState(null);
   const [filters, setFilters] = useState({ offense: true, pitching: false, bullpen: false, trends: false });
   const t = T[lang];
+  const { C, MONO, DISPLAY, SCALE, SPACE } = useHexaTheme();
 
   const toggleLang = () => {
     const next = lang === 'es' ? 'en' : 'es';
@@ -124,7 +127,7 @@ export default function DevUIShowcase() {
           position:     'sticky',
           top:          0,
           zIndex:       10,
-          bgcolor:      'rgba(0,0,0,0.92)',
+          bgcolor:      C.bg,
           backdropFilter: 'blur(8px)',
           borderBottom: `1px solid ${C.border}`,
           px:           { xs: SPACE.md, md: SPACE.lg },
@@ -133,6 +136,7 @@ export default function DevUIShowcase() {
           alignItems:   'center',
           justifyContent:'space-between',
           gap:          SPACE.md,
+          flexWrap:     'wrap',
         }}
       >
         <Box
@@ -177,24 +181,27 @@ export default function DevUIShowcase() {
           </Typography>
         </Box>
 
-        <Box
-          component="button"
-          onClick={toggleLang}
-          sx={{
-            fontFamily:   MONO,
-            fontSize:     SCALE.label,
-            color:        C.accent,
-            bgcolor:      'transparent',
-            border:       `1px solid ${C.accentLine}`,
-            px:           SPACE.md,
-            py:           '6px',
-            cursor:       'pointer',
-            letterSpacing:'0.14em',
-            minWidth:     44,
-            '&:hover':    { borderColor: C.accent, boxShadow: C.accentGlow },
-          }}
-        >
-          {t.langToggle}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <ThemeToggle lang={lang} layout="pill" />
+          <Box
+            component="button"
+            onClick={toggleLang}
+            sx={{
+              fontFamily:   MONO,
+              fontSize:     SCALE.label,
+              color:        C.accent,
+              bgcolor:      'transparent',
+              border:       `1px solid ${C.accentLine}`,
+              px:           SPACE.md,
+              py:           '6px',
+              cursor:       'pointer',
+              letterSpacing:'0.14em',
+              minWidth:     44,
+              '&:hover':    { borderColor: C.accent, boxShadow: C.accentGlow },
+            }}
+          >
+            {t.langToggle}
+          </Box>
         </Box>
       </Box>
 

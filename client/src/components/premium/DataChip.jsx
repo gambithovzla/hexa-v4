@@ -21,7 +21,7 @@
 
 import { Box, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
-import { C, MONO, SCALE, INTENT, SPACE } from '../../theme';
+import { useHexaTheme } from '../../themeProvider';
 import { hoverLift, usePrefersReducedMotion } from '../../motion';
 
 export default function DataChip({
@@ -34,6 +34,7 @@ export default function DataChip({
   icon,
 }) {
   const reduced = usePrefersReducedMotion();
+  const { C, MONO, SCALE, INTENT, SPACE } = useHexaTheme();
   const tone = INTENT[intent] || INTENT.data;
   const clickable = Boolean(onClick);
 

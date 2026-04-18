@@ -1,66 +1,123 @@
-/* ── H.E.X.A. V4 — Sci-Fi Global Design System ────────────────────────────── */
+/* ── H.E.X.A. V4 — Global Design System ──────────────────────────────────── */
+/*
+ * Theming contract:
+ *   ThemeProvider sets `data-theme="light|dark"` on the <html> element.
+ *   :root defaults to DARK values; [data-theme="light"] overrides them.
+ *   Existing components that use `var(--*)` automatically follow the mode.
+ *   Legacy dark-only hardcoded styles still work — they fall through as-is.
+ */
 
-/* ── CSS Custom Properties ─────────────────────────────────────────────────── */
-:root {
-  /* Backgrounds — absolute black foundation */
+/* ── DARK (default) ────────────────────────────────────────────────────── */
+:root,
+:root[data-theme='dark'] {
+  /* Backgrounds */
   --bg-primary:   #000000;
   --bg-secondary: #050508;
   --bg-card:      #07090E;
   --bg-elevated:  #0A0D14;
 
-  /* Neon Accent Palette */
-  --neon-cyan:        #00D9FF;   /* Electric Cyan — data/technical labels */
+  /* Neon accent palette */
+  --neon-cyan:        #00D9FF;
   --neon-cyan-dim:    rgba(0, 217, 255, 0.08);
   --neon-cyan-line:   rgba(0, 217, 255, 0.25);
   --neon-cyan-glow:   0 0 8px rgba(0, 217, 255, 0.55), 0 0 20px rgba(0, 217, 255, 0.2);
 
-  --neon-orange:      #FF6600;   /* Neon Orange — primary actions / alerts */
+  --neon-orange:      #FF6600;
   --neon-orange-dim:  rgba(255, 102, 0, 0.08);
   --neon-orange-line: rgba(255, 102, 0, 0.3);
   --neon-orange-glow: 0 0 8px rgba(255, 102, 0, 0.65), 0 0 20px rgba(255, 102, 0, 0.25);
 
-  --neon-green:       #00FF88;   /* Neon Green — success / Safe Picks */
+  --neon-green:       #00FF88;
   --neon-green-dim:   rgba(0, 255, 136, 0.08);
   --neon-green-line:  rgba(0, 255, 136, 0.25);
   --neon-green-glow:  0 0 8px rgba(0, 255, 136, 0.55), 0 0 20px rgba(0, 255, 136, 0.2);
 
-  /* Legacy alias compatibility */
-  --accent:       var(--neon-orange);
-  --accent-2:     var(--neon-cyan);
-  --success:      var(--neon-green);
-  --warning:      #FF9900;
-  --danger:       #FF2244;
-  --gold:         #FFB800;
+  --accent:   var(--neon-orange);
+  --accent-2: var(--neon-cyan);
+  --success:  var(--neon-green);
+  --warning:  #FF9900;
+  --danger:   #FF2244;
+  --gold:     #FFB800;
 
-  /* Borders */
   --border:       rgba(0, 217, 255, 0.2);
   --border-light: rgba(0, 217, 255, 0.1);
 
-  /* Text */
   --text-primary: #E8F4FF;
   --text-muted:   rgba(0, 217, 255, 0.5);
 
-  /* Typography — monospaced terminal stack */
   --font-mono:    'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace;
   --font-display: 'Orbitron', 'Share Tech Mono', monospace;
+
+  /* Scanline intensity — dark shows a faint CRT texture, light hides it */
+  --scanline-alpha: 0.012;
+
+  /* Corner-bracket accents on .hexa-card */
+  --hexa-card-bracket-tl: var(--neon-cyan);
+  --hexa-card-bracket-br: var(--neon-orange);
+  --hexa-card-shadow:     inset 0 0 40px rgba(0, 0, 0, 0.8);
 }
 
-/* ── Reset ─────────────────────────────────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
+/* ── LIGHT (Day terminal) ──────────────────────────────────────────────── */
+:root[data-theme='light'] {
+  /* Warm paper backgrounds */
+  --bg-primary:   #F5F2EB;
+  --bg-secondary: #EEE9DE;
+  --bg-card:      #FFFFFF;
+  --bg-elevated:  #FFFFFF;
+
+  /* Deep, readable accents — no glow */
+  --neon-cyan:        #005D7D;
+  --neon-cyan-dim:    rgba(0, 93, 125, 0.08);
+  --neon-cyan-line:   rgba(0, 93, 125, 0.28);
+  --neon-cyan-glow:   none;
+
+  --neon-orange:      #C44200;
+  --neon-orange-dim:  rgba(196, 66, 0, 0.08);
+  --neon-orange-line: rgba(196, 66, 0, 0.35);
+  --neon-orange-glow: none;
+
+  --neon-green:       #007A40;
+  --neon-green-dim:   rgba(0, 122, 64, 0.08);
+  --neon-green-line:  rgba(0, 122, 64, 0.28);
+  --neon-green-glow:  none;
+
+  --accent:   var(--neon-orange);
+  --accent-2: var(--neon-cyan);
+  --success:  var(--neon-green);
+  --warning:  #A05E00;
+  --danger:   #A8173A;
+  --gold:     #8A6500;
+
+  --border:       rgba(0, 93, 125, 0.24);
+  --border-light: rgba(0, 93, 125, 0.12);
+
+  --text-primary: #0A1014;
+  --text-muted:   rgba(10, 16, 20, 0.48);
+
+  /* Scanlines off for readability on paper */
+  --scanline-alpha: 0;
+
+  /* Inside-shadow replaced by a crisp hairline in light mode */
+  --hexa-card-bracket-tl: var(--neon-cyan);
+  --hexa-card-bracket-br: var(--neon-orange);
+  --hexa-card-shadow:     0 1px 2px rgba(10, 16, 20, 0.04);
 }
 
-/* ── Base ──────────────────────────────────────────────────────────────────── */
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
 html, body {
   margin:      0;
   padding:     0;
-  background:  #000000;
+  background:  var(--bg-primary);
   color:       var(--text-primary);
   font-family: var(--font-mono);
   font-size:   14px;
   line-height: 1.6;
   -webkit-font-smoothing:  antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition:  background-color 0.25s ease, color 0.25s ease;
 }
 
 html, body, #root {
@@ -70,45 +127,42 @@ html, body, #root {
 
 body {
   min-height: 100vh;
-  /* Subtle scanline texture */
   background-image: repeating-linear-gradient(
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 217, 255, 0.012) 2px,
-    rgba(0, 217, 255, 0.012) 4px
+    rgba(0, 217, 255, var(--scanline-alpha)) 2px,
+    rgba(0, 217, 255, var(--scanline-alpha)) 4px
   );
 }
 
-/* ── Scrollbars ────────────────────────────────────────────────────────────── */
+/* ── Scrollbars ────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: #000000; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 217, 255, 0.2);
+  background: var(--border);
   border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 217, 255, 0.5);
+  background: var(--neon-cyan);
   box-shadow: var(--neon-cyan-glow);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 217, 255, 0.2) #000000;
+  scrollbar-color: var(--border) var(--bg-primary);
 }
 
-/* ── Global Component Overrides ────────────────────────────────────────────── */
+/* ── Global Component Overrides ────────────────────────────────────────── */
 
-/* --- Buttons ---------------------------------------------------------------- */
 button, [role="button"] {
   font-family:    var(--font-mono) !important;
   letter-spacing: 0.08em;
 }
 
-/* --- Inputs ----------------------------------------------------------------- */
 input, textarea, select {
   font-family:      var(--font-mono) !important;
-  background:       #000000;
+  background:       var(--bg-card);
   border:           1px solid var(--neon-cyan-line);
   color:            var(--text-primary);
   letter-spacing:   0.04em;
@@ -116,22 +170,21 @@ input, textarea, select {
 }
 
 input:focus, textarea:focus {
-  outline:          none;
-  border-color:     var(--neon-cyan);
-  box-shadow:       var(--neon-cyan-glow);
+  outline:      none;
+  border-color: var(--neon-cyan);
+  box-shadow:   var(--neon-cyan-glow);
 }
 
-/* --- Cards / Panels --------------------------------------------------------- */
+/* --- Cards / Panels -------------------------------------------------------- */
 .hexa-card {
   background:    var(--bg-card);
   border:        1px solid var(--neon-cyan-line);
   border-radius: 0;
-  box-shadow:    inset 0 0 40px rgba(0, 0, 0, 0.8);
+  box-shadow:    var(--hexa-card-shadow);
   position:      relative;
   overflow:      hidden;
 }
 
-/* Corner bracket accent */
 .hexa-card::before {
   content:      '';
   position:     absolute;
@@ -139,8 +192,8 @@ input:focus, textarea:focus {
   left:         0;
   width:        12px;
   height:       12px;
-  border-top:   2px solid var(--neon-cyan);
-  border-left:  2px solid var(--neon-cyan);
+  border-top:   2px solid var(--hexa-card-bracket-tl);
+  border-left:  2px solid var(--hexa-card-bracket-tl);
 }
 
 .hexa-card::after {
@@ -150,21 +203,21 @@ input:focus, textarea:focus {
   right:        0;
   width:        12px;
   height:       12px;
-  border-bottom: 2px solid var(--neon-orange);
-  border-right:  2px solid var(--neon-orange);
+  border-bottom: 2px solid var(--hexa-card-bracket-br);
+  border-right:  2px solid var(--hexa-card-bracket-br);
 }
 
-/* ── Neon Text Utilities ───────────────────────────────────────────────────── */
+/* ── Neon Text Utilities ───────────────────────────────────────────────── */
 .text-cyan   { color: var(--neon-cyan); }
 .text-orange { color: var(--neon-orange); }
 .text-green  { color: var(--neon-green); }
 
-.glow-cyan   { text-shadow: 0 0 8px var(--neon-cyan), 0 0 20px rgba(0,217,255,0.4); }
-.glow-orange { text-shadow: 0 0 8px var(--neon-orange), 0 0 20px rgba(255,102,0,0.4); }
-.glow-green  { text-shadow: 0 0 8px var(--neon-green), 0 0 20px rgba(0,255,136,0.4); }
+.glow-cyan   { text-shadow: var(--neon-cyan-glow); }
+.glow-orange { text-shadow: var(--neon-orange-glow); }
+.glow-green  { text-shadow: var(--neon-green-glow); }
 
-/* ── Selection ─────────────────────────────────────────────────────────────── */
+/* ── Selection ─────────────────────────────────────────────────────────── */
 ::selection {
-  background: rgba(0, 217, 255, 0.25);
-  color:      #ffffff;
+  background: var(--neon-cyan-line);
+  color:      var(--text-primary);
 }

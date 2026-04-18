@@ -13,7 +13,7 @@
 
 import { Box, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
-import { C, MONO, SCALE, INTENT, GRAD, SPACE } from '../../theme';
+import { useHexaTheme } from '../../themeProvider';
 import { revealBar, usePrefersReducedMotion } from '../../motion';
 
 export default function EdgeBar({
@@ -23,6 +23,7 @@ export default function EdgeBar({
   showValue = true,
 }) {
   const reduced = usePrefersReducedMotion();
+  const { C, MONO, SCALE, INTENT, GRAD, SPACE } = useHexaTheme();
   const tone = INTENT[intent] || INTENT.action;
   const safe = Math.max(0, Math.min(100, percent));
 
