@@ -2639,16 +2639,19 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
 
     const monthRecords = selectedMonth
       ? await pool.query(`
-          SELECT game_date, game_pk, pick, result,
-            home_pitcher_xwoba, away_pitcher_xwoba,
-            home_pitcher_whiff, away_pitcher_whiff,
-            home_lineup_avg_xwoba, away_lineup_avg_xwoba,
-            park_factor_overall, temperature, wind_speed,
-            data_quality_score, signal_coherence_score,
-            odds_ml_home, odds_ml_away, odds_ou_total
-          FROM pick_features
-          WHERE TO_CHAR(game_date::date, 'YYYY-MM') = $1
-          ORDER BY game_date DESC, created_at DESC
+          SELECT pf.game_date, pf.game_pk, pf.pick, pf.result,
+            p.matchup,
+            pf.user_email, pf.pick_time_lima,
+            pf.home_pitcher_xwoba, pf.away_pitcher_xwoba,
+            pf.home_pitcher_whiff, pf.away_pitcher_whiff,
+            pf.home_lineup_avg_xwoba, pf.away_lineup_avg_xwoba,
+            pf.park_factor_overall, pf.temperature, pf.wind_speed,
+            pf.data_quality_score, pf.signal_coherence_score,
+            pf.odds_ml_home, pf.odds_ml_away, pf.odds_ou_total
+          FROM pick_features pf
+          LEFT JOIN picks p ON pf.pick_id = p.id
+          WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1
+          ORDER BY pf.game_date DESC, pf.created_at DESC
           LIMIT 750
         `, [selectedMonth])
       : { rows: [] };
