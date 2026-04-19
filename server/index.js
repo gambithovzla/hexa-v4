@@ -38,6 +38,7 @@ import {
   updateShadowModelRunsForGame,
 } from './shadow-model.js';
 import { buildHexaBoard } from './services/hexaBoardService.js';
+import contentRouter from './routes/content.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 
 dotenv.config();
@@ -459,6 +460,10 @@ app.use('/api/picks',     picksRouter);
 app.use('/api/oracle',    oracleHistoryRouter);
 app.use('/api/insights',  insightsRouter);
 app.post('/api/bmc/webhook', handleBMCWebhook);
+
+// ── Content API — read-only, API-key auth (external consumer) ─────────────────
+const contentLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false });
+app.use('/api/content/v1', contentLimiter, contentRouter);
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
 

@@ -11,6 +11,7 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
+import { computePublicStats } from '../services/public-stats.js';
 
 const router = Router();
 
@@ -51,200 +52,16 @@ async function gatePublicStats(req, res, next) {
   return res.status(403).json({ success: false, error: 'Performance dashboard is not public' });
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function parseJsonMaybe(value) {
-  if (!value || typeof value !== 'string') return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
-/**
- * Detect pick type from the saved payload first, then fall back to the pick text.
- * This avoids misclassifying player props like "Under 0.5 Hits" as plain "under".
- */
-function detectPickType(pick, bestPickRaw) {
-  const bestPick = parseJsonMaybe(bestPickRaw);
-  const bestType = String(bestPick?.type ?? '').toLowerCase().replace(/[\s_-]/g, '');
-
-  if (bestType.includes('playerprop')) return 'prop';
-  if (bestType.includes('runline')) return 'runline';
-  if (bestType.includes('moneyline')) return 'moneyline';
-  if (bestType.includes('overunder')) {
-    if (/Under/i.test(pick)) return 'under';
-    if (/Over/i.test(pick)) return 'over';
-  }
-
-  if (!pick) return 'moneyline';
-
-  const propLike =
-    /\b[A-Z]\.\s+[A-Z][a-z]+|Total Bases|Strikeouts?|Home Runs?|Hits?\b|RBIs?|\bWalks?\b|Pitching Outs?|Earned Runs?|Stolen Bases?\b/i.test(pick);
-  if (propLike) return 'prop';
-  if (/Run Line|\+1\.5|-1\.5/i.test(pick)) return 'runline';
-  if (/Over/i.test(pick)) return 'over';
-  if (/Under/i.test(pick)) return 'under';
-  return 'moneyline';
-}
-
-/**
- * Calculate units profit for a single pick using flat 1-unit stake.
- * American odds: +150 → profit 1.5u ; -110 → profit 0.909u ; loss → -1u ; push → 0u
- * Returns null only if odds === 0 (degenerate case — caller skips from ROI math).
- * Callers should pass -110 as the default when odds_at_pick is missing.
- */
-function calcUnits(result, odds) {
-  const isWon = result === 'won' || result === 'win';
-  const isLost = result === 'lost' || result === 'loss';
-  if (isWon) {
-    if (odds == null || odds === 0) return null;
-    return odds >= 0 ? odds / 100 : 100 / Math.abs(odds);
-  }
-  if (isLost) return -1;
-  return 0; // push
-}
-
-/**
- * Build a summary object from a {wins, losses, pushes, units} accumulator.
- */
-function buildSummary(statsMap) {
-  const out = {};
-  for (const [key, s] of Object.entries(statsMap)) {
-    const tot = s.wins + s.losses + s.pushes;
-    out[key] = {
-      totalPicks: tot,
-      wins:       s.wins,
-      losses:     s.losses,
-      pushes:     s.pushes,
-      winRate:    (s.wins + s.losses) > 0
-        ? Math.round((s.wins / (s.wins + s.losses)) * 1000) / 10
-        : 0,
-      roi:        tot > 0 ? Math.round((s.units / tot) * 10000) / 100 : 0,
-      unitProfit: Math.round(s.units * 100) / 100,
-    };
-  }
-  return out;
-}
-
 // ── GET /api/picks/public-stats ────────────────────────────────────────────────
 
 router.get('/public-stats', gatePublicStats, async (req, res) => {
   try {
-    const period = req.query.period ?? '30';
-
-    // Build date filter (no user-supplied values interpolated into SQL)
-    let dateFilter;
-    if (period === 'season') {
-      dateFilter = `created_at >= '2026-03-01'`;
-    } else {
-      const days = parseInt(period, 10);
-      if (![7, 30].includes(days)) {
-        return res.status(400).json({
-          success: false,
-          error: "period must be 7, 30, or 'season'",
-        });
-      }
-      // days is validated to be exactly 7 or 30 — safe to interpolate
-      dateFilter = `created_at >= NOW() - INTERVAL '${days} days'`;
-    }
-
-    // Fetch all resolved picks in the window, ordered for roiCurve
-    const { rows } = await pool.query(`
-      SELECT id, pick, best_pick, model, result, odds_at_pick, created_at
-      FROM   picks
-      WHERE  LOWER(result) IN ('won', 'lost', 'push', 'win', 'loss')
-        AND  deleted_at IS NULL
-        AND  ${dateFilter}
-      ORDER  BY created_at ASC
-    `);
-
-    // ── Aggregate ──────────────────────────────────────────────────────────────
-    let wins = 0, losses = 0, pushes = 0;
-    let roiUnits = 0, totalPicksForROI = 0;  // only picks with usable odds
-    const modelStats = {};
-    const typeStats  = {};
-    const roiCurve   = [];
-    let runningUnits = 0;
-    let roiPickNumber = 0;  // cursor for picks that contribute to ROI curve
-
-    for (const row of rows) {
-      const result = String(row.result ?? '').toLowerCase();
-      const isWon  = result === 'won'  || result === 'win';
-      const isLost = result === 'lost' || result === 'loss';
-      const isPush = result === 'push';
-
-      const odds  = row.odds_at_pick != null ? parseInt(row.odds_at_pick, 10) : -110; // default to standard juice when missing
-      const units = calcUnits(result, odds); // null only if odds === 0 (shouldn't happen with -110 default)
-
-      // W-L-P record uses ALL resolved picks regardless of odds
-      if (isWon)       wins++;
-      else if (isLost) losses++;
-      else if (isPush) pushes++;
-
-      // ROI math only counts picks where calcUnits returned a number
-      if (units !== null) {
-        roiUnits += units;
-        totalPicksForROI++;
-
-        // ── Model breakdown ────────────────────────────────────────────────────
-        const model = row.model || 'unknown';
-        if (!modelStats[model]) modelStats[model] = { wins: 0, losses: 0, pushes: 0, units: 0 };
-        if (isWon)       modelStats[model].wins++;
-        else if (isLost) modelStats[model].losses++;
-        else if (isPush) modelStats[model].pushes++;
-        modelStats[model].units += units;
-
-        // ── Type breakdown ─────────────────────────────────────────────────────
-        const type = detectPickType(row.pick, row.best_pick);
-        if (!typeStats[type]) typeStats[type] = { wins: 0, losses: 0, pushes: 0, units: 0 };
-        if (isWon)       typeStats[type].wins++;
-        else if (isLost) typeStats[type].losses++;
-        else if (isPush) typeStats[type].pushes++;
-        typeStats[type].units += units;
-
-        // ── ROI curve entry (only picks with usable odds) ──────────────────────
-        runningUnits += units;
-        roiPickNumber++;
-        const cumulativeRoi = Math.round((runningUnits / roiPickNumber) * 10000) / 100;
-        roiCurve.push({
-          pickNumber:   roiPickNumber,
-          cumulativeRoi,
-          date:         row.created_at,
-          result:       isWon ? 'won' : isLost ? 'lost' : 'push',
-        });
-      }
-    }
-
-    const totalPicks = rows.length;
-    const winRate    = (wins + losses) > 0
-      ? Math.round((wins / (wins + losses)) * 1000) / 10
-      : 0;
-    const unitProfit = Math.round(roiUnits * 100) / 100;
-    const roi        = totalPicksForROI > 0
-      ? Math.round((roiUnits / totalPicksForROI) * 10000) / 100
-      : 0;
-
-    return res.json({
-      success: true,
-      data: {
-        totalPicks,
-        wins,
-        losses,
-        pushes,
-        winRate,
-        roi,
-        unitProfit,
-        roiSampleSize: totalPicksForROI,
-        breakdown: {
-          byModel: buildSummary(modelStats),
-          byType:  buildSummary(typeStats),
-        },
-        roiCurve,
-      },
-    });
+    const data = await computePublicStats(req.query.period ?? '30');
+    return res.json({ success: true, data });
   } catch (err) {
+    if (err.code === 'INVALID_PERIOD') {
+      return res.status(400).json({ success: false, error: err.message });
+    }
     const msg = process.env.NODE_ENV === 'production'
       ? 'Internal server error'
       : err.message;
