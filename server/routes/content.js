@@ -13,8 +13,19 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { verifyContentApiKey } from '../middleware/content-api-key.js';
-import { toPickDTO, toInsightDTO, toPostmortemDTO, toPerformanceDTO } from './content-dto.js';
+import {
+  toBoardDTO,
+  toGameDTO,
+  toHighlightsDTO,
+  toInsightDTO,
+  toPickDTO,
+  toPostmortemDTO,
+  toPerformanceDTO,
+} from './content-dto.js';
 import { computePublicStats } from '../services/public-stats.js';
+import { getTodayGames } from '../mlb-api.js';
+import { buildHexaBoard } from '../services/hexaBoardService.js';
+import { getGameHighlightsAvailability, getGamePlayByPlay } from '../live-feed.js';
 
 const router = Router();
 
@@ -37,6 +48,68 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Apply API-key auth to every route in this router.
 router.use(verifyContentApiKey);
+
+// ── GET /api/content/v1/games?date=YYYY-MM-DD ────────────────────────────────
+router.get('/games', async (req, res) => {
+  const { date } = req.query;
+  if (date && !DATE_RE.test(date)) {
+    return res.status(400).json({ success: false, error: 'date must use YYYY-MM-DD' });
+  }
+
+  try {
+    const games = await getTodayGames(date);
+    logRequest(req, 200);
+    return res.json({
+      success: true,
+      count: games.length,
+      data: games.map(toGameDTO),
+    });
+  } catch {
+    logRequest(req, 500);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/content/v1/board?date=YYYY-MM-DD ────────────────────────────────
+router.get('/board', async (req, res) => {
+  const { date } = req.query;
+  if (date && !DATE_RE.test(date)) {
+    return res.status(400).json({ success: false, error: 'date must use YYYY-MM-DD' });
+  }
+
+  try {
+    const board = await buildHexaBoard({ date });
+    logRequest(req, 200);
+    return res.json({ success: true, data: toBoardDTO(board) });
+  } catch {
+    logRequest(req, 500);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/content/v1/games/:gamePk/play-by-play ───────────────────────────
+router.get('/games/:gamePk(\\d+)/play-by-play', async (req, res) => {
+  try {
+    const data = await getGamePlayByPlay(req.params.gamePk);
+    logRequest(req, 200);
+    return res.json({ success: true, data });
+  } catch {
+    logRequest(req, 500);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/content/v1/games/:gamePk/highlights-link ────────────────────────
+router.get('/games/:gamePk(\\d+)/highlights-link', async (req, res) => {
+  try {
+    const data = await getGameHighlightsAvailability(req.params.gamePk);
+    logRequest(req, 200);
+    return res.json({ success: true, data: toHighlightsDTO(data) });
+  } catch {
+    logRequest(req, 500);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
 
 // ── GET /api/content/v1/picks/today ──────────────────────────────────────────
 // Returns all picks for the current Eastern-time date, ordered by confidence.

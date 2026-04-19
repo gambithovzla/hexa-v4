@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
@@ -1252,6 +1252,38 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Baseball Savant unavailable — continuing without Statcast data:', err.message);
   }
 
+  // ── H2H Career Stats: batter vs specific pitcher ──────────────────────────
+  // Fetch in parallel for all batters who have an id and face a pitcher with an id.
+  const h2hMap = {}; // key: batterId → H2H stats object or null
+  try {
+    const h2hFetches = [];
+    const h2hMeta   = [];
+    const awayPitcherId = awayPitcher?.id ?? null;
+    const homePitcherId = homePitcher?.id ?? null;
+
+    for (const b of batterSplitsMap.home) {
+      if (b.id && awayPitcherId) {
+        h2hFetches.push(getBatterVsPitcherStats(b.id, awayPitcherId));
+        h2hMeta.push(b.id);
+      }
+    }
+    for (const b of batterSplitsMap.away) {
+      if (b.id && homePitcherId) {
+        h2hFetches.push(getBatterVsPitcherStats(b.id, homePitcherId));
+        h2hMeta.push(b.id);
+      }
+    }
+    if (h2hFetches.length > 0) {
+      const h2hResults = await Promise.allSettled(h2hFetches);
+      h2hResults.forEach((r, i) => {
+        h2hMap[h2hMeta[i]] = r.status === 'fulfilled' ? r.value : null;
+      });
+      console.log(`[context-builder] H2H stats fetched for ${h2hFetches.length} batters`);
+    }
+  } catch (err) {
+    console.warn('[context-builder] H2H fetch failed — continuing without H2H data:', err.message);
+  }
+
   // Fallback to hardcoded park factors if dynamic fetch returned nothing
   if (!parkFactorData) {
     const homeAbbr = gameData.teams?.home?.abbreviation;
@@ -1525,6 +1557,34 @@ export async function buildContext(gameData, oddsData = null) {
       return lines;
     };
 
+    const fmtH2HStat = (v, decimals = 3) => v != null ? Number(v).toFixed(decimals) : 'N/A';
+
+    const formatH2HBlock = (b, pitcherName) => {
+      const h2h = h2hMap[b.id];
+      if (!h2h || h2h.atBats == null) return null;
+      const ab = h2h.atBats;
+      if (ab < 10) return null; // too small — omit silently
+      const sampleNote = ab < 20 ? ' ⚠ Small sample — weight with caution' : ab < 30 ? ' (moderate sample)' : ' (reliable sample)';
+      return `    [H2H CAREER vs ${pitcherName}] AB: ${ab} | AVG: ${fmtH2HStat(h2h.avg)} | OPS: ${fmtH2HStat(h2h.ops)} | HR: ${h2h.homeRuns} | K: ${h2h.strikeOuts}${sampleNote}`;
+    };
+
+    const buildLineupH2HSummary = (batters, pitcherName, pitcherHand) => {
+      const withData = batters.filter(b => h2hMap[b.id] && (h2hMap[b.id]?.atBats ?? 0) >= 15);
+      if (withData.length === 0) return null;
+      const suppressed = withData.filter(b => Number(h2hMap[b.id]?.ops ?? 1) < 0.550).length;
+      const dominant   = withData.filter(b => Number(h2hMap[b.id]?.ops ?? 0) > 0.750).length;
+      const tooSmall   = batters.filter(b => !h2hMap[b.id] || (h2hMap[b.id]?.atBats ?? 0) < 15).length;
+      const total      = batters.length;
+      let signal = 'Mixed — no strong H2H directional bias';
+      if (suppressed >= 5) signal = 'LINEUP SUPPRESSED — strong UNDER / ML lean toward pitcher team';
+      else if (dominant >= 5) signal = 'LINEUP DOMINANT — strong OVER / ML lean toward batting team';
+      return [
+        `[LINEUP H2H SUMMARY vs ${pitcherName} (${pitcherHand})]`,
+        `  Batters OPS < .550 vs pitcher: ${suppressed}/${total} | OPS > .750: ${dominant}/${total} | Insufficient sample (<15 AB): ${tooSmall}/${total}`,
+        `  Collective signal: ${signal}`,
+      ].join('\n');
+    };
+
     if (batterSplitsMap.home.length > 0) {
       const awayPName = awayPitcher?.fullName ?? 'Unknown';
       const awayPHand = rivalPitcherHandForHome === 'L' ? 'LHP' : rivalPitcherHandForHome === 'R' ? 'RHP' : 'Unknown hand';
@@ -1532,7 +1592,11 @@ export async function buildContext(gameData, oddsData = null) {
       batterSplitsMap.home.forEach(b => {
         const lines = formatBatterSplit(b, rivalPitcherHandForHome);
         lines.forEach(l => blocks.push(l));
+        const h2hLine = formatH2HBlock(b, awayPName);
+        if (h2hLine) blocks.push(h2hLine);
       });
+      const homeSummary = buildLineupH2HSummary(batterSplitsMap.home, awayPName, awayPHand);
+      if (homeSummary) blocks.push(homeSummary);
     }
     if (batterSplitsMap.away.length > 0) {
       const homePName = homePitcher?.fullName ?? 'Unknown';
@@ -1541,10 +1605,14 @@ export async function buildContext(gameData, oddsData = null) {
       batterSplitsMap.away.forEach(b => {
         const lines = formatBatterSplit(b, rivalPitcherHandForAway);
         lines.forEach(l => blocks.push(l));
+        const h2hLine = formatH2HBlock(b, homePName);
+        if (h2hLine) blocks.push(h2hLine);
       });
+      const awaySummary = buildLineupH2HSummary(batterSplitsMap.away, homePName, homePHand);
+      if (awaySummary) blocks.push(awaySummary);
     }
 
-    blocks.push('ORACLE INSTRUCTION: Use individual batter splits for player prop analysis. A batter with OPS > .850 vs the matchup hand = strong hit/TB prop candidate. OPS < .600 vs matchup hand = fade candidate. Prioritize these splits over season averages for props.');
+    blocks.push('ORACLE INSTRUCTION: Use individual batter splits for player prop analysis. A batter with OPS > .850 vs the matchup hand = strong hit/TB prop candidate. OPS < .600 vs matchup hand = fade candidate. Prioritize these splits over season averages for props. When H2H CAREER blocks are present, use them as secondary signal for props (see H2H rules). When LINEUP H2H SUMMARY blocks are present, use them as additional signal for ML/RL/O/U picks.');
     blocks.push('');
   }
 

@@ -386,7 +386,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
         </Box>
       )}
 
-      {normalizedResult === 'pending' ? (
+      {normalizedResult === 'pending' && isAdmin ? (
         <Box sx={{ display: 'flex', gap: '8px', pt: '2px', flexWrap: 'wrap' }}>
           <MarkBtn label={`✓ ${t.history.markWin}`} color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />
           <MarkBtn label={`✗ ${t.history.markLoss}`} color={C.red} dim={C.redDim} onClick={() => onMarkResult(entry.id, 'loss')} />

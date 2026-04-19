@@ -79,6 +79,53 @@ export function toInsightDTO(row) {
   };
 }
 
+export function toGameDTO(game) {
+  if (!game) return null;
+  return {
+    game_pk: game.gamePk,
+    game_date: game.gameDate,
+    game_time: game.gameTime,
+    status: game.status ?? null,
+    venue: game.venue ?? null,
+    teams: game.teams ?? null,
+    lineup_status: game.lineupStatus ?? 'unavailable',
+    lineups: game.lineups ?? { home: [], away: [] },
+    series_description: game.seriesDescription ?? null,
+    games_in_series: game.gamesInSeries ?? null,
+    series_game_number: game.seriesGameNumber ?? null,
+  };
+}
+
+export function toBoardDTO(board) {
+  if (!board) return null;
+  return {
+    date: board.date ?? null,
+    last_updated_at: board.lastUpdatedAt ?? null,
+    total_games: board.totalGames ?? 0,
+    teams_analyzed: board.teamsAnalyzed ?? 0,
+    insights_count: board.insightsCount ?? 0,
+    insights: Array.isArray(board.insights)
+      ? board.insights.map((signal) => ({
+          type: signal.type,
+          icon: signal.icon,
+          text: signal.text ?? {},
+          priority: signal.priority ?? 0,
+          meta: signal.meta ?? {},
+        }))
+      : [],
+  };
+}
+
+export function toHighlightsDTO(info) {
+  if (!info) return null;
+  return {
+    available: Boolean(info.available),
+    externalUrl: info.externalUrl ?? null,
+    count: Number(info.count ?? 0),
+    reason: info.reason ?? null,
+  };
+}
+
 // Public-stats response is already safe (no PII, no raw features, no model
 // internals). Kept as a DTO for a single exposure surface.
 export function toPerformanceDTO(stats) {

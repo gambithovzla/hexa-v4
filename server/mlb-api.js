@@ -1117,3 +1117,42 @@ export async function getBatterGameLog(playerId, lastN = 7) {
 
   return [];
 }
+
+// ---------------------------------------------------------------------------
+// H2H: career stats of a specific batter vs a specific pitcher
+// Uses MLB vsPlayer stat type. Returns null if no data.
+// ---------------------------------------------------------------------------
+const h2hCache = new Map();
+
+export async function getBatterVsPitcherStats(batterId, pitcherId) {
+  if (!batterId || !pitcherId) return null;
+  const cacheKey = `${batterId}_${pitcherId}`;
+  if (h2hCache.has(cacheKey)) return h2hCache.get(cacheKey);
+
+  try {
+    const url = `${MLB_BASE}/people/${batterId}/stats?stats=vsPlayer&opposingPlayerId=${pitcherId}&group=hitting`;
+    const data = await fetchJSON(url);
+    const split = data?.stats?.[0]?.splits?.[0]?.stat;
+    if (!split) {
+      h2hCache.set(cacheKey, null);
+      return null;
+    }
+    const result = {
+      avg:        split.avg         ?? null,
+      obp:        split.obp         ?? null,
+      slg:        split.slg         ?? null,
+      ops:        split.ops         ?? null,
+      hits:       Number(split.hits        ?? 0),
+      atBats:     Number(split.atBats      ?? 0),
+      homeRuns:   Number(split.homeRuns    ?? 0),
+      strikeOuts: Number(split.strikeOuts  ?? 0),
+      walks:      Number(split.baseOnBalls ?? 0),
+    };
+    h2hCache.set(cacheKey, result);
+    return result;
+  } catch (err) {
+    console.log(`[MLB API] H2H stats failed for batter ${batterId} vs pitcher ${pitcherId}: ${err.message}`);
+    h2hCache.set(cacheKey, null);
+    return null;
+  }
+}
