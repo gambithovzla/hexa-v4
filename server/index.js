@@ -39,6 +39,8 @@ import {
 } from './shadow-model.js';
 import { buildHexaBoard } from './services/hexaBoardService.js';
 import contentRouter from './routes/content.js';
+import contentAdminRouter from './routes/content-admin.js';
+import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 
 dotenv.config();
@@ -459,6 +461,7 @@ app.use('/api/lemon',     lemonRouter);
 app.use('/api/picks',     picksRouter);
 app.use('/api/oracle',    oracleHistoryRouter);
 app.use('/api/insights',  insightsRouter);
+app.use('/api/admin/content', contentAdminRouter);
 app.post('/api/bmc/webhook', handleBMCWebhook);
 
 // ── Content API — read-only, API-key auth (external consumer) ─────────────────
@@ -529,6 +532,11 @@ async function refundCredits(userId, cost, isAdmin) {
 function normalizeRequestLanguage(value, fallback = 'en') {
   const normalized = String(value ?? fallback ?? 'en').toLowerCase();
   return normalized.startsWith('es') ? 'es' : 'en';
+}
+
+function normalizeRequestedEngine(value) {
+  const normalized = String(value ?? 'sonnet').toLowerCase().trim();
+  return ['sonnet', 'grok', 'dual'].includes(normalized) ? normalized : 'sonnet';
 }
 
 // ── Admin middleware ───────────────────────────────────────────────────────────
@@ -662,13 +670,18 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
     riskProfile = 'medium',
     webSearch   = false,
     model       = 'fast',
+    engine      = 'sonnet',
   } = req.body;
   const date         = req.body.date || new Date().toISOString().split('T')[0];
+  const resolvedEngine = normalizeRequestedEngine(engine);
   // Input validation
   if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
   if (model && !['fast', 'deep', 'premium'].includes(model)) return res.status(400).json({ success: false, error: 'Invalid model' });
   if (model === 'premium' && !req.user.is_admin) {
     return res.status(403).json({ success: false, error: 'Premium model is currently admin-only' });
+  }
+  if (resolvedEngine !== 'sonnet' && !req.user.is_admin) {
+    return res.status(403).json({ success: false, error: 'Alternate engines are currently admin-only' });
   }
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'Invalid date format' });
   const resolvedLang = lang ?? language;
@@ -738,6 +751,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
         statcastData,
         mlbApiData: gameData,
         userBankroll,
+        engine: resolvedEngine,
       });
     } catch (err) {
       await refundCredits(updatedUser.id, cost, updatedUser.is_admin);
@@ -785,6 +799,8 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       parseError: analysis.parseError,
       rawText: analysis.rawText,
       credits: updatedUser.credits,
+      engine: resolvedEngine,
+      engineMeta: analysis.engineMeta ?? null,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -805,8 +821,10 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
     webSearch   = false,
     parlayLegs,
     model       = 'fast',
+    engine      = 'sonnet',
   } = req.body;
   const date         = req.body.date || new Date().toISOString().split('T')[0];
+  const resolvedEngine = normalizeRequestedEngine(engine);
   // Input validation
   if (!gameIds || !Array.isArray(gameIds) || gameIds.length === 0) return res.status(400).json({ success: false, error: 'gameIds array is required' });
   if (gameIds.length > 10) return res.status(400).json({ success: false, error: 'Maximum 10 games per parlay' });
@@ -844,7 +862,15 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
           return buildContext(gameData, legOddsArr[i] ?? null).then(r => r.context ?? r);
         })
       );
-      analysis = await analyzeParlay(contexts, resolvedLang, { betType, riskProfile, webSearch, legs: parlayLegs, model, timeoutMs: 90000 });
+      analysis = await analyzeParlay(contexts, resolvedLang, {
+        betType,
+        riskProfile,
+        webSearch,
+        legs: parlayLegs,
+        model,
+        timeoutMs: 90000,
+        engine: resolvedEngine,
+      });
     } catch (err) {
       await refundCredits(updatedUser.id, cost, updatedUser.is_admin);
       const isTimeout = err.message === 'TIMEOUT';
@@ -859,7 +885,15 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
     const responseData = analysis.data
       ? { ...analysis.data, legOdds: legOddsArr.some(Boolean) ? legOddsArr : undefined }
       : null;
-    res.json({ success: true, data: responseData, parseError: analysis.parseError, rawText: analysis.rawText, credits: updatedUser.credits });
+    res.json({
+      success: true,
+      data: responseData,
+      parseError: analysis.parseError,
+      rawText: analysis.rawText,
+      credits: updatedUser.credits,
+      engine: resolvedEngine,
+      engineMeta: analysis.engineMeta ?? null,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -867,8 +901,9 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
 
 // POST /api/analyze/safe — Safe Pick mode (supports single gameId or multiple gameIds for parlay safe picks)
 app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => {
-  const { gameId, gameIds, lang = 'en', date } = req.body;
+  const { gameId, gameIds, lang = 'en', date, engine = 'sonnet' } = req.body;
   const resolvedDate = date || new Date().toISOString().split('T')[0];
+  const resolvedEngine = normalizeRequestedEngine(engine);
 
   // Determine if this is a multi-game safe pick request
   const ids = gameIds && Array.isArray(gameIds) && gameIds.length > 0
@@ -877,6 +912,9 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
 
   if (ids.length === 0) {
     return res.status(400).json({ success: false, error: 'gameId or gameIds is required' });
+  }
+  if (resolvedEngine !== 'sonnet' && !req.user.is_admin) {
+    return res.status(403).json({ success: false, error: 'Alternate engines are currently admin-only' });
   }
 
   // Cost: 2 credits per game
@@ -920,7 +958,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
         try {
           const contextBuildResult = await buildContext(gameData, matchedOdds);
           const contextString = contextBuildResult.context ?? contextBuildResult;
-          const analysis = await analyzeSafe({ contextString, lang });
+          const analysis = await analyzeSafe({ contextString, lang, engine: resolvedEngine, timeoutMs: 90000 });
           const shadowFeatures = contextBuildResult._features ?? {};
           const shadowStatcastData = buildShadowStatcastData(shadowFeatures);
           const xgboostResult = calculateParallelScore(shadowStatcastData, gameData);
@@ -1024,6 +1062,8 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
         rawText: single.rawText,
         credits: updatedUser.credits - (failCount * 2),
         mode: 'safe',
+        engine: resolvedEngine,
+        engineMeta: single.data?.engine_meta ?? null,
       });
     }
 
@@ -1037,6 +1077,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
       },
       credits: updatedUser.credits - (failCount * 2),
       mode: 'safe',
+      engine: resolvedEngine,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -2920,6 +2961,23 @@ runMigrations()
           });
         }
       }, TWO_HOURS).unref();
+
+      if (process.env.X_AUTO_PUBLISH_ENABLED === '1') {
+        const intervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);
+        const CONTENT_QUEUE_INTERVAL = intervalMinutes * 60 * 1000;
+        console.log(`[content-queue] Scheduled X autopublish enabled (${intervalMinutes}m cadence)`);
+        setInterval(() => {
+          processScheduledContentQueue()
+            .then((results) => {
+              if (results.length > 0) {
+                console.log(`[content-queue] Processed ${results.length} scheduled item(s)`);
+              }
+            })
+            .catch((err) => {
+              console.error('[content-queue] Scheduled publish failed:', err.message);
+            });
+        }, CONTENT_QUEUE_INTERVAL).unref();
+      }
     });
   })
   .catch(err => {

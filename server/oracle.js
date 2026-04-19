@@ -11,6 +11,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 import { calculateParallelScore } from './services/xgboostValidator.js';
+import { createXaiChatCompletion, getXaiModelId } from './services/xaiClient.js';
 
 dotenv.config();
 
@@ -27,6 +28,104 @@ const MODELS = {
   premium: { id: 'claude-opus-4-7',           maxTokens: 10000 },
   haiku:   { id: 'claude-haiku-4-5-20251001', maxTokens: 1000  },
 };
+
+const SUPPORTED_ENGINES = new Set(['sonnet', 'grok', 'dual']);
+
+function normalizeEngine(engine) {
+  const value = String(engine ?? 'sonnet').trim().toLowerCase();
+  return SUPPORTED_ENGINES.has(value) ? value : 'sonnet';
+}
+
+async function runAnthropicOracleRequest({ requestBody, timeoutMs = null }) {
+  const streamPromise = anthropic.messages.stream(requestBody).finalMessage();
+  const message = await (timeoutMs
+    ? Promise.race([
+        streamPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+        ),
+      ])
+    : streamPromise);
+
+  const rawText = extractRawText(message);
+  const { data, parseError } = parseResponse(rawText);
+
+  return {
+    provider: 'anthropic',
+    rawText,
+    data,
+    parseError,
+    stopReason: message.stop_reason,
+    usage: message.usage,
+    model: requestBody.model,
+  };
+}
+
+async function runXaiOracleRequest({
+  modelId,
+  systemText,
+  userMessage,
+  maxTokens,
+  timeoutMs = null,
+  mode = 'deep',
+}) {
+  const xaiPromise = createXaiChatCompletion({
+    model: modelId,
+    systemPrompt: systemText,
+    userMessage,
+    maxTokens,
+    temperature: 0.2,
+  });
+
+  const result = await (timeoutMs
+    ? Promise.race([
+        xaiPromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+        ),
+      ])
+    : xaiPromise);
+
+  const { data, parseError } = parseResponse(result.rawText);
+  const normalizedData = mode === 'safe' ? normalizeSafePickPayload(data) : data;
+
+  return {
+    provider: 'xai',
+    rawText: result.rawText,
+    data: normalizedData,
+    parseError,
+    stopReason: 'end_turn',
+    usage: result.usage,
+    model: result.model ?? modelId,
+  };
+}
+
+function buildEngineMeta({ requestedEngine, primaryResult, shadowResult = null, webSearch = false }) {
+  const primaryPick =
+    primaryResult?.data?.master_prediction?.pick ??
+    primaryResult?.data?.safe_pick?.pick ??
+    null;
+  const shadowPick =
+    shadowResult?.data?.master_prediction?.pick ??
+    shadowResult?.data?.safe_pick?.pick ??
+    null;
+
+  return {
+    requested_engine: requestedEngine,
+    primary_provider: primaryResult?.provider ?? null,
+    primary_model: primaryResult?.model ?? null,
+    shadow_provider: shadowResult?.provider ?? null,
+    shadow_model: shadowResult?.model ?? null,
+    web_search_supported: requestedEngine === 'sonnet' ? Boolean(webSearch) : false,
+    notes: [
+      ...(requestedEngine !== 'sonnet' && webSearch ? ['Web search is currently only active on the Anthropic path.'] : []),
+      ...(shadowResult && primaryPick && shadowPick && primaryPick !== shadowPick ? ['Primary and shadow engines disagreed on the top pick.'] : []),
+    ],
+    divergence: Boolean(shadowResult && primaryPick && shadowPick && primaryPick !== shadowPick),
+    primary_pick: primaryPick,
+    shadow_pick: shadowPick,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // System prompt H.E.X.A. V4
@@ -392,9 +491,11 @@ export async function analyzeGame(params) {
     statcastData = null,
     mlbApiData   = null,
     userBankroll = null,
+    engine       = 'sonnet',
   } = params;
 
   const { id: modelId, maxTokens } = MODELS[model] ?? MODELS.deep;
+  const resolvedEngine = normalizeEngine(engine);
 
   const userMessage = buildUserMessage({
     matchup, betType, context, riskProfile, mode, lang, games, legs, userBankroll,
@@ -449,6 +550,8 @@ These additions make Premium feel substantially different from Deep. The user sh
     requestBody.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
   }
 
+  const systemText = `${SYSTEM_PROMPT}${systemSuffix}`;
+
   // ── DEBUG: log full prompt before API call ─────────────────────────────────
   if (process.env.NODE_ENV !== 'production') {
     console.log('=== H.E.X.A. DEBUG: FULL CONTEXT ===');
@@ -467,27 +570,62 @@ These additions make Premium feel substantially different from Deep. The user sh
     console.log('=== END DEBUG ===');
   }
 
-  // Stream the response; race against optional timeout
-  const streamPromise = anthropic.messages.stream(requestBody).finalMessage();
-  const message = await (timeoutMs
-    ? Promise.race([
-        streamPromise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
-        ),
-      ])
-    : streamPromise);
+  let primaryResult;
+  let shadowResult = null;
 
-  const rawText              = extractRawText(message);
+  if (resolvedEngine === 'sonnet') {
+    primaryResult = await runAnthropicOracleRequest({ requestBody, timeoutMs });
+  } else if (resolvedEngine === 'grok') {
+    primaryResult = await runXaiOracleRequest({
+      modelId: getXaiModelId('deep'),
+      systemText,
+      userMessage,
+      maxTokens,
+      timeoutMs,
+      mode: 'deep',
+    });
+  } else {
+    const [anthropicResult, grokResult] = await Promise.allSettled([
+      runAnthropicOracleRequest({ requestBody, timeoutMs }),
+      runXaiOracleRequest({
+        modelId: getXaiModelId('deep'),
+        systemText,
+        userMessage,
+        maxTokens,
+        timeoutMs,
+        mode: 'deep',
+      }),
+    ]);
+
+    if (anthropicResult.status === 'fulfilled') {
+      primaryResult = anthropicResult.value;
+      shadowResult = grokResult.status === 'fulfilled' ? grokResult.value : null;
+    } else if (grokResult.status === 'fulfilled') {
+      primaryResult = grokResult.value;
+    } else {
+      throw anthropicResult.reason ?? grokResult.reason ?? new Error('Dual engine analysis failed');
+    }
+  }
+
+  const rawText = primaryResult.rawText;
 
   // ── DEBUG: log response ────────────────────────────────────────────────────
   if (process.env.NODE_ENV !== 'production') {
-    console.log('=== H.E.X.A. DEBUG: CLAUDE RESPONSE ===');
+    console.log(`=== H.E.X.A. DEBUG: ${String(primaryResult.provider).toUpperCase()} RESPONSE ===`);
     console.log((rawText?.substring(0, 500) ?? '') + (rawText?.length > 500 ? '...' : ''));
     console.log('=== END RESPONSE ===');
   }
 
-  const { data, parseError } = parseResponse(rawText);
+  const data = primaryResult.data;
+  const parseError = primaryResult.parseError;
+  if (data && !parseError) {
+    data.engine_meta = buildEngineMeta({
+      requestedEngine: resolvedEngine,
+      primaryResult,
+      shadowResult,
+      webSearch,
+    });
+  }
 
   // ── XGBoost Validator: comparación paralela con el resultado del Oracle ────
   // Solo se ejecuta en modo 'single' cuando hay datos disponibles para el validador.
@@ -536,9 +674,10 @@ These additions make Premium feel substantially different from Deep. The user sh
     data,
     rawText,
     parseError,
-    stopReason:    message.stop_reason,
-    usage:         message.usage,
+    stopReason:    primaryResult.stopReason,
+    usage:         primaryResult.usage,
     xgboostResult,
+    engineMeta:    data?.engine_meta ?? null,
   };
 }
 
@@ -566,6 +705,7 @@ export async function analyzeParlay(contexts, language = 'en', opts = {}) {
     webSearch:   opts.webSearch   ?? false,
     model:       opts.model       ?? 'fast',
     timeoutMs:   opts.timeoutMs   ?? null,
+    engine:      opts.engine      ?? 'sonnet',
   });
 }
 
@@ -589,6 +729,7 @@ export async function analyzeFullDay(contexts, date = '', language = 'en', opts 
     webSearch:   opts.webSearch   ?? false,
     model:       opts.model       ?? 'fast',
     timeoutMs:   opts.timeoutMs   ?? null,
+    engine:      opts.engine      ?? 'sonnet',
   });
 }
 
@@ -601,30 +742,100 @@ export async function analyzeFullDay(contexts, date = '', language = 'en', opts 
  *
  * @returns {Promise<{ data: object|null, rawText: string, parseError: boolean }>}
  */
-export async function analyzeSafe({ contextString, lang = 'en' }) {
+export async function analyzeSafe({ contextString, lang = 'en', engine = 'sonnet', timeoutMs = null }) {
   const modelConfig = MODELS.deep; // Safe Pick shares the Deep model (Opus 4.7)
+  const resolvedEngine = normalizeEngine(engine);
 
   const userMessage = lang === 'es'
     ? `Analiza este partido para el motor Safe Pick objetivo. Resume el matchup, el riesgo y las notas por familia de mercado soportada, incluyendo props de jugadores cuando haya líneas y datos suficientes. No elijas el pick final: el backend lo rankea.\n\nDatos:\n${contextString}`
     : `Analyze this game for the objective Safe Pick engine. Summarize the matchup, risk, and notes by supported market family, including player props when enough lines and player data are available. Do not choose the final pick: the backend ranks it.\n\nData:\n${contextString}`;
 
-  const response = await anthropic.messages.create({
-    model:      modelConfig.id,
-    max_tokens: modelConfig.maxTokens,
-    system: [
-      { type: 'text', text: SAFE_PICK_PROMPT, cache_control: { type: 'ephemeral' } },
-    ],
-    messages:   [{ role: 'user', content: userMessage }],
-  });
+  const runAnthropicSafe = async () => {
+    const request = anthropic.messages.create({
+      model:      modelConfig.id,
+      max_tokens: modelConfig.maxTokens,
+      system: [
+        { type: 'text', text: SAFE_PICK_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
+      messages:   [{ role: 'user', content: userMessage }],
+    });
+    const response = await (timeoutMs
+      ? Promise.race([
+          request,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+          ),
+        ])
+      : request);
 
-  const raw = response.content?.[0]?.text ?? '';
+    const raw = response.content?.[0]?.text ?? '';
+    const { data, parseError } = parseResponse(raw);
+    return {
+      provider: 'anthropic',
+      rawText: raw,
+      data: normalizeSafePickPayload(data),
+      parseError,
+      stopReason: response.stop_reason ?? 'end_turn',
+      usage: response.usage ?? null,
+      model: modelConfig.id,
+    };
+  };
 
-  console.log('[oracle:safe] RAW (first 300):', JSON.stringify(raw.slice(0, 300)));
+  let primaryResult;
+  let shadowResult = null;
 
-  const { data, parseError } = parseResponse(raw);
-  const normalizedData = normalizeSafePickPayload(data);
+  if (resolvedEngine === 'sonnet') {
+    primaryResult = await runAnthropicSafe();
+  } else if (resolvedEngine === 'grok') {
+    primaryResult = await runXaiOracleRequest({
+      modelId: getXaiModelId('safe'),
+      systemText: SAFE_PICK_PROMPT,
+      userMessage,
+      maxTokens: modelConfig.maxTokens,
+      timeoutMs,
+      mode: 'safe',
+    });
+  } else {
+    const [anthropicResult, grokResult] = await Promise.allSettled([
+      runAnthropicSafe(),
+      runXaiOracleRequest({
+        modelId: getXaiModelId('safe'),
+        systemText: SAFE_PICK_PROMPT,
+        userMessage,
+        maxTokens: modelConfig.maxTokens,
+        timeoutMs,
+        mode: 'safe',
+      }),
+    ]);
 
-  return { data: normalizedData, rawText: raw, parseError };
+    if (anthropicResult.status === 'fulfilled') {
+      primaryResult = anthropicResult.value;
+      shadowResult = grokResult.status === 'fulfilled' ? grokResult.value : null;
+    } else if (grokResult.status === 'fulfilled') {
+      primaryResult = grokResult.value;
+    } else {
+      throw anthropicResult.reason ?? grokResult.reason ?? new Error('Dual engine safe analysis failed');
+    }
+  }
+
+  console.log('[oracle:safe] RAW (first 300):', JSON.stringify(primaryResult.rawText.slice(0, 300)));
+
+  if (primaryResult.data && !primaryResult.parseError) {
+    primaryResult.data.engine_meta = buildEngineMeta({
+      requestedEngine: resolvedEngine,
+      primaryResult,
+      shadowResult,
+      webSearch: false,
+    });
+  }
+
+  return {
+    data: primaryResult.data,
+    rawText: primaryResult.rawText,
+    parseError: primaryResult.parseError,
+    usage: primaryResult.usage,
+    engineMeta: primaryResult.data?.engine_meta ?? null,
+  };
 }
 
 /**

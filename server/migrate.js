@@ -317,6 +317,37 @@ export async function runMigrations() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_insights_week ON hexa_insights(week_start, deleted_at)`);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS content_queue (
+        id SERIAL PRIMARY KEY,
+        type VARCHAR(40) NOT NULL,
+        lang VARCHAR(5) NOT NULL DEFAULT 'es',
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        publish_target VARCHAR(20) NOT NULL DEFAULT 'x',
+        title TEXT NOT NULL,
+        format VARCHAR(20) NOT NULL DEFAULT 'single_post',
+        posts JSONB NOT NULL DEFAULT '[]'::jsonb,
+        hashtags JSONB NOT NULL DEFAULT '[]'::jsonb,
+        cta TEXT,
+        visual_brief TEXT,
+        compliance_notes JSONB NOT NULL DEFAULT '[]'::jsonb,
+        source_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
+        source_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+        generated_with TEXT,
+        scheduled_for TIMESTAMP NULL,
+        approved_at TIMESTAMP NULL,
+        approved_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        published_at TIMESTAMP NULL,
+        publish_result JSONB NULL,
+        last_error TEXT NULL,
+        created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_content_queue_status ON content_queue(status, created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_content_queue_scheduled ON content_queue(status, scheduled_for)`);
+
     // ── user_email + Lima timezone timestamp for auditing ─────────────────────
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT NULL`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS pick_time_lima TIMESTAMP DEFAULT NULL`);
