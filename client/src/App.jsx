@@ -22,6 +22,7 @@ import HistoryPanel         from './components/HistoryPanel';
 import InsightsSemana       from './components/InsightsSemana';
 import BankrollTracker      from './components/BankrollTracker';
 import OddsLab              from './components/OddsLab';
+import XContentStudio       from './components/XContentStudio';
 import OracleLoadingOverlay from './components/OracleLoadingOverlay';
 import MethodologyPage      from './components/MethodologyPage';
 import LegalPage            from './components/LegalPage';
@@ -522,7 +523,10 @@ export default function App() {
           )}
 
           {activeTab === 'tools' && (
-            <OddsLab lang={lang} />
+            <Box sx={{ display: 'grid', gap: 3 }}>
+              <OddsLab lang={lang} />
+              {isAdmin && <XContentStudio lang={lang} />}
+            </Box>
           )}
 
           {/* Live Tracker */}

@@ -36,6 +36,13 @@ const L = {
       deep:    '🧠 Deep',
       premium: '✨ Premium',
     },
+    engineSelect: {
+      label: 'LLM Engine',
+      sonnet: 'Sonnet',
+      grok: 'Grok Fast',
+      dual: 'Dual Shadow',
+      hint: 'Safe/Deep stay the same. This only changes the engine behind the analysis.',
+    },
     webSearch:    'Web Intel',
     parlayLegs:   'Parlay Legs',
     runOracle:    'Run Oracle Analysis',
@@ -84,6 +91,13 @@ const L = {
       label:   'Modelo de Análisis',
       deep:    '🧠 Deep',
       premium: '✨ Premium',
+    },
+    engineSelect: {
+      label: 'Motor LLM',
+      sonnet: 'Sonnet',
+      grok: 'Grok Fast',
+      dual: 'Dual Shadow',
+      hint: 'Safe/Deep siguen igual. Esto solo cambia el motor detras del analisis.',
     },
     webSearch:    'Intel Web',
     parlayLegs:   'Patas del Parlay',
@@ -420,6 +434,63 @@ function ModelPicker({ value, onChange, t, lang, isAdmin = false }) {
             ? 'H.E.X.A. evaluará TODOS los tipos de apuesta y te dará el que tenga mayor probabilidad de acierto.'
             : 'H.E.X.A. will evaluate ALL bet types and give you the one with the highest probability of hitting.'}
         </Box>
+      )}
+    </Box>
+  );
+}
+
+function EnginePicker({ value, onChange, t, lang, disabled = false }) {
+  const options = [
+    { value: 'sonnet', label: t.engineSelect.sonnet },
+    { value: 'grok',   label: t.engineSelect.grok },
+    { value: 'dual',   label: t.engineSelect.dual },
+  ];
+
+  return (
+    <Box>
+      <SectionLabel>{t.engineSelect.label}</SectionLabel>
+      <Box sx={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+        {options.map((option) => {
+          const active = value === option.value;
+          return (
+            <Box
+              key={option.value}
+              component="button"
+              onClick={() => !disabled && onChange(option.value)}
+              sx={{
+                flex: 1,
+                minWidth: '92px',
+                py: '7px',
+                px: '8px',
+                border: `1px solid ${active ? C.accentLine : C.borderLight}`,
+                borderRadius: '0',
+                background: active ? C.accentDim : 'transparent',
+                color: active ? C.accent : C.textMuted,
+                fontFamily: MONO,
+                fontSize: '9px',
+                letterSpacing: '1.2px',
+                textTransform: 'uppercase',
+                cursor: disabled ? 'default' : 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: active ? C.accentGlow : 'none',
+                opacity: disabled ? 0.45 : 1,
+                '&:hover': disabled ? {} : { color: active ? C.accent : C.cyan, borderColor: active ? C.accentLine : C.cyanLine },
+              }}
+            >
+              {option.label}
+            </Box>
+          );
+        })}
+      </Box>
+      <Typography sx={{ fontFamily: SANS, fontSize: '0.68rem', color: C.textMuted, mt: '8px', lineHeight: 1.5 }}>
+        {t.engineSelect.hint}
+      </Typography>
+      {disabled && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, mt: '4px', letterSpacing: '0.04em' }}>
+          {lang === 'es'
+            ? 'Dual y Grok se habilitan para Safe y Deep. Premium sigue en Sonnet.'
+            : 'Dual and Grok are enabled for Safe and Deep. Premium remains on Sonnet.'}
+        </Typography>
       )}
     </Box>
   );
@@ -1004,6 +1075,7 @@ export default function AnalysisPanel({
 
   const [betType,     setBetType]     = useState('all');
   const [modelMode,   setModelMode]   = useState('deep');
+  const [engineMode,  setEngineMode]  = useState('sonnet');
   const [webSearch,   setWebSearch]   = useState(false);
   const [parlayLegs,  setParlayLegs]  = useState(2);
   const [result,      setResult]      = useState(null);
@@ -1032,6 +1104,21 @@ export default function AnalysisPanel({
       setModelMode('deep');
     }
   }, [isAdmin, modelMode]);
+
+  useEffect(() => {
+    if (!isAdmin && engineMode !== 'sonnet') {
+      setEngineMode('sonnet');
+    }
+    if (modelMode === 'premium' && engineMode !== 'sonnet') {
+      setEngineMode('sonnet');
+    }
+  }, [engineMode, isAdmin, modelMode]);
+
+  useEffect(() => {
+    if (engineMode !== 'sonnet' && webSearch) {
+      setWebSearch(false);
+    }
+  }, [engineMode, webSearch]);
 
   const canAnalyze =
     (mode === 'single' && selectedGames.length === 1) ||
@@ -1086,6 +1173,7 @@ export default function AnalysisPanel({
             gameIds: selectedGames.map(g => g.gamePk),
             date:    selectedDate,
             lang,
+            engine: engineMode,
           };
         } else {
           const g = selectedGames[0];
@@ -1093,6 +1181,7 @@ export default function AnalysisPanel({
             gameId: g.gamePk,
             date:   selectedDate,
             lang,
+            engine: engineMode,
           };
         }
       } else if (mode === 'single') {
@@ -1106,6 +1195,7 @@ export default function AnalysisPanel({
           riskProfile: 'balanced',
           webSearch,
           model:       modelMode,
+          engine:      engineMode,
         };
       } else if (mode === 'parlay') {
         endpoint = `${API_URL}/api/analyze/parlay`;
@@ -1118,6 +1208,7 @@ export default function AnalysisPanel({
           webSearch,
           parlayLegs,
           model:       modelMode,
+          engine:      engineMode,
         };
       }
 
@@ -1182,6 +1273,7 @@ export default function AnalysisPanel({
               gamePk: matchedGame?.gamePk ?? r.gameId ?? null,
               gameDate: selectedDate,
               model: 'deep',
+              engine: engineMode,
               language: lang,
               // Override matchup directly from the server response so it always works
               _matchupOverride: r.matchup,
@@ -1203,6 +1295,7 @@ export default function AnalysisPanel({
           gamePk:   selectedGames[0]?.gamePk ?? null,
           gameDate: selectedDate,
           model:    modelMode,
+          engine:   engineMode,
           language: lang,
           odds:     json.odds ?? null,
           featureStore: json.featureStore ?? null,
@@ -1322,6 +1415,16 @@ export default function AnalysisPanel({
         {/* Model picker */}
         <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} isAdmin={isAdmin} />
 
+        {isAdmin && (
+          <EnginePicker
+            value={engineMode}
+            onChange={setEngineMode}
+            t={t}
+            lang={lang}
+            disabled={modelMode === 'premium'}
+          />
+        )}
+
         {/* Parlay legs slider (only in parlay mode) */}
         {mode === 'parlay' && selectedGames.length >= 2 && (
           <ParlayLegsSlider
@@ -1334,7 +1437,7 @@ export default function AnalysisPanel({
         )}
 
         {/* Web search toggle — single game only, not in safe mode */}
-        {mode === 'single' && modelMode !== 'safe' && (
+        {mode === 'single' && modelMode !== 'safe' && engineMode === 'sonnet' && (
           <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
         )}
 
