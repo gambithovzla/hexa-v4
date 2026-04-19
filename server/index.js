@@ -1985,8 +1985,11 @@ app.get('/api/picks', verifyToken, async (req, res) => {
   }
 });
 
-// PATCH /api/picks/:id — actualiza resultado (win/loss/pending)
+// PATCH /api/picks/:id — actualiza resultado (win/loss/pending) — solo admins
 app.patch('/api/picks/:id', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ success: false, error: 'Manual result update is restricted to admins' });
+  }
   try {
     const result = normalizePickResult(req.body?.result);
     if (!['pending', 'win', 'loss', 'push'].includes(result)) {
