@@ -26,7 +26,7 @@ export async function createXaiChatCompletion({
   systemPrompt,
   userMessage,
   maxTokens = 2000,
-  temperature = 0.2,
+  temperature = 0,
 }) {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) {

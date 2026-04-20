@@ -101,6 +101,16 @@ async function runXaiOracleRequest({
 }
 
 function buildEngineMeta({ requestedEngine, primaryResult, shadowResult = null, webSearch = false }) {
+  const normalizePickComparison = (value) => String(value ?? '')
+    .toLowerCase()
+    .replace(/\s*\(([+-]?\d+)\)\s*/g, ' ')
+    .replace(/\bmoneyline\b/g, 'ml')
+    .replace(/\brun\s*line\b/g, 'rl')
+    .replace(/\bover[\s-]*under\b/g, 'ou')
+    .replace(/[^\p{L}\p{N}#+.\- ]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   const primaryPick =
     primaryResult?.data?.master_prediction?.pick ??
     primaryResult?.data?.safe_pick?.pick ??
@@ -109,6 +119,12 @@ function buildEngineMeta({ requestedEngine, primaryResult, shadowResult = null, 
     shadowResult?.data?.master_prediction?.pick ??
     shadowResult?.data?.safe_pick?.pick ??
     null;
+  const divergence = Boolean(
+    shadowResult &&
+    primaryPick &&
+    shadowPick &&
+    normalizePickComparison(primaryPick) !== normalizePickComparison(shadowPick)
+  );
 
   return {
     requested_engine: requestedEngine,
@@ -119,9 +135,9 @@ function buildEngineMeta({ requestedEngine, primaryResult, shadowResult = null, 
     web_search_supported: requestedEngine === 'sonnet' ? Boolean(webSearch) : false,
     notes: [
       ...(requestedEngine !== 'sonnet' && webSearch ? ['Web search is currently only active on the Anthropic path.'] : []),
-      ...(shadowResult && primaryPick && shadowPick && primaryPick !== shadowPick ? ['Primary and shadow engines disagreed on the top pick.'] : []),
+      ...(divergence ? ['Primary and shadow engines disagreed on the top pick.'] : []),
     ],
-    divergence: Boolean(shadowResult && primaryPick && shadowPick && primaryPick !== shadowPick),
+    divergence,
     primary_pick: primaryPick,
     shadow_pick: shadowPick,
   };
@@ -653,6 +669,7 @@ These additions make Premium feel substantially different from Deep. The user sh
   const requestBody = {
     model:      modelId,
     max_tokens: maxTokens,
+    temperature: 0,
     system:     systemBlocks,
     messages:   [{ role: 'user', content: userMessage }],
   };
@@ -878,6 +895,7 @@ export async function analyzeSafe({ contextString, lang = 'en', engine = 'sonnet
     const request = anthropic.messages.create({
       model:      modelConfig.id,
       max_tokens: modelConfig.maxTokens,
+      temperature: 0,
       system: [
         { type: 'text', text: SAFE_PICK_PROMPT, cache_control: { type: 'ephemeral' } },
       ],

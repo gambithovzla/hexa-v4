@@ -146,6 +146,8 @@ function EngineMetaCard({ meta, lang = 'en' }) {
         requested: 'Solicitado',
         primary: 'Visible',
         shadow: 'Shadow',
+        primaryPick: 'Pick visible',
+        shadowPick: 'Pick shadow',
         status: 'Estado',
         agreed: 'Sonnet y Grok coincidieron.',
         diverged: 'Sonnet y Grok discreparon en el pick principal.',
@@ -156,6 +158,8 @@ function EngineMetaCard({ meta, lang = 'en' }) {
         requested: 'Requested',
         primary: 'Visible',
         shadow: 'Shadow',
+        primaryPick: 'Visible pick',
+        shadowPick: 'Shadow pick',
         status: 'Status',
         agreed: 'Sonnet and Grok agreed on the top pick.',
         diverged: 'Sonnet and Grok disagreed on the top pick.',
@@ -197,6 +201,16 @@ function EngineMetaCard({ meta, lang = 'en' }) {
           </Typography>
         )}
       </Box>
+      {meta.primary_pick && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.cyan, lineHeight: 1.6 }}>
+          {labels.primaryPick}: {meta.primary_pick}
+        </Typography>
+      )}
+      {meta.shadow_pick && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textSecondary, lineHeight: 1.6 }}>
+          {labels.shadowPick}: {meta.shadow_pick}
+        </Typography>
+      )}
       <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: meta.divergence ? C.amber : C.textSecondary, lineHeight: 1.6 }}>
         {labels.status}: {statusText}
       </Typography>
@@ -1250,6 +1264,7 @@ function SafePickResult({ data, lang, t }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <EngineMetaCard meta={data.engine_meta} lang={lang} />
 
       {/* ── SAFE PICK SHIELD HEADER ── */}
       <Box sx={{
