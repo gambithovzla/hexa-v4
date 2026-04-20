@@ -428,8 +428,11 @@ export default function XContentStudio({ lang = 'es' }) {
     try {
       const json = await callGet('/api/admin/content/queue?limit=12');
       setQueueItems(json.data || []);
+      setError('');
+      return json.data || [];
     } catch (err) {
       setError(err.message || t.queueError);
+      return [];
     }
   }
 
@@ -476,11 +479,17 @@ export default function XContentStudio({ lang = 'es' }) {
     setError('');
     setInfo('');
     try {
-      await callEndpoint('/api/admin/content/queue', {
+      const json = await callEndpoint('/api/admin/content/queue', {
         draft,
         scheduledFor: scheduled ? scheduleFor : null,
       });
       setInfo(t.saved);
+      if (json.data?.id) {
+        setQueueItems((prev) => {
+          const next = [json.data, ...prev.filter((item) => item.id !== json.data.id)];
+          return next.slice(0, 12);
+        });
+      }
       await loadQueue();
     } catch (err) {
       setError(err.message || t.queueError);

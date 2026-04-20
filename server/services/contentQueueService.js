@@ -158,8 +158,8 @@ export async function scheduleQueuedContent({ id, userId, scheduledFor }) {
 async function markPublishResult({ id, status, publishResult = null, error = null }) {
   const { rows } = await pool.query(
     `UPDATE content_queue
-     SET status = $2,
-         published_at = CASE WHEN $2 = 'published' THEN NOW() ELSE published_at END,
+     SET status = $2::varchar(20),
+         published_at = CASE WHEN $2::varchar(20) = 'published' THEN NOW() ELSE published_at END,
          publish_result = COALESCE($3::jsonb, publish_result),
          last_error = $4,
          updated_at = NOW()
