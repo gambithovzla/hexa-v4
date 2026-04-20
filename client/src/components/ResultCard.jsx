@@ -151,6 +151,7 @@ function EngineMetaCard({ meta, lang = 'en' }) {
         status: 'Estado',
         agreed: 'Sonnet y Grok coincidieron.',
         diverged: 'Sonnet y Grok discreparon en el pick principal.',
+        comparisonUnavailable: 'No hubo suficiente salida estructurada para comparar ambos motores.',
         unavailable: 'Shadow no disponible en esta corrida.',
       }
     : {
@@ -163,12 +164,14 @@ function EngineMetaCard({ meta, lang = 'en' }) {
         status: 'Status',
         agreed: 'Sonnet and Grok agreed on the top pick.',
         diverged: 'Sonnet and Grok disagreed on the top pick.',
+        comparisonUnavailable: 'There was not enough structured output to compare both engines.',
         unavailable: 'Shadow engine was unavailable for this run.',
       };
 
   let statusText = '';
   if (meta.requested_engine === 'dual') {
     if (!meta.shadow_provider) statusText = labels.unavailable;
+    else if (meta.comparison_available === false) statusText = labels.comparisonUnavailable;
     else statusText = meta.divergence ? labels.diverged : labels.agreed;
   } else {
     statusText = formatProviderModel(meta.primary_provider, meta.primary_model);
@@ -219,6 +222,246 @@ function EngineMetaCard({ meta, lang = 'en' }) {
           {meta.notes.join(' ')}
         </Typography>
       )}
+    </Box>
+  );
+}
+
+function getEngineVariantPick(data) {
+  return (
+    data?.master_prediction?.pick ??
+    data?.best_pick?.detail ??
+    data?.safe_pick?.pick ??
+    data?.top_signal?.lean ??
+    null
+  );
+}
+
+function EngineVariantViewer({ variants, lang = 'en', mode = 'single' }) {
+  const validVariants = Array.isArray(variants)
+    ? variants.filter((variant) => variant?.data && typeof variant.data === 'object')
+    : [];
+
+  if (validVariants.length === 0) return null;
+  const shouldShow = validVariants.length > 1 || String(validVariants[0]?.provider ?? '').toLowerCase() === 'xai';
+  if (!shouldShow) return null;
+
+  const copy = lang === 'es'
+    ? {
+        title: mode === 'safe' ? 'Lectura por Motor' : 'Analisis por Motor',
+        helper: mode === 'safe'
+          ? 'El Safe Pick oficial lo decide el selector determinista. Aqui ves como razonaron Sonnet y Grok.'
+          : 'Puedes alternar entre el analisis visible y el shadow para leer ambos reportes completos.',
+        visible: 'Visible',
+        shadow: 'Shadow',
+        pick: mode === 'safe' ? 'Senal principal' : 'Pick',
+        overview: 'Resumen',
+        report: 'Reporte',
+        risk: 'Riesgo',
+        hunch: 'Corazonada',
+        notes: 'Notas de mercado',
+        alerts: 'Alertas',
+        empty: 'Sin texto adicional en esta corrida.',
+        moneyline: 'Moneyline',
+        runline: 'Run Line',
+        totals: 'Over/Under',
+      }
+    : {
+        title: mode === 'safe' ? 'Engine Readout' : 'Engine Analysis',
+        helper: mode === 'safe'
+          ? 'The official Safe Pick still comes from the deterministic selector. This panel shows how Sonnet and Grok reasoned.'
+          : 'You can switch between the visible engine and the shadow engine to read both full analyses.',
+        visible: 'Visible',
+        shadow: 'Shadow',
+        pick: mode === 'safe' ? 'Top signal' : 'Pick',
+        overview: 'Overview',
+        report: 'Report',
+        risk: 'Risk',
+        hunch: 'Hunch',
+        notes: 'Market notes',
+        alerts: 'Alerts',
+        empty: 'No extra text returned in this run.',
+        moneyline: 'Moneyline',
+        runline: 'Run Line',
+        totals: 'Over/Under',
+      };
+
+  const [activeKey, setActiveKey] = useState(validVariants[0]?.key ?? 'engine-0');
+  const activeVariant = validVariants.find((variant) => variant.key === activeKey) ?? validVariants[0];
+  const activeData = activeVariant?.data ?? {};
+  const activePick = getEngineVariantPick(activeData);
+  const activeFlags = Array.isArray(activeData.alert_flags) ? activeData.alert_flags : [];
+  const marketNotes = activeData.market_notes && typeof activeData.market_notes === 'object'
+    ? [
+        [copy.moneyline, activeData.market_notes.moneyline],
+        [copy.runline, activeData.market_notes.runline],
+        [copy.totals, activeData.market_notes.over_under],
+      ].filter(([, value]) => String(value ?? '').trim())
+    : [];
+  const hasBody = Boolean(
+    activePick ||
+    activeData.game_overview ||
+    activeData.oracle_report ||
+    activeData.hexa_hunch ||
+    activeData.model_risk ||
+    marketNotes.length > 0 ||
+    activeFlags.length > 0
+  );
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <SectionLabel>{copy.title}</SectionLabel>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, lineHeight: 1.7 }}>
+        {copy.helper}
+      </Typography>
+
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        {validVariants.map((variant) => {
+          const isActive = variant.key === activeVariant.key;
+          const label = variant.role === 'shadow' ? copy.shadow : copy.visible;
+          return (
+            <Box
+              key={variant.key}
+              component="button"
+              onClick={() => setActiveKey(variant.key)}
+              sx={{
+                display: 'inline-flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: '2px',
+                px: '10px',
+                py: '8px',
+                minWidth: '140px',
+                border: `1px solid ${isActive ? C.cyan : C.border}`,
+                bgcolor: isActive ? 'rgba(0,217,255,0.08)' : 'rgba(255,255,255,0.02)',
+                color: isActive ? C.cyan : C.textSecondary,
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'border-color 0.15s ease, background 0.15s ease, color 0.15s ease',
+                '&:hover': {
+                  borderColor: C.cyanLine,
+                  color: C.cyan,
+                },
+              }}
+            >
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                {label}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', lineHeight: 1.5 }}>
+                {formatProviderModel(variant.provider, variant.model)}
+              </Typography>
+            </Box>
+          );
+        })}
+      </Box>
+
+      <Box
+        sx={{
+          border: `1px solid ${C.border}`,
+          bgcolor: 'rgba(255,255,255,0.02)',
+          p: '14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}
+      >
+        {hasBody ? (
+          <>
+            {activePick && (
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase', mb: '4px' }}>
+                  {copy.pick}
+                </Typography>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: mode === 'safe' ? '1rem' : '1.15rem', fontWeight: 700, color: C.textPrimary, letterSpacing: '0.05em' }}>
+                  {activePick}
+                </Typography>
+              </Box>
+            )}
+
+            {activeData.model_risk && (
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.amber }}>
+                {copy.risk}: {String(activeData.model_risk).toUpperCase()}
+              </Typography>
+            )}
+
+            {activeData.game_overview && (
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase', mb: '4px' }}>
+                  {copy.overview}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.66rem', color: C.textSecondary, lineHeight: 1.7 }}>
+                  {activeData.game_overview}
+                </Typography>
+              </Box>
+            )}
+
+            {activeData.oracle_report && (
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase', mb: '4px' }}>
+                  {copy.report}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.66rem', color: C.textSecondary, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                  {activeData.oracle_report}
+                </Typography>
+              </Box>
+            )}
+
+            {activeData.hexa_hunch && (
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase', mb: '4px' }}>
+                  {copy.hunch}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.64rem', color: C.cyan, lineHeight: 1.7 }}>
+                  {activeData.hexa_hunch}
+                </Typography>
+              </Box>
+            )}
+
+            {marketNotes.length > 0 && (
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase', mb: '6px' }}>
+                  {copy.notes}
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {marketNotes.map(([label, value]) => (
+                    <Typography key={label} sx={{ fontFamily: MONO, fontSize: '0.64rem', color: C.textSecondary, lineHeight: 1.7 }}>
+                      <span style={{ color: C.cyan }}>{label}:</span> {value}
+                    </Typography>
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {activeFlags.length > 0 && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {activeFlags.map((flag, index) => {
+                  const fc = getFlagColor(flag);
+                  return (
+                    <Typography
+                      key={`${activeVariant.key}-${index}`}
+                      sx={{
+                        fontFamily: MONO,
+                        fontSize: '10px',
+                        color: fc.color,
+                        background: fc.bg,
+                        border: `1px solid ${fc.border}`,
+                        padding: '3px 8px',
+                        borderRadius: '0',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {flag}
+                    </Typography>
+                  );
+                })}
+              </Box>
+            )}
+          </>
+        ) : (
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted }}>
+            {copy.empty}
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -1261,10 +1504,12 @@ function SafePickResult({ data, lang, t }) {
   const hitProb     = Number(sp.hit_probability) || 0;
   const probColor   = hitProb >= 75 ? C.green : hitProb >= 55 ? C.amber : C.red;
   const circumference = 125.6;
+  const engineVariants = Array.isArray(data.engine_variants) ? data.engine_variants : [];
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <EngineMetaCard meta={data.engine_meta} lang={lang} />
+      <EngineVariantViewer variants={engineVariants} lang={lang} mode="safe" />
 
       {/* ── SAFE PICK SHIELD HEADER ── */}
       <Box sx={{
@@ -1515,10 +1760,12 @@ function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
   const bankrollMatchup = String(hexa.matchup ?? hexa.odds?.game ?? getGameMatchupLabel(selectedGame) ?? '').trim();
   const bankrollOdds = sanitizeOdds(valueBreakdown?.odds)
     ?? inferBankrollOdds({ pick: pickText, bestPickType: bp?.type, oddsData: hexa.odds, gameData: selectedGame });
+  const engineVariants = Array.isArray(hexa.engine_variants) ? hexa.engine_variants : [];
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <EngineMetaCard meta={hexa.engine_meta} lang={lang} />
+      <EngineVariantViewer variants={engineVariants} lang={lang} mode="single" />
       <DecisionCenter
         hexa={hexa}
         lang={lang}

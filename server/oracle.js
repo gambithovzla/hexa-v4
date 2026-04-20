@@ -100,6 +100,44 @@ async function runXaiOracleRequest({
   };
 }
 
+function extractEngineLead(data) {
+  return (
+    data?.master_prediction?.pick ??
+    data?.safe_pick?.pick ??
+    data?.top_signal?.lean ??
+    data?.top_signal?.pick ??
+    null
+  );
+}
+
+function stripEngineArtifacts(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const { engine_meta: _engineMeta, engine_variants: _engineVariants, ...rest } = data; // eslint-disable-line no-unused-vars
+  return rest;
+}
+
+function buildEngineVariants({ requestedEngine, primaryResult, shadowResult = null, mode = 'single' }) {
+  const variants = [];
+
+  const appendVariant = (result, role, index) => {
+    if (!result?.data || typeof result.data !== 'object') return;
+    variants.push({
+      key: `${role}-${result.provider ?? 'engine'}-${index}`,
+      role,
+      provider: result.provider ?? null,
+      model: result.model ?? null,
+      requested_engine: requestedEngine,
+      mode,
+      data: stripEngineArtifacts(result.data),
+    });
+  };
+
+  appendVariant(primaryResult, 'visible', 0);
+  appendVariant(shadowResult, 'shadow', 1);
+
+  return variants;
+}
+
 function buildEngineMeta({ requestedEngine, primaryResult, shadowResult = null, webSearch = false }) {
   const normalizePickComparison = (value) => String(value ?? '')
     .toLowerCase()
@@ -111,18 +149,11 @@ function buildEngineMeta({ requestedEngine, primaryResult, shadowResult = null, 
     .replace(/\s+/g, ' ')
     .trim();
 
-  const primaryPick =
-    primaryResult?.data?.master_prediction?.pick ??
-    primaryResult?.data?.safe_pick?.pick ??
-    null;
-  const shadowPick =
-    shadowResult?.data?.master_prediction?.pick ??
-    shadowResult?.data?.safe_pick?.pick ??
-    null;
+  const primaryPick = extractEngineLead(primaryResult?.data);
+  const shadowPick = extractEngineLead(shadowResult?.data);
+  const comparisonAvailable = Boolean(shadowResult && primaryPick && shadowPick);
   const divergence = Boolean(
-    shadowResult &&
-    primaryPick &&
-    shadowPick &&
+    comparisonAvailable &&
     normalizePickComparison(primaryPick) !== normalizePickComparison(shadowPick)
   );
 
@@ -133,6 +164,7 @@ function buildEngineMeta({ requestedEngine, primaryResult, shadowResult = null, 
     shadow_provider: shadowResult?.provider ?? null,
     shadow_model: shadowResult?.model ?? null,
     web_search_supported: requestedEngine === 'sonnet' ? Boolean(webSearch) : false,
+    comparison_available: comparisonAvailable,
     notes: [
       ...(requestedEngine !== 'sonnet' && webSearch ? ['Web search is currently only active on the Anthropic path.'] : []),
       ...(divergence ? ['Primary and shadow engines disagreed on the top pick.'] : []),
@@ -215,7 +247,7 @@ Respond in plain text. NO JSON. NO markdown formatting. Just natural, conversati
 - "¿El bullpen de los Dodgers aguanta si sale Yamamoto temprano?"
 - "Compare the two starting pitchers for me"`;
 
-const SAFE_PICK_PROMPT = `You are H.E.X.A. V4 Safe Pick Support Mode — a matchup analyst feeding a safe-pick engine for MLB. The backend selects the final winner across the supported markets available for each game. Your job is to summarize the matchup, surface the main risks, and provide concise reasoning snippets. Safe Pick is a highest-hit-probability mode, not a value/edge mode.  ## YOUR PROCESS  1. Analyze ALL available data: Statcast, pitcher stats, offensive stats, rolling windows, weather, park factors, lineup status. 2. Cover the supported market families that may be active for this game, including team markets and player props when the required lines and player data are available. 3. Return neutral game context plus short market-family notes that help explain why the backend-selected candidate won.  ## SIGNAL PRIORITY (same as Oracle mode) Priority 1: Statcast current season (xwOBA, Whiff%, barrel%) Priority 2: Recent form — rolling wOBA 7d/14d Priority 3: Season averages Priority 4: Historical multi-year trends Priority 5: Market odds as context only Priority 6: Weather + park factors (mandatory modifiers)  ## OUTPUT FORMAT  Respond with ONLY valid JSON. No markdown. No backticks. No preamble.  {"game_overview":"string — plain text under 220 chars, neutral summary of the matchup","alert_flags":["string array — data quality warnings if any"],"model_risk":"low | medium | high","market_notes":{"moneyline":"string under 160 chars","runline":"string under 160 chars","over_under":"string under 160 chars"}}  ## OUTPUT RULES — NON-NEGOTIABLE - All text values: plain text, single-line, no markdown, no bold, no bullets - JSON keys: always in English - When lang=es: translate all text values to Spanish, keys stay in English - Never truncate the JSON structure - Never output ABSTAIN or PASS`;
+const SAFE_PICK_PROMPT = `You are H.E.X.A. V4 Safe Pick Support Mode — a matchup analyst feeding a safe-pick engine for MLB. The backend selects the final winner across the supported markets available for each game. Your job is to summarize the matchup, surface the main risks, and provide concise reasoning snippets. Safe Pick is a highest-hit-probability mode, not a value/edge mode.  ## YOUR PROCESS  1. Analyze ALL available data: Statcast, pitcher stats, offensive stats, rolling windows, weather, park factors, lineup status. 2. Cover the supported market families that may be active for this game, including team markets and player props when the required lines and player data are available. 3. Return neutral game context plus short market-family notes that help explain why the backend-selected candidate won. 4. Provide your own advisory lean so dual-engine mode can compare Sonnet vs Grok, but do NOT decide the final official Safe Pick.  ## SIGNAL PRIORITY (same as Oracle mode) Priority 1: Statcast current season (xwOBA, Whiff%, barrel%) Priority 2: Recent form — rolling wOBA 7d/14d Priority 3: Season averages Priority 4: Historical multi-year trends Priority 5: Market odds as context only Priority 6: Weather + park factors (mandatory modifiers)  ## OUTPUT FORMAT  Respond with ONLY valid JSON. No markdown. No backticks. No preamble.  {"game_overview":"string — plain text under 220 chars, neutral summary of the matchup","alert_flags":["string array — data quality warnings if any"],"model_risk":"low | medium | high","top_signal":{"market":"Moneyline | RunLine | OverUnder | PlayerProp","lean":"string under 80 chars describing the strongest advisory angle only"},"market_notes":{"moneyline":"string under 160 chars","runline":"string under 160 chars","over_under":"string under 160 chars"}}  ## OUTPUT RULES — NON-NEGOTIABLE - All text values: plain text, single-line, no markdown, no bold, no bullets - JSON keys: always in English - When lang=es: translate all text values to Spanish, keys stay in English - Never truncate the JSON structure - Never output ABSTAIN or PASS`;
 
 // ---------------------------------------------------------------------------
 // Construcción del mensaje de usuario según el modo
@@ -542,7 +574,20 @@ function normalizeSingleGamePayload(data) {
 }
 
 function normalizeSafePickPayload(data) {
-  if (!data?.safe_pick) return data;
+  if (!data || typeof data !== 'object') return data;
+
+  const normalizedTopSignal = data?.top_signal && typeof data.top_signal === 'object'
+    ? {
+        market: data.top_signal.market != null ? String(data.top_signal.market).trim() : null,
+        lean: data.top_signal.lean != null ? String(data.top_signal.lean).trim() : null,
+      }
+    : data?.top_signal ?? null;
+
+  if (!data.safe_pick) {
+    return normalizedTopSignal
+      ? { ...data, top_signal: normalizedTopSignal }
+      : data;
+  }
 
   const candidates = [
     { ...data.safe_pick },
@@ -569,6 +614,7 @@ function normalizeSafePickPayload(data) {
     ...data,
     safe_pick: ranked[0],
     alternatives: ranked.slice(1, 3),
+    top_signal: normalizedTopSignal,
   };
 }
 
@@ -765,6 +811,12 @@ These additions make Premium feel substantially different from Deep. The user sh
       primaryResult,
       shadowResult,
       webSearch,
+    });
+    data.engine_variants = buildEngineVariants({
+      requestedEngine: resolvedEngine,
+      primaryResult,
+      shadowResult,
+      mode,
     });
   }
 
@@ -968,6 +1020,12 @@ export async function analyzeSafe({ contextString, lang = 'en', engine = 'sonnet
       primaryResult,
       shadowResult,
       webSearch: false,
+    });
+    primaryResult.data.engine_variants = buildEngineVariants({
+      requestedEngine: resolvedEngine,
+      primaryResult,
+      shadowResult,
+      mode: 'safe',
     });
   }
 

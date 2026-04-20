@@ -822,6 +822,9 @@ export function buildDeterministicSafePayload({
     game_overview: gameOverview,
     alert_flags: alertFlags,
     model_risk: llmData?.model_risk ?? 'medium',
+    top_signal: llmData?.top_signal ?? null,
+    engine_meta: llmData?.engine_meta ?? null,
+    engine_variants: Array.isArray(llmData?.engine_variants) ? llmData.engine_variants : null,
     selection_method: 'deterministic_supported_markets_v2',
     safe_scope: buildSafeScope({ oddsData, lang }),
   };
