@@ -1314,7 +1314,7 @@ export default function AnalysisPanel({
   function extractHexaData(response) {
     const isHexa = (obj) =>
       obj && typeof obj === 'object' &&
-      (obj.master_prediction || obj.parlay || obj.games || obj.safe_pick ||
+      (obj.master_prediction || obj.best_pick || obj.oracle_report || obj.parlay || obj.games || obj.safe_pick ||
        (obj.mode === 'safe_multi' && Array.isArray(obj.results)));
 
     const tryParse = (str) => {

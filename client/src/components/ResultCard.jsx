@@ -117,6 +117,98 @@ const L = {
 
 // ── Disclaimers (collapsible) ────────────────────────────────────────────────
 
+function formatEngineLabel(value, lang = 'en') {
+  const key = String(value ?? '').toLowerCase();
+  if (key === 'grok') return 'Grok';
+  if (key === 'dual') return lang === 'es' ? 'Dual (Sonnet + Grok)' : 'Dual (Sonnet + Grok)';
+  if (key === 'sonnet') return 'Sonnet';
+  return value ? String(value) : '—';
+}
+
+function formatProviderModel(provider, model) {
+  const providerLabel = provider ? String(provider).toUpperCase() : '—';
+  if (!model) return providerLabel;
+  return `${providerLabel} · ${model}`;
+}
+
+function EngineMetaCard({ meta, lang = 'en' }) {
+  if (!meta || typeof meta !== 'object') return null;
+
+  const shouldShow = (
+    meta.requested_engine &&
+    (meta.requested_engine !== 'sonnet' || meta.shadow_provider || meta.divergence || (meta.notes?.length ?? 0) > 0)
+  );
+  if (!shouldShow) return null;
+
+  const labels = lang === 'es'
+    ? {
+        title: 'Motor de Analisis',
+        requested: 'Solicitado',
+        primary: 'Visible',
+        shadow: 'Shadow',
+        status: 'Estado',
+        agreed: 'Sonnet y Grok coincidieron.',
+        diverged: 'Sonnet y Grok discreparon en el pick principal.',
+        unavailable: 'Shadow no disponible en esta corrida.',
+      }
+    : {
+        title: 'Analysis Engine',
+        requested: 'Requested',
+        primary: 'Visible',
+        shadow: 'Shadow',
+        status: 'Status',
+        agreed: 'Sonnet and Grok agreed on the top pick.',
+        diverged: 'Sonnet and Grok disagreed on the top pick.',
+        unavailable: 'Shadow engine was unavailable for this run.',
+      };
+
+  let statusText = '';
+  if (meta.requested_engine === 'dual') {
+    if (!meta.shadow_provider) statusText = labels.unavailable;
+    else statusText = meta.divergence ? labels.diverged : labels.agreed;
+  } else {
+    statusText = formatProviderModel(meta.primary_provider, meta.primary_model);
+  }
+
+  return (
+    <Box
+      sx={{
+        border: `1px solid ${C.border}`,
+        bgcolor: 'rgba(255,255,255,0.02)',
+        p: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+      }}
+    >
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.64rem', color: C.cyan, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+        {labels.title}
+      </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted }}>
+          {labels.requested}: {formatEngineLabel(meta.requested_engine, lang)}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textSecondary }}>
+          {labels.primary}: {formatProviderModel(meta.primary_provider, meta.primary_model)}
+        </Typography>
+        {meta.shadow_provider && (
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textSecondary }}>
+            {labels.shadow}: {formatProviderModel(meta.shadow_provider, meta.shadow_model)}
+          </Typography>
+        )}
+      </Box>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: meta.divergence ? C.amber : C.textSecondary, lineHeight: 1.6 }}>
+        {labels.status}: {statusText}
+      </Typography>
+      {Array.isArray(meta.notes) && meta.notes.length > 0 && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, lineHeight: 1.6 }}>
+          {meta.notes.join(' ')}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 function DisclaimerBlock({ title, body, accentColor }) {
   const [open, setOpen] = useState(false);
   return (
@@ -1410,23 +1502,26 @@ function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
     ?? inferBankrollOdds({ pick: pickText, bestPickType: bp?.type, oddsData: hexa.odds, gameData: selectedGame });
 
   return (
-    <DecisionCenter
-      hexa={hexa}
-      lang={lang}
-      slots={{
-        bankroll: (
-          <AgregarABanca
-            matchup={bankrollMatchup}
-            pick={pickText}
-            odds={bankrollOdds}
-            confidence={confidence}
-            lang={lang}
-          />
-        ),
-        oddsPanel: hexa.odds?.odds ? <OddsPanel odds={hexa.odds.odds} hexa={hexa} t={t} /> : null,
-        disclaimers: <Disclaimers t={t} />,
-      }}
-    />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <EngineMetaCard meta={hexa.engine_meta} lang={lang} />
+      <DecisionCenter
+        hexa={hexa}
+        lang={lang}
+        slots={{
+          bankroll: (
+            <AgregarABanca
+              matchup={bankrollMatchup}
+              pick={pickText}
+              odds={bankrollOdds}
+              confidence={confidence}
+              lang={lang}
+            />
+          ),
+          oddsPanel: hexa.odds?.odds ? <OddsPanel odds={hexa.odds.odds} hexa={hexa} t={t} /> : null,
+          disclaimers: <Disclaimers t={t} />,
+        }}
+      />
+    </Box>
   );
 }
 
@@ -1943,7 +2038,7 @@ export default function ResultCard({ data, lang = 'en', selectedGames = [] }) {
   }
 
   // Single game
-  if (data.master_prediction) {
+  if (data.master_prediction || data.best_pick || data.oracle_report) {
     return <SingleGameResult hexa={data} t={t} lang={lang} selectedGame={selectedGames[0] ?? null} />;
   }
 

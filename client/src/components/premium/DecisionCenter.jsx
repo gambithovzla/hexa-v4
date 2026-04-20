@@ -617,7 +617,18 @@ export default function DecisionCenter({ hexa, lang = 'en', slots = {} }) {
   const reduced = usePrefersReducedMotion();
 
   const mp = hexa.master_prediction ?? {};
-  const confidence = Math.min(100, Math.max(0, Number(mp.oracle_confidence) || 0));
+  const bp = hexa.best_pick ?? {};
+  const confidenceSeed = Number(mp.oracle_confidence);
+  const bestPickConfidence = Number(bp.confidence);
+  const confidence = Math.min(
+    100,
+    Math.max(
+      0,
+      Number.isFinite(confidenceSeed)
+        ? confidenceSeed
+        : (Number.isFinite(bestPickConfidence) ? (bestPickConfidence <= 1 ? bestPickConfidence * 100 : bestPickConfidence) : 0)
+    )
+  );
   const risk = String(hexa.model_risk || '').toLowerCase();
   const intent = toIntent(confidence, risk);
 
@@ -633,7 +644,7 @@ export default function DecisionCenter({ hexa, lang = 'en', slots = {} }) {
         <HeroCard
           intent={intent}
           eyebrow={t.verdict}
-          title={mp.pick || '—'}
+          title={mp.pick || bp.detail || '—'}
           meta={hexa.matchup || hexa.odds?.game || undefined}
         >
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>

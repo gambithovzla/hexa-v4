@@ -414,6 +414,117 @@ function toSafeProbability(value) {
   return Math.max(0, Math.min(100, n));
 }
 
+function toConfidencePercent(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n <= 1 ? Math.max(0, Math.min(100, n * 100)) : toSafeProbability(n);
+}
+
+function inferBestPickType(detail = '') {
+  const text = String(detail ?? '').toLowerCase();
+  if (!text) return 'Moneyline';
+  if (/\b(over|under)\b/.test(text)) return 'Over-Under';
+  if (/\bml\b|moneyline/.test(text)) return 'Moneyline';
+  if (/run line|[+-]1\.5/.test(text)) return 'RunLine';
+  return 'PlayerProp';
+}
+
+function normalizeSingleGamePayload(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  if (data.safe_pick || data.parlay || data.games) return data;
+
+  const masterPrediction = data.master_prediction && typeof data.master_prediction === 'object'
+    ? { ...data.master_prediction }
+    : {};
+  const bestPick = data.best_pick && typeof data.best_pick === 'object'
+    ? { ...data.best_pick }
+    : {};
+
+  const pickText =
+    masterPrediction.pick ??
+    bestPick.detail ??
+    data.pick ??
+    data.recommended_pick ??
+    data.recommendation ??
+    data.selection ??
+    null;
+
+  const oracleConfidence =
+    toConfidencePercent(masterPrediction.oracle_confidence) ??
+    toConfidencePercent(bestPick.confidence) ??
+    toConfidencePercent(data.oracle_confidence) ??
+    toConfidencePercent(data.confidence) ??
+    toConfidencePercent(data.hit_probability) ??
+    null;
+
+  const betValue =
+    masterPrediction.bet_value ??
+    data.bet_value ??
+    data.value_tier ??
+    data.value_breakdown?.value_tier ??
+    null;
+
+  const oracleReport =
+    data.oracle_report ??
+    data.report ??
+    data.explanation ??
+    data.analysis ??
+    data.reasoning ??
+    null;
+
+  const hexaHunch =
+    data.hexa_hunch ??
+    data.hunch ??
+    data.context_note ??
+    null;
+
+  const normalizedFlags = Array.isArray(data.alert_flags)
+    ? data.alert_flags.map((flag) => String(flag ?? '').trim()).filter(Boolean)
+    : typeof data.alert_flags === 'string' && data.alert_flags.trim()
+      ? [data.alert_flags.trim()]
+      : [];
+
+  const hasSingleGameSignal = Boolean(
+    pickText ||
+    oracleReport ||
+    hexaHunch ||
+    normalizedFlags.length > 0 ||
+    Object.keys(bestPick).length > 0 ||
+    Object.keys(masterPrediction).length > 0
+  );
+
+  if (!hasSingleGameSignal) return data;
+
+  if (pickText && !masterPrediction.pick) {
+    masterPrediction.pick = pickText;
+  }
+  if (oracleConfidence != null && masterPrediction.oracle_confidence == null) {
+    masterPrediction.oracle_confidence = Math.round(oracleConfidence);
+  }
+  if (betValue && !masterPrediction.bet_value) {
+    masterPrediction.bet_value = betValue;
+  }
+
+  if (pickText && !bestPick.detail) {
+    bestPick.detail = pickText;
+  }
+  if (!bestPick.type && pickText) {
+    bestPick.type = inferBestPickType(pickText);
+  }
+  if (oracleConfidence != null && bestPick.confidence == null) {
+    bestPick.confidence = Number((oracleConfidence / 100).toFixed(2));
+  }
+
+  return {
+    ...data,
+    master_prediction: masterPrediction,
+    best_pick: Object.keys(bestPick).length > 0 ? bestPick : data.best_pick,
+    oracle_report: oracleReport ?? data.oracle_report ?? null,
+    hexa_hunch: hexaHunch ?? data.hexa_hunch ?? null,
+    alert_flags: normalizedFlags,
+  };
+}
+
 function normalizeSafePickPayload(data) {
   if (!data?.safe_pick) return data;
 
@@ -604,6 +715,19 @@ These additions make Premium feel substantially different from Deep. The user sh
       primaryResult = grokResult.value;
     } else {
       throw anthropicResult.reason ?? grokResult.reason ?? new Error('Dual engine analysis failed');
+    }
+  }
+
+  if (mode === 'single') {
+    primaryResult = {
+      ...primaryResult,
+      data: normalizeSingleGamePayload(primaryResult.data),
+    };
+    if (shadowResult) {
+      shadowResult = {
+        ...shadowResult,
+        data: normalizeSingleGamePayload(shadowResult.data),
+      };
     }
   }
 
