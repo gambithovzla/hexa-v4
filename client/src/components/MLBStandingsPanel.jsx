@@ -8,17 +8,20 @@ const STANDINGS_SELECTION_KEY = 'hexa_standings_selection';
 
 const COPY = {
   en: {
-    eyebrow: 'League standings',
-    title: 'League and division board',
-    subtitle: 'Switch AL or NL and jump across East, Central, and West with minimal scroll.',
+    eyebrow: 'MLB standings',
+    title: 'League and division table',
+    subtitle: 'Switch between the full AL or NL table, or drill into each division without changing pages.',
     loading: 'Loading standings...',
     empty: 'No standings available right now.',
     error: 'Could not load standings.',
     season: 'Season',
     updated: 'Updated',
+    focus: 'Focus',
+    leader: 'Leader',
     league: 'League',
     division: 'Division',
-    leader: 'Leader',
+    viewLeague: 'Full league',
+    viewDivision: 'Divisions',
     record: 'Record',
     pct: 'PCT',
     gb: 'GB',
@@ -26,19 +29,23 @@ const COPY = {
     last10: 'Last 10',
     diff: 'Run diff',
     teams: 'Team',
+    divisionShort: 'Div',
   },
   es: {
     eyebrow: 'Tabla de posiciones',
-    title: 'Liga y division',
-    subtitle: 'Cambia entre AL o NL y salta por Este, Central y Oeste con el menor scroll posible.',
+    title: 'Tabla por liga y division',
+    subtitle: 'Mira la tabla completa de la Americana o Nacional, o baja a cada division sin cambiar de pantalla.',
     loading: 'Cargando posiciones...',
     empty: 'No hay posiciones disponibles ahora mismo.',
     error: 'No se pudieron cargar las posiciones.',
     season: 'Temporada',
     updated: 'Actualizado',
+    focus: 'Foco',
+    leader: 'Lider',
     league: 'Liga',
     division: 'Division',
-    leader: 'Lider',
+    viewLeague: 'Liga completa',
+    viewDivision: 'Divisiones',
     record: 'Record',
     pct: 'PCT',
     gb: 'GB',
@@ -46,6 +53,7 @@ const COPY = {
     last10: 'Ultimos 10',
     diff: 'Dif. carreras',
     teams: 'Equipo',
+    divisionShort: 'Div',
   },
 };
 
@@ -56,16 +64,19 @@ const DIVISION_LABELS = {
 };
 
 function readStoredSelection() {
-  if (typeof window === 'undefined') return { league: 'AL', division: 'east' };
+  if (typeof window === 'undefined') {
+    return { mode: 'league', league: 'AL', division: 'east' };
+  }
 
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STANDINGS_SELECTION_KEY) || '{}');
     return {
+      mode: parsed.mode || 'league',
       league: parsed.league || 'AL',
       division: parsed.division || 'east',
     };
   } catch {
-    return { league: 'AL', division: 'east' };
+    return { mode: 'league', league: 'AL', division: 'east' };
   }
 }
 
@@ -81,12 +92,48 @@ function formatUpdated(iso, lang) {
   }
 }
 
+function getToneStyles(accent) {
+  if (accent === C.accent) {
+    return { line: C.accentLine, dim: C.accentDim };
+  }
+  if (accent === C.green) {
+    return { line: C.greenLine, dim: C.greenDim };
+  }
+  return { line: C.cyanLine, dim: C.cyanDim };
+}
+
+function getPctValue(team) {
+  const raw = Number(team?.pct);
+  if (Number.isFinite(raw)) return raw;
+  const wins = Number(team?.wins ?? 0);
+  const losses = Number(team?.losses ?? 0);
+  const total = wins + losses;
+  return total > 0 ? wins / total : 0;
+}
+
+function parseGamesBack(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const normalized = String(value).trim();
+  if (!normalized || normalized === '-' || normalized === '--') return null;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function formatGamesBack(value) {
+  const numeric = parseGamesBack(value);
+  if (numeric == null || numeric <= 0) return '-';
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
+}
+
 function PanelTile({ label, value, accent = C.cyan, children }) {
+  const tone = getToneStyles(accent);
+
   return (
     <Box
       sx={{
         p: '12px 14px',
-        border: `1px solid ${accent === C.accent ? C.accentLine : accent === C.green ? C.greenLine : C.cyanLine}`,
+        border: `1px solid ${tone.line}`,
         background: 'rgba(0,0,0,0.34)',
         minHeight: 82,
       }}
@@ -95,7 +142,7 @@ function PanelTile({ label, value, accent = C.cyan, children }) {
         {label}
       </Typography>
       {children ?? (
-        <Typography sx={{ fontFamily: BARLOW, fontSize: '1rem', color: accent, letterSpacing: '0.08em', textTransform: 'uppercase', lineHeight: 1.1 }}>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '0.94rem', color: accent, letterSpacing: '0.08em', textTransform: 'uppercase', lineHeight: 1.1 }}>
           {value}
         </Typography>
       )}
@@ -104,33 +151,44 @@ function PanelTile({ label, value, accent = C.cyan, children }) {
 }
 
 function SelectorButton({ label, meta, active, onClick, accent = C.cyan, compact = false }) {
+  const tone = getToneStyles(accent);
+
   return (
     <Box
       component="button"
       onClick={onClick}
       sx={{
+        position: 'relative',
         display: 'grid',
         gap: compact ? '4px' : '6px',
         alignContent: 'center',
         justifyItems: compact ? 'center' : 'start',
-        minHeight: compact ? 68 : 74,
+        minHeight: compact ? 68 : 76,
         px: compact ? '10px' : '14px',
         py: compact ? '10px' : '12px',
-        border: `1px solid ${active ? accent : C.border}`,
-        borderBottom: active ? `2px solid ${accent}` : '2px solid rgba(0,217,255,0.08)',
-        background: active
-          ? 'linear-gradient(180deg, rgba(0,217,255,0.16), rgba(0,217,255,0.06))'
-          : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
+        border: `1px solid ${active ? tone.line : C.border}`,
+        background: active ? tone.dim : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
         boxShadow: active
-          ? '0 10px 24px rgba(0,0,0,0.42), 0 0 14px rgba(0,217,255,0.14)'
+          ? '0 12px 28px rgba(0,0,0,0.42)'
           : '0 8px 18px rgba(0,0,0,0.24)',
         color: active ? accent : C.textSecondary,
         textAlign: compact ? 'center' : 'left',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 12,
+          right: 12,
+          height: 3,
+          background: active ? accent : 'rgba(255,255,255,0.05)',
+        },
         '&:hover': {
-          borderColor: accent,
+          borderColor: tone.line,
           color: accent,
+          transform: 'translateY(-1px)',
         },
       }}
     >
@@ -145,12 +203,14 @@ function SelectorButton({ label, meta, active, onClick, accent = C.cyan, compact
 }
 
 function MetaPill({ label, value, accent = C.cyan }) {
+  const tone = getToneStyles(accent);
+
   return (
     <Box
       sx={{
         px: '8px',
         py: '6px',
-        border: `1px solid ${accent === C.accent ? C.accentLine : accent === C.green ? C.greenLine : accent === C.red ? C.redLine : C.border}`,
+        border: `1px solid ${tone.line}`,
         background: 'rgba(255,255,255,0.03)',
         minWidth: 66,
       }}
@@ -165,8 +225,9 @@ function MetaPill({ label, value, accent = C.cyan }) {
   );
 }
 
-function TeamRow({ team, rank, copy, selected, leader, onToggle }) {
+function TeamRow({ team, rank, copy, selected, leader, onToggle, viewMode }) {
   const runDiffAccent = team.runDiff == null ? C.textSecondary : team.runDiff >= 0 ? C.green : C.red;
+  const gamesBack = viewMode === 'league' ? team.leagueGamesBack : team.gamesBack;
 
   return (
     <Box
@@ -184,17 +245,17 @@ function TeamRow({ team, rank, copy, selected, leader, onToggle }) {
             ? 'linear-gradient(180deg, rgba(255,102,0,0.12), rgba(255,102,0,0.03))'
             : 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(4,6,10,0.94))',
         boxShadow: selected
-          ? '0 14px 30px rgba(0,0,0,0.42), 0 0 16px rgba(0,217,255,0.1)'
+          ? '0 14px 30px rgba(0,0,0,0.42)'
           : '0 12px 24px rgba(0,0,0,0.24)',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         '&:hover': {
-          borderColor: selected ? C.cyanLine : C.cyanLine,
+          borderColor: C.cyanLine,
           transform: 'translateY(-1px)',
         },
       }}
     >
-      <Box sx={{ display: 'grid', gridTemplateColumns: '34px 50px minmax(0,1fr) auto', gap: 1.25, alignItems: 'center' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '34px 46px minmax(0,1fr) auto', gap: 1.25, alignItems: 'center' }}>
         <Box
           sx={{
             width: 34,
@@ -211,7 +272,14 @@ function TeamRow({ team, rank, copy, selected, leader, onToggle }) {
           </Typography>
         </Box>
 
-        <TeamLogo teamId={team.teamId} abbr={team.abbreviation} size={42} color={leader ? C.accent : C.cyan} />
+        <TeamLogo
+          teamId={team.teamId}
+          abbr={team.abbreviation}
+          size={44}
+          color={leader ? C.accent : C.cyan}
+          glow={false}
+          variant="plain"
+        />
 
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.94rem', fontWeight: 800, color: C.textPrimary, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.02 }}>
@@ -233,8 +301,11 @@ function TeamRow({ team, rank, copy, selected, leader, onToggle }) {
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.35 }}>
+        {viewMode === 'league' && (
+          <MetaPill label={copy.divisionShort} value={team.divisionLabel || '-'} accent={C.accent} />
+        )}
         <MetaPill label={copy.record} value={`${team.wins}-${team.losses}`} accent={leader ? C.accent : C.cyan} />
-        <MetaPill label={copy.gb} value={team.gamesBack ?? '-'} accent={C.cyan} />
+        <MetaPill label={copy.gb} value={formatGamesBack(gamesBack)} accent={C.cyan} />
         <MetaPill label={copy.last10} value={team.last10 || '-'} accent={C.textPrimary} />
         <MetaPill label={copy.diff} value={team.runDiff != null ? `${team.runDiff > 0 ? '+' : ''}${team.runDiff}` : '-'} accent={runDiffAccent} />
       </Box>
@@ -256,6 +327,7 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeMode, setActiveMode] = useState(storedSelection.mode);
   const [activeLeague, setActiveLeague] = useState(storedSelection.league);
   const [activeDivision, setActiveDivision] = useState(storedSelection.division);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
@@ -288,10 +360,11 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(STANDINGS_SELECTION_KEY, JSON.stringify({
+      mode: activeMode,
       league: activeLeague,
       division: activeDivision,
     }));
-  }, [activeDivision, activeLeague]);
+  }, [activeDivision, activeLeague, activeMode]);
 
   const leagues = data?.leagues ?? [];
   const currentLeague = leagues.find((league) => league.key === activeLeague) ?? leagues[0] ?? null;
@@ -316,11 +389,49 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
       ?? null
   ), [activeDivision, currentLeague]);
 
+  const leagueTeams = useMemo(() => {
+    const flattened = (currentLeague?.divisions ?? []).flatMap((division) => {
+      const divisionLabel = division.name?.[lang] ?? DIVISION_LABELS[division.key]?.[lang] ?? division.key;
+      return (division.teams ?? []).map((team) => ({
+        ...team,
+        divisionKey: division.key,
+        divisionLabel,
+      }));
+    });
+
+    const sorted = [...flattened].sort((a, b) => (
+      getPctValue(b) - getPctValue(a)
+      || Number(b.wins ?? 0) - Number(a.wins ?? 0)
+      || Number(a.losses ?? 0) - Number(b.losses ?? 0)
+      || Number(b.runDiff ?? -9999) - Number(a.runDiff ?? -9999)
+      || String(a.fullName ?? a.name ?? '').localeCompare(String(b.fullName ?? b.name ?? ''))
+    ));
+
+    const leader = sorted[0];
+    if (!leader) return [];
+
+    return sorted.map((team, index) => {
+      const gb = ((leader.wins - team.wins) + (team.losses - leader.losses)) / 2;
+      return {
+        ...team,
+        leagueRank: index + 1,
+        leagueGamesBack: gb <= 0 ? '-' : gb,
+      };
+    });
+  }, [currentLeague, lang]);
+
+  const currentTeams = activeMode === 'league'
+    ? leagueTeams
+    : (currentDivision?.teams ?? []).map((team) => ({
+        ...team,
+        divisionLabel: currentDivision?.name?.[lang] ?? DIVISION_LABELS[currentDivision?.key]?.[lang] ?? currentDivision?.key,
+      }));
+
   useEffect(() => {
-    if (!currentDivision?.teams?.some((team) => team.teamId === selectedTeamId)) {
-      setSelectedTeamId(currentDivision?.teams?.[0]?.teamId ?? null);
+    if (!currentTeams.some((team) => team.teamId === selectedTeamId)) {
+      setSelectedTeamId(currentTeams[0]?.teamId ?? null);
     }
-  }, [currentDivision, selectedTeamId]);
+  }, [currentTeams, selectedTeamId]);
 
   if (loading) {
     return (
@@ -342,7 +453,7 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
     );
   }
 
-  if (!currentLeague || !currentDivision) {
+  if (!currentLeague || !currentDivision || currentTeams.length === 0) {
     return (
       <Box sx={{ border: `1px solid ${C.border}`, bgcolor: C.surface, p: 2.5 }}>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textMuted }}>
@@ -352,8 +463,11 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
     );
   }
 
-  const leader = currentDivision.teams?.[0] ?? null;
-  const divisionLabel = currentDivision.name?.[lang] ?? DIVISION_LABELS[currentDivision.key]?.[lang] ?? currentDivision.key;
+  const currentDivisionLabel = currentDivision.name?.[lang] ?? DIVISION_LABELS[currentDivision.key]?.[lang] ?? currentDivision.key;
+  const focusValue = activeMode === 'league'
+    ? (currentLeague.name?.[lang] ?? currentLeague.key)
+    : `${currentLeague.key} ${currentDivisionLabel}`;
+  const leader = currentTeams[0] ?? null;
 
   return (
     <Box
@@ -403,12 +517,19 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' }, gap: 1.25 }}>
         <PanelTile label={copy.season} value={data?.season ?? '-'} accent={C.cyan} />
         <PanelTile label={copy.updated} value={formatUpdated(data?.updatedAt, lang)} accent={C.accent} />
-        <PanelTile label={copy.division} value={`${currentLeague.key} ${divisionLabel}`} accent={C.cyan} />
-        <PanelTile label={copy.leader} accent={C.accent}>
+        <PanelTile label={copy.focus} value={focusValue} accent={C.green} />
+        <PanelTile label={copy.leader} accent={activeMode === 'league' ? C.green : C.accent}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TeamLogo teamId={leader?.teamId} abbr={leader?.abbreviation} size={34} color={C.accent} />
+            <TeamLogo
+              teamId={leader?.teamId}
+              abbr={leader?.abbreviation}
+              size={34}
+              color={activeMode === 'league' ? C.green : C.accent}
+              glow={false}
+              variant="plain"
+            />
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontFamily: BARLOW, fontSize: '0.82rem', fontWeight: 800, color: C.accent, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <Typography sx={{ fontFamily: BARLOW, fontSize: '0.82rem', fontWeight: 800, color: activeMode === 'league' ? C.green : C.accent, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                 {leader?.abbreviation || '-'}
               </Typography>
               <Typography noWrap sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, mt: 0.15 }}>
@@ -420,7 +541,30 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.25 }}>
-        {(leagues.length > 0 ? leagues : [{ key: 'AL', name: { en: 'American League', es: 'Liga Americana' } }, { key: 'NL', name: { en: 'National League', es: 'Liga Nacional' } }]).map((league) => (
+        <SelectorButton
+          label={copy.viewLeague}
+          meta={copy.league}
+          active={activeMode === 'league'}
+          onClick={() => {
+            setActiveMode('league');
+            setSelectedTeamId(null);
+          }}
+          accent={C.green}
+        />
+        <SelectorButton
+          label={copy.viewDivision}
+          meta={copy.division}
+          active={activeMode === 'division'}
+          onClick={() => {
+            setActiveMode('division');
+            setSelectedTeamId(null);
+          }}
+          accent={C.cyan}
+        />
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.25 }}>
+        {(leagues.length > 0 ? leagues : []).map((league) => (
           <SelectorButton
             key={league.key}
             label={league.key}
@@ -435,34 +579,37 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
         ))}
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1.25 }}>
-        {(currentLeague.divisions ?? []).map((division) => {
-          const localLabel = division.name?.[lang] ?? DIVISION_LABELS[division.key]?.[lang] ?? division.key;
-          return (
-            <SelectorButton
-              key={division.key}
-              label={`${currentLeague.key} ${localLabel}`}
-              meta={lang === 'es' ? `${copy.division} ${localLabel}` : `${copy.division} ${localLabel}`}
-              active={division.key === currentDivision.key}
-              onClick={() => {
-                setActiveDivision(division.key);
-                setSelectedTeamId(null);
-              }}
-              compact
-            />
-          );
-        })}
-      </Box>
+      {activeMode === 'division' && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1.25 }}>
+          {(currentLeague.divisions ?? []).map((division) => {
+            const localLabel = division.name?.[lang] ?? DIVISION_LABELS[division.key]?.[lang] ?? division.key;
+            return (
+              <SelectorButton
+                key={division.key}
+                label={`${currentLeague.key} ${localLabel}`}
+                meta={`${copy.division} ${localLabel}`}
+                active={division.key === currentDivision.key}
+                onClick={() => {
+                  setActiveDivision(division.key);
+                  setSelectedTeamId(null);
+                }}
+                compact
+              />
+            );
+          })}
+        </Box>
+      )}
 
       <Box sx={{ display: 'grid', gap: 1.1 }}>
-        {currentDivision.teams.map((team, index) => (
+        {currentTeams.map((team, index) => (
           <TeamRow
             key={team.teamId ?? `${team.abbreviation}-${index}`}
             team={team}
-            rank={index + 1}
+            rank={activeMode === 'league' ? (team.leagueRank ?? index + 1) : index + 1}
             copy={copy}
             selected={selectedTeamId === team.teamId}
             leader={index === 0}
+            viewMode={activeMode}
             onToggle={() => setSelectedTeamId((value) => (value === team.teamId ? null : team.teamId))}
           />
         ))}

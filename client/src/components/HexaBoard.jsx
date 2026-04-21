@@ -36,10 +36,8 @@ import { staggerContainer } from '../motion';
 import { HeroCard, InsightCard, DataChip } from './premium';
 import TeamLogo from './TeamLogo';
 import PlayerHeadshot from './PlayerHeadshot';
-import MLBStandingsPanel from './MLBStandingsPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const BOARD_VIEW_STORAGE_KEY = 'hexa_board_active_view';
 
 // ── Copy ────────────────────────────────────────────────────────────────────
 const T = {
@@ -60,10 +58,6 @@ const T = {
     ago:         (m) => `${m}m ago`,
     topSignal:   'TOP SIGNAL · TODAY',
     seeAll:      'SEE FEED BELOW',
-    views: {
-      signals: 'Board',
-      standings: 'Standings',
-    },
     filters:     {
       all:       'ALL',
       offense:   'OFFENSE',
@@ -101,10 +95,6 @@ const T = {
     ago:         (m) => `hace ${m}m`,
     topSignal:   'SEÑAL TOP · HOY',
     seeAll:      'VER FEED ABAJO',
-    views: {
-      signals: 'Pizarra',
-      standings: 'Posiciones',
-    },
     filters:     {
       all:       'TODO',
       offense:   'OFENSIVA',
@@ -344,63 +334,6 @@ function FilterChips({ lang, t, active, counts, onChange }) {
   );
 }
 
-function BoardViewTabs({ t, active, onChange }) {
-  const { C, MONO, SCALE, SPACE } = useHexaTheme();
-  const items = [
-    { key: 'signals', label: t.views.signals },
-    { key: 'standings', label: t.views.standings },
-  ];
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        gap: SPACE.sm,
-        overflowX: 'auto',
-        pb: SPACE.sm,
-        mb: SPACE.lg,
-        scrollSnapType: 'x proximity',
-        '&::-webkit-scrollbar': { height: 3 },
-      }}
-    >
-      {items.map((item) => {
-        const isActive = item.key === active;
-        return (
-          <Box
-            key={item.key}
-            component="button"
-            onClick={() => onChange(item.key)}
-            sx={{
-              flexShrink: 0,
-              scrollSnapAlign: 'center',
-              px: '16px',
-              py: '11px',
-              minHeight: 44,
-              border: `1px solid ${isActive ? C.cyan : C.border}`,
-              borderBottom: isActive ? `2px solid ${C.cyan}` : '2px solid rgba(0,217,255,0.08)',
-              bgcolor: isActive
-                ? 'linear-gradient(180deg, rgba(0,217,255,0.16), rgba(0,217,255,0.06))'
-                : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
-              color: isActive ? C.cyan : C.textSecondary,
-              fontFamily: MONO,
-              fontSize: SCALE.label,
-              fontWeight: 700,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              boxShadow: isActive
-                ? '0 10px 24px rgba(0,0,0,0.42), 0 0 14px rgba(0,217,255,0.14)'
-                : '0 8px 18px rgba(0,0,0,0.24)',
-            }}
-          >
-            {item.label}
-          </Box>
-        );
-      })}
-    </Box>
-  );
-}
-
 function InsightDrillDown({ insight, lang, t }) {
   const { C, MONO, SCALE, SPACE, INTENT } = useHexaTheme();
   const tone = INTENT[TYPE_INTENT[insight.type]] ?? INTENT.data;
@@ -445,10 +378,6 @@ export default function HexaBoard({ lang = 'es' }) {
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeView, setActiveView] = useState(() => {
-    if (typeof window === 'undefined') return 'signals';
-    return window.localStorage.getItem(BOARD_VIEW_STORAGE_KEY) || 'signals';
-  });
   const [activeCat,  setActiveCat]  = useState('all');
   const [expandedKey, setExpandedKey] = useState(null);
 
@@ -469,11 +398,6 @@ export default function HexaBoard({ lang = 'es' }) {
   }, []);
 
   useEffect(() => { fetchBoard(false); }, [fetchBoard]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(BOARD_VIEW_STORAGE_KEY, activeView);
-  }, [activeView]);
 
   const ageMin = data ? minutesAgo(data.lastUpdatedAt) : null;
 
@@ -513,8 +437,6 @@ export default function HexaBoard({ lang = 'es' }) {
         onRefresh={() => fetchBoard(true)}
       />
 
-      <BoardViewTabs t={t} active={activeView} onChange={setActiveView} />
-
       {/* Loading (first load only) */}
       {loading && !data && <LoadingSkeleton t={t} />}
 
@@ -547,11 +469,7 @@ export default function HexaBoard({ lang = 'es' }) {
       )}
 
       {/* Populated state */}
-      {!loading && !error && activeView === 'standings' && (
-        <MLBStandingsPanel lang={lang} />
-      )}
-
-      {!loading && !error && activeView === 'signals' && hero && (
+      {!loading && !error && hero && (
         <>
           {/* ── 1 · Hero ───────────────────────────────────────────────── */}
           <Box sx={{ mb: SPACE.lg }}>

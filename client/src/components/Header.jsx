@@ -30,18 +30,18 @@ const SUBTITLE = {
 
 const TABS = [
   { value: 'pizarra', en: 'Board',       es: 'Pizarra',          mobileEn: 'Board',       mobileEs: 'Pizarra' },
+  { value: 'standings', en: 'Standings', es: 'Posiciones',      mobileEn: 'Standings',   mobileEs: 'Posiciones' },
   { value: 'semana',  en: 'Picks',       es: 'Semana',           mobileEn: 'Picks',       mobileEs: 'Semana', highlight: true },
   { value: 'game',    en: 'Single Game', es: 'Juego Individual', mobileEn: 'Game',  mobileEs: 'Juego' },
   { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           mobileEn: 'Parlay',      mobileEs: 'Parlay', adminOnly: true },
   { value: 'bankroll', en: 'Bankroll',   es: 'Bankroll',         mobileEn: 'Bankroll',    mobileEs: 'Bankroll' },
-  { value: 'tools',   en: 'Tools',       es: 'Herramientas',     mobileEn: 'Tools',       mobileEs: 'Herramientas' },
+  { value: 'tools',   en: 'Tools',       es: 'Herramientas',     mobileEn: 'Tools',       mobileEs: 'Herramientas', adminOnly: true },
   { value: 'history', en: 'History',     es: 'Historial',        mobileEn: 'History',     mobileEs: 'Historial' },
   { value: 'live',    en: 'Live',        es: 'En Vivo',          mobileEn: 'Live',        mobileEs: 'En vivo' },
   { value: 'gameday', en: 'Details',     es: 'Detalles',         mobileEn: 'Details',     mobileEs: 'Detalles' },
   { value: 'guide',   en: 'Guide',       es: 'Guía',             mobileEn: 'Guide',  mobileEs: 'Guia' },
   { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan',       mobileEn: 'Batch',  mobileEs: 'Batch', adminOnly: true },
 ];
-const PRIMARY_TAB_VALUES = new Set(['pizarra', 'semana', 'game', 'tools']);
 
 // ── Statcast badge ────────────────────────────────────────────────────────────
 
@@ -534,12 +534,12 @@ function TabButton({ tab, active, lang, onClick, disabled = false, tabRef = null
         px:            { xs: '16px', sm: '18px' },
         py:            { xs: '12px', sm: '11px' },
         background:    active
-          ? 'linear-gradient(180deg, rgba(0,217,255,0.18), rgba(0,217,255,0.08))'
+          ? 'rgba(0,217,255,0.12)'
           : isHighlight
-            ? 'linear-gradient(180deg, rgba(0,255,136,0.12), rgba(0,255,136,0.04))'
+            ? 'rgba(0,255,136,0.1)'
             : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
         border:        active
-          ? `1px solid ${C.cyan}`
+          ? `1px solid ${C.cyanLine}`
           : isHighlight
             ? '1px solid rgba(0,255,136,0.35)'
             : `1px solid ${C.border}`,
@@ -563,18 +563,22 @@ function TabButton({ tab, active, lang, onClick, disabled = false, tabRef = null
         minWidth:      { xs: 'max-content', sm: 0 },
         scrollSnapAlign: 'center',
         boxShadow:     active
-          ? '0 10px 24px rgba(0,0,0,0.45), 0 0 18px rgba(0,217,255,0.2), inset 0 1px 0 rgba(255,255,255,0.06)'
+          ? '0 10px 24px rgba(0,0,0,0.38)'
           : isHighlight
-            ? '0 10px 22px rgba(0,0,0,0.45), 0 0 16px rgba(0,255,136,0.15), inset 0 1px 0 rgba(255,255,255,0.04)'
-            : '0 8px 18px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.03)',
+            ? '0 10px 22px rgba(0,0,0,0.38)'
+            : '0 8px 18px rgba(0,0,0,0.32)',
         '&::before': {
           content: '""',
           position: 'absolute',
-          inset: '1px 1px auto 1px',
-          height: '38%',
+          top: 0,
+          left: 10,
+          right: 10,
+          height: 3,
           background: active
-            ? 'linear-gradient(180deg, rgba(255,255,255,0.12), transparent)'
-            : 'linear-gradient(180deg, rgba(255,255,255,0.04), transparent)',
+            ? C.cyan
+            : isHighlight
+              ? '#00FF88'
+              : 'rgba(255,255,255,0.06)',
           pointerEvents: 'none',
         },
         '&::after': {
@@ -588,19 +592,17 @@ function TabButton({ tab, active, lang, onClick, disabled = false, tabRef = null
             ? C.cyan
             : isHighlight
               ? '#00FF88'
-              : 'rgba(0,217,255,0.18)',
-          boxShadow: active ? `0 0 10px ${C.cyan}` : 'none',
-          opacity: active || isHighlight ? 1 : 0.45,
+              : 'rgba(0,217,255,0.14)',
+          opacity: active || isHighlight ? 1 : 0.4,
         },
         '&:hover': {
           color:      active ? C.cyan : isHighlight ? '#00FF88' : C.textSecondary,
           background: active
-            ? 'linear-gradient(180deg, rgba(0,217,255,0.22), rgba(0,217,255,0.1))'
+            ? 'rgba(0,217,255,0.16)'
             : isHighlight
-              ? 'linear-gradient(180deg, rgba(0,255,136,0.18), rgba(0,255,136,0.06))'
+              ? 'rgba(0,255,136,0.14)'
               : 'linear-gradient(180deg, rgba(18,28,40,1), rgba(6,10,16,0.98))',
           borderColor: active ? C.cyan : isHighlight ? '#00FF88' : C.cyanLine,
-          textShadow: active ? `0 0 8px rgba(0,217,255,0.6)` : isHighlight ? '0 0 10px rgba(0,255,136,0.6)' : 'none',
           transform: 'translateY(-1px)',
         },
       }}
@@ -764,7 +766,6 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const tabRefs = useRef({});
   const desktopTabs = TABS.filter(tab => !tab.adminOnly || isAdmin);
-  const mobileTabs = desktopTabs.filter(tab => !PRIMARY_TAB_VALUES.has(tab.value));
   const adminActions = isAdmin
     ? [
         {
@@ -912,7 +913,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
                   position: 'absolute',
                   top: 'calc(100% + 8px)',
                   right: 0,
-                  width: 'min(320px, calc(100vw - 32px))',
+                  width: 'min(320px, calc(100vw - 24px))',
+                  maxHeight: 'calc(100vh - 140px)',
+                  overflowY: 'auto',
                   p: '12px',
                   display: 'grid',
                   gap: '10px',
@@ -1088,9 +1091,11 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
       {/* ── Tab bar (~28px of the 72px) ── */}
       <Box
         sx={{
-          display:    { xs: 'none', md: 'flex' },
+          display:    'flex',
           alignItems: 'stretch',
-          px:         { xs: '4px', sm: '12px' },
+          gap:        { xs: '8px', md: 0 },
+          px:         { xs: '8px', sm: '12px' },
+          pb:         { xs: '10px', md: 0 },
           overflowX:  'auto',
           flexWrap:   'nowrap',
           scrollSnapType: 'x proximity',
@@ -1102,35 +1107,6 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         }}
       >
         {desktopTabs.map(tab => (
-          <TabButton
-            key={tab.value}
-            tab={tab}
-            active={activeTab === tab.value}
-            lang={lang}
-            onClick={disabled ? undefined : () => onTabChange(tab.value)}
-            disabled={disabled}
-            tabRef={(node) => { tabRefs.current[tab.value] = node; }}
-          />
-        ))}
-      </Box>
-      <Box
-        sx={{
-          display: { xs: 'flex', md: 'none' },
-          alignItems: 'stretch',
-          gap: '8px',
-          px: '8px',
-          pb: '8px',
-          overflowX: 'auto',
-          flexWrap: 'nowrap',
-          scrollSnapType: 'x proximity',
-          scrollPaddingInline: '12px',
-          WebkitOverflowScrolling: 'touch',
-          msOverflowStyle: 'none',
-          scrollbarWidth: 'none',
-          '&::-webkit-scrollbar': { display: 'none' },
-        }}
-      >
-        {mobileTabs.map(tab => (
           <TabButton
             key={tab.value}
             tab={tab}

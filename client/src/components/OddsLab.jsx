@@ -445,7 +445,7 @@ export default function OddsLab({ lang = 'en' }) {
             <Typography sx={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, letterSpacing: '0.28em', textTransform: 'uppercase' }}>
               // premium utility layer
             </Typography>
-            <Typography sx={{ fontFamily: BARLOW, fontSize: { xs: 'clamp(1.8rem, 8.4vw, 2.35rem)', md: 34 }, color: C.accent, letterSpacing: { xs: '0.07em', md: '0.16em' }, textTransform: 'uppercase', lineHeight: 1.04, mt: 0.5, maxWidth: { xs: '100%', md: 760 }, wordBreak: 'break-word' }}>
+            <Typography sx={{ fontFamily: BARLOW, fontSize: { xs: 'clamp(1.45rem, 7.2vw, 2.05rem)', md: 34 }, color: C.accent, letterSpacing: { xs: '0.04em', md: '0.16em' }, textTransform: 'uppercase', lineHeight: 1.04, mt: 0.5, maxWidth: { xs: '100%', md: 760 }, wordBreak: 'break-word' }}>
               {t.title}
             </Typography>
             <Typography sx={{ fontFamily: MONO, fontSize: { xs: 11, md: 12 }, color: C.textSecondary, maxWidth: 760, mt: 1, lineHeight: 1.8 }}>
@@ -461,7 +461,7 @@ export default function OddsLab({ lang = 'en' }) {
         </Stack>
       </Box>
 
-      <Stack direction="row" spacing={1} useFlexGap sx={{ overflowX: 'auto', pb: 0.5, flexWrap: 'nowrap', scrollSnapType: 'x proximity', '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ overflowX: 'auto', px: 0.25, pb: 0.75, flexWrap: 'nowrap', scrollSnapType: 'x proximity', '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
         {toolSections.map((section) => (
           <Chip
             key={section.key}
@@ -469,17 +469,26 @@ export default function OddsLab({ lang = 'en' }) {
             onClick={() => focusSection(section.key)}
             sx={{
               color: activeSection === section.key ? C.cyan : C.textPrimary,
-              border: `1px solid ${activeSection === section.key ? C.cyan : C.border}`,
+              border: `1px solid ${activeSection === section.key ? C.cyanLine : C.border}`,
               background: activeSection === section.key
-                ? 'linear-gradient(180deg, rgba(0,217,255,0.16), rgba(0,217,255,0.06))'
+                ? 'rgba(0,217,255,0.12)'
                 : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
               minHeight: 44,
               flexShrink: 0,
               scrollSnapAlign: 'center',
               boxShadow: activeSection === section.key
-                ? '0 10px 24px rgba(0,0,0,0.42), 0 0 14px rgba(0,217,255,0.14)'
+                ? '0 10px 24px rgba(0,0,0,0.38)'
                 : '0 8px 18px rgba(0,0,0,0.24)',
-              '&:hover': { borderColor: C.cyanLine, background: C.cyanDim, color: C.cyan },
+              '& .MuiChip-label': {
+                px: 1.6,
+                fontFamily: BARLOW,
+                fontSize: { xs: '0.7rem', sm: '0.76rem' },
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+              },
+              '&:hover': { borderColor: C.cyanLine, background: 'rgba(0,217,255,0.16)', color: C.cyan },
             }}
           />
         ))}
@@ -487,7 +496,7 @@ export default function OddsLab({ lang = 'en' }) {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1.2fr 0.8fr' }, gap: 3 }}>
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <Box ref={(node) => { sectionRefs.current.converter = node; }} sx={{ ...panelSx, scrollMarginTop: 116 }}>
+          <Box ref={(node) => { sectionRefs.current.converter = node; }} sx={{ ...panelSx, scrollMarginTop: 170 }}>
             <SectionHeader eyebrow={t.converter.eyebrow} title={t.converter.title} subtitle={t.converter.subtitle} />
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
@@ -539,7 +548,7 @@ export default function OddsLab({ lang = 'en' }) {
             )}
           </Box>
 
-          <Box ref={(node) => { sectionRefs.current.betslip = node; }} sx={{ ...panelSx, scrollMarginTop: 116 }}>
+          <Box ref={(node) => { sectionRefs.current.betslip = node; }} sx={{ ...panelSx, scrollMarginTop: 170 }}>
             <SectionHeader eyebrow={t.betSlip.eyebrow} title={t.betSlip.title} subtitle={t.betSlip.subtitle} accent={C.accent} />
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '160px 1fr 1fr auto' }, gap: 2, alignItems: 'end' }}>
@@ -609,7 +618,7 @@ export default function OddsLab({ lang = 'en' }) {
         </Box>
 
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <Box ref={(node) => { sectionRefs.current.edge = node; }} sx={{ ...panelSx, scrollMarginTop: 116 }}>
+          <Box ref={(node) => { sectionRefs.current.edge = node; }} sx={{ ...panelSx, scrollMarginTop: 170 }}>
             <SectionHeader eyebrow={t.edge.eyebrow} title={t.edge.title} subtitle={t.edge.subtitle} accent={C.green} />
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '150px 1fr 1fr auto' }, gap: 2, alignItems: 'end' }}>
@@ -724,7 +733,7 @@ export default function OddsLab({ lang = 'en' }) {
         </Box>
       </Box>
 
-      <Box ref={(node) => { sectionRefs.current.parlay = node; }} sx={{ ...panelSx, scrollMarginTop: 116 }}>
+      <Box ref={(node) => { sectionRefs.current.parlay = node; }} sx={{ ...panelSx, scrollMarginTop: 170 }}>
         <SectionHeader eyebrow={t.parlay.eyebrow} title={t.parlay.title} subtitle={t.parlay.subtitle} accent={C.accent} />
 
         <Box sx={{ display: 'grid', gap: 1.5 }}>
@@ -837,7 +846,7 @@ export default function OddsLab({ lang = 'en' }) {
         )}
       </Box>
 
-      <Box ref={(node) => { sectionRefs.current.reference = node; }} sx={{ ...panelSx, scrollMarginTop: 116 }}>
+      <Box ref={(node) => { sectionRefs.current.reference = node; }} sx={{ ...panelSx, scrollMarginTop: 170 }}>
         <SectionHeader eyebrow={t.reference.eyebrow} title={t.reference.title} subtitle={t.reference.subtitle} />
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 420 }}>
