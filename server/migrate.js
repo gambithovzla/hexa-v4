@@ -311,11 +311,14 @@ export async function runMigrations() {
         pick_id     INTEGER       REFERENCES picks(id) ON DELETE SET NULL,
         pick_data   JSONB         DEFAULT '{}',
         week_start  DATE          NOT NULL,
+        dedupe_key  TEXT          DEFAULT NULL,
         created_at  TIMESTAMP     DEFAULT NOW(),
         deleted_at  TIMESTAMP     DEFAULT NULL
       )
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_insights_week ON hexa_insights(week_start, deleted_at)`);
+    await client.query(`ALTER TABLE hexa_insights ADD COLUMN IF NOT EXISTS dedupe_key TEXT DEFAULT NULL`);
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_insights_dedupe_key ON hexa_insights(dedupe_key)`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS content_queue (

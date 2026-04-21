@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -286,6 +286,7 @@ function americanFromEntry(entry) {
 
 export default function OddsLab({ lang = 'en' }) {
   const t = LABELS[lang] ?? LABELS.en;
+  const sectionRefs = useRef({});
 
   const [hexaPicks, setHexaPicks] = useState([]);
   const [importedLabel, setImportedLabel] = useState('');
@@ -405,6 +406,13 @@ export default function OddsLab({ lang = 'en' }) {
   }
 
   const valueDetected = edgePercent != null && edgePercent > 0;
+  const toolSections = [
+    { key: 'converter', label: t.converter.title },
+    { key: 'betslip', label: t.betSlip.title },
+    { key: 'edge', label: t.edge.title },
+    { key: 'parlay', label: t.parlay.title },
+    { key: 'reference', label: t.reference.title },
+  ];
 
   return (
     <Box sx={{ display: 'grid', gap: 3 }}>
@@ -430,9 +438,27 @@ export default function OddsLab({ lang = 'en' }) {
         </Stack>
       </Box>
 
+      <Stack direction="row" spacing={1} useFlexGap sx={{ overflowX: 'auto', pb: 0.5, flexWrap: 'nowrap', '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
+        {toolSections.map((section) => (
+          <Chip
+            key={section.key}
+            label={section.label}
+            onClick={() => sectionRefs.current[section.key]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            sx={{
+              color: C.textPrimary,
+              border: `1px solid ${C.border}`,
+              background: 'rgba(255,255,255,0.03)',
+              minHeight: 42,
+              flexShrink: 0,
+              '&:hover': { borderColor: C.cyanLine, background: C.cyanDim, color: C.cyan },
+            }}
+          />
+        ))}
+      </Stack>
+
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1.2fr 0.8fr' }, gap: 3 }}>
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <Box sx={panelSx}>
+          <Box ref={(node) => { sectionRefs.current.converter = node; }} sx={panelSx}>
             <SectionHeader eyebrow={t.converter.eyebrow} title={t.converter.title} subtitle={t.converter.subtitle} />
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
@@ -484,7 +510,7 @@ export default function OddsLab({ lang = 'en' }) {
             )}
           </Box>
 
-          <Box sx={panelSx}>
+          <Box ref={(node) => { sectionRefs.current.betslip = node; }} sx={panelSx}>
             <SectionHeader eyebrow={t.betSlip.eyebrow} title={t.betSlip.title} subtitle={t.betSlip.subtitle} accent={C.accent} />
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '160px 1fr 1fr auto' }, gap: 2, alignItems: 'end' }}>
@@ -554,7 +580,7 @@ export default function OddsLab({ lang = 'en' }) {
         </Box>
 
         <Box sx={{ display: 'grid', gap: 3 }}>
-          <Box sx={panelSx}>
+          <Box ref={(node) => { sectionRefs.current.edge = node; }} sx={panelSx}>
             <SectionHeader eyebrow={t.edge.eyebrow} title={t.edge.title} subtitle={t.edge.subtitle} accent={C.green} />
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '150px 1fr 1fr auto' }, gap: 2, alignItems: 'end' }}>
@@ -669,7 +695,7 @@ export default function OddsLab({ lang = 'en' }) {
         </Box>
       </Box>
 
-      <Box sx={panelSx}>
+      <Box ref={(node) => { sectionRefs.current.parlay = node; }} sx={panelSx}>
         <SectionHeader eyebrow={t.parlay.eyebrow} title={t.parlay.title} subtitle={t.parlay.subtitle} accent={C.accent} />
 
         <Box sx={{ display: 'grid', gap: 1.5 }}>
@@ -767,7 +793,7 @@ export default function OddsLab({ lang = 'en' }) {
           />
         </Stack>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(5, 1fr)' }, gap: 1.5, mt: 2 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(5, 1fr)' }, gap: 1.5, mt: 2 }}>
           <StatBlock label={t.stats.legs} value={String(validParlayDecimals.length)} accent={C.cyan} />
           <StatBlock label={t.stats.combinedPrice} value={parlayResult ? formatAmericanOdds(parlayResult.combinedAmerican) : '--'} accent={C.accent} />
           <StatBlock label={t.fields.decimal} value={parlayResult ? formatDecimalOdds(parlayResult.combinedDecimal) : '--'} accent={C.cyan} />
@@ -782,31 +808,33 @@ export default function OddsLab({ lang = 'en' }) {
         )}
       </Box>
 
-      <Box sx={panelSx}>
+      <Box ref={(node) => { sectionRefs.current.reference = node; }} sx={panelSx}>
         <SectionHeader eyebrow={t.reference.eyebrow} title={t.reference.title} subtitle={t.reference.subtitle} />
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{t.fields.american}</TableCell>
-              <TableCell>{t.fields.decimal}</TableCell>
-              <TableCell>{t.fields.fractional}</TableCell>
-              <TableCell>{t.fields.probability}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {REFERENCE_AMERICAN.map(american => {
-              const converted = convertOddsFrom('american', String(american));
-              return (
-                <TableRow key={american}>
-                  <TableCell>{formatByType('american', american)}</TableCell>
-                  <TableCell>{converted?.decimal ?? '--'}</TableCell>
-                  <TableCell>{converted?.fractional ?? '--'}</TableCell>
-                  <TableCell>{converted?.probability ?? '--'}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 420 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>{t.fields.american}</TableCell>
+                <TableCell>{t.fields.decimal}</TableCell>
+                <TableCell>{t.fields.fractional}</TableCell>
+                <TableCell>{t.fields.probability}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {REFERENCE_AMERICAN.map(american => {
+                const converted = convertOddsFrom('american', String(american));
+                return (
+                  <TableRow key={american}>
+                    <TableCell>{formatByType('american', american)}</TableCell>
+                    <TableCell>{converted?.decimal ?? '--'}</TableCell>
+                    <TableCell>{converted?.fractional ?? '--'}</TableCell>
+                    <TableCell>{converted?.probability ?? '--'}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Box>
       </Box>
     </Box>
   );

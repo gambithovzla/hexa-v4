@@ -18,6 +18,7 @@ const SEASON = new Date().getFullYear();
 // ---------------------------------------------------------------------------
 const gamesCache = new Map();
 const GAMES_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos
+const STANDINGS_CACHE_TTL_MS = 15 * 60 * 1000;
 
 // Seasons to try in order — current year may have no data early in calendar year
 const SEASON_FALLBACK = SEASON >= 2026 ? [SEASON, 2025, 2024] : [SEASON, SEASON - 1];
@@ -243,6 +244,42 @@ function normalizeHittingStats(data) {
 // ---------------------------------------------------------------------------
 
 let teamsCache = null;
+let standingsCache = null;
+
+const LEAGUE_KEYS = {
+  103: 'AL',
+  104: 'NL',
+};
+
+const LEAGUE_NAMES = {
+  AL: { en: 'American League', es: 'Liga Americana' },
+  NL: { en: 'National League', es: 'Liga Nacional' },
+};
+
+const DIVISION_ORDER = ['east', 'central', 'west'];
+const DIVISION_NAMES = {
+  east: { en: 'East', es: 'Este' },
+  central: { en: 'Central', es: 'Central' },
+  west: { en: 'West', es: 'Oeste' },
+};
+
+function getDivisionKey(name) {
+  const raw = String(name ?? '').toLowerCase();
+  if (raw.includes('east')) return 'east';
+  if (raw.includes('central')) return 'central';
+  if (raw.includes('west')) return 'west';
+  return raw || 'division';
+}
+
+function getLastTenRecord(teamRecord) {
+  const splitRecords = teamRecord?.records?.splitRecords ?? [];
+  const lastTen = splitRecords.find((entry) => (
+    String(entry?.type ?? entry?.displayName ?? '').toLowerCase().replace(/\s+/g, '') === 'lastten'
+  ));
+
+  if (!lastTen) return null;
+  return `${lastTen.wins ?? 0}-${lastTen.losses ?? 0}`;
+}
 
 // ---------------------------------------------------------------------------
 // Funciones exportadas
@@ -307,6 +344,95 @@ export async function getTeams() {
     console.error('[MLB API] Error en getTeams:', err.message);
     throw err;
   }
+}
+
+export async function getMlbStandings(season = SEASON) {
+  if (standingsCache && standingsCache.season === season && Date.now() < standingsCache.expiresAt) {
+    console.log(`[MLB API] Standings ${season} servidos desde cache`);
+    return standingsCache.data;
+  }
+
+  const [standingsData, teams] = await Promise.all([
+    fetchJSON(`${MLB_BASE}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason&hydrate=team`),
+    getTeams(),
+  ]);
+
+  const teamMap = new Map(teams.map((team) => [team.id, team]));
+  const leagueMap = new Map();
+
+  for (const record of standingsData.records ?? []) {
+    const leagueKey = LEAGUE_KEYS[record?.league?.id] ?? String(record?.league?.name ?? 'MLB');
+    const divisionKey = getDivisionKey(record?.division?.name);
+    const divisionNames = DIVISION_NAMES[divisionKey] ?? {
+      en: record?.division?.name ?? 'Division',
+      es: record?.division?.name ?? 'Division',
+    };
+
+    if (!leagueMap.has(leagueKey)) {
+      leagueMap.set(leagueKey, {
+        key: leagueKey,
+        name: LEAGUE_NAMES[leagueKey] ?? {
+          en: record?.league?.name ?? leagueKey,
+          es: record?.league?.name ?? leagueKey,
+        },
+        divisions: [],
+      });
+    }
+
+    const league = leagueMap.get(leagueKey);
+    const teamsInDivision = (record.teamRecords ?? [])
+      .map((teamRecord) => {
+        const teamMeta = teamMap.get(teamRecord?.team?.id) ?? {};
+        const wins = Number(teamRecord?.wins ?? 0);
+        const losses = Number(teamRecord?.losses ?? 0);
+        return {
+          teamId: teamRecord?.team?.id ?? null,
+          abbreviation: teamMeta.abbreviation ?? null,
+          name: teamMeta.teamName ?? teamRecord?.team?.name ?? 'Team',
+          fullName: teamRecord?.team?.name ?? teamMeta.name ?? 'Team',
+          wins,
+          losses,
+          pct: teamRecord?.winningPercentage ?? null,
+          gamesBack: teamRecord?.gamesBack ?? '-',
+          streak: teamRecord?.streak?.streakCode ?? null,
+          last10: getLastTenRecord(teamRecord),
+          runDiff: teamRecord?.runsScored != null && teamRecord?.runsAllowed != null
+            ? Number(teamRecord.runsScored) - Number(teamRecord.runsAllowed)
+            : null,
+          divisionRank: Number(teamRecord?.divisionRank ?? 99),
+        };
+      })
+      .sort((a, b) => a.divisionRank - b.divisionRank || b.wins - a.wins || a.losses - b.losses);
+
+    league.divisions.push({
+      key: divisionKey,
+      name: divisionNames,
+      teams: teamsInDivision,
+    });
+  }
+
+  const leagues = [...leagueMap.values()]
+    .sort((a, b) => String(a.key).localeCompare(String(b.key)))
+    .map((league) => ({
+      ...league,
+      divisions: league.divisions.sort((a, b) => (
+        DIVISION_ORDER.indexOf(a.key) - DIVISION_ORDER.indexOf(b.key)
+      )),
+    }));
+
+  const payload = {
+    season,
+    updatedAt: new Date().toISOString(),
+    leagues,
+  };
+
+  standingsCache = {
+    season,
+    data: payload,
+    expiresAt: Date.now() + STANDINGS_CACHE_TTL_MS,
+  };
+
+  return payload;
 }
 
 /**

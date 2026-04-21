@@ -36,6 +36,7 @@ import { staggerContainer } from '../motion';
 import { HeroCard, InsightCard, DataChip } from './premium';
 import TeamLogo from './TeamLogo';
 import PlayerHeadshot from './PlayerHeadshot';
+import MLBStandingsPanel from './MLBStandingsPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -58,6 +59,10 @@ const T = {
     ago:         (m) => `${m}m ago`,
     topSignal:   'TOP SIGNAL · TODAY',
     seeAll:      'SEE FEED BELOW',
+    views: {
+      signals: 'Signals',
+      standings: 'Standings',
+    },
     filters:     {
       all:       'ALL',
       offense:   'OFFENSE',
@@ -95,6 +100,10 @@ const T = {
     ago:         (m) => `hace ${m}m`,
     topSignal:   'SEÑAL TOP · HOY',
     seeAll:      'VER FEED ABAJO',
+    views: {
+      signals: 'Senales',
+      standings: 'Posiciones',
+    },
     filters:     {
       all:       'TODO',
       offense:   'OFENSIVA',
@@ -334,6 +343,57 @@ function FilterChips({ lang, t, active, counts, onChange }) {
   );
 }
 
+function BoardViewTabs({ t, active, onChange }) {
+  const { C, MONO, SCALE, SPACE } = useHexaTheme();
+  const items = [
+    { key: 'signals', label: t.views.signals },
+    { key: 'standings', label: t.views.standings },
+  ];
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        gap: SPACE.sm,
+        overflowX: 'auto',
+        pb: SPACE.sm,
+        mb: SPACE.lg,
+        scrollSnapType: 'x proximity',
+        '&::-webkit-scrollbar': { height: 3 },
+      }}
+    >
+      {items.map((item) => {
+        const isActive = item.key === active;
+        return (
+          <Box
+            key={item.key}
+            component="button"
+            onClick={() => onChange(item.key)}
+            sx={{
+              flexShrink: 0,
+              scrollSnapAlign: 'center',
+              px: '14px',
+              py: '10px',
+              minHeight: 42,
+              border: `1px solid ${isActive ? C.cyan : C.border}`,
+              bgcolor: isActive ? C.cyanDim : 'rgba(255,255,255,0.02)',
+              color: isActive ? C.cyan : C.textSecondary,
+              fontFamily: MONO,
+              fontSize: SCALE.label,
+              fontWeight: 700,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+            }}
+          >
+            {item.label}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 function InsightDrillDown({ insight, lang, t }) {
   const { C, MONO, SCALE, SPACE, INTENT } = useHexaTheme();
   const tone = INTENT[TYPE_INTENT[insight.type]] ?? INTENT.data;
@@ -378,6 +438,7 @@ export default function HexaBoard({ lang = 'es' }) {
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeView, setActiveView] = useState('signals');
   const [activeCat,  setActiveCat]  = useState('all');
   const [expandedKey, setExpandedKey] = useState(null);
 
@@ -437,6 +498,8 @@ export default function HexaBoard({ lang = 'es' }) {
         onRefresh={() => fetchBoard(true)}
       />
 
+      <BoardViewTabs t={t} active={activeView} onChange={setActiveView} />
+
       {/* Loading (first load only) */}
       {loading && !data && <LoadingSkeleton t={t} />}
 
@@ -469,7 +532,11 @@ export default function HexaBoard({ lang = 'es' }) {
       )}
 
       {/* Populated state */}
-      {!loading && !error && hero && (
+      {!loading && !error && activeView === 'standings' && (
+        <MLBStandingsPanel lang={lang} />
+      )}
+
+      {!loading && !error && activeView === 'signals' && hero && (
         <>
           {/* ── 1 · Hero ───────────────────────────────────────────────── */}
           <Box sx={{ mb: SPACE.lg }}>
