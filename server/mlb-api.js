@@ -257,14 +257,24 @@ const LEAGUE_NAMES = {
 };
 
 const DIVISION_ORDER = ['east', 'central', 'west'];
+const DIVISION_IDS = {
+  200: 'west',
+  201: 'east',
+  202: 'central',
+  203: 'west',
+  204: 'east',
+  205: 'central',
+};
 const DIVISION_NAMES = {
   east: { en: 'East', es: 'Este' },
   central: { en: 'Central', es: 'Central' },
   west: { en: 'West', es: 'Oeste' },
 };
 
-function getDivisionKey(name) {
-  const raw = String(name ?? '').toLowerCase();
+function getDivisionKey(division) {
+  const byId = DIVISION_IDS[Number(division?.id)];
+  if (byId) return byId;
+  const raw = String(division?.name ?? division?.abbreviation ?? '').toLowerCase();
   if (raw.includes('east')) return 'east';
   if (raw.includes('central')) return 'central';
   if (raw.includes('west')) return 'west';
@@ -362,7 +372,7 @@ export async function getMlbStandings(season = SEASON) {
 
   for (const record of standingsData.records ?? []) {
     const leagueKey = LEAGUE_KEYS[record?.league?.id] ?? String(record?.league?.name ?? 'MLB');
-    const divisionKey = getDivisionKey(record?.division?.name);
+    const divisionKey = getDivisionKey(record?.division);
     const divisionNames = DIVISION_NAMES[divisionKey] ?? {
       en: record?.division?.name ?? 'Division',
       es: record?.division?.name ?? 'Division',

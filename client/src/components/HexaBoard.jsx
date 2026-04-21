@@ -39,6 +39,7 @@ import PlayerHeadshot from './PlayerHeadshot';
 import MLBStandingsPanel from './MLBStandingsPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const BOARD_VIEW_STORAGE_KEY = 'hexa_board_active_view';
 
 // ── Copy ────────────────────────────────────────────────────────────────────
 const T = {
@@ -60,7 +61,7 @@ const T = {
     topSignal:   'TOP SIGNAL · TODAY',
     seeAll:      'SEE FEED BELOW',
     views: {
-      signals: 'Signals',
+      signals: 'Board',
       standings: 'Standings',
     },
     filters:     {
@@ -101,7 +102,7 @@ const T = {
     topSignal:   'SEÑAL TOP · HOY',
     seeAll:      'VER FEED ABAJO',
     views: {
-      signals: 'Senales',
+      signals: 'Pizarra',
       standings: 'Posiciones',
     },
     filters:     {
@@ -372,11 +373,14 @@ function BoardViewTabs({ t, active, onChange }) {
             sx={{
               flexShrink: 0,
               scrollSnapAlign: 'center',
-              px: '14px',
-              py: '10px',
-              minHeight: 42,
+              px: '16px',
+              py: '11px',
+              minHeight: 44,
               border: `1px solid ${isActive ? C.cyan : C.border}`,
-              bgcolor: isActive ? C.cyanDim : 'rgba(255,255,255,0.02)',
+              borderBottom: isActive ? `2px solid ${C.cyan}` : '2px solid rgba(0,217,255,0.08)',
+              bgcolor: isActive
+                ? 'linear-gradient(180deg, rgba(0,217,255,0.16), rgba(0,217,255,0.06))'
+                : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
               color: isActive ? C.cyan : C.textSecondary,
               fontFamily: MONO,
               fontSize: SCALE.label,
@@ -384,6 +388,9 @@ function BoardViewTabs({ t, active, onChange }) {
               letterSpacing: '0.14em',
               textTransform: 'uppercase',
               cursor: 'pointer',
+              boxShadow: isActive
+                ? '0 10px 24px rgba(0,0,0,0.42), 0 0 14px rgba(0,217,255,0.14)'
+                : '0 8px 18px rgba(0,0,0,0.24)',
             }}
           >
             {item.label}
@@ -438,7 +445,10 @@ export default function HexaBoard({ lang = 'es' }) {
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeView, setActiveView] = useState('signals');
+  const [activeView, setActiveView] = useState(() => {
+    if (typeof window === 'undefined') return 'signals';
+    return window.localStorage.getItem(BOARD_VIEW_STORAGE_KEY) || 'signals';
+  });
   const [activeCat,  setActiveCat]  = useState('all');
   const [expandedKey, setExpandedKey] = useState(null);
 
@@ -459,6 +469,11 @@ export default function HexaBoard({ lang = 'es' }) {
   }, []);
 
   useEffect(() => { fetchBoard(false); }, [fetchBoard]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(BOARD_VIEW_STORAGE_KEY, activeView);
+  }, [activeView]);
 
   const ageMin = data ? minutesAgo(data.lastUpdatedAt) : null;
 

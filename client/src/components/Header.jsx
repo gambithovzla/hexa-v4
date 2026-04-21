@@ -29,18 +29,19 @@ const SUBTITLE = {
 };
 
 const TABS = [
-  { value: 'pizarra', en: 'Board',       es: 'Pizarra',          mobileEn: 'Board', mobileEs: 'Board' },
-  { value: 'semana',  en: 'Picks',       es: 'Semana',           mobileEn: 'Picks', mobileEs: 'Picks', highlight: true },
+  { value: 'pizarra', en: 'Board',       es: 'Pizarra',          mobileEn: 'Board',       mobileEs: 'Pizarra' },
+  { value: 'semana',  en: 'Picks',       es: 'Semana',           mobileEn: 'Picks',       mobileEs: 'Semana', highlight: true },
   { value: 'game',    en: 'Single Game', es: 'Juego Individual', mobileEn: 'Game',  mobileEs: 'Juego' },
-  { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           mobileEn: 'Parlay', mobileEs: 'Parlay', adminOnly: true },
-  { value: 'bankroll', en: 'Bankroll',   es: 'Bankroll',         mobileEn: 'Bank',   mobileEs: 'Bank' },
-  { value: 'tools',   en: 'Tools',       es: 'Herramientas',     mobileEn: 'Tools',  mobileEs: 'Tools' },
-  { value: 'history', en: 'History',     es: 'Historial',        mobileEn: 'Hist',   mobileEs: 'Hist' },
-  { value: 'live',    en: 'Live',        es: 'En Vivo',          mobileEn: 'Live',   mobileEs: 'Live' },
-  { value: 'gameday', en: 'Gameday',     es: 'Detalle',          mobileEn: 'Detail', mobileEs: 'Dia' },
+  { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           mobileEn: 'Parlay',      mobileEs: 'Parlay', adminOnly: true },
+  { value: 'bankroll', en: 'Bankroll',   es: 'Bankroll',         mobileEn: 'Bankroll',    mobileEs: 'Bankroll' },
+  { value: 'tools',   en: 'Tools',       es: 'Herramientas',     mobileEn: 'Tools',       mobileEs: 'Herramientas' },
+  { value: 'history', en: 'History',     es: 'Historial',        mobileEn: 'History',     mobileEs: 'Historial' },
+  { value: 'live',    en: 'Live',        es: 'En Vivo',          mobileEn: 'Live',        mobileEs: 'En vivo' },
+  { value: 'gameday', en: 'Details',     es: 'Detalles',         mobileEn: 'Details',     mobileEs: 'Detalles' },
   { value: 'guide',   en: 'Guide',       es: 'Guía',             mobileEn: 'Guide',  mobileEs: 'Guia' },
   { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan',       mobileEn: 'Batch',  mobileEs: 'Batch', adminOnly: true },
 ];
+const PRIMARY_TAB_VALUES = new Set(['pizarra', 'semana', 'game', 'tools']);
 
 // ── Statcast badge ────────────────────────────────────────────────────────────
 
@@ -481,6 +482,39 @@ function ActionConfirmModal({
   );
 }
 
+function AdminActionButton({ action, active = false, onClick }) {
+  return (
+    <Box
+      component="button"
+      onClick={onClick}
+      sx={{
+        px: action.compact ? '12px' : '14px',
+        py: action.compact ? '7px' : '6px',
+        border: active ? `1px solid ${action.color}` : `1px solid ${action.border}`,
+        borderRadius: '0',
+        bgcolor: active ? action.backgroundActive ?? action.background : action.background,
+        color: action.color,
+        fontFamily: MONO,
+        fontWeight: 600,
+        fontSize: action.compact ? '0.6rem' : '0.58rem',
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        transition: 'all 0.2s ease',
+        boxShadow: active ? `0 0 14px ${action.glow ?? `${action.color}33`}` : 'none',
+        '&:hover': {
+          bgcolor: action.hoverBackground ?? action.backgroundActive ?? action.background,
+          borderColor: action.hoverBorder ?? action.color,
+        },
+      }}
+    >
+      {action.label}
+    </Box>
+  );
+}
+
 function TabButton({ tab, active, lang, onClick, disabled = false, tabRef = null }) {
   const label = lang === 'es' ? tab.es : tab.en;
   const mobileLabel = lang === 'es' ? (tab.mobileEs ?? tab.es) : (tab.mobileEn ?? tab.en);
@@ -495,38 +529,79 @@ function TabButton({ tab, active, lang, onClick, disabled = false, tabRef = null
         position:      'relative',
         display:       'inline-flex',
         alignItems:    'center',
+        justifyContent:'center',
         gap:           isHighlight ? '5px' : '0',
-        px:            { xs: '14px', sm: '20px' },
+        px:            { xs: '16px', sm: '18px' },
         py:            { xs: '12px', sm: '11px' },
-        background:    active ? C.cyanDim : isHighlight ? 'rgba(0,255,136,0.05)' : 'transparent',
-        border:        'none',
-        borderBottom:  active
+        background:    active
+          ? 'linear-gradient(180deg, rgba(0,217,255,0.18), rgba(0,217,255,0.08))'
+          : isHighlight
+            ? 'linear-gradient(180deg, rgba(0,255,136,0.12), rgba(0,255,136,0.04))'
+            : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
+        border:        active
           ? `1px solid ${C.cyan}`
           : isHighlight
-            ? '1px solid rgba(0,255,136,0.30)'
-            : '1px solid transparent',
+            ? '1px solid rgba(0,255,136,0.35)'
+            : `1px solid ${C.border}`,
+        borderBottom:  active
+          ? `2px solid ${C.cyan}`
+          : isHighlight
+            ? '2px solid rgba(0,255,136,0.55)'
+            : '2px solid rgba(0,217,255,0.08)',
         color:         active ? C.cyan : isHighlight ? '#00FF88' : C.textMuted,
         fontFamily:    BARLOW,
-        fontSize:      '0.72rem',
+        fontSize:      { xs: '0.68rem', sm: '0.72rem' },
         fontWeight:    isHighlight ? 700 : 'inherit',
-        letterSpacing: '0.12em',
+        letterSpacing: { xs: '0.1em', sm: '0.12em' },
         textTransform: 'uppercase',
         cursor:        disabled ? 'default' : 'pointer',
         pointerEvents: disabled ? 'none' : 'auto',
         opacity:       disabled && !active ? 0.35 : 1,
-        transition:    'all 0.2s',
+        transition:    'all 0.2s ease',
         flexShrink:    0,
-        minHeight:     44,
+        minHeight:     46,
+        minWidth:      { xs: 'max-content', sm: 0 },
         scrollSnapAlign: 'center',
         boxShadow:     active
-          ? `0 1px 0 ${C.cyan}, 0 0 10px rgba(0,217,255,0.2)`
+          ? '0 10px 24px rgba(0,0,0,0.45), 0 0 18px rgba(0,217,255,0.2), inset 0 1px 0 rgba(255,255,255,0.06)'
           : isHighlight
-            ? '0 0 14px rgba(0,255,136,0.15)'
-            : 'none',
+            ? '0 10px 22px rgba(0,0,0,0.45), 0 0 16px rgba(0,255,136,0.15), inset 0 1px 0 rgba(255,255,255,0.04)'
+            : '0 8px 18px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.03)',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          inset: '1px 1px auto 1px',
+          height: '38%',
+          background: active
+            ? 'linear-gradient(180deg, rgba(255,255,255,0.12), transparent)'
+            : 'linear-gradient(180deg, rgba(255,255,255,0.04), transparent)',
+          pointerEvents: 'none',
+        },
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          left: 10,
+          right: 10,
+          bottom: 4,
+          height: 2,
+          background: active
+            ? C.cyan
+            : isHighlight
+              ? '#00FF88'
+              : 'rgba(0,217,255,0.18)',
+          boxShadow: active ? `0 0 10px ${C.cyan}` : 'none',
+          opacity: active || isHighlight ? 1 : 0.45,
+        },
         '&:hover': {
           color:      active ? C.cyan : isHighlight ? '#00FF88' : C.textSecondary,
-          background: active ? C.cyanDim : isHighlight ? 'rgba(0,255,136,0.10)' : 'rgba(0,217,255,0.04)',
+          background: active
+            ? 'linear-gradient(180deg, rgba(0,217,255,0.22), rgba(0,217,255,0.1))'
+            : isHighlight
+              ? 'linear-gradient(180deg, rgba(0,255,136,0.18), rgba(0,255,136,0.06))'
+              : 'linear-gradient(180deg, rgba(18,28,40,1), rgba(6,10,16,0.98))',
+          borderColor: active ? C.cyan : isHighlight ? '#00FF88' : C.cyanLine,
           textShadow: active ? `0 0 8px rgba(0,217,255,0.6)` : isHighlight ? '0 0 10px rgba(0,255,136,0.6)' : 'none',
+          transform: 'translateY(-1px)',
         },
       }}
     >
@@ -686,13 +761,78 @@ function MethodologyLink({ lang, onClick }) {
 
 export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, onPerformance, isAdmin = false, performancePublic = false, onOracleChat }) {
   const [showCreditPanel, setShowCreditPanel] = useState(false);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
   const tabRefs = useRef({});
+  const desktopTabs = TABS.filter(tab => !tab.adminOnly || isAdmin);
+  const mobileTabs = desktopTabs.filter(tab => !PRIMARY_TAB_VALUES.has(tab.value));
+  const adminActions = isAdmin
+    ? [
+        {
+          key: 'oracle',
+          label: 'ORACLE CHAT',
+          color: '#f97316',
+          border: 'rgba(249,115,22,0.4)',
+          background: 'rgba(249,115,22,0.15)',
+          backgroundActive: 'rgba(249,115,22,0.22)',
+          onClick: onOracleChat,
+        },
+        {
+          key: 'backtests',
+          label: 'BACKTESTS',
+          color: '#FF9900',
+          border: 'rgba(255,153,0,0.3)',
+          background: 'rgba(255,153,0,0.08)',
+          backgroundActive: 'rgba(255,153,0,0.14)',
+          onClick: () => { window.location.href = '/admin/backtests'; },
+        },
+        {
+          key: 'run-test',
+          label: 'RUN TEST',
+          color: '#FF9900',
+          border: 'rgba(255,102,0,0.3)',
+          background: 'rgba(255,102,0,0.08)',
+          backgroundActive: 'rgba(255,102,0,0.14)',
+          onClick: () => { window.location.href = '/admin/run-backtest'; },
+        },
+        {
+          key: 'dataset',
+          label: 'DATASET',
+          color: '#00FF88',
+          border: 'rgba(0,255,136,0.3)',
+          background: 'rgba(0,255,136,0.08)',
+          backgroundActive: 'rgba(0,255,136,0.14)',
+          onClick: () => { window.location.href = '/admin/dataset'; },
+        },
+        {
+          key: 'shadow',
+          label: 'SHADOW',
+          color: '#00E5FF',
+          border: 'rgba(0,255,255,0.3)',
+          background: 'rgba(0,255,255,0.08)',
+          backgroundActive: 'rgba(0,255,255,0.14)',
+          onClick: () => { window.location.href = '/admin/shadow-model'; },
+        },
+        {
+          key: 'credits',
+          label: 'CREDIT MGR',
+          color: '#f97316',
+          border: 'rgba(249,115,22,0.4)',
+          background: 'rgba(249,115,22,0.15)',
+          backgroundActive: 'rgba(249,115,22,0.25)',
+          onClick: () => setShowCreditPanel(v => !v),
+        },
+      ]
+    : [];
 
   useEffect(() => {
     const node = tabRefs.current[activeTab];
     if (node?.scrollIntoView) {
       node.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }
+  }, [activeTab]);
+
+  useEffect(() => {
+    setShowAdminMenu(false);
   }, [activeTab]);
 
   return (
@@ -743,12 +883,73 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         {/* Auth button / user pill */}
         <AuthButton lang={lang} />
 
+        {isAdmin && (
+          <Box sx={{ position: 'relative', display: { xs: 'block', md: 'none' }, flexShrink: 0 }}>
+            <Box
+              component="button"
+              onClick={() => setShowAdminMenu(v => !v)}
+              sx={{
+                px: '14px',
+                py: '7px',
+                border: showAdminMenu ? `1px solid ${C.accent}` : `1px solid ${C.accentLine}`,
+                bgcolor: showAdminMenu ? 'rgba(255,102,0,0.2)' : C.accentDim,
+                color: C.accent,
+                fontFamily: MONO,
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                boxShadow: showAdminMenu ? C.accentGlow : 'none',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              Admin
+            </Box>
+            {showAdminMenu && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  right: 0,
+                  width: 'min(320px, calc(100vw - 32px))',
+                  p: '12px',
+                  display: 'grid',
+                  gap: '10px',
+                  border: `1px solid ${C.accentLine}`,
+                  bgcolor: 'rgba(6,8,14,0.98)',
+                  boxShadow: '0 18px 36px rgba(0,0,0,0.78), 0 0 18px rgba(255,102,0,0.08)',
+                  zIndex: 1100,
+                }}
+              >
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+                  Admin controls
+                </Typography>
+                <Box sx={{ display: 'grid', gap: '8px' }}>
+                  {adminActions.map((action) => (
+                    <AdminActionButton
+                      key={action.key}
+                      action={{ ...action, compact: true }}
+                      active={action.key === 'credits' && showCreditPanel}
+                      onClick={() => {
+                        action.onClick?.();
+                        setShowAdminMenu(false);
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
+
         {/* Oracle Chat button — admin only */}
         {isAdmin && (
           <Box
             component="button"
             onClick={onOracleChat}
             sx={{
+              display:        { xs: 'none', md: 'inline-flex' },
               px:            '16px',
               py:            '6px',
               border:        '1px solid rgba(249,115,22,0.4)',
@@ -774,6 +975,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         {/* Backtest Dashboard button — admin only */}
         {isAdmin && (
           <Box component="button" onClick={() => { window.location.href = '/admin/backtests'; }} sx={{
+            display: { xs: 'none', md: 'inline-flex' },
             px: '10px', py: '5px',
             border: `1px solid rgba(255,153,0,0.3)`,
             background: 'rgba(255,153,0,0.08)',
@@ -788,6 +990,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {isAdmin && (
           <Box component="button" onClick={() => { window.location.href = '/admin/run-backtest'; }} sx={{
+            display: { xs: 'none', md: 'inline-flex' },
             px: '10px', py: '5px',
             border: '1px solid rgba(255,102,0,0.3)',
             background: 'rgba(255,102,0,0.08)',
@@ -802,6 +1005,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {isAdmin && (
           <Box component="button" onClick={() => { window.location.href = '/admin/dataset'; }} sx={{
+            display: { xs: 'none', md: 'inline-flex' },
             px: '10px', py: '5px',
             border: '1px solid rgba(0,255,136,0.3)',
             background: 'rgba(0,255,136,0.08)',
@@ -816,6 +1020,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {isAdmin && (
           <Box component="button" onClick={() => { window.location.href = '/admin/shadow-model'; }} sx={{
+            display: { xs: 'none', md: 'inline-flex' },
             px: '10px', py: '5px',
             border: '1px solid rgba(0,255,255,0.3)',
             background: 'rgba(0,255,255,0.08)',
@@ -830,7 +1035,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Credit Manager button + panel — admin only */}
         {isAdmin && (
-          <Box sx={{ position: 'relative', flexShrink: 0 }}>
+          <Box sx={{ position: 'relative', flexShrink: 0, display: { xs: 'none', md: 'block' } }}>
             <Box
               component="button"
               onClick={() => setShowCreditPanel(v => !v)}
@@ -858,13 +1063,6 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             >
               CREDIT MGR
             </Box>
-
-            {showCreditPanel && (
-              <AdminCreditPanel
-                lang={lang}
-                onClose={() => setShowCreditPanel(false)}
-              />
-            )}
           </Box>
         )}
 
@@ -890,7 +1088,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
       {/* ── Tab bar (~28px of the 72px) ── */}
       <Box
         sx={{
-          display:    'flex',
+          display:    { xs: 'none', md: 'flex' },
           alignItems: 'stretch',
           px:         { xs: '4px', sm: '12px' },
           overflowX:  'auto',
@@ -903,7 +1101,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
-        {TABS.filter(tab => !tab.adminOnly || isAdmin).map(tab => (
+        {desktopTabs.map(tab => (
           <TabButton
             key={tab.value}
             tab={tab}
@@ -915,6 +1113,41 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           />
         ))}
       </Box>
+      <Box
+        sx={{
+          display: { xs: 'flex', md: 'none' },
+          alignItems: 'stretch',
+          gap: '8px',
+          px: '8px',
+          pb: '8px',
+          overflowX: 'auto',
+          flexWrap: 'nowrap',
+          scrollSnapType: 'x proximity',
+          scrollPaddingInline: '12px',
+          WebkitOverflowScrolling: 'touch',
+          msOverflowStyle: 'none',
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        }}
+      >
+        {mobileTabs.map(tab => (
+          <TabButton
+            key={tab.value}
+            tab={tab}
+            active={activeTab === tab.value}
+            lang={lang}
+            onClick={disabled ? undefined : () => onTabChange(tab.value)}
+            disabled={disabled}
+            tabRef={(node) => { tabRefs.current[tab.value] = node; }}
+          />
+        ))}
+      </Box>
+      {showCreditPanel && (
+        <AdminCreditPanel
+          lang={lang}
+          onClose={() => setShowCreditPanel(false)}
+        />
+      )}
     </Box>
   );
 }
