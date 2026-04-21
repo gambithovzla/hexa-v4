@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { getTodayGames, getTeams } from './mlb-api.js';
+import { getMlbStandings, getTeams, getTodayGames } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat, summarizeGameBrief, analyzeChatJornada } from './oracle.js';
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
@@ -42,6 +42,7 @@ import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
+import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
 
 dotenv.config();
 
@@ -644,6 +645,17 @@ app.get('/api/teams', async (req, res) => {
   try {
     const teams = await getTeams();
     res.json({ success: true, data: teams });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/mlb/standings
+app.get('/api/mlb/standings', async (req, res) => {
+  try {
+    const season = Number.parseInt(req.query.season, 10) || new Date().getFullYear();
+    const standings = await getMlbStandings(season);
+    res.json({ success: true, data: standings });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -1784,6 +1796,13 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
       if (result) {
         await pool.query(`UPDATE picks SET result = $1 WHERE id = $2`, [result, pick.id]);
         await updatePickFeatureResult({ pickId: pick.id, result });
+        if (result === 'win') {
+          try {
+            await publishWinningInsightByPickId(pick.id);
+          } catch (publishErr) {
+            console.warn(`[semana-auto] Could not publish win for pick ${pick.id}: ${publishErr.message}`);
+          }
+        }
         resolved++;
         console.log(`[auto-resolve] Pick ${pick.id} "${pick.pick}" → ${result} (${awayTeam} ${awayScore} - ${homeTeam} ${homeScore})`);
       }
@@ -2048,6 +2067,13 @@ app.patch('/api/picks/:id', verifyToken, async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
     await updatePickFeatureResult({ pickId: rows[0].id, result: rows[0].result });
+    if (rows[0].result === 'win') {
+      try {
+        await publishWinningInsightByPickId(rows[0].id);
+      } catch (publishErr) {
+        console.warn(`[semana-auto] Could not publish manual win for pick ${rows[0].id}: ${publishErr.message}`);
+      }
+    }
     res.json({ success: true, data: rows[0] });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });

@@ -25,21 +25,30 @@ function buildExplanation(pick, type) {
 
 // GET /api/insights — non-deleted insights, optional ?week=YYYY-MM-DD filter
 router.get('/', async (req, res) => {
-  const { week } = req.query;
+  const { week, type } = req.query;
   try {
-    const { rows } = week
-      ? await pool.query(
-          `SELECT id, type, title, explanation, pick_id, pick_data, week_start, created_at
-           FROM hexa_insights WHERE deleted_at IS NULL AND week_start = $1
-           ORDER BY created_at DESC`,
-          [week]
-        )
-      : await pool.query(
-          `SELECT id, type, title, explanation, pick_id, pick_data, week_start, created_at
-           FROM hexa_insights WHERE deleted_at IS NULL
-           ORDER BY week_start DESC, created_at DESC
-           LIMIT 100`
-        );
+    const filters = ['deleted_at IS NULL'];
+    const params = [];
+
+    if (week) {
+      params.push(week);
+      filters.push(`week_start = $${params.length}`);
+    }
+
+    if (type === 'acierto' || type === 'fallo') {
+      params.push(type);
+      filters.push(`type = $${params.length}`);
+    }
+
+    const limitClause = week ? '' : 'LIMIT 100';
+    const { rows } = await pool.query(
+      `SELECT id, type, title, explanation, pick_id, pick_data, week_start, created_at
+       FROM hexa_insights
+       WHERE ${filters.join(' AND ')}
+       ORDER BY week_start DESC, created_at DESC
+       ${limitClause}`,
+      params
+    );
     res.json({ success: true, insights: rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

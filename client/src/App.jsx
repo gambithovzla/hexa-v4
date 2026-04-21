@@ -436,7 +436,7 @@ export default function App() {
             flex:      1,
             px:        { xs: 2, sm: 3 },
             py:        3,
-            pb:        3,
+            pb:        { xs: 'calc(24px + env(safe-area-inset-bottom))', sm: '24px' },
             maxWidth:  1440,
             mx:        'auto',
             width:     '100%',

@@ -9,7 +9,7 @@
  *   onTabChange — (tab) => void
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
 import LanguageToggle from './LanguageToggle';
 import ThemeToggle    from './ThemeToggle';
@@ -29,17 +29,17 @@ const SUBTITLE = {
 };
 
 const TABS = [
-  { value: 'pizarra', en: 'Board',       es: 'Pizarra'          },
-  { value: 'semana',  en: 'Picks',       es: 'Semana',  highlight: true },
-  { value: 'game',    en: 'Single Game', es: 'Juego Individual' },
-  { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           adminOnly: true },
-  { value: 'bankroll', en: 'Bankroll',    es: 'Bankroll'         },
-  { value: 'tools',   en: 'Tools',       es: 'Herramientas'     },
-  { value: 'history', en: 'History',     es: 'Historial'        },
-  { value: 'live',    en: 'Live',        es: 'En Vivo'          },
-  { value: 'gameday', en: 'Gameday',     es: 'Detalle'          },
-  { value: 'guide',   en: 'Guide',       es: 'Guía'             },
-  { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan', adminOnly: true },
+  { value: 'pizarra', en: 'Board',       es: 'Pizarra',          mobileEn: 'Board', mobileEs: 'Board' },
+  { value: 'semana',  en: 'Picks',       es: 'Semana',           mobileEn: 'Picks', mobileEs: 'Picks', highlight: true },
+  { value: 'game',    en: 'Single Game', es: 'Juego Individual', mobileEn: 'Game',  mobileEs: 'Juego' },
+  { value: 'parlay',  en: 'Parlay',      es: 'Parlay',           mobileEn: 'Parlay', mobileEs: 'Parlay', adminOnly: true },
+  { value: 'bankroll', en: 'Bankroll',   es: 'Bankroll',         mobileEn: 'Bank',   mobileEs: 'Bank' },
+  { value: 'tools',   en: 'Tools',       es: 'Herramientas',     mobileEn: 'Tools',  mobileEs: 'Tools' },
+  { value: 'history', en: 'History',     es: 'Historial',        mobileEn: 'Hist',   mobileEs: 'Hist' },
+  { value: 'live',    en: 'Live',        es: 'En Vivo',          mobileEn: 'Live',   mobileEs: 'Live' },
+  { value: 'gameday', en: 'Gameday',     es: 'Detalle',          mobileEn: 'Detail', mobileEs: 'Dia' },
+  { value: 'guide',   en: 'Guide',       es: 'Guía',             mobileEn: 'Guide',  mobileEs: 'Guia' },
+  { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan',       mobileEn: 'Batch',  mobileEs: 'Batch', adminOnly: true },
 ];
 
 // ── Statcast badge ────────────────────────────────────────────────────────────
@@ -481,12 +481,14 @@ function ActionConfirmModal({
   );
 }
 
-function TabButton({ tab, active, lang, onClick, disabled = false }) {
+function TabButton({ tab, active, lang, onClick, disabled = false, tabRef = null }) {
   const label = lang === 'es' ? tab.es : tab.en;
+  const mobileLabel = lang === 'es' ? (tab.mobileEs ?? tab.es) : (tab.mobileEn ?? tab.en);
   const isHighlight = tab.highlight && !active;
 
   return (
     <Box
+      ref={tabRef}
       component="button"
       onClick={onClick}
       sx={{
@@ -494,8 +496,8 @@ function TabButton({ tab, active, lang, onClick, disabled = false }) {
         display:       'inline-flex',
         alignItems:    'center',
         gap:           isHighlight ? '5px' : '0',
-        px:            '20px',
-        py:            '11px',
+        px:            { xs: '14px', sm: '20px' },
+        py:            { xs: '12px', sm: '11px' },
         background:    active ? C.cyanDim : isHighlight ? 'rgba(0,255,136,0.05)' : 'transparent',
         border:        'none',
         borderBottom:  active
@@ -514,6 +516,8 @@ function TabButton({ tab, active, lang, onClick, disabled = false }) {
         opacity:       disabled && !active ? 0.35 : 1,
         transition:    'all 0.2s',
         flexShrink:    0,
+        minHeight:     44,
+        scrollSnapAlign: 'center',
         boxShadow:     active
           ? `0 1px 0 ${C.cyan}, 0 0 10px rgba(0,217,255,0.2)`
           : isHighlight
@@ -527,7 +531,12 @@ function TabButton({ tab, active, lang, onClick, disabled = false }) {
       }}
     >
       {isHighlight && <span style={{ fontSize: '8px', opacity: 0.8 }}>✦</span>}
-      {label}
+      <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+        {mobileLabel}
+      </Box>
+      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+        {label}
+      </Box>
     </Box>
   );
 }
@@ -677,6 +686,14 @@ function MethodologyLink({ lang, onClick }) {
 
 export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, onPerformance, isAdmin = false, performancePublic = false, onOracleChat }) {
   const [showCreditPanel, setShowCreditPanel] = useState(false);
+  const tabRefs = useRef({});
+
+  useEffect(() => {
+    const node = tabRefs.current[activeTab];
+    if (node?.scrollIntoView) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [activeTab]);
 
   return (
     <Box
@@ -702,7 +719,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           gap:        '14px',
           minHeight:  '44px',
           flexWrap:   'wrap',
-          overflow:   'hidden',
+          overflow:   'visible',
         }}
       >
         {/* Logo block */}
@@ -878,6 +895,8 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           px:         { xs: '4px', sm: '12px' },
           overflowX:  'auto',
           flexWrap:   'nowrap',
+          scrollSnapType: 'x proximity',
+          scrollPaddingInline: '12px',
           WebkitOverflowScrolling: 'touch',
           msOverflowStyle: 'none',
           scrollbarWidth: 'none',
@@ -892,6 +911,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             lang={lang}
             onClick={disabled ? undefined : () => onTabChange(tab.value)}
             disabled={disabled}
+            tabRef={(node) => { tabRefs.current[tab.value] = node; }}
           />
         ))}
       </Box>

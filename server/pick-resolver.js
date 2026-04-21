@@ -11,6 +11,7 @@ import { getTodayGames } from './mlb-api.js';
 import { getLiveGameData } from './live-feed.js';
 import { updatePickFeatureResult } from './feature-store.js';
 import { updateShadowModelRunsForGame } from './shadow-model.js';
+import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
 
 // ── Nickname → abbreviation (lowercase keys for case-insensitive lookup) ─────
 
@@ -822,6 +823,13 @@ export async function resolvePendingPicks() {
 
         await pool.query('UPDATE picks SET result = $1 WHERE id = $2', [result, pick.id]);
         await updatePickFeatureResult({ pickId: pick.id, result });
+        if (result === 'win') {
+          try {
+            await publishWinningInsightByPickId(pick.id);
+          } catch (publishErr) {
+            console.warn(`[semana-auto] Could not publish win for pick ${pick.id}: ${publishErr.message}`);
+          }
+        }
 
         if (propResult) {
           console.log(
