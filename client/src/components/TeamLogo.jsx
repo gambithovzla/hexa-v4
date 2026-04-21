@@ -9,22 +9,30 @@ import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { C, MONO } from '../theme';
 
-export default function TeamLogo({ teamId, abbr, size = 36, color = C.cyan, glow = true }) {
+export default function TeamLogo({
+  teamId,
+  abbr,
+  size = 36,
+  color = C.cyan,
+  glow = true,
+  variant = 'ring',
+}) {
   const [failed, setFailed] = useState(false);
   const src = teamId ? `https://www.mlbstatic.com/team-logos/${teamId}.svg` : null;
   const showFallback = !src || failed;
+  const isPlain = variant === 'plain';
 
   const ringStyles = {
     width:        size,
     height:       size,
-    borderRadius: '50%',
-    border:       `1px solid ${color}`,
-    bgcolor:      C.surfaceAlt,
+    borderRadius: isPlain ? 0 : '50%',
+    border:       isPlain ? 'none' : `1px solid ${color}`,
+    bgcolor:      isPlain ? 'transparent' : C.surfaceAlt,
     display:      'flex',
     alignItems:   'center',
     justifyContent: 'center',
     flexShrink:   0,
-    boxShadow:    glow ? `0 0 6px ${color}55, inset 0 0 4px ${color}22` : 'none',
+    boxShadow:    isPlain ? 'none' : glow ? `0 0 6px ${color}55, inset 0 0 4px ${color}22` : 'none',
     overflow:     'hidden',
     position:     'relative',
   };
@@ -36,7 +44,7 @@ export default function TeamLogo({ teamId, abbr, size = 36, color = C.cyan, glow
           fontFamily:    MONO,
           fontSize:      size * 0.32,
           fontWeight:    600,
-          color,
+          color: isPlain ? C.textPrimary : color,
           letterSpacing: '0.04em',
           lineHeight:    1,
         }}>
@@ -55,10 +63,10 @@ export default function TeamLogo({ teamId, abbr, size = 36, color = C.cyan, glow
         loading="lazy"
         onError={() => setFailed(true)}
         sx={{
-          width:     '78%',
-          height:    '78%',
+          width:     isPlain ? '100%' : '78%',
+          height:    isPlain ? '100%' : '78%',
           objectFit: 'contain',
-          filter:    `drop-shadow(0 0 3px ${color}66)`,
+          filter:    isPlain ? 'none' : `drop-shadow(0 0 3px ${color}66)`,
         }}
       />
     </Box>

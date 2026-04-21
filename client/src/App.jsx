@@ -39,6 +39,7 @@ import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
 import LearningCenter      from './components/LearningCenter';
+import MLBStandingsPanel   from './components/MLBStandingsPanel';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
 
@@ -53,20 +54,6 @@ const TAB_LAYOUT = {
   gridTemplateColumns: { xs: '1fr', md: '380px 1fr' },
   gap:                 3,
   alignItems:          'start',
-};
-const PRIMARY_MOBILE_NAV = {
-  en: [
-    { value: 'pizarra', label: 'Board', micro: 'daily board' },
-    { value: 'semana', label: 'Week', micro: 'winning picks' },
-    { value: 'game', label: 'Game', micro: 'oracle flow' },
-    { value: 'tools', label: 'Tools', micro: 'utility suite' },
-  ],
-  es: [
-    { value: 'pizarra', label: 'Pizarra', micro: 'board diario' },
-    { value: 'semana', label: 'Semana', micro: 'picks ganados' },
-    { value: 'game', label: 'Juego', micro: 'flujo oracle' },
-    { value: 'tools', label: 'Herramientas', micro: 'suite util' },
-  ],
 };
 
 // ── Footer ────────────────────────────────────────────────────────────────────
@@ -260,112 +247,6 @@ function MobileBackBar({ lang, matchup, onBack }) {
   );
 }
 
-function MobileBottomNav({ lang, activeTab, onChange, disabled = false }) {
-  const items = PRIMARY_MOBILE_NAV[lang] ?? PRIMARY_MOBILE_NAV.es;
-
-  return (
-    <Box
-      sx={{
-        position: 'fixed',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 995,
-        display: { xs: 'block', md: 'none' },
-        px: '10px',
-        pb: 'calc(10px + env(safe-area-inset-bottom))',
-        pointerEvents: 'none',
-      }}
-    >
-      <Box
-        sx={{
-          pointerEvents: 'auto',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: '8px',
-          p: '8px',
-          border: `1px solid ${C.border}`,
-          bgcolor: 'rgba(4,6,10,0.96)',
-          boxShadow: '0 -10px 32px rgba(0,0,0,0.72), 0 0 20px rgba(0,217,255,0.08)',
-          backdropFilter: 'blur(14px)',
-        }}
-      >
-        {items.map((item) => {
-          const active = activeTab === item.value;
-          return (
-            <Box
-              key={item.value}
-              component="button"
-              onClick={() => onChange(item.value)}
-              disabled={disabled}
-              sx={{
-                minHeight: 62,
-                px: '8px',
-                py: '9px',
-                display: 'grid',
-                gap: '5px',
-                alignContent: 'center',
-                justifyItems: 'center',
-                border: active ? `1px solid ${C.cyan}` : `1px solid ${C.border}`,
-                bgcolor: active
-                  ? 'linear-gradient(180deg, rgba(0,217,255,0.16), rgba(0,217,255,0.06))'
-                  : 'linear-gradient(180deg, rgba(16,22,32,0.98), rgba(5,7,12,0.96))',
-                color: active ? C.cyan : C.textMuted,
-                cursor: disabled ? 'default' : 'pointer',
-                opacity: disabled && !active ? 0.45 : 1,
-                boxShadow: active
-                  ? '0 10px 24px rgba(0,0,0,0.45), 0 0 18px rgba(0,217,255,0.16), inset 0 1px 0 rgba(255,255,255,0.05)'
-                  : '0 8px 18px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03)',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  borderColor: active ? C.cyan : C.cyanLine,
-                  color: active ? C.cyan : C.textPrimary,
-                },
-              }}
-            >
-              <Box
-                sx={{
-                  width: 22,
-                  height: 3,
-                  bgcolor: active ? C.cyan : C.accent,
-                  boxShadow: active ? `0 0 10px ${C.cyan}` : `0 0 8px ${C.accent}`,
-                }}
-              />
-              <Typography
-                sx={{
-                  fontFamily: BARLOW,
-                  fontSize: item.value === 'tools' && lang === 'es' ? '0.58rem' : '0.66rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  textAlign: 'center',
-                  lineHeight: 1.05,
-                  color: 'inherit',
-                }}
-              >
-                {item.label}
-              </Typography>
-              <Typography
-                sx={{
-                  fontFamily: MONO,
-                  fontSize: '0.5rem',
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  textAlign: 'center',
-                  color: active ? C.textPrimary : C.textMuted,
-                  lineHeight: 1.2,
-                }}
-              >
-                {item.micro}
-              </Typography>
-            </Box>
-          );
-        })}
-      </Box>
-    </Box>
-  );
-}
-
 function AppFooter() {
   return (
     <Box
@@ -373,7 +254,7 @@ function AppFooter() {
       sx={{
         mt:         6,
         pt:         '14px',
-        pb:         { xs: 'calc(14px + 96px + env(safe-area-inset-bottom))', md: '14px' },
+        pb:         { xs: 'calc(14px + env(safe-area-inset-bottom))', md: '14px' },
         px:         3,
         borderTop:  `1px solid ${C.border}`,
         textAlign:  'center',
@@ -424,6 +305,7 @@ export default function App() {
   const [isAdmin,           setIsAdmin]           = useState(false);
   const [performancePublic, setPerformancePublic] = useState(false);
   const { isMobileExperience } = useShellMode();
+  const adminOnlyTabs = ['parlay', 'tools', 'batch'];
 
   // Check admin status on mount
   useEffect(() => {
@@ -449,6 +331,12 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('hexa_lang', lang);
   }, [lang]);
+
+  useEffect(() => {
+    if (!isAdmin && adminOnlyTabs.includes(activeTab)) {
+      setActiveTab('pizarra');
+    }
+  }, [activeTab, isAdmin]);
 
   // Write-only use of useHistory — addPick is forwarded to AnalysisPanel.
   // HistoryPanel reads history via its own hook instance (remounts each visit).
@@ -557,7 +445,7 @@ export default function App() {
             flex:      1,
             px:        { xs: 2, sm: 3 },
             py:        3,
-            pb:        { xs: 'calc(104px + env(safe-area-inset-bottom))', md: '24px' },
+            pb:        { xs: 'calc(20px + env(safe-area-inset-bottom))', md: '24px' },
             maxWidth:  1440,
             mx:        'auto',
             width:     '100%',
@@ -566,6 +454,10 @@ export default function App() {
           {/* Pizarra H.E.X.A. — landing tab */}
           {activeTab === 'pizarra' && (
             <HexaBoard lang={lang} />
+          )}
+
+          {activeTab === 'standings' && (
+            <MLBStandingsPanel lang={lang} />
           )}
 
           {/* Single game */}
@@ -643,10 +535,10 @@ export default function App() {
             <BankrollTracker lang={lang} />
           )}
 
-          {activeTab === 'tools' && (
+          {activeTab === 'tools' && isAdmin && (
             <Box sx={{ display: 'grid', gap: 3 }}>
               <OddsLab lang={lang} />
-              {isAdmin && <XContentStudio lang={lang} />}
+              <XContentStudio lang={lang} />
             </Box>
           )}
 
@@ -683,12 +575,6 @@ export default function App() {
         </Box>
 
         {/* ── Footer ── */}
-        <MobileBottomNav
-          lang={lang}
-          activeTab={activeTab}
-          onChange={isAnalyzing ? () => {} : setActiveTab}
-          disabled={isAnalyzing}
-        />
         <AppFooter />
       </Box>
   );
