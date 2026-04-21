@@ -567,34 +567,6 @@ function TabButton({ tab, active, lang, onClick, disabled = false, tabRef = null
           : isHighlight
             ? '0 10px 22px rgba(0,0,0,0.38)'
             : '0 8px 18px rgba(0,0,0,0.32)',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 10,
-          right: 10,
-          height: 3,
-          background: active
-            ? C.cyan
-            : isHighlight
-              ? '#00FF88'
-              : 'rgba(255,255,255,0.06)',
-          pointerEvents: 'none',
-        },
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          left: 10,
-          right: 10,
-          bottom: 4,
-          height: 2,
-          background: active
-            ? C.cyan
-            : isHighlight
-              ? '#00FF88'
-              : 'rgba(0,217,255,0.14)',
-          opacity: active || isHighlight ? 1 : 0.4,
-        },
         '&:hover': {
           color:      active ? C.cyan : isHighlight ? '#00FF88' : C.textSecondary,
           background: active
@@ -885,7 +857,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         <AuthButton lang={lang} />
 
         {isAdmin && (
-          <Box sx={{ position: 'relative', display: { xs: 'block', md: 'none' }, flexShrink: 0 }}>
+          <Box sx={{ display: { xs: 'block', md: 'none' }, flexShrink: 0 }}>
             <Box
               component="button"
               onClick={() => setShowAdminMenu(v => !v)}
@@ -909,37 +881,49 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             </Box>
             {showAdminMenu && (
               <Box
+                onClick={() => setShowAdminMenu(false)}
                 sx={{
-                  position: 'absolute',
-                  top: 'calc(100% + 8px)',
-                  right: 0,
-                  width: 'min(320px, calc(100vw - 24px))',
-                  maxHeight: 'calc(100vh - 140px)',
-                  overflowY: 'auto',
-                  p: '12px',
-                  display: 'grid',
-                  gap: '10px',
-                  border: `1px solid ${C.accentLine}`,
-                  bgcolor: 'rgba(6,8,14,0.98)',
-                  boxShadow: '0 18px 36px rgba(0,0,0,0.78), 0 0 18px rgba(255,102,0,0.08)',
-                  zIndex: 1100,
+                  position: 'fixed',
+                  inset: 0,
+                  zIndex: 1300,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: 2,
+                  bgcolor: 'rgba(0,0,0,0.78)',
+                  backdropFilter: 'blur(6px)',
                 }}
               >
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
-                  Admin controls
-                </Typography>
-                <Box sx={{ display: 'grid', gap: '8px' }}>
-                  {adminActions.map((action) => (
-                    <AdminActionButton
-                      key={action.key}
-                      action={{ ...action, compact: true }}
-                      active={action.key === 'credits' && showCreditPanel}
-                      onClick={() => {
-                        action.onClick?.();
-                        setShowAdminMenu(false);
-                      }}
-                    />
-                  ))}
+                <Box
+                  onClick={(e) => e.stopPropagation()}
+                  sx={{
+                    width: 'min(320px, 100%)',
+                    maxHeight: 'calc(100vh - 96px)',
+                    overflowY: 'auto',
+                    p: '14px',
+                    display: 'grid',
+                    gap: '10px',
+                    border: `1px solid ${C.accentLine}`,
+                    bgcolor: 'rgba(6,8,14,0.98)',
+                    boxShadow: '0 18px 36px rgba(0,0,0,0.78), 0 0 18px rgba(255,102,0,0.08)',
+                  }}
+                >
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+                    Admin controls
+                  </Typography>
+                  <Box sx={{ display: 'grid', gap: '8px' }}>
+                    {adminActions.map((action) => (
+                      <AdminActionButton
+                        key={action.key}
+                        action={{ ...action, compact: true }}
+                        active={action.key === 'credits' && showCreditPanel}
+                        onClick={() => {
+                          action.onClick?.();
+                          setShowAdminMenu(false);
+                        }}
+                      />
+                    ))}
+                  </Box>
                 </Box>
               </Box>
             )}
