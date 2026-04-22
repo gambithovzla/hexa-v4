@@ -40,6 +40,7 @@ import {
 import { buildHexaBoard } from './services/hexaBoardService.js';
 import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
+import liveIntelligenceRouter from './routes/live-intelligence.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
@@ -462,6 +463,7 @@ app.use('/api/lemon',     lemonRouter);
 app.use('/api/picks',     picksRouter);
 app.use('/api/oracle',    oracleHistoryRouter);
 app.use('/api/insights',  insightsRouter);
+app.use('/api/live',      liveIntelligenceRouter);
 app.use('/api/admin/content', contentAdminRouter);
 app.post('/api/bmc/webhook', handleBMCWebhook);
 

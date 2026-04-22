@@ -14,6 +14,7 @@ const MLB_BASE = 'https://statsapi.mlb.com';
 
 // ── In-memory cache: gamePk → { data, timestamp } ────────────────────────────
 const _cache = new Map();
+const _rawCache = new Map();
 const CACHE_TTL_MS = 20_000; // 20 seconds
 
 function isLiveDetailedState(status = {}) {
@@ -52,6 +53,23 @@ async function fetchJSON(url, timeoutMs = 10000) {
   }
 }
 
+async function fetchRawLiveFeed(gamePk) {
+  const key = String(gamePk);
+  const cached = _rawCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const url = `${MLB_BASE}/api/v1.1/game/${gamePk}/feed/live`;
+  const raw = await fetchJSON(url);
+  _rawCache.set(key, { data: raw, timestamp: Date.now() });
+  return raw;
+}
+
+export async function getRawLiveFeed(gamePk) {
+  return fetchRawLiveFeed(gamePk);
+}
+
 /**
  * Get live game data for a specific game.
  * Returns normalized object with score, situation, plays, and boxscore.
@@ -68,8 +86,7 @@ export async function getLiveGameData(gamePk) {
     return cached.data;
   }
 
-  const url = `${MLB_BASE}/api/v1.1/game/${gamePk}/feed/live`;
-  const raw = await fetchJSON(url);
+  const raw = await fetchRawLiveFeed(gamePk);
 
   const data = normalizeLiveFeed(raw, gamePk);
 
@@ -105,8 +122,7 @@ export async function getMultipleLiveGames(gamePks) {
  * @returns {Promise<object>}
  */
 export async function getGamePlayByPlay(gamePk) {
-  const url = `${MLB_BASE}/api/v1.1/game/${gamePk}/feed/live`;
-  const raw = await fetchJSON(url);
+  const raw = await fetchRawLiveFeed(gamePk);
   return normalizePlayByPlay(raw, gamePk);
 }
 
