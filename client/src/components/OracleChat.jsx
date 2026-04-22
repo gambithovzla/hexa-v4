@@ -13,13 +13,82 @@ function getEasternDate() {
 
 // ─── History view ─────────────────────────────────────────────────────────────
 
+function SessionModal({ session, onClose }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: C.bg || '#0a0a0a',
+        zIndex: 9999,
+        display: 'flex', flexDirection: 'column',
+        overflowY: 'hidden',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Sticky header */}
+      <div style={{
+        position: 'sticky', top: 0,
+        background: C.surface,
+        borderBottom: `1px solid ${C.border}`,
+        padding: '14px 16px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        zIndex: 1, flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0, marginRight: '12px' }}>
+          <span style={{ fontFamily: BARLOW, fontSize: '15px', color: C.textPrimary, fontWeight: 700,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {session.matchups || session.mode}
+          </span>
+          <span style={{ fontFamily: MONO, fontSize: '9px', color: C.textDim, letterSpacing: '1px' }}>
+            {session.mode.toUpperCase()} · {Math.floor((session.messages?.length || 0) / 2)} pregunta(s)
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'transparent', border: `1px solid ${C.border}`,
+            color: C.textMuted, fontFamily: MONO, fontSize: '11px',
+            padding: '6px 12px', cursor: 'pointer', flexShrink: 0,
+            letterSpacing: '1px',
+          }}
+        >
+          ✕ CERRAR
+        </button>
+      </div>
+
+      {/* Scrollable messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {(session.messages || []).map((msg, i) => (
+          <div key={i} style={{
+            padding: '10px 14px',
+            background: msg.role === 'user' ? C.surface : 'transparent',
+            border: msg.role === 'user' ? `1px solid ${C.border}` : `1px solid ${C.borderLight || C.border}`,
+            borderLeft: msg.role === 'assistant' ? `3px solid ${C.accent}` : undefined,
+          }}>
+            <div style={{
+              fontFamily: MONO, fontSize: '8px',
+              color: msg.role === 'user' ? C.textDim : C.accent,
+              letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '6px',
+            }}>
+              {msg.role === 'user' ? 'ADMIN' : 'ORACLE'}
+            </div>
+            <div style={{ fontFamily: SANS, fontSize: '13px', lineHeight: 1.75, color: C.textSecondary, whiteSpace: 'pre-wrap' }}>
+              {msg.text}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OracleHistoryView({ lang }) {
   const [days, setDays] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [loadingDays, setLoadingDays] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(false);
-  const [expandedSession, setExpandedSession] = useState(null);
+  const [modalSession, setModalSession] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('hexa_token');
@@ -32,7 +101,7 @@ function OracleHistoryView({ lang }) {
 
   function loadSessions(date) {
     setSelectedDate(date);
-    setExpandedSession(null);
+    setModalSession(null);
     setLoadingSessions(true);
     const token = localStorage.getItem('hexa_token');
     fetch(`${API_URL}/api/oracle/history/${date}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -43,15 +112,20 @@ function OracleHistoryView({ lang }) {
   }
 
   function formatDay(dateStr) {
+    if (!dateStr) return '—';
+    // Slice to "YYYY-MM-DD" to handle both date strings and full ISO timestamps
+    const clean = String(dateStr).slice(0, 10);
     try {
-      return new Date(dateStr + 'T12:00:00').toLocaleDateString('es-ES', {
+      return new Date(clean + 'T12:00:00').toLocaleDateString('es-ES', {
         weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
       });
-    } catch { return dateStr; }
+    } catch { return clean; }
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {modalSession && <SessionModal session={modalSession} onClose={() => setModalSession(null)} />}
+
       <div style={{ fontFamily: MONO, fontSize: '9px', color: C.textDim, letterSpacing: '2px' }}>
         HISTORIAL DE SESIONES ORACLE — ADMIN
       </div>
@@ -69,91 +143,69 @@ function OracleHistoryView({ lang }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '12px' }}>
-        {/* Day list */}
-        <div style={{ width: '180px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {days.map(d => (
-            <button
-              key={d.date_et}
-              onClick={() => loadSessions(d.date_et)}
-              style={{
-                background: selectedDate === d.date_et ? C.accentDim : C.surface,
-                border: `1px solid ${selectedDate === d.date_et ? C.accentLine : C.border}`,
-                borderLeft: `2px solid ${selectedDate === d.date_et ? C.accent : C.border}`,
-                color: selectedDate === d.date_et ? C.accent : C.textMuted,
-                fontFamily: MONO, fontSize: '10px', padding: '8px 10px',
-                cursor: 'pointer', textAlign: 'left', width: '100%',
-                transition: 'all 0.12s',
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>{formatDay(d.date_et)}</div>
-              <div style={{ fontSize: '9px', opacity: 0.7, marginTop: '2px' }}>
-                {d.session_count} sesión{d.session_count !== 1 ? 'es' : ''}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Sessions panel */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
-          {!selectedDate && (
-            <div style={{ fontFamily: MONO, fontSize: '11px', color: C.textDim, padding: '20px', textAlign: 'center',
-              border: `1px dashed ${C.border}` }}>
-              Selecciona un día para ver las conversaciones.
+      {/* Day list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {days.map(d => (
+          <button
+            key={d.date_et}
+            onClick={() => loadSessions(d.date_et)}
+            style={{
+              background: selectedDate === d.date_et ? C.accentDim : C.surface,
+              border: `1px solid ${selectedDate === d.date_et ? C.accentLine : C.border}`,
+              borderLeft: `2px solid ${selectedDate === d.date_et ? C.accent : C.border}`,
+              color: selectedDate === d.date_et ? C.accent : C.textMuted,
+              fontFamily: MONO, fontSize: '10px', padding: '10px 12px',
+              cursor: 'pointer', textAlign: 'left', width: '100%',
+              transition: 'all 0.12s',
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>{formatDay(d.date_et)}</div>
+            <div style={{ fontSize: '9px', opacity: 0.7, marginTop: '2px' }}>
+              {d.session_count} sesión{d.session_count !== 1 ? 'es' : ''}
             </div>
-          )}
+          </button>
+        ))}
+      </div>
+
+      {/* Sessions for selected date */}
+      {selectedDate && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ fontFamily: MONO, fontSize: '9px', color: C.textDim, letterSpacing: '1px', paddingBottom: '4px',
+            borderBottom: `1px solid ${C.border}` }}>
+            CONVERSACIONES — {formatDay(selectedDate).toUpperCase()}
+          </div>
+
           {loadingSessions && (
-            <div style={{ fontFamily: MONO, fontSize: '11px', color: C.textDim, padding: '20px', textAlign: 'center' }}>
+            <div style={{ fontFamily: MONO, fontSize: '11px', color: C.textDim, padding: '16px', textAlign: 'center' }}>
               Cargando sesiones...
             </div>
           )}
-          {!loadingSessions && sessions.map(session => (
-            <div key={session.id} style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-              <button
-                onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
-                style={{
-                  width: '100%', background: 'transparent', border: 'none',
-                  padding: '10px 14px', cursor: 'pointer', textAlign: 'left',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span style={{ fontFamily: BARLOW, fontSize: '13px', color: C.textPrimary, fontWeight: 700 }}>
-                    {session.matchups || session.mode}
-                  </span>
-                  <span style={{ fontFamily: MONO, fontSize: '9px', color: C.textDim }}>
-                    {session.mode.toUpperCase()} · {Math.floor((session.messages?.length || 0) / 2)} pregunta(s)
-                  </span>
-                </div>
-                <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
-                  {expandedSession === session.id ? '▲' : '▼'}
-                </span>
-              </button>
 
-              {expandedSession === session.id && (
-                <div style={{ borderTop: `1px solid ${C.border}`, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {(session.messages || []).map((msg, i) => (
-                    <div key={i} style={{
-                      padding: '8px 12px',
-                      background: msg.role === 'user' ? C.surface : 'transparent',
-                      border: msg.role === 'user' ? `1px solid ${C.border}` : `1px solid ${C.borderLight || C.border}`,
-                      borderLeft: msg.role === 'assistant' ? `3px solid ${C.accent}` : 'none',
-                    }}>
-                      <div style={{ fontFamily: MONO, fontSize: '8px', color: msg.role === 'user' ? C.textDim : C.accent,
-                        letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>
-                        {msg.role === 'user' ? 'ADMIN' : 'ORACLE'}
-                      </div>
-                      <div style={{ fontFamily: SANS, fontSize: '12px', lineHeight: 1.7, color: C.textSecondary, whiteSpace: 'pre-wrap' }}>
-                        {msg.text}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          {!loadingSessions && sessions.map(session => (
+            <button
+              key={session.id}
+              onClick={() => setModalSession(session)}
+              style={{
+                background: C.surface, border: `1px solid ${C.border}`,
+                width: '100%', padding: '12px 14px', cursor: 'pointer',
+                textAlign: 'left', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, flex: 1 }}>
+                <span style={{ fontFamily: BARLOW, fontSize: '13px', color: C.textPrimary, fontWeight: 700,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {session.matchups || session.mode}
+                </span>
+                <span style={{ fontFamily: MONO, fontSize: '9px', color: C.textDim }}>
+                  {session.mode.toUpperCase()} · {Math.floor((session.messages?.length || 0) / 2)} pregunta(s)
+                </span>
+              </div>
+              <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, flexShrink: 0 }}>›</span>
+            </button>
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
