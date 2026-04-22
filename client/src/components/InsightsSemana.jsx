@@ -63,10 +63,11 @@ const MLB_TEAM_IDS = {
 };
 
 function getWeekStart(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getDay();
+  const utcDate = (date instanceof Date ? date : new Date(date)).toISOString().slice(0, 10);
+  const d = new Date(`${utcDate}T12:00:00Z`);
+  const day = d.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
+  d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().slice(0, 10);
 }
 
@@ -511,6 +512,13 @@ export default function InsightsSemana({ lang = 'es' }) {
   useEffect(() => {
     fetchInsights();
   }, [fetchInsights]);
+
+  // Auto-refresh every 3 minutes when viewing the current week so resolved wins appear automatically
+  useEffect(() => {
+    if (!isCurrentWeek) return;
+    const id = setInterval(fetchInsights, 3 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [isCurrentWeek, fetchInsights]);
 
   async function handleDelete(id) {
     try {
