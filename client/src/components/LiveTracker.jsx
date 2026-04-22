@@ -101,18 +101,6 @@ const T = {
     winning:      'ON TRACK',
     losing:       'BEHIND',
     resolved:     'RESOLVED',
-    liveRead:     'HEXA LIVE READ',
-    pressure:     'PRESSURE',
-    momentum:     'MOMENTUM',
-    bullpenRisk:  'BULLPEN RISK',
-    keySignal:    'KEY SIGNAL',
-    hexaSummary:  'HEXA SUMMARY',
-    low:          'Low',
-    medium:       'Medium',
-    high:         'High',
-    critical:     'Critical',
-    neutral:      'Neutral',
-    noSignal:     'No dominant signal',
   },
   es: {
     title:        'EN VIVO',
@@ -137,18 +125,6 @@ const T = {
     winning:      'EN CAMINO',
     losing:       'ATRÁS',
     resolved:     'RESUELTO',
-    liveRead:     'HEXA LIVE READ',
-    pressure:     'PRESION',
-    momentum:     'MOMENTUM',
-    bullpenRisk:  'RIESGO BULLPEN',
-    keySignal:    'SENAL CLAVE',
-    hexaSummary:  'RESUMEN HEXA',
-    low:          'Baja',
-    medium:       'Media',
-    high:         'Alta',
-    critical:     'Critica',
-    neutral:      'Neutral',
-    noSignal:     'Sin senal dominante',
   },
 };
 
@@ -415,116 +391,6 @@ function RecentPlaysFeed({ plays, lang }) {
 
 // ── Pick progress bars ────────────────────────────────────────────────────────
 
-function getSignalByType(signals, type) {
-  return (signals || []).find(signal => signal?.type === type) || null;
-}
-
-function levelLabel(level, lang) {
-  const t = T[lang] || T.en;
-  if (level === 'critical') return t.critical;
-  if (level === 'high') return t.high;
-  if (level === 'medium') return t.medium;
-  return t.low;
-}
-
-function HexaLiveReadPanel({ read, lang }) {
-  const t = T[lang] || T.en;
-  const signals = read?.signals || [];
-  const narrative = read?.narrative || {};
-  const pressure = getSignalByType(signals, 'high_leverage');
-  const momentum = getSignalByType(signals, 'momentum_shift');
-  const bullpen = getSignalByType(signals, 'bullpen_stress');
-  const keySignal = signals[0] || null;
-
-  const metrics = [
-    { label: t.pressure, value: pressure ? levelLabel(pressure.level, lang) : t.low, tone: pressure ? C.red : C.textSecondary },
-    { label: t.momentum, value: momentum?.team || t.neutral, tone: momentum ? C.cyan : C.textSecondary },
-    { label: t.bullpenRisk, value: bullpen ? levelLabel(bullpen.level, lang) : t.low, tone: bullpen ? (bullpen.level === 'critical' ? C.red : C.amber || '#ffaa00') : C.textSecondary },
-    { label: t.keySignal, value: keySignal?.title || t.noSignal, tone: keySignal ? C.textPrimary : C.textSecondary },
-  ];
-
-  const summary = narrative?.summary || (lang === 'es'
-    ? 'HEXA no detecta una senal dominante por ahora.'
-    : 'HEXA does not detect a dominant signal right now.');
-
-  return (
-    <Box sx={{
-      border: `1px solid ${C.cyanLine || C.border}`,
-      bgcolor: C.cyanDim,
-      p: '12px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '12px',
-    }}>
-      <Typography sx={{ fontFamily: BARLOW, fontSize: '0.62rem', color: C.cyan, letterSpacing: '0.18em' }}>
-        {t.liveRead}
-      </Typography>
-
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
-        {metrics.map((metric) => (
-          <Box
-            key={metric.label}
-            sx={{
-              border: `1px solid ${C.border}`,
-              bgcolor: C.surface,
-              px: '10px',
-              py: '8px',
-              minHeight: '58px',
-            }}
-          >
-            <Typography sx={{ fontFamily: MONO, fontSize: '0.48rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px' }}>
-              {metric.label}
-            </Typography>
-            <Typography sx={{ fontFamily: BARLOW, fontSize: '0.72rem', color: metric.tone, letterSpacing: '0.08em' }}>
-              {metric.value}
-            </Typography>
-          </Box>
-        ))}
-      </Box>
-
-      <Box sx={{
-        border: `1px solid ${C.border}`,
-        bgcolor: C.surface,
-        p: '10px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-      }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.48rem', color: C.textMuted, letterSpacing: '0.12em' }}>
-          {t.hexaSummary}
-        </Typography>
-        {narrative?.headline && (
-          <Typography sx={{ fontFamily: BARLOW, fontSize: '0.8rem', color: C.textPrimary, letterSpacing: '0.08em' }}>
-            {narrative.headline}
-          </Typography>
-        )}
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textSecondary, lineHeight: 1.55 }}>
-          {summary}
-        </Typography>
-        {Array.isArray(narrative?.bullets) && narrative.bullets.length > 0 && (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {narrative.bullets.slice(0, 3).map((bullet, index) => (
-              <Box
-                key={`${bullet}-${index}`}
-                sx={{
-                  px: '8px',
-                  py: '4px',
-                  border: `1px solid ${C.border}`,
-                  bgcolor: 'transparent',
-                }}
-              >
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted }}>
-                  {bullet}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        )}
-      </Box>
-    </Box>
-  );
-}
-
 function PickProgressBars({ picks, lang }) {
   const t = T[lang] || T.en;
   if (!picks || picks.length === 0) return null;
@@ -687,7 +553,6 @@ function LiveGameCard({ game, picks, lang }) {
   const homeRuns = game.home?.score ?? 0;
 
   const gamePicks = picks?.filter(p => p.gamePk === game.gamePk) || [];
-  const liveRead = game.liveRead || null;
 
   return (
     <Box sx={{
@@ -838,8 +703,6 @@ function LiveGameCard({ game, picks, lang }) {
             </Box>
           </Box>
 
-          <HexaLiveReadPanel read={liveRead} lang={lang} />
-
           {/* Recent plays */}
           {recentPlays && recentPlays.length > 0 && (
             <RecentPlaysFeed plays={recentPlays} lang={lang} />
@@ -901,38 +764,16 @@ export default function LiveTracker({ lang = 'en' }) {
         return;
       }
 
-      // 3. Fetch live data plus HEXA interpretation in parallel
-      const [liveRes, intelligenceRes] = await Promise.all([
-        fetch(`${API_URL}/api/games/live`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ gamePks: liveGamePks }),
-        }),
-        fetch(`${API_URL}/api/live/batch-intelligence?lang=${lang}`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ gamePks: liveGamePks }),
-        }),
-      ]);
-      const [liveJson, intelligenceJson] = await Promise.all([
-        liveRes.json(),
-        intelligenceRes.json().catch(() => ({ success: false, data: [] })),
-      ]);
+      // 3. Fetch live data
+      const liveRes  = await fetch(`${API_URL}/api/games/live`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ gamePks: liveGamePks }),
+      });
+      const liveJson = await liveRes.json();
       const fetchedGames = Array.isArray(liveJson?.data) ? liveJson.data : [];
-      const intelligenceMap = new Map(
-        (Array.isArray(intelligenceJson?.data) ? intelligenceJson.data : [])
-          .filter(read => read?.gamePk)
-          .map(read => [String(read.gamePk), read])
-      );
       if (liveJson.success) {
-        setLiveGames(
-          fetchedGames
-            .filter(game => game?.status === 'live')
-            .map(game => ({
-              ...game,
-              liveRead: intelligenceMap.get(String(game.gamePk)) || null,
-            }))
-        );
+        setLiveGames(fetchedGames.filter(game => game?.status === 'live'));
       }
 
       // Auto-resolve picks for games that just finished
@@ -973,7 +814,7 @@ export default function LiveTracker({ lang = 'en' }) {
     } finally {
       setLoading(false);
     }
-  }, [lang, token]);
+  }, [token]);
 
   useEffect(() => {
     fetchLiveData();
