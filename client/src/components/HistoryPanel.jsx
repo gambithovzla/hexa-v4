@@ -178,6 +178,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
   const badgeSx = resultBadgeSx(entry.result);
   const resultLabel = t.history.result?.[normalizedResult] ?? normalizedResult.toUpperCase();
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const [postmortemOpen, setPostmortemOpen] = useState(Boolean(entry.postmortem));
   const [postmortemLoading, setPostmortemLoading] = useState(false);
   const [postmortemError, setPostmortemError] = useState('');
@@ -386,110 +387,169 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
         </Box>
       )}
 
-      {normalizedResult === 'pending' && isAdmin ? (
+      {normalizedResult === 'pending' && isAdmin && (
         <Box sx={{ display: 'flex', gap: '8px', pt: '2px', flexWrap: 'wrap' }}>
           <MarkBtn label={`✓ ${t.history.markWin}`} color={C.green} dim={C.greenDim} onClick={() => onMarkResult(entry.id, 'win')} />
           <MarkBtn label={`✗ ${t.history.markLoss}`} color={C.red} dim={C.redDim} onClick={() => onMarkResult(entry.id, 'loss')} />
           <MarkBtn label={`⇌ ${t.history.markPush}`} color={C.cyan} dim={C.cyanDim} onClick={() => onMarkResult(entry.id, 'push')} />
         </Box>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', pt: '2px' }}>
-          <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      )}
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', pt: '2px' }}>
+        <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {entry.oracle_report && (
+            <MarkBtn
+              label={showAnalysis ? t.history.hideAnalysis : t.history.viewAnalysis}
+              color={C.accent}
+              dim={C.accentDim}
+              onClick={() => setShowAnalysis(prev => !prev)}
+            />
+          )}
+          {normalizedResult !== 'pending' ? (
             <MarkBtn
               label={postmortemData ? t.history.viewPostmortem : t.history.requestPostmortem}
               color={C.cyan}
               dim={C.cyanDim}
               onClick={handlePostmortemClick}
             />
-          </Box>
-
-          {postmortemLoading && (
-            <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.cyan }}>
-              {t.history.loadingPostmortem}
+          ) : (
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.amber, border: `1px solid ${C.amberLine}`, bgcolor: C.amberDim, px: '8px', py: '3px', letterSpacing: '0.04em' }}>
+              {t.history.postmortemPendingNote}
             </Typography>
-          )}
-
-          {postmortemError && (
-            <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.red }}>
-              {postmortemError || t.history.postmortemError}
-            </Typography>
-          )}
-
-          {postmortemOpen && postmortemData && (
-            <Box sx={{
-              mt: '4px',
-              p: '12px',
-              border: `1px solid ${C.cyanLine}`,
-              bgcolor: C.cyanDim,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-            }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.cyan, letterSpacing: '0.16em' }}>
-                {t.history.postmortemTitle}
-              </Typography>
-
-              {postmortemData.summary && (
-                <Box>
-                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
-                    {t.history.postmortemSummary}
-                  </Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, lineHeight: 1.6 }}>
-                    {postmortemData.summary}
-                  </Typography>
-                </Box>
-              )}
-
-              {postmortemData.key_factors?.length > 0 && (
-                <Box>
-                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
-                    {t.history.postmortemKeyFactors}
-                  </Typography>
-                  {renderStringList(postmortemData.key_factors, C.textPrimary)}
-                </Box>
-              )}
-
-              {postmortemData.what_hexa_got_right?.length > 0 && (
-                <Box>
-                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
-                    {t.history.postmortemRight}
-                  </Typography>
-                  {renderStringList(postmortemData.what_hexa_got_right, C.green)}
-                </Box>
-              )}
-
-              {postmortemData.what_hexa_missed?.length > 0 && (
-                <Box>
-                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
-                    {t.history.postmortemMissed}
-                  </Typography>
-                  {renderStringList(postmortemData.what_hexa_missed, C.red)}
-                </Box>
-              )}
-
-              {postmortemData.adjustment_signals?.length > 0 && (
-                <Box>
-                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
-                    {t.history.postmortemAdjustments}
-                  </Typography>
-                  {renderStringList(postmortemData.adjustment_signals, C.cyan)}
-                </Box>
-              )}
-
-              {postmortemData.training_takeaway && (
-                <Box>
-                  <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
-                    {t.history.postmortemTakeaway}
-                  </Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, lineHeight: 1.6 }}>
-                    {postmortemData.training_takeaway}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
           )}
         </Box>
-      )}
+
+        {showAnalysis && entry.oracle_report && (
+          <Box sx={{
+            mt: '4px', p: '12px',
+            border: `1px solid ${C.accentLine}`,
+            bgcolor: C.accentDim,
+            display: 'flex', flexDirection: 'column', gap: '10px',
+          }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.accent, letterSpacing: '0.16em' }}>
+              {t.history.analysisTitle}
+            </Typography>
+
+            <Box>
+              <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                {t.history.analysisReport}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, lineHeight: 1.6 }}>
+                {entry.oracle_report}
+              </Typography>
+            </Box>
+
+            {entry.hexa_hunch && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.analysisHunch}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.amber, lineHeight: 1.6 }}>
+                  {entry.hexa_hunch}
+                </Typography>
+              </Box>
+            )}
+
+            {Array.isArray(entry.alert_flags) && entry.alert_flags.length > 0 && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.analysisAlerts}
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {entry.alert_flags.map((flag, idx) => (
+                    <Typography key={`flag-${idx}`} sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.red, border: `1px solid ${C.redLine}`, bgcolor: C.redDim, px: '6px', py: '2px' }}>
+                      {flag}
+                    </Typography>
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {postmortemLoading && (
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.cyan }}>
+            {t.history.loadingPostmortem}
+          </Typography>
+        )}
+
+        {postmortemError && (
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.red }}>
+            {postmortemError || t.history.postmortemError}
+          </Typography>
+        )}
+
+        {postmortemOpen && postmortemData && (
+          <Box sx={{
+            mt: '4px', p: '12px',
+            border: `1px solid ${C.cyanLine}`,
+            bgcolor: C.cyanDim,
+            display: 'flex', flexDirection: 'column', gap: '10px',
+          }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.cyan, letterSpacing: '0.16em' }}>
+              {t.history.postmortemTitle}
+            </Typography>
+
+            {postmortemData.summary && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.postmortemSummary}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, lineHeight: 1.6 }}>
+                  {postmortemData.summary}
+                </Typography>
+              </Box>
+            )}
+
+            {postmortemData.key_factors?.length > 0 && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.postmortemKeyFactors}
+                </Typography>
+                {renderStringList(postmortemData.key_factors, C.textPrimary)}
+              </Box>
+            )}
+
+            {postmortemData.what_hexa_got_right?.length > 0 && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.postmortemRight}
+                </Typography>
+                {renderStringList(postmortemData.what_hexa_got_right, C.green)}
+              </Box>
+            )}
+
+            {postmortemData.what_hexa_missed?.length > 0 && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.postmortemMissed}
+                </Typography>
+                {renderStringList(postmortemData.what_hexa_missed, C.red)}
+              </Box>
+            )}
+
+            {postmortemData.adjustment_signals?.length > 0 && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.postmortemAdjustments}
+                </Typography>
+                {renderStringList(postmortemData.adjustment_signals, C.cyan)}
+              </Box>
+            )}
+
+            {postmortemData.training_takeaway && (
+              <Box>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.58rem', color: C.textMuted, letterSpacing: '0.12em', mb: '4px', textTransform: 'uppercase' }}>
+                  {t.history.postmortemTakeaway}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, lineHeight: 1.6 }}>
+                  {postmortemData.training_takeaway}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }

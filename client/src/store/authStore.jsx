@@ -9,18 +9,24 @@
  * Token is persisted in localStorage under 'hexa_token'.
  */
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const AuthContext = createContext(null);
 
-const TOKEN_KEY = 'hexa_token';
-const API_URL   = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const TOKEN_KEY          = 'hexa_token';
+const API_URL            = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const INACTIVITY_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours
+const WARN_BEFORE        = 2 * 60 * 1000;       // warn 2 min before logout
+const ACTIVITY_EVENTS    = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
 
 export function AuthProvider({ children }) {
   const [user,            setUser]            = useState(null);
   const [token,           setToken]           = useState(() => localStorage.getItem(TOKEN_KEY));
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading,       setIsLoading]       = useState(true);
+  const [sessionWarning,  setSessionWarning]  = useState(false);
+  const inactivityTimer = useRef(null);
+  const warningTimer    = useRef(null);
 
   // ── Verify stored token on mount ──────────────────────────────────────────
   const checkAuth = useCallback(async (currentToken) => {
@@ -89,12 +95,40 @@ export function AuthProvider({ children }) {
   }
 
   // ── logout ────────────────────────────────────────────────────────────────
-  function logout() {
+  const logout = useCallback(function logout() {
+    clearTimeout(inactivityTimer.current);
+    clearTimeout(warningTimer.current);
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
     setIsAuthenticated(false);
-  }
+    setSessionWarning(false);
+  }, []);
+
+  // ── inactivity timer — resets on any user interaction ────────────────────
+  const resetInactivityTimer = useCallback(() => {
+    clearTimeout(inactivityTimer.current);
+    clearTimeout(warningTimer.current);
+    setSessionWarning(false);
+    warningTimer.current = setTimeout(() => setSessionWarning(true), INACTIVITY_TIMEOUT - WARN_BEFORE);
+    inactivityTimer.current = setTimeout(() => logout(), INACTIVITY_TIMEOUT);
+  }, [logout]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      clearTimeout(inactivityTimer.current);
+      clearTimeout(warningTimer.current);
+      setSessionWarning(false);
+      return;
+    }
+    resetInactivityTimer();
+    ACTIVITY_EVENTS.forEach(ev => window.addEventListener(ev, resetInactivityTimer, { passive: true }));
+    return () => {
+      ACTIVITY_EVENTS.forEach(ev => window.removeEventListener(ev, resetInactivityTimer));
+      clearTimeout(inactivityTimer.current);
+      clearTimeout(warningTimer.current);
+    };
+  }, [isAuthenticated, resetInactivityTimer]);
 
   // ── updateCredits — called after a successful analysis ───────────────────
   function updateCredits(credits) {
@@ -128,7 +162,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated, isLoading, login, register, logout, checkAuth, updateCredits, verifyEmail, resendCode }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated, isLoading, sessionWarning, login, register, logout, checkAuth, updateCredits, verifyEmail, resendCode }}>
       {children}
     </AuthContext.Provider>
   );
