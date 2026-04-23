@@ -803,11 +803,34 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       }
     }
 
+    let savedPick = null;
+    if (responseData && !analysis.parseError) {
+      try {
+        const matchup = `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`;
+        savedPick = await persistAnalysisPick({
+          userId: req.user.id,
+          userEmail: req.user.email ?? null,
+          type: 'single',
+          matchup,
+          analysisData: annotateAnalysisData(analysis.data, featureStore?.features ?? {}, gameData),
+          model: model ?? 'fast',
+          language: resolvedLang,
+          gamePk: gameData.gamePk,
+          gameDate: date,
+          oddsData: matchedOdds ?? null,
+          featureStore: featureStore ?? null,
+        });
+      } catch (saveErr) {
+        console.warn('[single-persist] Could not auto-save single pick:', saveErr.message);
+      }
+    }
+
     res.json({
       success: true,
       data: responseData,
       odds: matchedOdds ?? null,
       featureStore,
+      savedPick: savedPick ?? null,
       parseError: analysis.parseError,
       rawText: analysis.rawText,
       credits: updatedUser.credits,

@@ -397,7 +397,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', pt: '2px' }}>
         <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-          {entry.oracle_report && (
+          {(entry.oracle_report || entry.hexa_hunch || (Array.isArray(entry.alert_flags) && entry.alert_flags.length > 0)) && (
             <MarkBtn
               label={showAnalysis ? t.history.hideAnalysis : t.history.viewAnalysis}
               color={C.accent}
@@ -419,7 +419,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
           )}
         </Box>
 
-        {showAnalysis && entry.oracle_report && (
+        {showAnalysis && (entry.oracle_report || entry.hexa_hunch || (Array.isArray(entry.alert_flags) && entry.alert_flags.length > 0)) && (
           <Box sx={{
             mt: '4px', p: '12px',
             border: `1px solid ${C.accentLine}`,
