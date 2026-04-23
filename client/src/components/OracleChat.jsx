@@ -230,6 +230,10 @@ export default function OracleChat({ lang = 'en', onBack }) {
   const [sessionKey] = useState(genSessionKey);
   const chatEndRef = useRef(null);
 
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const recognitionRef = useRef(null);
+
   // Fetch today's games (use local date, not UTC — MLB games are scheduled
   // in ET/PT, and using toISOString() would skip to tomorrow after ~8pm ET)
   useEffect(() => {
@@ -250,6 +254,35 @@ export default function OracleChat({ lang = 'en', onBack }) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation]);
+
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setVoiceSupported(!!SR);
+  }, []);
+
+  function startVoiceInput() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
+    const recognition = new SR();
+    recognitionRef.current = recognition;
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = lang === 'es' ? 'es-ES' : 'en-US';
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(r => r[0].transcript)
+        .join('');
+      setQuestion(transcript);
+    };
+    recognition.start();
+  }
 
   function getMatchup(game) {
     const away = game.teams?.away?.team?.abbreviation || game.teams?.away?.abbreviation || game.away || '?';
@@ -686,20 +719,47 @@ export default function OracleChat({ lang = 'en', onBack }) {
                   onChange={e => setQuestion(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={
-                    mode === 'jornada'
-                      ? (lang === 'es'
-                          ? 'ej: ¿Cuál es el pick más seguro de hoy? ¿Dame los top 3...'
-                          : 'e.g. What\'s the safest pick today? Rank all games by confidence...')
-                      : (lang === 'es'
-                          ? 'Pregunta al Oracle... (ej: ¿Arraez hace más de 1.5 hits?)'
-                          : 'Ask the Oracle... (e.g. Does Cole get 7+ strikeouts?)')
+                    isListening
+                      ? (lang === 'es' ? 'Escuchando...' : 'Listening...')
+                      : mode === 'jornada'
+                        ? (lang === 'es'
+                            ? 'ej: ¿Cuál es el pick más seguro de hoy? ¿Dame los top 3...'
+                            : 'e.g. What\'s the safest pick today? Rank all games by confidence...')
+                        : (lang === 'es'
+                            ? 'Pregunta al Oracle... (ej: ¿Arraez hace más de 1.5 hits?)'
+                            : 'Ask the Oracle... (e.g. Does Cole get 7+ strikeouts?)')
                   }
                   style={{
-                    flex: 1, background: C.surface, border: `1px solid ${C.border}`,
+                    flex: 1, background: C.surface, border: `1px solid ${isListening ? '#FF3344' : C.border}`,
                     borderRadius: '3px', padding: '12px 16px', color: C.textPrimary,
                     fontFamily: SANS, fontSize: '13px', outline: 'none',
+                    transition: 'border-color 0.2s',
                   }}
                 />
+                {voiceSupported && (
+                  <button
+                    type="button"
+                    onClick={startVoiceInput}
+                    title={isListening
+                      ? (lang === 'es' ? 'Detener grabación' : 'Stop recording')
+                      : (lang === 'es' ? 'Hablar' : 'Speak')}
+                    style={{
+                      background: isListening ? 'rgba(255,51,68,0.15)' : 'transparent',
+                      border: `1px solid ${isListening ? '#FF3344' : C.border}`,
+                      borderRadius: '3px',
+                      padding: '12px 14px',
+                      cursor: 'pointer',
+                      color: isListening ? '#FF3344' : C.textMuted,
+                      fontSize: '16px',
+                      lineHeight: 1,
+                      transition: 'all 0.2s',
+                      animation: isListening ? 'micPulse 1s ease-in-out infinite' : 'none',
+                      flexShrink: 0,
+                    }}
+                  >
+                    🎤
+                  </button>
+                )}
                 <button
                   onClick={handleSend}
                   disabled={sendDisabled}
@@ -734,6 +794,10 @@ export default function OracleChat({ lang = 'en', onBack }) {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
+        }
+        @keyframes micPulse {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255,51,68,0.4); }
+          50% { opacity: 0.85; box-shadow: 0 0 0 6px rgba(255,51,68,0); }
         }
       `}</style>
     </div>

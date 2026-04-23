@@ -731,6 +731,48 @@ function MethodologyLink({ lang, onClick }) {
   );
 }
 
+// ── Session warning banner ────────────────────────────────────────────────────
+
+function SessionWarningBanner({ lang }) {
+  const { sessionWarning } = useAuth();
+  if (!sessionWarning) return null;
+  const isEs = lang === 'es';
+  return (
+    <Box sx={{
+      bgcolor: C.amberDim,
+      borderTop: `1px solid ${C.amberLine}`,
+      borderBottom: `1px solid ${C.amberLine}`,
+      px: { xs: '16px', sm: '24px' },
+      py: '8px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '12px',
+    }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.amber, letterSpacing: '0.04em', flex: 1 }}>
+        {'⚠'} {isEs
+          ? 'Tu sesión cerrará en 2 minutos por inactividad. Haz clic en cualquier lugar para continuar.'
+          : 'Session closing in 2 minutes due to inactivity. Click anywhere to stay logged in.'}
+      </Typography>
+      <Box
+        component="button"
+        sx={{
+          px: '12px', py: '4px',
+          border: `1px solid ${C.amberLine}`,
+          bgcolor: 'transparent',
+          color: C.amber,
+          fontFamily: MONO, fontSize: '0.6rem',
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+          cursor: 'pointer', flexShrink: 0,
+          '&:hover': { bgcolor: C.amber, color: '#000' },
+        }}
+      >
+        {isEs ? 'Continuar' : 'Stay'}
+      </Box>
+    </Box>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChange, disabled = false, onMethodology, onPerformance, isAdmin = false, performancePublic = false, onOracleChat }) {
@@ -1108,6 +1150,7 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           onClose={() => setShowCreditPanel(false)}
         />
       )}
+      <SessionWarningBanner lang={lang} />
     </Box>
   );
 }
