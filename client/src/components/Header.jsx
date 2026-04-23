@@ -12,7 +12,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
 import LanguageToggle from './LanguageToggle';
-import ThemeToggle    from './ThemeToggle';
 import AuthModal from './AuthModal';
 import HexaHelpModal from './HexaHelpModal';
 import PricingModal from './PricingModal';
@@ -878,18 +877,55 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
         }}
       >
         {/* Logo block */}
-        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Box
             component="img"
-            src="/hexa-logo.png"
+            src="/hexa-mascot.png"
             alt="H.E.X.A."
             sx={{
-              height:    { xs: '40px', sm: '48px' },
-              width:     'auto',
-              display:   'block',
-              userSelect:'none',
+              height:         { xs: '36px', sm: '44px' },
+              width:          { xs: '36px', sm: '44px' },
+              borderRadius:   '50%',
+              objectFit:      'cover',
+              objectPosition: 'center top',
+              border:         `1px solid ${C.cyanLine}`,
+              boxShadow:      '0 0 12px rgba(0,217,255,0.4)',
+              bgcolor:        'rgba(0,0,0,0.6)',
+              flexShrink:     0,
+              display:        'block',
+              userSelect:     'none',
             }}
           />
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+            <Box
+              component="span"
+              sx={{
+                fontFamily:    MONO,
+                fontSize:      { xs: '0.82rem', sm: '0.95rem' },
+                fontWeight:    700,
+                letterSpacing: '0.22em',
+                color:         C.textPrimary,
+                lineHeight:    1,
+                userSelect:    'none',
+              }}
+            >
+              H.E.X.A.
+            </Box>
+            <Box
+              component="span"
+              sx={{
+                fontFamily:    MONO,
+                fontSize:      '0.5rem',
+                letterSpacing: '0.16em',
+                color:         C.textMuted,
+                lineHeight:    1,
+                userSelect:    'none',
+                display:       { xs: 'none', sm: 'block' },
+              }}
+            >
+              HYBRID EXPERT X-ANALYSIS
+            </Box>
+          </Box>
         </Box>
 
         {/* Statcast status badge */}
@@ -1106,9 +1142,6 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Help button */}
         <HelpButton lang={lang} />
-
-        {/* Theme toggle (LIGHT / SYSTEM / DARK) */}
-        <ThemeToggle lang={lang} layout="pill" />
 
         {/* Language toggle */}
         <LanguageToggle lang={lang} onToggle={onLangToggle} />

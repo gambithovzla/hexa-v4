@@ -197,6 +197,81 @@ function InsightMedia({ insight, size = 40, tone }) {
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
+function BrandHero({ lang }) {
+  const { C, MONO, DISPLAY, SPACE } = useHexaTheme();
+  const isEs = lang === 'es';
+  return (
+    <Box
+      sx={{
+        display:         'flex',
+        alignItems:      'center',
+        gap:             { xs: SPACE.md, sm: SPACE.lg },
+        mb:              SPACE.lg,
+        px:              { xs: SPACE.md, sm: SPACE.lg },
+        py:              { xs: SPACE.sm, sm: SPACE.md },
+        border:          `1px solid ${C.cyanLine}`,
+        borderLeft:      `3px solid ${C.cyan}`,
+        bgcolor:         'rgba(0,0,0,0.35)',
+        backgroundImage: 'linear-gradient(135deg, rgba(0,217,255,0.06) 0%, transparent 55%)',
+        position:        'relative',
+        overflow:        'hidden',
+      }}
+    >
+      <Box
+        component="img"
+        src="/hexa-mascot.png"
+        alt="H.E.X.A."
+        sx={{
+          height:        { xs: 72, sm: 104, md: 128 },
+          width:         'auto',
+          flexShrink:    0,
+          filter:        'drop-shadow(0 0 18px rgba(0,217,255,0.35))',
+          userSelect:    'none',
+          pointerEvents: 'none',
+        }}
+      />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          sx={{
+            fontFamily:    DISPLAY,
+            fontWeight:    900,
+            fontSize:      { xs: '1.5rem', sm: '2rem', md: '2.4rem' },
+            letterSpacing: '0.32em',
+            color:         C.textPrimary,
+            lineHeight:    1,
+            textShadow:    C.cyanGlow,
+          }}
+        >
+          H.E.X.A.
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily:    MONO,
+            fontSize:      { xs: '0.6rem', sm: '0.72rem' },
+            letterSpacing: '0.24em',
+            color:         C.cyan,
+            mt:            '6px',
+          }}
+        >
+          {isEs ? 'ANALIZA · DECIDE · GANA' : 'ANALYZE · DECIDE · WIN'}
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily:    MONO,
+            fontSize:      { xs: '0.58rem', sm: '0.64rem' },
+            letterSpacing: '0.18em',
+            color:         C.textMuted,
+            mt:            '4px',
+            display:       { xs: 'none', sm: 'block' },
+          }}
+        >
+          HYBRID EXPERT X-ANALYSIS
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 function BoardHeader({ t, data, ageMin, refreshing, loading, onRefresh }) {
   const { C, MONO, DISPLAY, SCALE, SPACE } = useHexaTheme();
 
@@ -428,6 +503,7 @@ export default function HexaBoard({ lang = 'es' }) {
 
   return (
     <Box sx={{ maxWidth: 1040, mx: 'auto', width: '100%' }}>
+      <BrandHero lang={lang} />
       <BoardHeader
         t={t}
         data={data}
