@@ -18,60 +18,20 @@
  * switch their imports to `const { C } = useHexaTheme()`.
  */
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import darkPalette  from './palettes/dark.js';
-import lightPalette from './palettes/light.js';
+import darkPalette from './palettes/dark.js';
 import { buildTokens, MONO, DISPLAY, SCALE, SPACE, EASE, DURATION, RADIUS } from './theme.js';
 import { buildMuiTheme } from './styles/muiTheme.js';
-
-const STORAGE_KEY = 'hexa_theme_mode';
-const VALID_MODES = ['light', 'dark', 'system'];
 
 // ── Context ──────────────────────────────────────────────────────────────────
 const HexaThemeContext = createContext(null);
 
-function readStoredMode() {
-  if (typeof window === 'undefined') return 'system';
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    return VALID_MODES.includes(stored) ? stored : 'system';
-  } catch {
-    return 'system';
-  }
-}
-
-function readSystemPreference() {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'dark';
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-}
-
 export function ThemeProvider({ children }) {
-  const [mode, setModeState]       = useState(readStoredMode);
-  const [systemMode, setSystemMode] = useState(readSystemPreference);
-
-  // Keep systemMode in sync with OS preference while the app is open.
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const sync = () => setSystemMode(mq.matches ? 'light' : 'dark');
-    if (mq.addEventListener) mq.addEventListener('change', sync);
-    else mq.addListener(sync);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', sync);
-      else mq.removeListener(sync);
-    };
-  }, []);
-
-  // Persist whenever the user's explicit preference changes.
-  const setMode = (next) => {
-    if (!VALID_MODES.includes(next)) return;
-    try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
-    setModeState(next);
-  };
-
-  const resolvedMode = mode === 'system' ? systemMode : mode;
-  const palette = resolvedMode === 'light' ? lightPalette : darkPalette;
+  const mode         = 'dark';
+  const resolvedMode = 'dark';
+  const setMode      = () => {};  // theme is fixed — no-op
+  const palette = darkPalette;
 
   // Rebuild palette-dependent tokens whenever the effective palette changes.
   const tokens = useMemo(() => buildTokens(palette), [palette]);
