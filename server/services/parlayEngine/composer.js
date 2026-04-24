@@ -111,7 +111,16 @@ const SGP_MIN_CORR = { conservative: 0.15, balanced: 0.0, aggressive: -0.2, drea
  * Check whether a set of legs is a valid parlay under the given mode.
  * Returns { valid: true } or { valid: false, reason: string }.
  */
-export function isParlayValid(legs, correlations, mode, { allowSGP = true } = {}) {
+export function isParlayValid(
+  legs,
+  correlations,
+  mode,
+  {
+    allowSGP = true,
+    minEdge = MIN_EDGE_BY_MODE[mode] ?? 2,
+    allowNullEdge = mode !== 'conservative',
+  } = {},
+) {
   // 1. No strong negative correlation between any pair
   for (let i = 0; i < legs.length; i++) {
     for (let j = i + 1; j < legs.length; j++) {
@@ -145,8 +154,10 @@ export function isParlayValid(legs, correlations, mode, { allowSGP = true } = {}
   }
 
   // 4. Minimum edge per leg for the mode
-  const minEdge = MIN_EDGE_BY_MODE[mode] ?? 2;
-  if (legs.some(l => (l.edge ?? -999) < minEdge)) {
+  if (legs.some(l => {
+    if (l.edge == null) return !allowNullEdge;
+    return l.edge < minEdge;
+  })) {
     return { valid: false, reason: 'edge_below_minimum' };
   }
 
@@ -271,15 +282,15 @@ export function composeParlays({
     minConfidence = 55,
     minDataQuality = 50,
     allowSGP      = true,
+    allowNullEdge = mode !== 'conservative',
   } = filters;
 
   const { correlations, riskDistances } = correlationMatrix;
-  const validityOpts = { allowSGP };
+  const validityOpts = { allowSGP, minEdge, allowNullEdge };
 
   // --- Step 1: filter eligible candidates
   // Player props often have null odds → null edge. For non-conservative modes we
   // accept them on model probability alone so the full prop market is available.
-  const allowNullEdge = mode !== 'conservative';
   const eligible = candidates.filter(c => {
     const hasEdge = c.edge !== null && c.edge !== undefined;
     const edgeOk  = hasEdge ? c.edge >= minEdge : allowNullEdge;
