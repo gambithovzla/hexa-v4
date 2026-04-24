@@ -93,12 +93,22 @@ export async function getGameOdds() {
     const raw  = await res.json();
     console.log('[odds-api] Raw events returned:', Array.isArray(raw) ? raw.length : 'not an array', typeof raw === 'string' ? raw.substring(0, 200) : '');
 
-    if (Array.isArray(raw) && raw.length === 0) {
-      console.warn('[odds-api] 0 events returned — likely Spring Training (no MLB regular season games listed)');
-    }
-
     const data = (Array.isArray(raw) ? raw : []).map(normalizeEvent).filter(Boolean);
     console.log('[odds-api] Normalized events:', data.length);
+
+    if (data.length === 0 && _cache.data?.length > 0) {
+      // Odds API returned 0 events — all games likely started and were removed from the endpoint.
+      // Keep the existing pre-game odds so picks still show real odds instead of '—'.
+      // Extend the TTL so we don't hit the API again for another 60 minutes.
+      console.warn(`[odds-api] 0 events returned but cache has ${_cache.data.length} — preserving pre-game odds cache`);
+      _cache = { data: _cache.data, ts: Date.now() };
+      return _cache.data;
+    }
+
+    if (data.length === 0) {
+      console.warn('[odds-api] 0 events returned — likely all games started or Spring Training');
+    }
+
     _cache = { data, ts: Date.now() };
     return data;
   } catch (err) {
