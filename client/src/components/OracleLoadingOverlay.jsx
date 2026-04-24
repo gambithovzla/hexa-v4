@@ -63,7 +63,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
       <Box
         sx={{
           position:   'relative',
-          width:      { xs: 160, sm: 210 },
+          width:      { xs: 'min(240px, 58vw)', sm: 'min(320px, 38vw)', md: 340 },
           flexShrink: 0,
           '@keyframes hexaGlow': {
             '0%, 100%': { filter: 'drop-shadow(0 0 16px rgba(0,217,255,0.35))' },
@@ -104,11 +104,11 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
         <Box
           sx={{
             position:   'absolute',
-            bottom:     '-12px',
-            left:       '10%',
-            right:      '10%',
-            height:     '24px',
-            background: 'radial-gradient(ellipse at center, rgba(0,217,255,0.25) 0%, transparent 70%)',
+            bottom:     '-16px',
+            left:       '8%',
+            right:      '8%',
+            height:     '32px',
+            background: 'radial-gradient(ellipse at center, rgba(0,217,255,0.28) 0%, transparent 70%)',
             '@keyframes hexaBasePulse': {
               '0%, 100%': { opacity: 0.5 },
               '50%':      { opacity: 1   },
@@ -170,7 +170,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
       {/* Progress bar */}
       <Box
         sx={{
-          width:    { xs: '200px', sm: '260px' },
+          width:    { xs: '220px', sm: '300px' },
           height:   '2px',
           bgcolor:  C.border,
           overflow: 'hidden',
