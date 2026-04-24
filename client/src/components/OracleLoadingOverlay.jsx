@@ -74,7 +74,7 @@ export default function OracleLoadingOverlay({ lang = 'en' }) {
       >
         <Box
           component="img"
-          src="/hexa-mascot.png"
+          src="/hexa-analyzing.png"
           alt="H.E.X.A."
           sx={{ width: '100%', height: 'auto', display: 'block' }}
           onError={e => { e.target.style.display = 'none'; }}

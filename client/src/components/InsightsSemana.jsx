@@ -550,16 +550,30 @@ export default function InsightsSemana({ lang = 'es' }) {
       ) : insights.length === 0 ? (
         <div
           style={{
-            fontFamily: MONO,
-            fontSize: '11px',
-            color: 'rgba(255,255,255,0.38)',
-            padding: '24px',
-            textAlign: 'center',
-            border: `1px dashed ${GLINE}`,
-            background: GDIM,
+            fontFamily:  MONO,
+            fontSize:    '11px',
+            color:       'rgba(255,255,255,0.38)',
+            padding:     '32px 24px',
+            textAlign:   'center',
+            border:      `1px dashed ${GLINE}`,
+            background:  GDIM,
             letterSpacing: '0.08em',
+            position:    'relative',
+            overflow:    'hidden',
+            minHeight:   '120px',
+            display:     'flex',
+            flexDirection: 'column',
+            alignItems:  'center',
+            justifyContent: 'center',
+            gap:         '10px',
           }}
         >
+          <img
+            src="/hexa-mascot-ghost.png"
+            alt=""
+            aria-hidden="true"
+            style={{ height: 64, width: 'auto', opacity: 0.18, pointerEvents: 'none', userSelect: 'none' }}
+          />
           {isCurrentWeek ? copy.emptyCurrent : copy.emptyPast}
         </div>
       ) : (
