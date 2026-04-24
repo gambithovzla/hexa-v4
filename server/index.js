@@ -1114,13 +1114,13 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     });
 
     if (composedParlays.length === 0 && mode === 'conservative' && effectiveMinEdge > 0) {
-      console.warn(`[parlay-synergy] conservative retry with minEdge=0 after strict minEdge=${effectiveMinEdge} returned no parlays`);
+      console.warn(`[parlay-synergy] conservative retry with relaxed constraints after strict minEdge=${effectiveMinEdge} returned no parlays`);
       const relaxed = composeParlays({
         candidates: enriched,
         correlationMatrix,
         N: requestedLegs,
         mode,
-        filters: { minEdge: 0, minConfidence, allowSGP },
+        filters: { minEdge: 0, minConfidence, allowSGP, allowNullEdge: true, allowHighRisk: true },
       });
       composedParlays = relaxed.parlays;
       composerMeta = {
