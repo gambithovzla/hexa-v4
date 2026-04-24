@@ -1,10 +1,13 @@
 /**
  * useParlayArchitectHistory
  *
- * Persists Parlay Architect runs to localStorage under 'hexa_synergy_history'.
- * Each entry shape:
+ * Persists Parlay Architect runs. When a token is provided it fetches the
+ * user's history from the server on mount (cross-device sync) and falls back
+ * to localStorage for unauthenticated sessions.
+ *
+ * Entry shape:
  *   {
- *     id:                  number  (Date.now())
+ *     id:                  string|number  ('db_N' for server rows, Date.now() for local)
  *     created_at:          string  (ISO)
  *     date:                string  (YYYY-MM-DD game date)
  *     mode:                string
@@ -15,18 +18,20 @@
  *     combined_probability: number | null
  *     combined_decimal_odds: number | null
  *     combined_edge_score: number | null
- *     legs:                object[]  (full leg objects with reasoning)
+ *     legs:                object[]
  *     warnings:            string[]
  *     result:              'pending' | 'win' | 'loss' | 'push'
  *     legs_hit:            number | null
  *     _fallback:           boolean
+ *     _source:             'server' | 'local'
  *   }
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const STORAGE_KEY = 'hexa_synergy_history';
 const MAX_ENTRIES = 150;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function load() {
   try {
@@ -45,8 +50,33 @@ function persist(entries) {
   }
 }
 
-export default function useParlayArchitectHistory() {
+export default function useParlayArchitectHistory(token) {
   const [history, setHistory] = useState(() => load());
+
+  // On mount (or when token changes): fetch server history and merge
+  useEffect(() => {
+    if (!token) return;
+
+    fetch(`${API_URL}/api/parlay-architect/history`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(json => {
+        if (!json.success) return;
+        const serverEntries = json.data ?? [];
+        // Merge: server entries take priority (by db_id dedup), keep local-only entries
+        const serverIds = new Set(serverEntries.map(e => e.db_id));
+        const localOnly = load().filter(e => !e.db_id || !serverIds.has(e.db_id));
+        const merged = [...serverEntries, ...localOnly]
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, MAX_ENTRIES);
+        persist(merged);
+        setHistory(merged);
+      })
+      .catch(() => {
+        // server unreachable — keep localStorage as-is
+      });
+  }, [token]);
 
   const addRun = useCallback(({ date, mode, requestedLegs, gameIds, result, architect_meta }) => {
     const chosen = result?.chosen_parlay ?? {};
@@ -67,6 +97,7 @@ export default function useParlayArchitectHistory() {
       result:                'pending',
       legs_hit:              null,
       _fallback:             architect_meta?._fallback ?? false,
+      _source:               'local',
     };
     setHistory(prev => {
       const next = [entry, ...prev].slice(0, MAX_ENTRIES);
