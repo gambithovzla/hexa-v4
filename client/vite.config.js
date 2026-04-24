@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon-32.png', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['favicon-32.png', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'H.E.X.A. Oracle',
         short_name: 'HEXA',
@@ -23,13 +23,25 @@ export default defineConfig({
             src: 'icon-192.png',
             sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
           },
           {
             src: 'icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       },
