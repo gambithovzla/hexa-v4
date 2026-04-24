@@ -277,17 +277,28 @@ export function composeParlays({
   const validityOpts = { allowSGP };
 
   // --- Step 1: filter eligible candidates
-  const eligible = candidates.filter(c =>
-    (c.edge ?? -999) >= minEdge &&
-    c.modelProbability >= minConfidence &&
-    (c.dataQualityScore ?? 0) >= minDataQuality,
-  );
+  // Player props often have null odds → null edge. For non-conservative modes we
+  // accept them on model probability alone so the full prop market is available.
+  const allowNullEdge = mode !== 'conservative';
+  const eligible = candidates.filter(c => {
+    const hasEdge = c.edge !== null && c.edge !== undefined;
+    const edgeOk  = hasEdge ? c.edge >= minEdge : allowNullEdge;
+    return edgeOk
+      && c.modelProbability >= minConfidence
+      && (c.dataQualityScore ?? 0) >= minDataQuality;
+  });
 
   console.log(`[parlay-synergy] composer: ${eligible.length}/${candidates.length} eligible after filters (mode=${mode}, N=${N})`);
 
-  if (eligible.length < N) {
-    console.warn(`[parlay-synergy] composer: not enough eligible candidates (${eligible.length}) for N=${N}`);
+  if (eligible.length < 2) {
+    console.warn(`[parlay-synergy] composer: not enough eligible candidates (${eligible.length}) for any parlay`);
     return { parlays: [], meta: { eligibleCount: eligible.length, rejectedByNoGo: 0 } };
+  }
+
+  // Clamp N to what the pool can realistically support
+  const effectiveN = Math.min(N, eligible.length);
+  if (effectiveN < N) {
+    console.warn(`[parlay-synergy] composer: pool has ${eligible.length} eligible, clamping N from ${N} to ${effectiveN}`);
   }
 
   // --- Step 2: sort seeds by edge adjusted for xgb agreement
@@ -306,16 +317,19 @@ export function composeParlays({
   for (let s = 0; s < seedCount && results.length < 3; s++) {
     const seed = sorted[s];
 
-    // Greedy construction
-    let legs = greedyBuild(seed, eligible, N, mode, correlations, riskDistances, validityOpts);
+    // Greedy construction — target effectiveN, accept partial if pool is exhausted
+    let legs = greedyBuild(seed, eligible, effectiveN, mode, correlations, riskDistances, validityOpts);
 
-    if (legs.length < N) {
+    // Accept partial builds: if we got at least 2 valid legs we have a usable parlay.
+    // Emit a warning so the frontend can inform the user of the shortfall.
+    if (legs.length < 2) {
       rejectedByNoGo++;
-      continue; // couldn't fill N legs from this seed
+      continue;
     }
+    const actualN = legs.length;
 
     // 2-opt local search improvement
-    legs = localSearch(legs, eligible, N, mode, correlations, riskDistances, validityOpts);
+    legs = localSearch(legs, eligible, actualN, mode, correlations, riskDistances, validityOpts);
 
     // Final validity check (local search preserves validity, but verify)
     const validity = isParlayValid(legs, correlations, mode, validityOpts);
@@ -330,7 +344,11 @@ export function composeParlays({
     if (seen.has(key)) continue;
     seen.add(key);
 
-    results.push(buildComposedParlay(results.length, legs, correlations, riskDistances, mode, N));
+    const composed = buildComposedParlay(results.length, legs, correlations, riskDistances, mode, actualN);
+    if (actualN < N) {
+      composed.partial_warning = `Pool only supported ${actualN} of ${N} requested legs.`;
+    }
+    results.push(composed);
   }
 
   // Sort by score descending and re-index

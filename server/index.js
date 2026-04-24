@@ -1138,12 +1138,14 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     const alternatives  = composedParlays.slice(1);
 
     // Resolve architect's chosen leg IDs back to full candidate objects
+    const actualBuiltLegs = topComposed.legs.length;
     let finalLegs = resolveLegs(architectDecision.final_legs, enriched);
-    if (finalLegs.length < requestedLegs) {
+    if (finalLegs.length < actualBuiltLegs) {
       // Fallback: architect returned bad IDs — use top composer parlay
       console.warn('[parlay-synergy] architect leg resolution incomplete, falling back to composer top');
       finalLegs = topComposed.legs;
     }
+    const partialWarning = topComposed.partial_warning ?? null;
 
     const overrodeComposer =
       architectDecision.decision !== 'confirm' || architectDecision.chosen_index !== 0;
@@ -1172,7 +1174,10 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
           combined_edge_score:   finalLegs.reduce((s, l) => s + (l.edge ?? 0), 0),
           synergy_type:          architectDecision.synergy_type,
           synergy_thesis:        architectDecision.synergy_thesis,
-          warnings:              architectDecision.warnings ?? [],
+          warnings:              [
+            ...(architectDecision.warnings ?? []),
+            ...(partialWarning ? [partialWarning] : []),
+          ],
         },
         alternatives: alternatives.map((alt, i) => ({
           index:                 i + 1,
@@ -1185,7 +1190,10 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
         composer_meta: {
           mode,
           candidate_pool_size:  enriched.length,
+          eligible_count:       composerMeta.eligibleCount,
           rejected_by_no_go:    composerMeta.rejectedByNoGo,
+          requested_legs:       requestedLegs,
+          built_legs:           actualBuiltLegs,
           score_breakdown:      topComposed.scoreBreakdown,
         },
         architect_meta: {
