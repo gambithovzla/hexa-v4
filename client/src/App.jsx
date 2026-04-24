@@ -29,6 +29,7 @@ import LegalPage            from './components/LegalPage';
 import OracleChat          from './components/OracleChat';
 import PerformanceDashboard from './pages/PerformanceDashboard';
 import DevUIShowcase       from './pages/DevUIShowcase';
+import ParlayArchitect     from './pages/ParlayArchitect';
 import PerformancePage      from './components/PerformancePage';
 import BatchScanPanel      from './components/BatchScanPanel';
 import BacktestDashboard  from './components/BacktestDashboard';
@@ -305,7 +306,7 @@ export default function App() {
   const [isAdmin,           setIsAdmin]           = useState(false);
   const [performancePublic, setPerformancePublic] = useState(false);
   const { isMobileExperience } = useShellMode();
-  const adminOnlyTabs = ['parlay', 'tools', 'batch'];
+  const adminOnlyTabs = ['parlay', 'tools', 'batch', 'synergy'];
 
   // Check admin status on mount
   useEffect(() => {
@@ -555,6 +556,11 @@ export default function App() {
           {/* Guía H.E.X.A. — learning center */}
           {activeTab === 'guide' && (
             <LearningCenter lang={lang} />
+          )}
+
+          {/* Parlay Architect — Synergy Engine (admin only) */}
+          {activeTab === 'synergy' && isAdmin && (
+            <ParlayArchitect lang={lang} />
           )}
 
           {/* Batch Scan (admin only) */}

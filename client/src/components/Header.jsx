@@ -40,6 +40,7 @@ const TABS = [
   { value: 'gameday', en: 'Details',     es: 'Detalles',         mobileEn: 'Details',     mobileEs: 'Detalles' },
   { value: 'guide',   en: 'Guide',       es: 'Guía',             mobileEn: 'Guide',  mobileEs: 'Guia' },
   { value: 'batch',   en: 'Batch Scan',  es: 'Batch Scan',       mobileEn: 'Batch',  mobileEs: 'Batch', adminOnly: true },
+  { value: 'synergy', en: 'Architect',  es: 'Arquitecto',        mobileEn: 'Arch.',  mobileEs: 'Arch.', adminOnly: true },
 ];
 
 // ── Statcast badge ────────────────────────────────────────────────────────────
