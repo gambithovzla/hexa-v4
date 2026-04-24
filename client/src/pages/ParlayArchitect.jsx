@@ -127,10 +127,38 @@ const L = {
 
 const MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
 
+const LEGS_MARKS = [2, 5, 10, 15, 20, 25, 30].map(v => ({ value: v, label: String(v) }));
+
 function getMatchupLabel(game) {
   const away = game.teams?.away?.name ?? game.awayTeam ?? '?';
   const home = game.teams?.home?.name ?? game.homeTeam ?? '?';
   return `${away} @ ${home}`;
+}
+
+function getTeamId(side) {
+  return side?.team?.id ?? side?.id ?? null;
+}
+
+function TeamLogo({ teamId, abbr, size = 22 }) {
+  if (!teamId) {
+    return (
+      <Box sx={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted }}>{abbr ?? '?'}</Typography>
+      </Box>
+    );
+  }
+  return (
+    <Box
+      component="img"
+      src={`https://www.mlbstatic.com/team-logos/${teamId}.svg`}
+      alt={abbr ?? ''}
+      onError={e => {
+        e.target.style.display = 'none';
+        e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
+      }}
+      sx={{ width: size, height: size, objectFit: 'contain', flexShrink: 0, display: 'block' }}
+    />
+  );
 }
 
 function fmtMs(ms) {
@@ -503,6 +531,13 @@ export default function ParlayArchitect({ lang = 'en' }) {
               ) : games.map(game => {
                 const id = game.gamePk ?? game.id ?? game.gameId;
                 const checked = selectedIds.has(id);
+                const awayId   = getTeamId(game.teams?.away);
+                const homeId   = getTeamId(game.teams?.home);
+                const awayAbbr = game.teams?.away?.abbreviation ?? game.teams?.away?.team?.abbreviation ?? '?';
+                const homeAbbr = game.teams?.home?.abbreviation ?? game.teams?.home?.team?.abbreviation ?? '?';
+                const awayName = game.teams?.away?.name ?? game.teams?.away?.team?.name ?? awayAbbr;
+                const homeName = game.teams?.home?.name ?? game.teams?.home?.team?.name ?? homeAbbr;
+                const gameTime = game.gameTime ?? game.time ?? null;
                 return (
                   <Box
                     key={id}
@@ -511,7 +546,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      px: '12px',
+                      px: '10px',
                       py: '7px',
                       cursor: 'pointer',
                       bgcolor: checked ? 'rgba(255,102,0,0.05)' : 'transparent',
@@ -520,28 +555,37 @@ export default function ParlayArchitect({ lang = 'en' }) {
                       '&:hover': { bgcolor: 'rgba(0,217,255,0.03)' },
                     }}
                   >
+                    {/* Checkbox */}
                     <Box sx={{
-                      width: 13,
-                      height: 13,
+                      width: 13, height: 13, flexShrink: 0,
                       border: `1px solid ${checked ? C.accent : C.border}`,
                       bgcolor: checked ? C.accent : 'transparent',
-                      flexShrink: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       {checked && <Box sx={{ width: 7, height: 7, bgcolor: '#000' }} />}
                     </Box>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: checked ? C.textPrimary : C.textSecondary, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {getMatchupLabel(game)}
+
+                    {/* Away logo + name */}
+                    <TeamLogo teamId={awayId} abbr={awayAbbr} size={20} />
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: checked ? C.textPrimary : C.textSecondary, fontWeight: checked ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {awayName}
+                    </Typography>
+
+                    {/* VS separator */}
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted, flexShrink: 0, px: '2px' }}>@</Typography>
+
+                    {/* Home logo + name */}
+                    <TeamLogo teamId={homeId} abbr={homeAbbr} size={20} />
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: checked ? C.textPrimary : C.textSecondary, fontWeight: checked ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {homeName}
+                    </Typography>
+
+                    {/* Time */}
+                    {gameTime && (
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted, flexShrink: 0 }}>
+                        {gameTime}
                       </Typography>
-                      {(game.gameTime ?? game.time) && (
-                        <Typography sx={{ fontFamily: MONO, fontSize: '0.54rem', color: C.textMuted }}>
-                          {game.gameTime ?? game.time}
-                        </Typography>
-                      )}
-                    </Box>
+                    )}
                   </Box>
                 );
               })}
@@ -597,19 +641,28 @@ export default function ParlayArchitect({ lang = 'en' }) {
               value={requestedLegs}
               onChange={(_, v) => setRequestedLegs(v)}
               min={2}
-              max={8}
+              max={30}
               step={1}
-              marks
+              marks={LEGS_MARKS}
               sx={{
-                color: C.cyan,
+                color: requestedLegs > 10 ? C.amber : C.cyan,
                 py: '6px',
-                '& .MuiSlider-thumb': { bgcolor: C.cyan, width: 12, height: 12, '&:hover': { boxShadow: `0 0 0 6px rgba(0,217,255,0.12)` } },
+                '& .MuiSlider-thumb': { bgcolor: requestedLegs > 10 ? C.amber : C.cyan, width: 12, height: 12, '&:hover': { boxShadow: `0 0 0 6px rgba(0,217,255,0.12)` } },
                 '& .MuiSlider-rail': { bgcolor: C.borderLight },
-                '& .MuiSlider-track': { bgcolor: C.cyan },
-                '& .MuiSlider-mark': { bgcolor: C.border, width: 2, height: 2 },
-                '& .MuiSlider-markActive': { bgcolor: C.cyan },
+                '& .MuiSlider-track': { bgcolor: requestedLegs > 10 ? C.amber : C.cyan },
+                '& .MuiSlider-mark': { bgcolor: C.borderLight, width: 2, height: 6 },
+                '& .MuiSlider-markActive': { bgcolor: requestedLegs > 10 ? C.amber : C.cyan },
+                '& .MuiSlider-markLabel': { fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, top: '22px' },
               }}
             />
+            {requestedLegs > 10 && (
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.amber, mt: '4px', letterSpacing: '0.06em' }}>
+                ⚠ {lang === 'es'
+                  ? `Probabilidad combinada ≈ ${(Math.pow(0.60, requestedLegs) * 100).toFixed(4)}% — parlay de alto riesgo`
+                  : `Combined probability ≈ ${(Math.pow(0.60, requestedLegs) * 100).toFixed(4)}% — high-risk longshot`
+                }
+              </Typography>
+            )}
           </Panel>
 
           {/* Model tier */}
