@@ -10,7 +10,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run client\"",
     "audit": "node scripts/system-audit.js",
     "force_rebuild": "echo 1",
-    "test:parlay": "node --test server/services/parlayEngine/__tests__/pool.test.js server/services/parlayEngine/__tests__/risk.test.js server/services/parlayEngine/__tests__/correl.test.js server/services/parlayEngine/__tests__/composer.test.js"
+    "test:parlay": "node --test server/services/parlayEngine/__tests__/pool.test.js server/services/parlayEngine/__tests__/risk.test.js server/services/parlayEngine/__tests__/correl.test.js server/services/parlayEngine/__tests__/composer.test.js server/services/parlayEngine/__tests__/architect.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",

@@ -4,8 +4,9 @@ export { buildCandidatePool, createPoolBuilder, clearPoolCache } from './pool.js
 export { enrichWithRiskVector, enrichPoolWithRiskVectors } from './risk.js';
 export { buildCorrelationMatrix, getCorrelation, getRiskDistance, pairKey } from './correl.js';
 export { composeParlays, isParlayValid } from './composer.js';
-
-// Phase 5: architect.js  → askArchitect
+export { askArchitect, createArchitect, resolveLegs } from './architect.js';
+export { PARLAY_ARCHITECT_SYSTEM, buildArchitectUserMessage } from './prompts.js';
+export { callArchitect } from './llmClient.js';
 // Phase 3: correl.js     → buildCorrelationMatrix
 // Phase 4: composer.js   → composeParlays
 // Phase 5: architect.js  → askArchitect
