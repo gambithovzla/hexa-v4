@@ -35,7 +35,7 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        globPatterns: ['**/*.{js,css,html,svg}', '**/!(icon-*|favicon-*|apple-touch-icon).png'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/hexa-v4-production\.up\.railway\.app\/api/,
