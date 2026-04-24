@@ -151,6 +151,7 @@ describe('buildCandidatePool', () => {
     // Odds
     assert.ok('odds' in c, 'odds present');
     assert.ok('decimalOdds' in c, 'decimalOdds present');
+    assert.ok('line' in c, 'line present');
 
     // XGBoost
     assert.ok('xgbScore' in c, 'xgbScore present');
@@ -243,5 +244,22 @@ describe('buildCandidatePool', () => {
     const kProp = result.find(c => c.pick.includes('Ks'));
     assert.ok(kProp, 'strikeouts prop candidate must exist');
     assert.strictEqual(kProp.propKind, 'k', 'prop_kind strikeouts maps to propKind k');
+  });
+
+  it('omits unpriced candidates before they reach the architect pool', async () => {
+    clearPoolCache();
+    const build = createPoolBuilder(makeMockDeps({
+      _buildDeterministicSafePayload: ({ gameData }) => ({
+        safe_candidates: [
+          ...makeSafeCandidates(gameData.teams.home.abbreviation, gameData.teams.away.abbreviation),
+          { pick: 'Unpriced Player Over 0.5 Hits', type: 'PlayerProp', hit_probability: 70, odds: null, market_type: 'playerprop', side: 'over', prop_kind: 'hits', model_probability: 70, implied_probability: null, edge: null, rank: 9, reasoning: 'No market price' },
+        ],
+      }),
+    }));
+    const result = await build({ gameIds: [778001], date: '2026-04-23', lang: 'en' });
+
+    assert.ok(result.length > 0, 'priced candidates still flow through');
+    assert.ok(result.every(c => c.odds != null), 'architect pool must not include null odds');
+    assert.ok(!result.some(c => c.pick.includes('Unpriced Player')), 'unpriced candidate omitted');
   });
 });
