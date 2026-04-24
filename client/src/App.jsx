@@ -35,7 +35,8 @@ import BatchScanPanel      from './components/BatchScanPanel';
 import BacktestDashboard  from './components/BacktestDashboard';
 import BacktestRunner     from './components/BacktestRunner';
 import DatasetDashboard  from './components/DatasetDashboardV2';
-import ShadowModeDashboard from './components/ShadowModeDashboard';
+import ShadowModeDashboard    from './components/ShadowModeDashboard';
+import SynergyRunsDashboard  from './components/SynergyRunsDashboard';
 import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
@@ -390,6 +391,9 @@ export default function App() {
   }
   if (window.location.pathname === '/admin/shadow-model') {
     return <ShadowModeDashboard onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/synergy-runs') {
+    return <SynergyRunsDashboard lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
 
 

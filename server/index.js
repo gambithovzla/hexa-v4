@@ -1260,6 +1260,30 @@ app.get('/api/admin/parlay-synergy/recent', verifyToken, isAdmin, async (req, re
   }
 });
 
+// POST /api/admin/parlay-synergy/:id/resolve — mark a run hit/miss (admin only)
+app.post('/api/admin/parlay-synergy/:id/resolve', verifyToken, isAdmin, async (req, res) => {
+  const runId = Number(req.params.id);
+  if (!Number.isInteger(runId) || runId < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid run id' });
+  }
+  const { hit, legs_hit } = req.body;
+  if (typeof hit !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'hit must be a boolean' });
+  }
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE parlay_synergy_runs
+       SET resolved = true, hit = $1, legs_hit = $2, resolved_at = NOW()
+       WHERE id = $3`,
+      [hit, legs_hit ?? null, runId]
+    );
+    if (rowCount === 0) return res.status(404).json({ success: false, error: 'Run not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // POST /api/analyze/safe — Safe Pick mode (supports single gameId or multiple gameIds for parlay safe picks)
 app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => {
   const { gameId, gameIds, lang = 'en', date, engine = 'sonnet' } = req.body;

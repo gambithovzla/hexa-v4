@@ -828,6 +828,15 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
           onClick: () => { window.location.href = '/admin/shadow-model'; },
         },
         {
+          key: 'synergy-runs',
+          label: 'SYNERGY RUNS',
+          color: '#FF6600',
+          border: 'rgba(255,102,0,0.3)',
+          background: 'rgba(255,102,0,0.08)',
+          backgroundActive: 'rgba(255,102,0,0.14)',
+          onClick: () => { window.location.href = '/admin/synergy-runs'; },
+        },
+        {
           key: 'credits',
           label: 'CREDIT MGR',
           color: '#f97316',
@@ -1096,6 +1105,21 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
             '&:hover': { background: 'rgba(0,255,255,0.15)', borderColor: 'rgba(0,255,255,0.5)' },
           }}>
             SHADOW
+          </Box>
+        )}
+
+        {isAdmin && (
+          <Box component="button" onClick={() => { window.location.href = '/admin/synergy-runs'; }} sx={{
+            display: { xs: 'none', md: 'inline-flex' },
+            px: '10px', py: '5px',
+            border: '1px solid rgba(255,102,0,0.3)',
+            background: 'rgba(255,102,0,0.08)',
+            color: '#FF6600',
+            fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '1.5px',
+            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            '&:hover': { background: 'rgba(255,102,0,0.15)', borderColor: 'rgba(255,102,0,0.5)' },
+          }}>
+            SYNERGY RUNS
           </Box>
         )}
 
