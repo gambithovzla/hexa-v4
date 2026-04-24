@@ -210,11 +210,11 @@ function MetaBadge({ children, color }) {
 
 function StatRow({ label, value, color }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', py: '3px', borderBottom: `1px solid ${C.borderLight}` }}>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', py: '3px', borderBottom: `1px solid ${C.borderLight}` }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>
         {label}
       </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.78rem', color: color ?? C.textPrimary, fontWeight: 600 }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.78rem', color: color ?? C.textPrimary, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
         {value}
       </Typography>
     </Box>
@@ -230,21 +230,22 @@ function AltParlay({ alt, index, t, lang, expanded, onToggle }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          px: '14px',
+          gap: '8px',
+          px: { xs: '10px', sm: '14px' },
           py: '10px',
           cursor: 'pointer',
           '&:hover': { bgcolor: 'rgba(0,217,255,0.03)' },
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: '8px', sm: '10px' }, flexWrap: 'wrap', minWidth: 0, flex: 1 }}>
           <MetaBadge color={C.cyan}>{t.alt} {index}</MetaBadge>
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textSecondary }}>
-            {t.decimalOdds}: <span style={{ color: C.cyan }}>{alt.combined_decimal_odds?.toFixed(2) ?? '—'}</span>
-            {' '} · {t.combinedProb}: <span style={{ color: C.green }}>{fmtPct(alt.combined_probability)}</span>
-            {' '} · {t.score}: <span style={{ color: C.accent }}>{alt.score?.toFixed(1) ?? '—'}</span>
+          <Typography sx={{ fontFamily: MONO, fontSize: { xs: '0.64rem', sm: '0.72rem' }, color: C.textSecondary, lineHeight: 1.5 }}>
+            <span style={{ color: C.cyan }}>{alt.combined_decimal_odds?.toFixed(2) ?? '—'}</span>
+            {' '} · <span style={{ color: C.green }}>{fmtPct(alt.combined_probability)}</span>
+            {' '} · <span style={{ color: C.accent }}>{alt.score?.toFixed(1) ?? '—'}</span>
           </Typography>
         </Box>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>
           [{expanded ? t.hide : t.show}]
         </Typography>
       </Box>
@@ -289,9 +290,9 @@ function ResultPanel({ result, t, lang, expandedAlt, setExpandedAlt }) {
             { label: t.decimalOdds,  value: chosen_parlay.combined_decimal_odds?.toFixed(2) ?? '—', color: C.cyan },
             { label: t.edgeScore,    value: chosen_parlay.combined_edge_score != null ? `${Number(chosen_parlay.combined_edge_score).toFixed(1)}` : '—', color: C.accent },
           ].map(({ label, value, color }) => (
-            <Box key={label} sx={{ flex: 1, px: '12px', py: '10px', borderRight: `1px solid ${C.borderLight}`, '&:last-child': { borderRight: 'none' } }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.54rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</Typography>
-              <Typography sx={{ fontFamily: MONO, fontSize: '1rem', color, fontWeight: 700, mt: '2px' }}>{value}</Typography>
+            <Box key={label} sx={{ flex: 1, minWidth: 0, px: { xs: '8px', sm: '12px' }, py: '10px', borderRight: `1px solid ${C.borderLight}`, '&:last-child': { borderRight: 'none' } }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: { xs: '0.5rem', sm: '0.54rem' }, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: { xs: '0.85rem', sm: '1rem' }, color, fontWeight: 700, mt: '2px' }}>{value}</Typography>
             </Box>
           ))}
         </Box>
@@ -486,8 +487,9 @@ export default function ParlayArchitect({ lang = 'en' }) {
       <Box sx={{
         display: 'grid',
         gridTemplateColumns: { xs: '1fr', md: '340px 1fr' },
-        gap: 3,
+        gap: { xs: 2, md: 3 },
         alignItems: 'start',
+        minWidth: 0,
       }}>
 
         {/* ── Config panel ── */}
@@ -570,9 +572,10 @@ export default function ParlayArchitect({ lang = 'en' }) {
                     sx={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      px: '10px',
-                      py: '7px',
+                      gap: { xs: '6px', sm: '8px' },
+                      px: { xs: '8px', sm: '10px' },
+                      py: '8px',
+                      minHeight: '40px',
                       cursor: 'pointer',
                       bgcolor: checked ? 'rgba(255,102,0,0.05)' : 'transparent',
                       borderLeft: `3px solid ${checked ? C.accent : 'transparent'}`,
@@ -582,17 +585,17 @@ export default function ParlayArchitect({ lang = 'en' }) {
                   >
                     {/* Checkbox */}
                     <Box sx={{
-                      width: 13, height: 13, flexShrink: 0,
+                      width: 14, height: 14, flexShrink: 0,
                       border: `1px solid ${checked ? C.accent : C.border}`,
                       bgcolor: checked ? C.accent : 'transparent',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      {checked && <Box sx={{ width: 7, height: 7, bgcolor: '#000' }} />}
+                      {checked && <Box sx={{ width: 8, height: 8, bgcolor: '#000' }} />}
                     </Box>
 
                     {/* Away logo + name */}
                     <TeamLogo teamId={awayId} abbr={awayAbbr} size={20} />
-                    <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: checked ? C.textPrimary : C.textSecondary, fontWeight: checked ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    <Typography sx={{ fontFamily: MONO, fontSize: { xs: '0.66rem', sm: '0.68rem' }, color: checked ? C.textPrimary : C.textSecondary, fontWeight: checked ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                       {awayName}
                     </Typography>
 
@@ -601,13 +604,13 @@ export default function ParlayArchitect({ lang = 'en' }) {
 
                     {/* Home logo + name */}
                     <TeamLogo teamId={homeId} abbr={homeAbbr} size={20} />
-                    <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: checked ? C.textPrimary : C.textSecondary, fontWeight: checked ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    <Typography sx={{ fontFamily: MONO, fontSize: { xs: '0.66rem', sm: '0.68rem' }, color: checked ? C.textPrimary : C.textSecondary, fontWeight: checked ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                       {homeName}
                     </Typography>
 
                     {/* Time */}
                     {gameTime && (
-                      <Typography sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted, flexShrink: 0 }}>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted, flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
                         {gameTime}
                       </Typography>
                     )}
