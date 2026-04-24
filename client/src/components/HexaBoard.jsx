@@ -222,12 +222,19 @@ function BrandHero({ lang }) {
         src="/hexa-hero.png"
         alt="H.E.X.A."
         sx={{
-          height:        { xs: 96, sm: 140, md: 180 },
-          width:         'auto',
-          flexShrink:    0,
-          filter:        'drop-shadow(0 0 18px rgba(0,217,255,0.35))',
-          userSelect:    'none',
-          pointerEvents: 'none',
+          height:           { xs: 110, sm: 160, md: 210 },
+          width:            'auto',
+          flexShrink:       0,
+          opacity:          0.82,
+          filter:           'drop-shadow(0 0 28px rgba(0,217,255,0.55)) drop-shadow(0 0 8px rgba(0,217,255,0.3))',
+          WebkitMaskImage:  'linear-gradient(to right, transparent 0%, black 12%, black 75%, transparent 100%), linear-gradient(to top, transparent 0%, black 18%)',
+          WebkitMaskComposite: 'source-in',
+          maskImage:        'linear-gradient(to right, transparent 0%, black 12%, black 75%, transparent 100%), linear-gradient(to top, transparent 0%, black 18%)',
+          maskComposite:    'intersect',
+          userSelect:       'none',
+          pointerEvents:    'none',
+          mt:               { xs: '8px', sm: '12px' },
+          alignSelf:        'flex-end',
         }}
       />
       <Box sx={{ flex: 1, minWidth: 0 }}>
