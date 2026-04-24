@@ -105,23 +105,23 @@ describe('isParlayValid', () => {
     assert.strictEqual(result.reason, 'strong_negative_correlation');
   });
 
-  it('rejects 3 picks from the same game', () => {
+  it('rejects more same-game legs than the mode allows', () => {
     const a = cand({ id: 'sgp3a', gamePk: 20, marketType: 'moneyline', side: 'home', odds: -130, edge: 4 });
     const b = cand({ id: 'sgp3b', gamePk: 20, marketType: 'overunder', side: 'under', odds: -110, edge: 3 });
     const c2 = cand({ id: 'sgp3c', gamePk: 20, marketType: 'playerprop', side: 'over', propKind: 'k', odds: -115, edge: 3 });
     const { correlations } = buildCorrelationMatrix([a, b, c2]);
-    const result = isParlayValid([a, b, c2], correlations, 'balanced');
+    const result = isParlayValid([a, b, c2], correlations, 'conservative');
     assert.strictEqual(result.valid, false);
     assert.strictEqual(result.reason, 'too_many_same_game');
   });
 
-  it('rejects SGP pair without positive correlation', () => {
+  it('rejects SGP pair without positive correlation in conservative mode', () => {
     // Two different market types from same game with no positive correlation rule
     const ml = cand({ id: 'sgp_ml', gamePk: 30, marketType: 'moneyline', side: 'away', odds: 120, edge: 4 });
     const rl = cand({ id: 'sgp_rl', gamePk: 30, marketType: 'runline', side: 'home', odds: 105, edge: 4 });
     const { correlations } = buildCorrelationMatrix([ml, rl]);
     // corr(ml away, rl home) = 0 by default → < 0.15 → invalid SGP
-    const result = isParlayValid([ml, rl], correlations, 'balanced');
+    const result = isParlayValid([ml, rl], correlations, 'conservative');
     assert.strictEqual(result.valid, false);
     assert.strictEqual(result.reason, 'sgp_without_positive_correlation');
   });
@@ -152,6 +152,28 @@ describe('isParlayValid', () => {
       cand({ id: 'edge1', gamePk: 60, edge: 5 }),
       cand({ id: 'edge2', gamePk: 61, edge: 2.5 }), // < 3 (conservative min)
       cand({ id: 'edge3', gamePk: 62, edge: 4 }),
+    ];
+    const { correlations } = buildCorrelationMatrix(legs);
+    const result = isParlayValid(legs, correlations, 'conservative');
+    assert.strictEqual(result.valid, false);
+    assert.strictEqual(result.reason, 'edge_below_minimum');
+  });
+
+  it('allows null-edge player props outside conservative mode', () => {
+    const legs = [
+      cand({ id: 'null_edge1', gamePk: 63, marketType: 'playerprop', propKind: 'hits', odds: null, decimalOdds: null, edge: null, modelProbability: 72 }),
+      cand({ id: 'null_edge2', gamePk: 64, marketType: 'playerprop', propKind: 'k', odds: null, decimalOdds: null, edge: null, modelProbability: 68 }),
+      cand({ id: 'null_edge3', gamePk: 65, edge: 4 }),
+    ];
+    const { correlations } = buildCorrelationMatrix(legs);
+    const result = isParlayValid(legs, correlations, 'dreamer');
+    assert.ok(result.valid, `expected null-edge props to be valid in dreamer, got: ${result.reason}`);
+  });
+
+  it('rejects null-edge player props in conservative mode', () => {
+    const legs = [
+      cand({ id: 'cons_null1', gamePk: 66, marketType: 'playerprop', propKind: 'hits', odds: null, decimalOdds: null, edge: null, modelProbability: 72 }),
+      cand({ id: 'cons_null2', gamePk: 67, edge: 4 }),
     ];
     const { correlations } = buildCorrelationMatrix(legs);
     const result = isParlayValid(legs, correlations, 'conservative');
@@ -279,14 +301,50 @@ describe('composeParlays', () => {
     }
   });
 
-  it('returns empty parlays when eligible pool is too small for N', () => {
+  it('returns a partial parlay when eligible pool is too small for requested N', () => {
     const pool = [
       cand({ id: 'small1', gamePk: 400, edge: 5 }),
       cand({ id: 'small2', gamePk: 401, edge: 5 }),
     ];
     const corrMatrix = buildCorrelationMatrix(pool);
     const { parlays } = composeParlays({ candidates: pool, correlationMatrix: corrMatrix, N: 5, mode: 'balanced' });
-    assert.strictEqual(parlays.length, 0);
+    assert.strictEqual(parlays.length, 1);
+    assert.strictEqual(parlays[0].legs.length, 2);
+    assert.match(parlays[0].partial_warning, /2 of 5 requested legs/);
+  });
+
+  it('builds dreamer parlays using null-edge player props', () => {
+    const standards = Array.from({ length: 3 }, (_, i) => cand({
+      id: `dream_standard_${i}`,
+      gamePk: 700 + i,
+      edge: 5,
+      modelProbability: 62,
+    }));
+    const props = Array.from({ length: 17 }, (_, i) => cand({
+      id: `dream_prop_${i}`,
+      gamePk: 710 + i,
+      marketType: 'playerprop',
+      side: 'over',
+      propKind: i % 2 === 0 ? 'hits' : 'k',
+      odds: null,
+      decimalOdds: null,
+      edge: null,
+      modelProbability: 64 + (i % 8),
+      dataQualityScore: 74,
+    }));
+    const pool = [...standards, ...props];
+    const corrMatrix = buildCorrelationMatrix(pool);
+
+    const { parlays, meta } = composeParlays({
+      candidates: pool,
+      correlationMatrix: corrMatrix,
+      N: 20,
+      mode: 'dreamer',
+    });
+
+    assert.ok(parlays.length > 0, 'expected a dreamer parlay with null-edge props');
+    assert.strictEqual(meta.eligibleCount, 20);
+    assert.strictEqual(parlays[0].legs.length, 20);
   });
 
   it('meta.eligibleCount reflects filtered candidates', () => {
