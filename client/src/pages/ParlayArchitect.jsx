@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Box, Typography, Slider } from '@mui/material';
 import { useAuth } from '../store/authStore';
 import useGames from '../hooks/useGames';
+import useParlayArchitectHistory from '../hooks/useParlayArchitectHistory';
 import OracleLoadingOverlay from '../components/OracleLoadingOverlay';
 import ParlayLegCard from '../components/ParlayLegCard';
+import ParlayArchitectHistory from '../components/ParlayArchitectHistory';
 import { C, MONO, BARLOW } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -366,6 +368,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
   const t = L[lang] ?? L.en;
   const { token } = useAuth();
   const { games, date, setDate, gamesLoading } = useGames();
+  const { grouped, groupedDates, stats, winRate, addRun, markResult, deleteRun } = useParlayArchitectHistory();
 
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [mode, setMode] = useState('balanced');
@@ -412,6 +415,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
       setResult(json.data);
+      addRun({ date, mode, requestedLegs, gameIds: [...selectedIds], result: json.data, architect_meta: json.data?.architect_meta });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -733,6 +737,17 @@ export default function ParlayArchitect({ lang = 'en' }) {
           )}
         </Box>
       </Box>
+
+      {/* ── History ── */}
+      <ParlayArchitectHistory
+        lang={lang}
+        grouped={grouped}
+        groupedDates={groupedDates}
+        stats={stats}
+        winRate={winRate}
+        onMark={markResult}
+        onDelete={deleteRun}
+      />
     </Box>
   );
 }
