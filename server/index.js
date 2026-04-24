@@ -1237,6 +1237,55 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
   }
 });
 
+// GET /api/parlay-architect/history — user's own parlay runs (authenticated)
+app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         id, created_at, game_date, mode, requested_legs, game_pks,
+         architect_output, composed_top3, combined_prob, combined_dec_odds,
+         synergy_type, warnings, resolved, hit, legs_hit
+       FROM parlay_synergy_runs
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [String(req.user.id)]
+    );
+
+    const entries = rows.map(row => {
+      const architectOutput = row.architect_output ?? {};
+      const composedTop3    = row.composed_top3 ?? [];
+      const chosenIndex     = architectOutput.chosen_index ?? 0;
+      const chosenParlay    = composedTop3[chosenIndex] ?? composedTop3[0] ?? null;
+
+      return {
+        id:                    `db_${row.id}`,
+        db_id:                 row.id,
+        created_at:            row.created_at,
+        date:                  row.game_date,
+        mode:                  row.mode,
+        requested_legs:        row.requested_legs,
+        game_ids:              row.game_pks ?? [],
+        synergy_type:          row.synergy_type ?? null,
+        synergy_thesis:        architectOutput.synergy_thesis ?? null,
+        combined_probability:  row.combined_prob ?? null,
+        combined_decimal_odds: row.combined_dec_odds ?? null,
+        combined_edge_score:   null,
+        legs:                  chosenParlay?.legs ?? [],
+        warnings:              row.warnings ?? [],
+        result:                row.resolved ? (row.hit ? 'win' : 'loss') : 'pending',
+        legs_hit:              row.legs_hit ?? null,
+        _fallback:             architectOutput._fallback ?? false,
+        _source:               'server',
+      };
+    });
+
+    res.json({ success: true, data: entries });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // GET /api/admin/parlay-synergy/recent — last 50 runs (admin only)
 app.get('/api/admin/parlay-synergy/recent', verifyToken, isAdmin, async (req, res) => {
   try {

@@ -66,6 +66,8 @@ const L = {
     candPool: 'Pool',
     rejected: 'Rejected',
     model_used: 'Model',
+    selectAll: 'SELECT ALL',
+    clearAll: 'CLEAR ALL',
   },
   es: {
     title: 'PARLAY ARCHITECT',
@@ -122,6 +124,8 @@ const L = {
     candPool: 'Pool',
     rejected: 'Rechazados',
     model_used: 'Modelo',
+    selectAll: 'SELECCIONAR TODO',
+    clearAll: 'LIMPIAR',
   },
 };
 
@@ -396,7 +400,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
   const t = L[lang] ?? L.en;
   const { token } = useAuth();
   const { games, date, setDate, gamesLoading } = useGames();
-  const { grouped, groupedDates, stats, winRate, addRun, markResult, deleteRun } = useParlayArchitectHistory();
+  const { grouped, groupedDates, stats, winRate, addRun, markResult, deleteRun } = useParlayArchitectHistory(token);
 
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [mode, setMode] = useState('balanced');
@@ -416,6 +420,12 @@ export default function ParlayArchitect({ lang = 'en' }) {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  function toggleAllGames() {
+    const allIds = games.map(g => g.gamePk ?? g.id ?? g.gameId);
+    const allSelected = allIds.every(id => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(allIds));
   }
 
   async function run() {
@@ -510,13 +520,28 @@ export default function ParlayArchitect({ lang = 'en' }) {
 
           {/* Game list */}
           <Box sx={{ border: `1px solid ${C.border}`, bgcolor: C.surface }}>
-            <Box sx={{ px: '12px', py: '8px', borderBottom: `1px solid ${C.borderLight}` }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.16em', color: C.textMuted, textTransform: 'uppercase' }}>
-                {t.selectGames}
-              </Typography>
-              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textDim, mt: '2px' }}>
-                {t.selectHint}
-              </Typography>
+            <Box sx={{ px: '12px', py: '8px', borderBottom: `1px solid ${C.borderLight}`, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.16em', color: C.textMuted, textTransform: 'uppercase' }}>
+                  {t.selectGames}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textDim, mt: '2px' }}>
+                  {t.selectHint}
+                </Typography>
+              </Box>
+              {games.length > 0 && (
+                <Box
+                  onClick={toggleAllGames}
+                  sx={{
+                    fontFamily: MONO, fontSize: '0.52rem', letterSpacing: '0.12em',
+                    color: games.every(g => selectedIds.has(g.gamePk ?? g.id ?? g.gameId)) ? C.accent : C.textMuted,
+                    cursor: 'pointer', userSelect: 'none', flexShrink: 0, mt: '1px',
+                    '&:hover': { color: C.accent },
+                  }}
+                >
+                  {games.every(g => selectedIds.has(g.gamePk ?? g.id ?? g.gameId)) ? t.clearAll : t.selectAll}
+                </Box>
+              )}
             </Box>
 
             <Box sx={{ py: '4px' }}>

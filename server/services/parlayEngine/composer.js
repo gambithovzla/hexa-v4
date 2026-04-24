@@ -100,6 +100,13 @@ function scoreParlay(legs, correlations, riskDistances, mode, N) {
 
 const MIN_EDGE_BY_MODE = { conservative: 3, balanced: 2, aggressive: 2, dreamer: 1.5 };
 
+// Max legs allowed from a single game per mode
+const MAX_LEGS_PER_GAME = { conservative: 2, balanced: 3, aggressive: 4, dreamer: 5 };
+
+// Minimum pairwise correlation required between legs from the same game per mode.
+// More lenient modes allow independent player props (hits, Ks, bases) to coexist.
+const SGP_MIN_CORR = { conservative: 0.15, balanced: 0.0, aggressive: -0.2, dreamer: -0.3 };
+
 /**
  * Check whether a set of legs is a valid parlay under the given mode.
  * Returns { valid: true } or { valid: false, reason: string }.
@@ -114,17 +121,21 @@ export function isParlayValid(legs, correlations, mode, { allowSGP = true } = {}
   }
 
   // 2. SGP rules (same-game parlay constraints)
+  const maxPerGame = MAX_LEGS_PER_GAME[mode] ?? 3;
+  const minSgpCorr = SGP_MIN_CORR[mode] ?? 0.0;
   const byGame = groupBy(legs, 'gamePk');
-  for (const [gamePk, group] of Object.entries(byGame)) {
+  for (const [, group] of Object.entries(byGame)) {
     if (!allowSGP && group.length > 1) {
       return { valid: false, reason: 'sgp_not_allowed' };
     }
-    if (group.length > 2) {
+    if (group.length > maxPerGame) {
       return { valid: false, reason: 'too_many_same_game' };
     }
-    if (group.length === 2) {
-      const c = correlations[pairKey(group[0], group[1])] ?? 0;
-      if (c < 0.15) return { valid: false, reason: 'sgp_without_positive_correlation' };
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const c = correlations[pairKey(group[i], group[j])] ?? 0;
+        if (c < minSgpCorr) return { valid: false, reason: 'sgp_without_positive_correlation' };
+      }
     }
   }
 
