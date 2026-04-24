@@ -3,8 +3,9 @@
 export { buildCandidatePool, createPoolBuilder, clearPoolCache } from './pool.js';
 export { enrichWithRiskVector, enrichPoolWithRiskVectors } from './risk.js';
 export { buildCorrelationMatrix, getCorrelation, getRiskDistance, pairKey } from './correl.js';
+export { composeParlays, isParlayValid } from './composer.js';
 
-// Phase 4: composer.js   → composeParlays
+// Phase 5: architect.js  → askArchitect
 // Phase 3: correl.js     → buildCorrelationMatrix
 // Phase 4: composer.js   → composeParlays
 // Phase 5: architect.js  → askArchitect
