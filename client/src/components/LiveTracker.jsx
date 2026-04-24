@@ -496,6 +496,7 @@ function PickProgressBars({ picks, lang }) {
                       </Typography>
                       {isDone ? (
                         <Box sx={{
+                          display: 'inline-flex', alignItems: 'center', gap: '3px',
                           px: '6px', py: '1px',
                           border: `1px solid ${isWon ? C.greenLine : C.redLine}`,
                           bgcolor: isWon ? C.greenDim : C.redDim,
@@ -503,6 +504,7 @@ function PickProgressBars({ picks, lang }) {
                           color: isWon ? C.green : C.red,
                           letterSpacing: '0.1em',
                         }}>
+                          {isWon && <img src="/hexa-victory.png" alt="" aria-hidden="true" style={{ height: 12, width: 'auto', pointerEvents: 'none' }} />}
                           {isWon ? 'WON' : 'LOST'}
                         </Box>
                       ) : (
@@ -842,6 +844,13 @@ export default function LiveTracker({ lang = 'en' }) {
         gap:            '10px',
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Box
+            component="img"
+            src="/hexa-neutral.png"
+            alt=""
+            aria-hidden="true"
+            sx={{ height: 28, width: 'auto', pointerEvents: 'none', userSelect: 'none', opacity: 0.85 }}
+          />
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.85rem', letterSpacing: '0.2em', color: C.cyan }}>
             {t.title}
           </Typography>
@@ -897,12 +906,25 @@ export default function LiveTracker({ lang = 'en' }) {
       {/* ── Content ── */}
       {liveGames.length === 0 ? (
         <Box sx={{
-          textAlign: 'center',
-          py:        '60px',
-          border:    `1px solid ${C.border}`,
-          bgcolor:   C.surface,
+          textAlign:      'center',
+          py:             '48px',
+          border:         `1px solid ${C.border}`,
+          bgcolor:        C.surface,
+          position:       'relative',
+          overflow:       'hidden',
+          display:        'flex',
+          flexDirection:  'column',
+          alignItems:     'center',
+          gap:            '10px',
         }}>
-          <Typography sx={{ fontFamily: BARLOW, fontSize: '0.85rem', letterSpacing: '0.2em', color: C.textMuted, mb: '8px' }}>
+          <Box
+            component="img"
+            src="/hexa-mascot-ghost.png"
+            alt=""
+            aria-hidden="true"
+            sx={{ height: 72, width: 'auto', opacity: 0.18, pointerEvents: 'none', userSelect: 'none' }}
+          />
+          <Typography sx={{ fontFamily: BARLOW, fontSize: '0.85rem', letterSpacing: '0.2em', color: C.textMuted }}>
             {t.noGames}
           </Typography>
           <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textDim }}>

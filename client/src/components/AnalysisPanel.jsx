@@ -653,18 +653,22 @@ function EmptyState({ mode, canAnalyze, t }) {
       }}
     >
       <Box
+        component="img"
+        src="/hexa-mascot-ghost.png"
+        alt=""
+        aria-hidden="true"
         sx={{
-          fontSize:   '2.4rem',
-          lineHeight: 1,
-          '@keyframes hexaPulse': {
-            '0%,100%': { opacity: 0.55 },
-            '50%':     { opacity: 1 },
+          height:        80,
+          width:         'auto',
+          pointerEvents: 'none',
+          userSelect:    'none',
+          '@keyframes hexaGhostPulse': {
+            '0%,100%': { opacity: 0.22 },
+            '50%':     { opacity: 0.38 },
           },
-          animation: 'hexaPulse 2.4s ease-in-out infinite',
+          animation: 'hexaGhostPulse 3s ease-in-out infinite',
         }}
-      >
-        ⚾
-      </Box>
+      />
       <Typography
         sx={{
           fontFamily: SANS,

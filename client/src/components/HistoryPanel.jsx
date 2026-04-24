@@ -770,8 +770,25 @@ function AnalisisTab({ lang }) {
 
       {/* Pick list */}
       {history.length === 0 ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10, gap: '14px', minHeight: 260 }}>
-          <Typography sx={{ fontSize: '2.5rem', lineHeight: 1 }}>📋</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8, gap: '14px', minHeight: 260 }}>
+          <Box
+            component="img"
+            src="/hexa-mascot-ghost.png"
+            alt=""
+            aria-hidden="true"
+            sx={{
+              height:        96,
+              width:         'auto',
+              opacity:       0.22,
+              pointerEvents: 'none',
+              userSelect:    'none',
+              '@keyframes hexaGhostPulse2': {
+                '0%,100%': { opacity: 0.18 },
+                '50%':     { opacity: 0.30 },
+              },
+              animation: 'hexaGhostPulse2 3.5s ease-in-out infinite',
+            }}
+          />
           <Typography sx={{ fontFamily: SANS, fontSize: '0.875rem', color: C.textMuted, textAlign: 'center', maxWidth: 320, lineHeight: 1.7 }}>{t.history.empty}</Typography>
         </Box>
       ) : (
@@ -1097,7 +1114,10 @@ function ResultBadge({ result }) {
     : { label: 'PENDIENTE', color: C.amber, dim: C.amberDim, border: C.amberLine };
 
   return (
-    <Box component="span" sx={{ display: 'inline-block', px: '8px', py: '2px', bgcolor: cfg.dim, border: `1px solid ${cfg.border}`, borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.6rem', fontWeight: 700, color: cfg.color, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px', px: '8px', py: '2px', bgcolor: cfg.dim, border: `1px solid ${cfg.border}`, borderRadius: '2px', fontFamily: BARLOW, fontSize: '0.6rem', fontWeight: 700, color: cfg.color, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+      {result === 'won' && (
+        <Box component="img" src="/hexa-victory.png" alt="" aria-hidden="true" sx={{ height: 14, width: 'auto', pointerEvents: 'none' }} />
+      )}
       {cfg.label}
     </Box>
   );

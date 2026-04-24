@@ -342,6 +342,21 @@ function FlagsPanel({ flags, t }) {
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: SPACE.xs }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, mb: SPACE.sm }}>
+        <Box
+          component="img"
+          src="/hexa-alert.png"
+          alt=""
+          aria-hidden="true"
+          sx={{ height: 28, width: 'auto', pointerEvents: 'none', userSelect: 'none' }}
+        />
+        <Box
+          component="span"
+          sx={{ fontFamily: MONO, fontSize: SCALE.micro, color: '#ff9d4d', letterSpacing: '0.16em', textTransform: 'uppercase' }}
+        >
+          {t.flags} · {flags.length}
+        </Box>
+      </Box>
       {flags.map((flag, i) => (
         <Box
           key={i}

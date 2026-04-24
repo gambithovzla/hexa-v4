@@ -219,10 +219,10 @@ function BrandHero({ lang }) {
     >
       <Box
         component="img"
-        src="/hexa-mascot.png"
+        src="/hexa-hero.png"
         alt="H.E.X.A."
         sx={{
-          height:        { xs: 72, sm: 104, md: 128 },
+          height:        { xs: 96, sm: 140, md: 180 },
           width:         'auto',
           flexShrink:    0,
           filter:        'drop-shadow(0 0 18px rgba(0,217,255,0.35))',
@@ -534,7 +534,23 @@ export default function HexaBoard({ lang = 'es' }) {
 
       {/* Empty (successful fetch, no insights) */}
       {!loading && !error && data && (!data.insights || data.insights.length === 0) && (
-        <Box sx={{ p: SPACE.lg, border: `1px dashed ${C.border}`, textAlign: 'center' }}>
+        <Box sx={{ p: SPACE.lg, border: `1px dashed ${C.border}`, textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: 180 }}>
+          <Box
+            component="img"
+            src="/hexa-mascot-ghost.png"
+            alt=""
+            aria-hidden="true"
+            sx={{
+              position:      'absolute',
+              bottom:        '-10px',
+              right:         '16px',
+              height:        140,
+              width:         'auto',
+              opacity:       0.1,
+              pointerEvents: 'none',
+              userSelect:    'none',
+            }}
+          />
           <Typography sx={{ fontFamily: MONO, fontSize: SCALE.body, color: C.textSecondary, letterSpacing: '0.1em' }}>
             {t.empty}
           </Typography>
