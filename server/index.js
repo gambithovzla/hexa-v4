@@ -1067,9 +1067,11 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     const candidates = await buildCandidatePool({ gameIds, date: resolvedDate, lang: resolvedLang });
 
     if (candidates.length === 0) {
+      console.warn(`[parlay-synergy] empty candidate pool for gameIds=[${gameIds.join(',')}] date=${resolvedDate}`);
       return res.status(422).json({
         success: false,
         error: 'No candidates found for the provided games. Try a different date or game selection. / No se encontraron candidatos para los juegos indicados.',
+        debug: { gameIds, date: resolvedDate, reason: 'empty_pool' },
       });
     }
 
