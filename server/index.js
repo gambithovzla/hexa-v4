@@ -539,6 +539,66 @@ async function refundCredits(userId, cost, isAdmin) {
   }
 }
 
+async function persistParlayRun({
+  userId, userEmail, gameIds, mode, requestedLegs, resolvedDate, resolvedLang,
+  model, resolvedEngine, isAdminRun, cost,
+  enriched, composedParlays, architectDecision,
+  finalLegs, composerMs, llmMs, totalMs,
+}) {
+  try {
+    await pool.query(
+      `INSERT INTO parlay_synergy_runs (
+        user_id, user_email, game_date,
+        requested_legs, mode, game_pks, language, engine, model,
+        candidate_pool, composed_top3, architect_output,
+        chosen_legs, combined_prob, combined_dec_odds,
+        synergy_type, warnings,
+        timings, credits_charged, is_admin_run
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+      )`,
+      [
+        String(userId),
+        userEmail ?? null,
+        resolvedDate,
+        requestedLegs,
+        mode,
+        JSON.stringify(gameIds),
+        resolvedLang,
+        resolvedEngine,
+        model,
+        JSON.stringify(enriched.map(c => ({
+          candidateId: c.candidateId, gamePk: c.gamePk, pick: c.pick,
+          type: c.type, edge: c.edge, modelProbability: c.modelProbability,
+          riskVector: c.riskVector, gameScript: c.gameScript,
+        }))),
+        JSON.stringify(composedParlays.slice(0, 3)),
+        JSON.stringify({
+          decision:                    architectDecision.decision,
+          chosen_index:                architectDecision.chosen_index,
+          modifications:               architectDecision.modifications,
+          synergy_type:                architectDecision.synergy_type,
+          synergy_thesis:              (architectDecision.synergy_thesis ?? '').slice(0, 1000),
+          hidden_correlations_detected: architectDecision.hidden_correlations_detected,
+          confidence_in_decision:      architectDecision.confidence_in_decision,
+          _fallback:                   architectDecision._fallback ?? false,
+        }),
+        JSON.stringify(finalLegs.map(l => l.candidateId)),
+        architectDecision.combined_probability,
+        architectDecision.combined_decimal_odds,
+        architectDecision.synergy_type ?? null,
+        JSON.stringify(architectDecision.warnings ?? []),
+        JSON.stringify({ composer_ms: composerMs, llm_ms: llmMs, total_ms: totalMs }),
+        cost,
+        isAdminRun ?? false,
+      ]
+    );
+  } catch (err) {
+    console.error('[parlay-synergy] persist failed (non-fatal):', err.message);
+  }
+}
+
 function normalizeRequestLanguage(value, fallback = 'en') {
   const normalized = String(value ?? fallback ?? 'en').toLowerCase();
   return normalized.startsWith('es') ? 'es' : 'en';
@@ -1140,8 +1200,62 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       engine:  resolvedEngine,
     });
 
+    // ── Fase 7: Fire-and-forget persistence ──────────────────────────────
+    persistParlayRun({
+      userId: updatedUser.id, userEmail: updatedUser.email,
+      gameIds, mode, requestedLegs,
+      resolvedDate, resolvedLang, model, resolvedEngine,
+      isAdminRun: updatedUser.is_admin, cost: PARLAY_SYNERGY_COST,
+      enriched, composedParlays, architectDecision,
+      finalLegs, composerMs, llmMs, totalMs,
+    });
+
+    // ── Fase 7: Shadow mode — async compare with legacy analyzeParlay ─────
+    if (process.env.SHADOW_MODE_ENABLED === 'true' && gameIds.length === 1) {
+      (async () => {
+        try {
+          const shadowResult = await analyzeParlay(
+            String(gameIds[0]), resolvedLang, resolvedDate, resolvedEngine
+          );
+          await pool.query(
+            `UPDATE parlay_synergy_runs
+             SET shadow_old_parlay = $1, resolved_at = NOW()
+             WHERE user_id = $2 AND created_at = (
+               SELECT MAX(created_at) FROM parlay_synergy_runs WHERE user_id = $2
+             )`,
+            [JSON.stringify(shadowResult), String(updatedUser.id)]
+          );
+        } catch (err) {
+          console.error('[parlay-synergy] shadow mode failed (non-fatal):', err.message);
+        }
+      })();
+    }
+
   } catch (err) {
     console.error('[parlay-synergy] endpoint error:', err.message, err.stack?.split('\n')[1]);
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/parlay-synergy/recent — last 50 runs (admin only)
+app.get('/api/admin/parlay-synergy/recent', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         id, user_id, user_email, game_date, game_pks, mode, requested_legs,
+         engine, model,
+         architect_output, chosen_legs,
+         combined_prob, combined_dec_odds,
+         synergy_type, warnings,
+         resolved, hit, legs_hit, resolved_at,
+         shadow_old_parlay, shadow_old_hit,
+         timings, credits_charged, is_admin_run, created_at
+       FROM parlay_synergy_runs
+       ORDER BY created_at DESC
+       LIMIT 50`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
 });
