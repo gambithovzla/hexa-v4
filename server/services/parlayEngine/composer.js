@@ -73,6 +73,13 @@ function scoreParlay(legs, correlations, riskDistances, mode, N) {
   if (uniqueScripts.size === 1 && scripts.length >= 2) scriptBonus = 3;
   if (uniqueScripts.size >= 3) scriptBonus = -2;
 
+  // 7. Null-odds penalty — prefer legs with real market prices so the display
+  //    shows actual numbers instead of dashes. Not a hard disqualifier.
+  let nullOddsPenalty = 0;
+  for (const leg of legs) {
+    if (leg.odds == null) nullOddsPenalty += 1.5;
+  }
+
   const total =
     edgeSum
     + corrBonus      * mm.corr
@@ -80,6 +87,7 @@ function scoreParlay(legs, correlations, riskDistances, mode, N) {
     - negCorrPenalty
     - lengthPenalty  * mm.length
     - dqPenalty
+    - nullOddsPenalty
     + scriptBonus;
 
   return {
@@ -91,6 +99,7 @@ function scoreParlay(legs, correlations, riskDistances, mode, N) {
       length_penalty:    lengthPenalty,
       neg_corr_penalty:  negCorrPenalty,
       dq_penalty:        dqPenalty,
+      null_odds_penalty: nullOddsPenalty,
       script_bonus:      scriptBonus,
     },
   };
@@ -119,6 +128,7 @@ export function isParlayValid(
     allowSGP = true,
     minEdge = MIN_EDGE_BY_MODE[mode] ?? 2,
     allowNullEdge = mode !== 'conservative',
+    allowHighRisk = false,
   } = {},
 ) {
   // 1. No strong negative correlation between any pair
@@ -148,8 +158,8 @@ export function isParlayValid(
     }
   }
 
-  // 3. Conservative mode rejects any high-risk leg
-  if (mode === 'conservative' && legs.some(l => l.modelRisk === 'high')) {
+  // 3. Conservative mode rejects any high-risk leg (unless relaxed by allowHighRisk)
+  if (mode === 'conservative' && !allowHighRisk && legs.some(l => l.modelRisk === 'high')) {
     return { valid: false, reason: 'high_risk_leg_in_conservative_mode' };
   }
 
@@ -283,10 +293,11 @@ export function composeParlays({
     minDataQuality = 50,
     allowSGP      = true,
     allowNullEdge = mode !== 'conservative',
+    allowHighRisk = false,
   } = filters;
 
   const { correlations, riskDistances } = correlationMatrix;
-  const validityOpts = { allowSGP, minEdge, allowNullEdge };
+  const validityOpts = { allowSGP, minEdge, allowNullEdge, allowHighRisk };
 
   // --- Step 1: filter eligible candidates
   // Player props often have null odds → null edge. For non-conservative modes we
