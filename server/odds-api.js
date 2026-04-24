@@ -10,8 +10,10 @@
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const CACHE_TTL_MS  = 60 * 60 * 1000; // 60 minutes
+const PROP_MARKETS  = ['batter_hits', 'pitcher_strikeouts'];
 
 let _cache = { data: null, ts: 0 };
+const _propCache = new Map();
 
 // ---------------------------------------------------------------------------
 // Spring Training detection + mock odds
@@ -105,6 +107,40 @@ export async function getGameOdds() {
   }
 }
 
+export async function hydrateOddsForGame(oddsData) {
+  const apiKey = process.env.ODDS_API_KEY;
+  if (!oddsData || oddsData.source === 'estimated_spring_training') return oddsData;
+  if (oddsData.playerProps) return oddsData;
+  if (!oddsData.eventId || !apiKey) return oddsData;
+
+  const cached = _propCache.get(oddsData.eventId);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return { ...oddsData, playerProps: cached.data };
+  }
+
+  try {
+    const url =
+      `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(oddsData.eventId)}/odds?` +
+      `apiKey=${apiKey}&regions=us&markets=${PROP_MARKETS.join(',')}&oddsFormat=american&dateFormat=iso`;
+
+    console.log('[odds-api] Fetching event props:', url.replace(apiKey, `${apiKey.substring(0, 8)}...`));
+    const res = await fetch(url);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[odds-api] props error ${res.status} for ${oddsData.awayTeam} @ ${oddsData.homeTeam}: ${body.substring(0, 160)}`);
+      return oddsData;
+    }
+
+    const event = await res.json();
+    const playerProps = normalizePlayerProps(event);
+    _propCache.set(oddsData.eventId, { ts: Date.now(), data: playerProps });
+    return { ...oddsData, playerProps };
+  } catch (err) {
+    console.error('[odds-api] props fetch error:', err.message);
+    return oddsData;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -112,6 +148,85 @@ export async function getGameOdds() {
 function avg(arr) {
   if (!arr.length) return null;
   return arr.reduce((s, v) => s + v, 0) / arr.length;
+}
+
+function normalizeName(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizePropDirection(value) {
+  const name = normalizeName(value);
+  if (name === 'over' || name === 'o') return 'over';
+  if (name === 'under' || name === 'u') return 'under';
+  return null;
+}
+
+function normalizePlayerProps(event) {
+  const grouped = new Map();
+  const books = event?.bookmakers ?? [];
+
+  for (const book of books) {
+    for (const market of book.markets ?? []) {
+      if (!PROP_MARKETS.includes(market.key)) continue;
+      for (const outcome of market.outcomes ?? []) {
+        const direction = normalizePropDirection(outcome.name);
+        const point = Number(outcome.point);
+        const price = Number(outcome.price);
+        const playerName = String(
+          outcome.description ??
+          outcome.participant ??
+          outcome.player ??
+          '',
+        ).trim();
+
+        if (!direction || !playerName || !Number.isFinite(point) || !Number.isFinite(price)) continue;
+
+        const key = `${market.key}::${normalizeName(playerName)}::${direction}::${point}`;
+        const existing = grouped.get(key) ?? {
+          marketKey: market.key,
+          playerName,
+          normalizedPlayerName: normalizeName(playerName),
+          direction,
+          line: point,
+          prices: [],
+          books: [],
+        };
+        existing.prices.push(price);
+        existing.books.push(book.key ?? book.title ?? 'book');
+        grouped.set(key, existing);
+      }
+    }
+  }
+
+  const playerProps = {};
+  for (const entry of grouped.values()) {
+    const offer = {
+      playerName: entry.playerName,
+      normalizedPlayerName: entry.normalizedPlayerName,
+      direction: entry.direction,
+      line: entry.line,
+      price: Math.round(avg(entry.prices)),
+      books: entry.books,
+    };
+    if (!playerProps[entry.marketKey]) playerProps[entry.marketKey] = [];
+    playerProps[entry.marketKey].push(offer);
+  }
+
+  for (const marketKey of Object.keys(playerProps)) {
+    playerProps[marketKey].sort((a, b) =>
+      a.normalizedPlayerName.localeCompare(b.normalizedPlayerName) ||
+      a.line - b.line ||
+      a.direction.localeCompare(b.direction)
+    );
+  }
+
+  return playerProps;
 }
 
 /**
@@ -163,6 +278,8 @@ function normalizeEvent(event) {
   if (mlHomeAvg == null && mlAwayAvg == null) return null;
 
   return {
+    eventId: event.id ?? null,
+    commenceTime: event.commence_time ?? null,
     homeTeam: event.home_team,
     awayTeam: event.away_team,
     odds: {
