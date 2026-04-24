@@ -1103,31 +1103,13 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     // ── Step 5: Compose top-3 parlays ────────────────────────────────────
     const composerStart = Date.now();
     const effectiveMinEdge = minEdge ?? { conservative: 3, balanced: 2, aggressive: 2, dreamer: 1.5 }[mode] ?? 2;
-    let { parlays: composedParlays, meta: composerMeta } = composeParlays({
+    const { parlays: composedParlays, meta: composerMeta } = composeParlays({
       candidates: enriched,
       correlationMatrix,
       N: requestedLegs,
       mode,
       filters: { minEdge: effectiveMinEdge, minConfidence, allowSGP },
     });
-
-    if (composedParlays.length === 0 && mode === 'conservative' && effectiveMinEdge > 0) {
-      console.warn(`[parlay-synergy] conservative retry with minEdge=0 after strict minEdge=${effectiveMinEdge} returned no parlays`);
-      const relaxed = composeParlays({
-        candidates: enriched,
-        correlationMatrix,
-        N: requestedLegs,
-        mode,
-        filters: { minEdge: 0, minConfidence, allowSGP },
-      });
-      composedParlays = relaxed.parlays;
-      composerMeta = {
-        ...relaxed.meta,
-        strict_min_edge: effectiveMinEdge,
-        effective_min_edge: 0,
-        relaxed_min_edge: true,
-      };
-    }
     const composerMs = Date.now() - composerStart;
 
     if (composedParlays.length === 0) {
@@ -1194,11 +1176,6 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
           synergy_thesis:        architectDecision.synergy_thesis,
           warnings:              [
             ...(architectDecision.warnings ?? []),
-            ...(composerMeta.relaxed_min_edge
-              ? [resolvedLang === 'es'
-                ? `Modo conservador relajo el piso estricto de edge de ${composerMeta.strict_min_edge}% a 0% porque ningun parlay con odds reales supero el umbral estricto.`
-                : `Conservative strict edge floor relaxed from ${composerMeta.strict_min_edge}% to 0% because no valid priced parlay cleared the strict threshold.`]
-              : []),
             ...(partialWarning ? [partialWarning] : []),
           ],
         },
@@ -1215,9 +1192,6 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
           candidate_pool_size:  enriched.length,
           eligible_count:       composerMeta.eligibleCount,
           rejected_by_no_go:    composerMeta.rejectedByNoGo,
-          strict_min_edge:       composerMeta.strict_min_edge ?? effectiveMinEdge,
-          effective_min_edge:    composerMeta.effective_min_edge ?? effectiveMinEdge,
-          relaxed_min_edge:      composerMeta.relaxed_min_edge ?? false,
           requested_legs:       requestedLegs,
           built_legs:           actualBuiltLegs,
           score_breakdown:      topComposed.scoreBreakdown,

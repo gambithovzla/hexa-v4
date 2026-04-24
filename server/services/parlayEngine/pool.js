@@ -1,5 +1,5 @@
 import { getTodayGames } from '../../mlb-api.js';
-import { getGameOdds, hydrateOddsForGame, matchOddsToGame } from '../../odds-api.js';
+import { getGameOdds, matchOddsToGame } from '../../odds-api.js';
 import { buildContext } from '../../context-builder.js';
 import { buildDeterministicSafePayload } from '../../market-intelligence.js';
 import { calculateParallelScore } from '../xgboostValidator.js';
@@ -70,7 +70,6 @@ function computeXgbAgreement(marketType, side, xgbResult, gameData) {
  */
 async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
   const {
-    _hydrateOddsForGame,
     _matchOddsToGame,
     _buildContext,
     _buildDeterministicSafePayload,
@@ -78,16 +77,13 @@ async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
   } = deps;
 
   const gamePk = gameData.gamePk;
-  const matchedOdds = _matchOddsToGame(
+  const oddsData = _matchOddsToGame(
     allOdds,
     gameData.teams.home.name,
     gameData.teams.away.name,
   );
-  const { _features } = await _buildContext(gameData, matchedOdds ?? null);
-  const propsAllowed = ['FULL_ANALYSIS', 'STANDARD_ANALYSIS'].includes(String(_features?.dataQuality?.strategy ?? ''));
-  const oddsData = propsAllowed
-    ? await _hydrateOddsForGame(matchedOdds)
-    : matchedOdds;
+
+  const { _features } = await _buildContext(gameData, oddsData ?? null);
 
   const statcastData = {
     homePitcher: _features.homePitcherSavant ?? {},
@@ -119,13 +115,7 @@ async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
   const gameDate = gameData.gameDate?.slice(0, 10) ?? '';
   const gameStartUTC = gameData.gameDate ?? '';
 
-  const pricedCandidates = (safePayload.safe_candidates ?? []).filter(sc => sc.odds != null);
-  const omitted = (safePayload.safe_candidates ?? []).length - pricedCandidates.length;
-  if (omitted > 0) {
-    console.warn(`[parlay-synergy] gamePk ${gamePk}: omitted ${omitted} unpriced candidates before architect pool`);
-  }
-
-  return pricedCandidates.map(sc => {
+  return (safePayload.safe_candidates ?? []).map(sc => {
     const marketType = sc.market_type;
     const side = sc.side ?? null;
     const propKind = propKindFromRaw(sc.prop_kind);
@@ -146,9 +136,6 @@ async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
       marketType,
       side,
       propKind,
-      teamSide: sc.team_side ?? null,
-      line: sc.line ?? null,
-      propMarketKey: sc.prop_market_key ?? null,
       // Probabilities
       modelProbability,
       impliedProbability: sc.implied_probability ?? null,
@@ -182,14 +169,12 @@ async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
 export function createPoolBuilder({
   _getTodayGames,
   _getGameOdds,
-  _hydrateOddsForGame = async (oddsData) => oddsData,
   _matchOddsToGame,
   _buildContext,
   _buildDeterministicSafePayload,
   _calculateParallelScore,
 }) {
   const deps = {
-    _hydrateOddsForGame,
     _matchOddsToGame,
     _buildContext,
     _buildDeterministicSafePayload,
@@ -243,7 +228,6 @@ export function clearPoolCache() {
 export const buildCandidatePool = createPoolBuilder({
   _getTodayGames: getTodayGames,
   _getGameOdds: getGameOdds,
-  _hydrateOddsForGame: hydrateOddsForGame,
   _matchOddsToGame: matchOddsToGame,
   _buildContext: buildContext,
   _buildDeterministicSafePayload: buildDeterministicSafePayload,
