@@ -43,6 +43,15 @@ import contentAdminRouter from './routes/content-admin.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
+import {
+  buildCandidatePool,
+  enrichPoolWithRiskVectors,
+  buildCorrelationMatrix,
+  composeParlays,
+  askArchitect,
+  resolveLegs,
+} from './services/parlayEngine/index.js';
+import { runParlaySynergyMigrations } from './migrate.js';
 
 dotenv.config();
 
@@ -530,6 +539,66 @@ async function refundCredits(userId, cost, isAdmin) {
   }
 }
 
+async function persistParlayRun({
+  userId, userEmail, gameIds, mode, requestedLegs, resolvedDate, resolvedLang,
+  model, resolvedEngine, isAdminRun, cost,
+  enriched, composedParlays, architectDecision,
+  finalLegs, composerMs, llmMs, totalMs,
+}) {
+  try {
+    await pool.query(
+      `INSERT INTO parlay_synergy_runs (
+        user_id, user_email, game_date,
+        requested_legs, mode, game_pks, language, engine, model,
+        candidate_pool, composed_top3, architect_output,
+        chosen_legs, combined_prob, combined_dec_odds,
+        synergy_type, warnings,
+        timings, credits_charged, is_admin_run
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+      )`,
+      [
+        String(userId),
+        userEmail ?? null,
+        resolvedDate,
+        requestedLegs,
+        mode,
+        JSON.stringify(gameIds),
+        resolvedLang,
+        resolvedEngine,
+        model,
+        JSON.stringify(enriched.map(c => ({
+          candidateId: c.candidateId, gamePk: c.gamePk, pick: c.pick,
+          type: c.type, edge: c.edge, modelProbability: c.modelProbability,
+          riskVector: c.riskVector, gameScript: c.gameScript,
+        }))),
+        JSON.stringify(composedParlays.slice(0, 3)),
+        JSON.stringify({
+          decision:                    architectDecision.decision,
+          chosen_index:                architectDecision.chosen_index,
+          modifications:               architectDecision.modifications,
+          synergy_type:                architectDecision.synergy_type,
+          synergy_thesis:              (architectDecision.synergy_thesis ?? '').slice(0, 1000),
+          hidden_correlations_detected: architectDecision.hidden_correlations_detected,
+          confidence_in_decision:      architectDecision.confidence_in_decision,
+          _fallback:                   architectDecision._fallback ?? false,
+        }),
+        JSON.stringify(finalLegs.map(l => l.candidateId)),
+        architectDecision.combined_probability,
+        architectDecision.combined_decimal_odds,
+        architectDecision.synergy_type ?? null,
+        JSON.stringify(architectDecision.warnings ?? []),
+        JSON.stringify({ composer_ms: composerMs, llm_ms: llmMs, total_ms: totalMs }),
+        cost,
+        isAdminRun ?? false,
+      ]
+    );
+  } catch (err) {
+    console.error('[parlay-synergy] persist failed (non-fatal):', err.message);
+  }
+}
+
 function normalizeRequestLanguage(value, fallback = 'en') {
   const normalized = String(value ?? fallback ?? 'en').toLowerCase();
   return normalized.startsWith('es') ? 'es' : 'en';
@@ -929,6 +998,287 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
       engine: resolvedEngine,
       engineMeta: analysis.engineMeta ?? null,
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/analyze/parlay-synergy — Parlay Synergy Engine (admin-only beta), costs 6 (fast) / 12 (deep)
+app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
+  // Feature flag — off by default until explicitly enabled in .env
+  if (process.env.PARLAY_SYNERGY_ENABLED !== 'true') {
+    return res.status(503).json({
+      success: false,
+      error: 'Parlay Synergy Engine coming soon. / El motor de parlays sinérgicos estará disponible próximamente.',
+    });
+  }
+
+  const {
+    gameIds,
+    requestedLegs  = 3,
+    mode           = 'balanced',
+    minEdge,
+    minConfidence  = 55,
+    allowSGP       = true,
+    lang           = 'en',
+    engine         = 'sonnet',
+    model          = 'fast',
+    date,
+  } = req.body;
+
+  const resolvedDate   = date || new Date().toISOString().split('T')[0];
+  const resolvedLang   = normalizeRequestLanguage(lang);
+  const resolvedEngine = normalizeRequestedEngine(engine);
+
+  // Resolve the actual LLM model string from engine + model tier
+  const LLM_MODEL_MAP = {
+    sonnet: { fast: 'claude-sonnet-4-6', deep: 'claude-sonnet-4-6' },
+    grok:   { fast: process.env.XAI_ORACLE_MODEL ?? 'grok-4-fast-reasoning', deep: process.env.XAI_ORACLE_MODEL ?? 'grok-4-fast-reasoning' },
+  };
+  const resolvedModel = LLM_MODEL_MAP[resolvedEngine]?.[model] ?? 'claude-sonnet-4-6';
+
+  // ── Input validation ────────────────────────────────────────────────────
+  if (!gameIds || !Array.isArray(gameIds) || gameIds.length < 2) {
+    return res.status(400).json({ success: false, error: 'gameIds must be an array with at least 2 games' });
+  }
+  if (requestedLegs < 2 || requestedLegs > 30) {
+    return res.status(400).json({ success: false, error: 'requestedLegs must be between 2 and 30' });
+  }
+  const VALID_MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
+  if (!VALID_MODES.includes(mode)) {
+    return res.status(400).json({ success: false, error: `Invalid mode. Must be one of: ${VALID_MODES.join(', ')}` });
+  }
+  if (model && !['fast', 'deep'].includes(model)) {
+    return res.status(400).json({ success: false, error: 'Invalid model' });
+  }
+
+  const PARLAY_SYNERGY_COST = model === 'deep' ? 12 : 6;
+
+  // ── Email verification ──────────────────────────────────────────────────
+  const synergyUserCheck = await pool.query('SELECT email_verified FROM users WHERE id = $1', [req.user.id]);
+  if (synergyUserCheck.rows[0] && !synergyUserCheck.rows[0].email_verified) {
+    return res.status(403).json({ success: false, error: 'Please verify your email before running analysis' });
+  }
+
+  try {
+    const totalStart = Date.now();
+
+    // ── Step 1: Candidate pool (cached, fast on repeat calls) ───────────
+    const candidates = await buildCandidatePool({ gameIds, date: resolvedDate, lang: resolvedLang });
+
+    if (candidates.length === 0) {
+      return res.status(422).json({
+        success: false,
+        error: 'No candidates found for the provided games. Try a different date or game selection. / No se encontraron candidatos para los juegos indicados.',
+      });
+    }
+
+    // ── Deduct credits after confirming we have data ─────────────────────
+    const updatedUser = await deductCredits(req, res, PARLAY_SYNERGY_COST);
+    if (!updatedUser) return;
+
+    // ── Step 2: Fetch per-game features (context builder TTL: 10 min) ───
+    const allGames = await getTodayGames(resolvedDate);
+    let allOdds = [];
+    try { allOdds = await getGameOdds(); } catch { /* optional */ }
+
+    const featuresByGamePk = new Map();
+    const gameDataByGamePk = new Map();
+    for (const id of gameIds) {
+      const gamePk = Number(id);
+      const gameData = allGames.find(g => g.gamePk === gamePk);
+      if (!gameData) continue;
+      const oddsData = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
+      const { _features } = await buildContext(gameData, oddsData ?? null);
+      featuresByGamePk.set(gamePk, _features);
+      gameDataByGamePk.set(gamePk, gameData);
+    }
+
+    // ── Step 3: Risk vector enrichment ──────────────────────────────────
+    const enriched = enrichPoolWithRiskVectors(candidates, featuresByGamePk, gameDataByGamePk);
+
+    // ── Step 4: Correlation matrix ───────────────────────────────────────
+    const correlationMatrix = buildCorrelationMatrix(enriched);
+
+    // ── Step 5: Compose top-3 parlays ────────────────────────────────────
+    const composerStart = Date.now();
+    const effectiveMinEdge = minEdge ?? { conservative: 3, balanced: 2, aggressive: 2, dreamer: 1.5 }[mode] ?? 2;
+    const { parlays: composedParlays, meta: composerMeta } = composeParlays({
+      candidates: enriched,
+      correlationMatrix,
+      N: requestedLegs,
+      mode,
+      filters: { minEdge: effectiveMinEdge, minConfidence, allowSGP },
+    });
+    const composerMs = Date.now() - composerStart;
+
+    if (composedParlays.length === 0) {
+      await refundCredits(updatedUser.id, PARLAY_SYNERGY_COST, updatedUser.is_admin);
+      return res.status(422).json({
+        success: false,
+        error: `Composer could not build a valid ${requestedLegs}-leg parlay for mode="${mode}". Try fewer legs, a different mode, or more games. / El compositor no pudo construir un parlay válido de ${requestedLegs} patas. Intenta con menos patas, otro modo, o más juegos.`,
+      });
+    }
+
+    // ── Step 6: LLM Architect validation ─────────────────────────────────
+    const llmStart = Date.now();
+    const architectDecision = await askArchitect({
+      candidatePool: enriched,
+      composedParlays,
+      mode,
+      N: requestedLegs,
+      lang: resolvedLang,
+      engine: resolvedModel,
+    });
+    const llmMs    = Date.now() - llmStart;
+    const totalMs  = Date.now() - totalStart;
+
+    // ── Step 7: Assemble response ─────────────────────────────────────────
+    const topComposed   = composedParlays[0];
+    const alternatives  = composedParlays.slice(1);
+
+    // Resolve architect's chosen leg IDs back to full candidate objects
+    let finalLegs = resolveLegs(architectDecision.final_legs, enriched);
+    if (finalLegs.length < requestedLegs) {
+      // Fallback: architect returned bad IDs — use top composer parlay
+      console.warn('[parlay-synergy] architect leg resolution incomplete, falling back to composer top');
+      finalLegs = topComposed.legs;
+    }
+
+    const overrodeComposer =
+      architectDecision.decision !== 'confirm' || architectDecision.chosen_index !== 0;
+
+    const legSummary = legs => legs.map(l => ({
+      candidateId:      l.candidateId,
+      gamePk:           l.gamePk,
+      matchup:          l.matchup,
+      pick:             l.pick,
+      type:             l.type,
+      odds:             l.odds,
+      modelProbability: l.modelProbability,
+      edge:             l.edge,
+      reasoning:        (l.reasoning ?? '').slice(0, 200),
+      riskVector:       l.riskVector,
+      gameScript:       l.gameScript,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        chosen_parlay: {
+          legs:                  legSummary(finalLegs),
+          combined_probability:  architectDecision.combined_probability,
+          combined_decimal_odds: architectDecision.combined_decimal_odds,
+          combined_edge_score:   finalLegs.reduce((s, l) => s + (l.edge ?? 0), 0),
+          synergy_type:          architectDecision.synergy_type,
+          synergy_thesis:        architectDecision.synergy_thesis,
+          warnings:              architectDecision.warnings ?? [],
+        },
+        alternatives: alternatives.map((alt, i) => ({
+          index:                 i + 1,
+          legs:                  legSummary(alt.legs),
+          combined_probability:  alt.combinedMarginalProbability,
+          combined_decimal_odds: alt.combinedDecimalOdds,
+          combined_edge_score:   alt.legs.reduce((s, l) => s + (l.edge ?? 0), 0),
+          score:                 alt.score,
+        })),
+        composer_meta: {
+          mode,
+          candidate_pool_size:  enriched.length,
+          rejected_by_no_go:    composerMeta.rejectedByNoGo,
+          score_breakdown:      topComposed.scoreBreakdown,
+        },
+        architect_meta: {
+          validated:                      true,
+          overrode_composer:              overrodeComposer,
+          hidden_correlations_detected:   architectDecision.hidden_correlations_detected ?? [],
+          model:                          resolvedModel,
+          timings: { composer_ms: composerMs, llm_ms: llmMs, total_ms: totalMs },
+        },
+      },
+      credits: updatedUser.credits,
+      engine:  resolvedEngine,
+    });
+
+    // ── Fase 7: Fire-and-forget persistence ──────────────────────────────
+    persistParlayRun({
+      userId: updatedUser.id, userEmail: updatedUser.email,
+      gameIds, mode, requestedLegs,
+      resolvedDate, resolvedLang, model, resolvedEngine,
+      isAdminRun: updatedUser.is_admin, cost: PARLAY_SYNERGY_COST,
+      enriched, composedParlays, architectDecision,
+      finalLegs, composerMs, llmMs, totalMs,
+    });
+
+    // ── Fase 7: Shadow mode — async compare with legacy analyzeParlay ─────
+    if (process.env.SHADOW_MODE_ENABLED === 'true' && gameIds.length === 1) {
+      (async () => {
+        try {
+          const shadowResult = await analyzeParlay(
+            String(gameIds[0]), resolvedLang, resolvedDate, resolvedEngine
+          );
+          await pool.query(
+            `UPDATE parlay_synergy_runs
+             SET shadow_old_parlay = $1, resolved_at = NOW()
+             WHERE user_id = $2 AND created_at = (
+               SELECT MAX(created_at) FROM parlay_synergy_runs WHERE user_id = $2
+             )`,
+            [JSON.stringify(shadowResult), String(updatedUser.id)]
+          );
+        } catch (err) {
+          console.error('[parlay-synergy] shadow mode failed (non-fatal):', err.message);
+        }
+      })();
+    }
+
+  } catch (err) {
+    console.error('[parlay-synergy] endpoint error:', err.message, err.stack?.split('\n')[1]);
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/parlay-synergy/recent — last 50 runs (admin only)
+app.get('/api/admin/parlay-synergy/recent', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         id, user_id, user_email, game_date, game_pks, mode, requested_legs,
+         engine, model,
+         architect_output, chosen_legs,
+         combined_prob, combined_dec_odds,
+         synergy_type, warnings,
+         resolved, hit, legs_hit, resolved_at,
+         shadow_old_parlay, shadow_old_hit,
+         timings, credits_charged, is_admin_run, created_at
+       FROM parlay_synergy_runs
+       ORDER BY created_at DESC
+       LIMIT 50`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/parlay-synergy/:id/resolve — mark a run hit/miss (admin only)
+app.post('/api/admin/parlay-synergy/:id/resolve', verifyToken, isAdmin, async (req, res) => {
+  const runId = Number(req.params.id);
+  if (!Number.isInteger(runId) || runId < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid run id' });
+  }
+  const { hit, legs_hit } = req.body;
+  if (typeof hit !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'hit must be a boolean' });
+  }
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE parlay_synergy_runs
+       SET resolved = true, hit = $1, legs_hit = $2, resolved_at = NOW()
+       WHERE id = $3`,
+      [hit, legs_hit ?? null, runId]
+    );
+    if (rowCount === 0) return res.status(404).json({ success: false, error: 'Run not found' });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -2923,6 +3273,7 @@ app.post('/api/admin/feature-store/backfill', verifyToken, async (req, res) => {
 });
 
 runMigrations()
+  .then(() => runParlaySynergyMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {

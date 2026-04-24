@@ -384,3 +384,74 @@ export async function runMigrations() {
     client.release();
   }
 }
+
+/**
+ * runParlaySynergyMigrations()
+ * Creates the parlay_synergy_runs table and its indexes.
+ * Separate from runMigrations() per the brief — safe to run on every deploy.
+ * Note: user_id is TEXT to match the existing users(id) TEXT primary key.
+ */
+export async function runParlaySynergyMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS parlay_synergy_runs (
+        id                BIGSERIAL PRIMARY KEY,
+        user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_email        VARCHAR(255),
+        created_at        TIMESTAMPTZ DEFAULT NOW(),
+        game_date         DATE NOT NULL,
+
+        requested_legs    INTEGER NOT NULL,
+        mode              VARCHAR(32) NOT NULL,
+        game_pks          JSONB NOT NULL,
+        language          VARCHAR(8) DEFAULT 'en',
+        engine            VARCHAR(16) DEFAULT 'sonnet',
+        model             VARCHAR(16) DEFAULT 'fast',
+
+        candidate_pool    JSONB NOT NULL,
+        composed_top3     JSONB NOT NULL,
+        architect_output  JSONB NOT NULL,
+
+        chosen_legs       JSONB NOT NULL,
+        combined_prob     NUMERIC(6,4),
+        combined_dec_odds NUMERIC(10,2),
+        synergy_type      VARCHAR(64),
+        warnings          JSONB,
+
+        resolved          BOOLEAN DEFAULT false,
+        hit               BOOLEAN,
+        legs_hit          INTEGER,
+        resolved_at       TIMESTAMPTZ,
+
+        shadow_old_parlay JSONB,
+        shadow_old_hit    BOOLEAN,
+
+        timings           JSONB,
+        credits_charged   INTEGER,
+        is_admin_run      BOOLEAN DEFAULT false
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_parlay_synergy_runs_user_date
+        ON parlay_synergy_runs(user_id, game_date DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_parlay_synergy_runs_resolved
+        ON parlay_synergy_runs(resolved, game_date DESC) WHERE resolved = false
+    `);
+
+    await client.query('COMMIT');
+    console.log('[migrate] parlay_synergy_runs table ready');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] parlay_synergy_runs migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
