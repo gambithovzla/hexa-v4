@@ -119,10 +119,21 @@ async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
   const gameDate = gameData.gameDate?.slice(0, 10) ?? '';
   const gameStartUTC = gameData.gameDate ?? '';
 
-  const pricedCandidates = (safePayload.safe_candidates ?? []).filter(sc => sc.odds != null);
-  const omitted = (safePayload.safe_candidates ?? []).length - pricedCandidates.length;
+  // Main-market candidates (ML/RL/OU) stay in the pool even if odds are null:
+  // the odds API can fail to match a game (team-name mismatch, rate limit, etc.)
+  // and dropping them turns the whole pool empty. Player props, however, require
+  // real prices — an unpriced prop is not bettable and has no edge to reason about.
+  const allCandidates = safePayload.safe_candidates ?? [];
+  const pricedCandidates = allCandidates.filter(sc =>
+    sc.market_type !== 'playerprop' || sc.odds != null
+  );
+  const omitted = allCandidates.length - pricedCandidates.length;
   if (omitted > 0) {
-    console.warn(`[parlay-synergy] gamePk ${gamePk}: omitted ${omitted} unpriced candidates before architect pool`);
+    console.warn(`[parlay-synergy] gamePk ${gamePk}: omitted ${omitted} unpriced player prop(s) before architect pool`);
+  }
+  const unpricedMain = pricedCandidates.filter(sc => sc.market_type !== 'playerprop' && sc.odds == null).length;
+  if (unpricedMain > 0) {
+    console.warn(`[parlay-synergy] gamePk ${gamePk}: ${unpricedMain} main-market candidate(s) have null odds (odds API match may have failed)`);
   }
 
   return pricedCandidates.map(sc => {

@@ -246,7 +246,7 @@ describe('buildCandidatePool', () => {
     assert.strictEqual(kProp.propKind, 'k', 'prop_kind strikeouts maps to propKind k');
   });
 
-  it('omits unpriced candidates before they reach the architect pool', async () => {
+  it('omits unpriced player props but keeps unpriced main-market candidates', async () => {
     clearPoolCache();
     const build = createPoolBuilder(makeMockDeps({
       _buildDeterministicSafePayload: ({ gameData }) => ({
@@ -259,7 +259,27 @@ describe('buildCandidatePool', () => {
     const result = await build({ gameIds: [778001], date: '2026-04-23', lang: 'en' });
 
     assert.ok(result.length > 0, 'priced candidates still flow through');
-    assert.ok(result.every(c => c.odds != null), 'architect pool must not include null odds');
-    assert.ok(!result.some(c => c.pick.includes('Unpriced Player')), 'unpriced candidate omitted');
+    assert.ok(!result.some(c => c.pick.includes('Unpriced Player')), 'unpriced player prop omitted');
+    // Player props in the pool must have odds; main markets may be null (odds-api match can fail)
+    assert.ok(
+      result.every(c => c.marketType !== 'playerprop' || c.odds != null),
+      'no player prop with null odds',
+    );
+  });
+
+  it('keeps main-market candidates even when odds matching fails (null odds)', async () => {
+    clearPoolCache();
+    const build = createPoolBuilder(makeMockDeps({
+      _buildDeterministicSafePayload: ({ gameData }) => ({
+        safe_candidates: [
+          { pick: `${gameData.teams.home.abbreviation} Moneyline`, type: 'Moneyline', hit_probability: 60, odds: null, market_type: 'moneyline', side: 'home', model_probability: 60, implied_probability: null, edge: null, rank: 1, reasoning: 'No odds matched' },
+          { pick: `${gameData.teams.away.abbreviation} Moneyline`, type: 'Moneyline', hit_probability: 40, odds: null, market_type: 'moneyline', side: 'away', model_probability: 40, implied_probability: null, edge: null, rank: 2, reasoning: 'No odds matched' },
+        ],
+      }),
+    }));
+    const result = await build({ gameIds: [778001], date: '2026-04-23', lang: 'en' });
+
+    assert.ok(result.length >= 2, `expected >=2 candidates even without odds, got ${result.length}`);
+    assert.ok(result.every(c => c.marketType === 'moneyline'), 'main-market candidates preserved');
   });
 });
