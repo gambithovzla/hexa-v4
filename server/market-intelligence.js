@@ -240,68 +240,6 @@ function samePlayerName(left, right) {
   return aLast === bLast;
 }
 
-function getPlayerPropOffers(oddsData, marketKey, playerName) {
-  const target = normalizeText(playerName);
-  if (!target) return [];
-  const targetParts = target.split(' ').filter(Boolean);
-  const targetLast = targetParts[targetParts.length - 1];
-
-  return (oddsData?.playerProps?.[marketKey] ?? []).filter((offer) => {
-    const offerName = normalizeText(offer?.playerName ?? offer?.normalizedPlayerName);
-    if (!offerName) return false;
-    if (offerName === target) return true;
-    const offerParts = offerName.split(' ').filter(Boolean);
-    const offerLast = offerParts[offerParts.length - 1];
-    return Boolean(targetLast && offerLast && targetLast === offerLast && (
-      offerName.includes(targetParts[0]) || target.includes(offerParts[0])
-    ));
-  });
-}
-
-function selectPropLine(offers, preferredLine = null) {
-  if (!offers.length) return null;
-  const byLine = new Map();
-  for (const offer of offers) {
-    const line = toNumber(offer.line);
-    if (line == null) continue;
-    const key = String(line);
-    const group = byLine.get(key) ?? { line, directions: new Set(), count: 0 };
-    group.directions.add(offer.direction);
-    group.count += 1;
-    byLine.set(key, group);
-  }
-
-  const groups = [...byLine.values()];
-  if (!groups.length) return null;
-  groups.sort((a, b) => {
-    const bothA = a.directions.has('over') && a.directions.has('under') ? 1 : 0;
-    const bothB = b.directions.has('over') && b.directions.has('under') ? 1 : 0;
-    if (bothA !== bothB) return bothB - bothA;
-    if (preferredLine != null) {
-      const distA = Math.abs(a.line - preferredLine);
-      const distB = Math.abs(b.line - preferredLine);
-      if (distA !== distB) return distA - distB;
-    }
-    return b.count - a.count;
-  });
-  return groups[0].line;
-}
-
-function selectPropOffer({ oddsData, marketKey, playerName, direction, preferredLine = null, requireExactLine = false }) {
-  const offers = getPlayerPropOffers(oddsData, marketKey, playerName);
-  if (!offers.length) return null;
-  const line = requireExactLine
-    ? preferredLine
-    : selectPropLine(offers, preferredLine);
-  if (line == null) return null;
-
-  return offers.find((offer) =>
-    offer.direction === direction &&
-    toNumber(offer.line) === line &&
-    toNumber(offer.price) != null
-  ) ?? null;
-}
-
 function findSavantBatterByName(batters = [], name) {
   return (batters ?? []).find((entry) => samePlayerName(entry?.name, name)) ?? null;
 }
@@ -380,7 +318,7 @@ function canUseProps(features = {}) {
   return strategy === 'FULL_ANALYSIS' || strategy === 'STANDARD_ANALYSIS';
 }
 
-function buildBatterPropCandidates({ gameData, features = {}, oddsData = null, lang = 'en' }) {
+function buildBatterPropCandidates({ gameData, features = {}, lang = 'en' }) {
   if (!canUseProps(features)) return [];
 
   const parkOverall = toNumber(features?.parkFactorData?.park_factor_overall);
@@ -405,15 +343,6 @@ function buildBatterPropCandidates({ gameData, features = {}, oddsData = null, l
       const savantEntry = findSavantBatterByName(savantPool, name);
       const savant = savantEntry?.savant ?? null;
       if (!name || !savant) return null;
-      const overOffer = selectPropOffer({
-        oddsData,
-        marketKey: 'batter_hits',
-        playerName: name,
-        direction: 'over',
-        preferredLine: 0.5,
-        requireExactLine: true,
-      });
-      if (!overOffer) return null;
 
       const splitEntry = findSplitEntry(splitPool, player);
       const matchupSplit = getMatchupSplit(splitEntry, matchupHand);
@@ -444,16 +373,13 @@ function buildBatterPropCandidates({ gameData, features = {}, oddsData = null, l
       if (probability < 0.55) return null;
 
       return {
-        pick: `${name} Over ${overOffer.line} Hits`,
+        pick: `${name} Over 0.5 Hits`,
         type: 'PlayerProp',
         hit_probability: round(probability * 100, 1),
-        odds: overOffer.price,
+        odds: null,
         market_type: 'playerprop',
-        side: 'over',
-        team_side: side,
+        side,
         prop_kind: 'hits',
-        line: overOffer.line,
-        prop_market_key: 'batter_hits',
         reasoning: buildHitsPropReasoning({
           lang,
           playerName: name,
@@ -469,7 +395,7 @@ function buildBatterPropCandidates({ gameData, features = {}, oddsData = null, l
   });
 }
 
-function buildPitcherPropCandidates({ features = {}, oddsData = null, lang = 'en' }) {
+function buildPitcherPropCandidates({ features = {}, lang = 'en' }) {
   if (!canUseProps(features)) return [];
 
   const qualityScore = features?.dataQuality?.score;
@@ -499,11 +425,6 @@ function buildPitcherPropCandidates({ features = {}, oddsData = null, lang = 'en
     const opponentAvgXwoba = averageXwoba(opponentBatters);
     const weakCount = (opponentBatters ?? []).filter((batter) => toNumber(batter?.savant?.xwOBA) != null && toNumber(batter?.savant?.xwOBA) < 0.31).length;
     const estimatedLine = estimatePitcherKLine({ whiffPercent: whiff, kPercent: kRate });
-    const propLine = selectPropLine(
-      getPlayerPropOffers(oddsData, 'pitcher_strikeouts', pitcher.fullName),
-      estimatedLine,
-    );
-    if (propLine == null) return [];
 
     let overProbability = 0.48;
     if (whiff != null) overProbability += (whiff - 24) * 0.008;
@@ -514,7 +435,6 @@ function buildPitcherPropCandidates({ features = {}, oddsData = null, lang = 'en
     if (opponentAvgXwoba != null) overProbability -= (opponentAvgXwoba - 0.315) * 0.9;
     overProbability += weakCount * 0.006;
     if (parkOverall != null && parkOverall < 100) overProbability += (100 - parkOverall) * 0.002;
-    overProbability += (estimatedLine - propLine) * 0.04;
 
     overProbability = shrinkTowardsCoinFlip(overProbability, qualityScore);
     overProbability = clamp(overProbability, 0.38, 0.71);
@@ -522,73 +442,47 @@ function buildPitcherPropCandidates({ features = {}, oddsData = null, lang = 'en
 
     const candidates = [];
     if (overProbability >= 0.58) {
-      const overOffer = selectPropOffer({
-        oddsData,
-        marketKey: 'pitcher_strikeouts',
-        playerName: pitcher.fullName,
-        direction: 'over',
-        preferredLine: propLine,
-        requireExactLine: true,
+      candidates.push({
+        pick: `${pitcher.fullName} Over ${estimatedLine} Strikeouts`,
+        type: 'PlayerProp',
+        hit_probability: round(overProbability * 100, 1),
+        odds: null,
+        market_type: 'playerprop',
+        side,
+        prop_kind: 'strikeouts',
+        reasoning: buildKPropReasoning({
+          lang,
+          pitcherName: pitcher.fullName,
+          line: estimatedLine,
+          direction: 'over',
+          whiff: round(whiff, 1),
+          kRate: round(kRate, 1),
+          opponentAvgXwoba: round(opponentAvgXwoba, 3),
+          weakCount,
+        }),
       });
-      if (overOffer) {
-        candidates.push({
-          pick: `${pitcher.fullName} Over ${overOffer.line} Strikeouts`,
-          type: 'PlayerProp',
-          hit_probability: round(overProbability * 100, 1),
-          odds: overOffer.price,
-          market_type: 'playerprop',
-          side: 'over',
-          team_side: side,
-          prop_kind: 'strikeouts',
-          line: overOffer.line,
-          prop_market_key: 'pitcher_strikeouts',
-          reasoning: buildKPropReasoning({
-            lang,
-            pitcherName: pitcher.fullName,
-            line: overOffer.line,
-            direction: 'over',
-            whiff: round(whiff, 1),
-            kRate: round(kRate, 1),
-            opponentAvgXwoba: round(opponentAvgXwoba, 3),
-            weakCount,
-          }),
-        });
-      }
     }
 
     if (underProbability >= 0.58) {
-      const underOffer = selectPropOffer({
-        oddsData,
-        marketKey: 'pitcher_strikeouts',
-        playerName: pitcher.fullName,
-        direction: 'under',
-        preferredLine: propLine,
-        requireExactLine: true,
+      candidates.push({
+        pick: `${pitcher.fullName} Under ${estimatedLine} Strikeouts`,
+        type: 'PlayerProp',
+        hit_probability: round(underProbability * 100, 1),
+        odds: null,
+        market_type: 'playerprop',
+        side,
+        prop_kind: 'strikeouts',
+        reasoning: buildKPropReasoning({
+          lang,
+          pitcherName: pitcher.fullName,
+          line: estimatedLine,
+          direction: 'under',
+          whiff: round(whiff, 1),
+          kRate: round(kRate, 1),
+          opponentAvgXwoba: round(opponentAvgXwoba, 3),
+          weakCount,
+        }),
       });
-      if (underOffer) {
-        candidates.push({
-          pick: `${pitcher.fullName} Under ${underOffer.line} Strikeouts`,
-          type: 'PlayerProp',
-          hit_probability: round(underProbability * 100, 1),
-          odds: underOffer.price,
-          market_type: 'playerprop',
-          side: 'under',
-          team_side: side,
-          prop_kind: 'strikeouts',
-          line: underOffer.line,
-          prop_market_key: 'pitcher_strikeouts',
-          reasoning: buildKPropReasoning({
-            lang,
-            pitcherName: pitcher.fullName,
-            line: underOffer.line,
-            direction: 'under',
-            whiff: round(whiff, 1),
-            kRate: round(kRate, 1),
-            opponentAvgXwoba: round(opponentAvgXwoba, 3),
-            weakCount,
-          }),
-        });
-      }
     }
 
     return candidates;
@@ -660,7 +554,6 @@ function candidateReasoning({
   edge,
   expectedTotal,
   marketTotal,
-  marketLine,
   features = {},
 }) {
   const homePitcherXwoba = toNumber(features?.homePitcherSavant?.xwOBA_against);
@@ -674,7 +567,7 @@ function candidateReasoning({
       return `${pick} lidera con ${modelProbability}% de acierto estimado; gap de abridores xwOBA ${awayPitcherXwoba ?? 'N/A'} vs ${homePitcherXwoba ?? 'N/A'} y contexto de juego ${parkOverall ?? 100} de park factor.`;
     }
     if (marketType === 'runline') {
-      return `${pick} sube por diferencia proyectada de talento, abridores y ofensiva; spread real ${marketLine ?? 'N/A'} con total de juego ${marketTotal ?? 'N/A'} como contexto secundario.`;
+      return `${pick} sube por diferencia proyectada de talento y entorno de anotacion; total esperado ${expectedTotal ?? 'N/A'} sobre linea ${marketTotal ?? 'N/A'}.`;
     }
     return `${pick} se apoya en total proyectado ${expectedTotal ?? 'N/A'} frente a linea ${marketTotal ?? 'N/A'}; clima ${temperature ?? 'N/A'}F, viento ${windSpeed ?? 'N/A'} mph y park factor ${parkOverall ?? 100}.`;
   }
@@ -683,7 +576,7 @@ function candidateReasoning({
     return `${pick} leads at ${modelProbability}% projected hit rate; starter xwOBA gap ${awayPitcherXwoba ?? 'N/A'} vs ${homePitcherXwoba ?? 'N/A'} with park context ${parkOverall ?? 100}.`;
   }
   if (marketType === 'runline') {
-    return `${pick} rises on projected team gap, starters and offense; real spread ${marketLine ?? 'N/A'} with game total ${marketTotal ?? 'N/A'} as secondary context.`;
+    return `${pick} rises on projected team gap plus scoring environment; expected total ${expectedTotal ?? 'N/A'} against market ${marketTotal ?? 'N/A'}.`;
   }
   return `${pick} is supported by projected total ${expectedTotal ?? 'N/A'} versus market ${marketTotal ?? 'N/A'}; weather ${temperature ?? 'N/A'}F, wind ${windSpeed ?? 'N/A'} mph and park factor ${parkOverall ?? 100}.`;
 }
@@ -730,8 +623,8 @@ export function buildDeterministicSafePayload({
   });
 
   const playerPropCandidates = [
-    ...buildBatterPropCandidates({ gameData, features, oddsData, lang }),
-    ...buildPitcherPropCandidates({ features, oddsData, lang }),
+    ...buildBatterPropCandidates({ gameData, features, lang }),
+    ...buildPitcherPropCandidates({ features, lang }),
   ];
 
   const candidates = [
@@ -742,7 +635,6 @@ export function buildDeterministicSafePayload({
       odds: ml.away ?? null,
       market_type: 'moneyline',
       side: 'away',
-      line: null,
     },
     {
       pick: `${homeAbbr} Moneyline`,
@@ -751,7 +643,6 @@ export function buildDeterministicSafePayload({
       odds: ml.home ?? null,
       market_type: 'moneyline',
       side: 'home',
-      line: null,
     },
     {
       pick: `${awayAbbr} ${rl.away?.spread != null && rl.away.spread > 0 ? '+' : ''}${rl.away?.spread ?? '+1.5'} Run Line`,
@@ -760,7 +651,6 @@ export function buildDeterministicSafePayload({
       odds: rl.away?.price ?? null,
       market_type: 'runline',
       side: 'away',
-      line: rl.away?.spread ?? 1.5,
     },
     {
       pick: `${homeAbbr} ${rl.home?.spread != null && rl.home.spread > 0 ? '+' : ''}${rl.home?.spread ?? '-1.5'} Run Line`,
@@ -769,7 +659,6 @@ export function buildDeterministicSafePayload({
       odds: rl.home?.price ?? null,
       market_type: 'runline',
       side: 'home',
-      line: rl.home?.spread ?? -1.5,
     },
     {
       pick: `Over ${ou.total ?? 8.5}`,
@@ -778,7 +667,6 @@ export function buildDeterministicSafePayload({
       odds: ou.overPrice ?? null,
       market_type: 'overunder',
       side: 'over',
-      line: ou.total ?? 8.5,
     },
     {
       pick: `Under ${ou.total ?? 8.5}`,
@@ -787,7 +675,6 @@ export function buildDeterministicSafePayload({
       odds: ou.underPrice ?? null,
       market_type: 'overunder',
       side: 'under',
-      line: ou.total ?? 8.5,
     },
     ...playerPropCandidates,
   ]
@@ -813,7 +700,7 @@ export function buildDeterministicSafePayload({
     .map((candidate, index) => ({
       ...candidate,
       rank: index + 1,
-      reasoning: candidate.reasoning ?? candidateReasoning({
+      reasoning: candidateReasoning({
         lang,
         marketType: candidate.market_type,
         pick: candidate.pick,
@@ -822,7 +709,6 @@ export function buildDeterministicSafePayload({
         edge: candidate.edge,
         expectedTotal,
         marketTotal: ou.total ?? 8.5,
-        marketLine: candidate.line ?? null,
         features,
       }),
     }));
