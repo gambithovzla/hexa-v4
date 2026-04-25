@@ -8,7 +8,7 @@ import path from 'path';
 import { getMlbStandings, getTeams, getTodayGames } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat, summarizeGameBrief, analyzeChatJornada } from './oracle.js';
-import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odds-api.js';
+import { getGameOdds, matchOddsToGame, calculateImpliedProbability, getOddsApiStatus } from './odds-api.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken, requireVerifiedEmail } from './middleware/auth-middleware.js';
@@ -287,7 +287,7 @@ async function saveFeatureStoreForGame({
     let matchedOdds = parseJsonMaybe(oddsData);
     if (!matchedOdds?.odds) {
       try {
-        const allOdds = await getGameOdds();
+        const allOdds = await getGameOdds({ date: matchedDate });
         matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
       } catch {
         matchedOdds = null;
@@ -702,8 +702,8 @@ app.get('/api/games/:gamePk/highlights-link', async (req, res) => {
 // GET /api/odds/today
 app.get('/api/odds/today', async (req, res) => {
   try {
-    const odds = await getGameOdds();
-    res.json({ success: true, data: odds });
+    const odds = await getGameOdds({ date: req.query.date });
+    res.json({ success: true, data: odds, meta: getOddsApiStatus() });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -796,7 +796,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
 
     let matchedOdds = null;
     try {
-      const allOdds = await getGameOdds();
+      const allOdds = await getGameOdds({ date });
       matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     } catch { /* odds are optional */ }
 
@@ -946,7 +946,7 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
     const games = await getTodayGames(date);
 
     let allOdds = [];
-    try { allOdds = await getGameOdds(); } catch { /* optional */ }
+    try { allOdds = await getGameOdds({ date: resolvedDate }); } catch { /* optional */ }
 
     const legOddsArr = gameIds.map(id => {
       const gameData = games.find(g => String(g.gamePk) === String(id));
@@ -1082,7 +1082,7 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     // ── Step 2: Fetch per-game features (context builder TTL: 10 min) ───
     const allGames = await getTodayGames(resolvedDate);
     let allOdds = [];
-    try { allOdds = await getGameOdds(); } catch { /* optional */ }
+    try { allOdds = await getGameOdds({ date: resolvedDate }); } catch { /* optional */ }
 
     const featuresByGamePk = new Map();
     const gameDataByGamePk = new Map();
@@ -1098,6 +1098,22 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
 
     // ── Step 3: Risk vector enrichment ──────────────────────────────────
     const enriched = enrichPoolWithRiskVectors(candidates, featuresByGamePk, gameDataByGamePk);
+    const oddsStatus = getOddsApiStatus();
+    const pricedCandidateCount = enriched.filter(c => c.odds != null).length;
+    const oddsWarnings = [];
+    if (!oddsStatus.keyConfigured) {
+      oddsWarnings.push(resolvedLang === 'es'
+        ? 'ODDS_API_KEY no esta configurada en el backend; las cuotas reales no pueden cargarse.'
+        : 'ODDS_API_KEY is not configured on the backend; real odds cannot load.');
+    } else if (oddsStatus.ok === false) {
+      oddsWarnings.push(resolvedLang === 'es'
+        ? `The Odds API fallo o devolvio error (${oddsStatus.status ?? 'unknown'}); revisa cuota/credenciales.`
+        : `The Odds API failed or returned an error (${oddsStatus.status ?? 'unknown'}); check quota/credentials.`);
+    } else if (pricedCandidateCount === 0) {
+      oddsWarnings.push(resolvedLang === 'es'
+        ? 'No se empataron cuotas reales para los juegos seleccionados; las patas se generaron sin precio de mercado.'
+        : 'No real odds matched the selected games; legs were generated without market prices.');
+    }
 
     // ── Step 4: Correlation matrix ───────────────────────────────────────
     const correlationMatrix = buildCorrelationMatrix(enriched);
@@ -1177,6 +1193,7 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       pick:             l.pick,
       type:             l.type,
       odds:             l.odds,
+      decimalOdds:      l.decimalOdds,
       modelProbability: l.modelProbability,
       edge:             l.edge,
       reasoning:        (l.reasoning ?? '').slice(0, 200),
@@ -1195,6 +1212,7 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
           synergy_type:          architectDecision.synergy_type,
           synergy_thesis:        architectDecision.synergy_thesis,
           warnings:              [
+            ...oddsWarnings,
             ...(architectDecision.warnings ?? []),
             ...(composerMeta.relaxed_min_edge
               ? [resolvedLang === 'es'
@@ -1215,6 +1233,9 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
         composer_meta: {
           mode,
           candidate_pool_size:  enriched.length,
+          priced_candidate_count: pricedCandidateCount,
+          null_odds_count:      enriched.length - pricedCandidateCount,
+          odds_api:             oddsStatus,
           eligible_count:       composerMeta.eligibleCount,
           rejected_by_no_go:    composerMeta.rejectedByNoGo,
           strict_min_edge:       composerMeta.strict_min_edge ?? effectiveMinEdge,
@@ -1409,7 +1430,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
     }
 
     let allOdds = [];
-    try { allOdds = await getGameOdds(); } catch { /* optional */ }
+    try { allOdds = await getGameOdds({ date: resolvedDate }); } catch { /* optional */ }
 
     const updatedUser = await deductCredits(req, res, cost);
     if (!updatedUser) return;
@@ -1605,7 +1626,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
     const games = await getTodayGames(resolvedDate);
 
     let allOdds = [];
-    try { allOdds = await getGameOdds(); } catch { /* optional */ }
+    try { allOdds = await getGameOdds({ date: resolvedDate }); } catch { /* optional */ }
 
     // Build context for each game
     const gameContexts = await Promise.all(
@@ -1832,7 +1853,7 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
 
     let matchedOdds = null;
     try {
-      const allOdds = await getGameOdds();
+      const allOdds = await getGameOdds({ date: resolvedDate });
       matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
     } catch { /* odds are optional */ }
 
@@ -1915,7 +1936,7 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
 
     // Fetch all odds once, then match per game
     let allOdds = [];
-    try { allOdds = await getGameOdds(); } catch { /* odds optional */ }
+    try { allOdds = await getGameOdds({ date: resolvedDate }); } catch { /* odds optional */ }
 
     // MAP phase: build context + summarize with Haiku — all in parallel
     const gameBriefs = await Promise.all(
@@ -2955,7 +2976,7 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
     if (!gameData) return res.status(404).json({ success: false, error: 'Game not found in MLB schedule' });
 
     let allOdds = [];
-    try { allOdds = await getGameOdds(); } catch {}
+    try { allOdds = await getGameOdds({ date }); } catch {}
     const matchedOdds = matchOddsToGame(allOdds, gameData.teams?.home?.name, gameData.teams?.away?.name);
 
     const contextResult2 = await buildContext(gameData, matchedOdds);

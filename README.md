@@ -192,6 +192,7 @@ Ver [.env.example](.env.example) para la lista completa. Resumen:
 | `ANTHROPIC_API_KEY` | Sí | Key de Anthropic para Claude |
 | `DATABASE_URL` | Sí | Connection string Postgres |
 | `JWT_SECRET` | Sí | Secreto para firmar tokens (cambiar en prod) |
+| `ODDS_API_KEY` | Si para cuotas reales | Key de The Odds API para moneyline/runline/totales MLB |
 | `PORT` | No | Puerto del server (default `3001`) |
 | `NODE_ENV` | No | `development` / `production` |
 | `XAI_API_KEY` | No | Key xAI para modos Grok / Dual |
