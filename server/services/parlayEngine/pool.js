@@ -217,7 +217,7 @@ export function createPoolBuilder({
 
     const [allGames, allOdds] = await Promise.all([
       _getTodayGames(date),
-      _getGameOdds(),
+      _getGameOdds({ date }),
     ]);
 
     const gameMap = new Map(allGames.map(g => [g.gamePk, g]));
