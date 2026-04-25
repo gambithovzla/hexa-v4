@@ -1109,6 +1109,10 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       oddsWarnings.push(resolvedLang === 'es'
         ? `The Odds API fallo o devolvio error (${oddsStatus.status ?? 'unknown'}); revisa cuota/credenciales.`
         : `The Odds API failed or returned an error (${oddsStatus.status ?? 'unknown'}); check quota/credentials.`);
+    } else if (oddsStatus.partialMarkets) {
+      oddsWarnings.push(resolvedLang === 'es'
+        ? 'The Odds API no tenia creditos suficientes para todos los mercados; se uso fallback h2h y solo Moneyline tendra cuotas reales.'
+        : 'The Odds API did not have enough credits for all markets; h2h fallback was used and only Moneyline will have real odds.');
     } else if (pricedCandidateCount === 0) {
       oddsWarnings.push(resolvedLang === 'es'
         ? 'No se empataron cuotas reales para los juegos seleccionados; las patas se generaron sin precio de mercado.'
