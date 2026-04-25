@@ -606,7 +606,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     onClose();
   }
 
-  function handleBackdropClick(e) {
+  function handleBackdropPointerDown(e) {
     if (isBlockingVerify) return;
     if (e.target === e.currentTarget) onClose();
   }
@@ -617,7 +617,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
 
   return (
     <Box
-      onClick={handleBackdropClick}
+      onPointerDown={handleBackdropPointerDown}
       sx={{
         position:        'fixed',
         inset:           0,
@@ -634,6 +634,8 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     >
       {/* ── Card ── */}
       <Box
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         sx={{
           position:     'relative',
           zIndex:       10000,
