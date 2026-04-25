@@ -152,6 +152,10 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code TEXT DEFAULT NULL`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_code_hash TEXT DEFAULT NULL`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_requested_at TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_attempts INTEGER DEFAULT 0`);
     await client.query(`UPDATE users SET email_verified = true WHERE email = 'cdanielrr@hotmail.com' OR email = 'admin@hexa.com'`);
 
     // ── backtest_results (Shadow Mode — offline backtesting, never touches picks) ─

@@ -73,6 +73,19 @@ const L = {
     verifyResendCountdown: (s) => `Resend in ${s}s`,
     verifyCancelRegister: 'Cancel registration',
     verifyBlockedHint:    'You must verify your email to activate your account.',
+    forgotLink:      'Forgot password?',
+    forgotTitle:     'RESET ACCESS KEY',
+    forgotStepLabel: 'RECOVERY // EMAIL',
+    forgotBody:      'Enter your account email and we will send a 6-digit reset code.',
+    forgotSubmit:    'Send reset code',
+    forgotBack:      'Back to login',
+    resetTitle:      'SET NEW PASSWORD',
+    resetStepLabel:  'RECOVERY // RESET CODE',
+    resetSent:       (email) => `If ${email} exists, a reset code was sent.`,
+    resetHelper:     'Paste the 6 digits and choose a new password.',
+    newPassword:     'New Auth Key // Password',
+    resetSubmit:     'Update password',
+    resetSuccess:    'Password updated. Log in with your new password.',
   },
   es: {
     login:           'Iniciar sesión',
@@ -107,6 +120,19 @@ const L = {
     verifyResendCountdown: (s) => `Reenviar en ${s}s`,
     verifyCancelRegister: 'Cancelar registro',
     verifyBlockedHint:    'Debes verificar tu email para activar tu cuenta.',
+    forgotLink:      'Olvide mi contrasena',
+    forgotTitle:     'RECUPERAR CLAVE',
+    forgotStepLabel: 'RECUPERACION // EMAIL',
+    forgotBody:      'Ingresa el email de tu cuenta y enviaremos un codigo de 6 digitos.',
+    forgotSubmit:    'Enviar codigo',
+    forgotBack:      'Volver al login',
+    resetTitle:      'NUEVA CONTRASENA',
+    resetStepLabel:  'RECUPERACION // CODIGO',
+    resetSent:       (email) => `Si ${email} existe, enviamos un codigo de recuperacion.`,
+    resetHelper:     'Pega los 6 digitos y elige una nueva contrasena.',
+    newPassword:     'Nueva Clave Auth // Contrasena',
+    resetSubmit:     'Actualizar contrasena',
+    resetSuccess:    'Contrasena actualizada. Inicia sesion con tu nueva clave.',
   },
 };
 
@@ -410,11 +436,16 @@ function OTPInput({ value, onChange, length = 6, disabled, autoFocus }) {
 
 export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'login', initialView = null }) {
   const t = L[lang] ?? L.en;
-  const { login, register, logout, verifyEmail, resendCode, user } = useAuth();
+  const { login, register, logout, verifyEmail, resendCode, requestPasswordReset, resetPassword, user } = useAuth();
 
   const [tab,           setTab]           = useState(defaultTab);
   const [email,         setEmail]         = useState('');
   const [password,      setPassword]      = useState('');
+  const [resetCode,     setResetCode]     = useState('');
+  const [resetPassword_, setResetPassword_] = useState('');
+  const [resetEmail,    setResetEmail]    = useState('');
+  const [authMode,      setAuthMode]      = useState('auth'); // 'auth' | 'forgot' | 'reset'
+  const [success,       setSuccess]       = useState('');
   const [error,         setError]         = useState('');
   const [loading,       setLoading]       = useState(false);
   const [verifyStep,    setVerifyStep]    = useState(false);
@@ -433,6 +464,11 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     setTab(defaultTab);
     setEmail('');
     setPassword('');
+    setResetCode('');
+    setResetPassword_('');
+    setResetEmail('');
+    setAuthMode('auth');
+    setSuccess('');
     setError('');
     setLoading(false);
     setVerifyCode('');
@@ -454,7 +490,10 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
     setResendCooldown(0);
   }, [open, initialView, user]);
 
-  useEffect(() => { setError(''); }, [tab]);
+  useEffect(() => {
+    setError('');
+    setSuccess('');
+  }, [tab]);
 
   // Countdown tick for resend cooldown
   useEffect(() => {
@@ -492,6 +531,44 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
       }
     } catch (err) {
       setError(err.message ?? 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      await requestPasswordReset(email);
+      setResetEmail(email);
+      setResetCode('');
+      setResetPassword_('');
+      setAuthMode('reset');
+    } catch (err) {
+      setError(err.message ?? 'Failed to request password reset');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResetSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      await resetPassword(resetEmail || email, resetCode.trim(), resetPassword_);
+      setSuccess(t.resetSuccess);
+      setPassword('');
+      setResetCode('');
+      setResetPassword_('');
+      setAuthMode('auth');
+      setTab('login');
+    } catch (err) {
+      setError(err.message ?? 'Failed to reset password');
     } finally {
       setLoading(false);
     }
@@ -535,6 +612,8 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
   }
 
   const canSubmit = !loading && email && password && (tab === 'login' || ageConfirmed);
+  const canForgotSubmit = !loading && email;
+  const canResetSubmit = !loading && (resetEmail || email) && resetCode.length >= 6 && resetPassword_.length >= 6;
 
   return (
     <Box
@@ -747,6 +826,181 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
               </Typography>
             </Box>
           </Box>
+        ) : authMode === 'forgot' ? (
+          <Box component="form" onSubmit={handleForgotSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Box
+              sx={{
+                border: `1px solid ${NC.orangeLine}`,
+                borderLeft: `3px solid ${NC.orange}`,
+                bgcolor: NC.orangeDim,
+                px: '14px',
+                py: '12px',
+              }}
+            >
+              <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '6px' }}>
+                {t.forgotStepLabel}
+              </Typography>
+              <Typography sx={{ fontFamily: DISPLAY, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
+                {t.forgotTitle}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7 }}>
+                {t.forgotBody}
+              </Typography>
+            </Box>
+
+            <InputField label={t.email} type="email" value={email} onChange={setEmail} disabled={loading} autoFocus />
+
+            {error && (
+              <Box sx={{ bgcolor: NC.redDim, border: `1px solid ${NC.redLine}`, borderRadius: '0', px: '12px', py: '8px' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.red }}>! {error}</Typography>
+              </Box>
+            )}
+
+            <Box
+              component="button"
+              type="submit"
+              disabled={!canForgotSubmit}
+              sx={{
+                mt: '4px',
+                py: '13px',
+                border: `1px solid ${canForgotSubmit ? NC.orange : NC.cyanLine}`,
+                borderRadius: '0',
+                background: canForgotSubmit ? NC.orangeDim : 'transparent',
+                color: canForgotSubmit ? NC.orange : NC.textDim,
+                fontFamily: MONO,
+                fontSize: '10px',
+                letterSpacing: '4px',
+                textTransform: 'uppercase',
+                cursor: canForgotSubmit ? 'pointer' : 'not-allowed',
+                boxShadow: canForgotSubmit ? NC.orangeGlow : 'none',
+                transition: 'all 0.2s',
+                '&:hover': canForgotSubmit ? { background: 'rgba(255,102,0,0.2)', color: '#ffffff' } : {},
+              }}
+            >
+              {loading ? t.loading : t.forgotSubmit}
+            </Box>
+
+            <Typography
+              onClick={() => {
+                setAuthMode('auth');
+                setError('');
+                setSuccess('');
+              }}
+              sx={{
+                fontFamily: MONO,
+                fontSize: '9px',
+                color: NC.textMuted,
+                textAlign: 'center',
+                cursor: 'pointer',
+                letterSpacing: '0.06em',
+                '&:hover': { color: NC.cyan },
+                transition: 'color 0.2s',
+              }}
+            >
+              {t.forgotBack}
+            </Typography>
+          </Box>
+        ) : authMode === 'reset' ? (
+          <Box component="form" onSubmit={handleResetSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Box
+              sx={{
+                border: `1px solid ${NC.orangeLine}`,
+                borderLeft: `3px solid ${NC.orange}`,
+                bgcolor: NC.orangeDim,
+                px: '14px',
+                py: '12px',
+              }}
+            >
+              <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '6px' }}>
+                {t.resetStepLabel}
+              </Typography>
+              <Typography sx={{ fontFamily: DISPLAY, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
+                {t.resetTitle}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7, mb: '4px' }}>
+                {t.resetSent(resetEmail || email)}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: NC.textDim, lineHeight: 1.7 }}>
+                {t.resetHelper}
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <Typography sx={{
+                fontFamily: MONO,
+                fontSize: '7px',
+                color: NC.textMuted,
+                textTransform: 'uppercase',
+                letterSpacing: '3px',
+                textAlign: 'center',
+              }}>
+                {t.verifyCode}
+              </Typography>
+              <OTPInput
+                value={resetCode}
+                onChange={setResetCode}
+                length={6}
+                disabled={loading}
+                autoFocus
+              />
+            </Box>
+
+            <InputField label={t.newPassword} type="password" value={resetPassword_} onChange={setResetPassword_} disabled={loading} showToggle />
+
+            {error && (
+              <Box sx={{ bgcolor: NC.redDim, border: `1px solid ${NC.redLine}`, borderRadius: '0', px: '12px', py: '8px' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.red }}>! {error}</Typography>
+              </Box>
+            )}
+            {success && (
+              <Box sx={{ bgcolor: 'rgba(0,255,136,0.08)', border: `1px solid rgba(0,255,136,0.3)`, borderRadius: '0', px: '12px', py: '8px' }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.green }}>{success}</Typography>
+              </Box>
+            )}
+
+            <Box
+              component="button"
+              type="submit"
+              disabled={!canResetSubmit}
+              sx={{
+                mt: '4px',
+                py: '13px',
+                border: `1px solid ${canResetSubmit ? NC.orange : NC.cyanLine}`,
+                borderRadius: '0',
+                background: canResetSubmit ? NC.orangeDim : 'transparent',
+                color: canResetSubmit ? NC.orange : NC.textDim,
+                fontFamily: MONO,
+                fontSize: '10px',
+                letterSpacing: '4px',
+                textTransform: 'uppercase',
+                cursor: canResetSubmit ? 'pointer' : 'not-allowed',
+                boxShadow: canResetSubmit ? NC.orangeGlow : 'none',
+                transition: 'all 0.2s',
+                '&:hover': canResetSubmit ? { background: 'rgba(255,102,0,0.2)', color: '#ffffff' } : {},
+              }}
+            >
+              {loading ? t.loading : t.resetSubmit}
+            </Box>
+
+            <Typography
+              onClick={() => {
+                setAuthMode('auth');
+                setError('');
+              }}
+              sx={{
+                fontFamily: MONO,
+                fontSize: '9px',
+                color: NC.textMuted,
+                textAlign: 'center',
+                cursor: 'pointer',
+                letterSpacing: '0.06em',
+                '&:hover': { color: NC.cyan },
+                transition: 'color 0.2s',
+              }}
+            >
+              {t.forgotBack}
+            </Typography>
+          </Box>
         ) : (
           <>
             {/* Tab bar */}
@@ -784,6 +1038,20 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
               )}
 
               {/* Age confirmation — register only */}
+              {success && (
+                <Box sx={{
+                  bgcolor:      'rgba(0,255,136,0.08)',
+                  border:       '1px solid rgba(0,255,136,0.3)',
+                  borderRadius: '0',
+                  px:           '12px',
+                  py:           '8px',
+                }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.green, letterSpacing: '0.04em' }}>
+                    {success}
+                  </Typography>
+                </Box>
+              )}
+
               {tab === 'register' && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <input
@@ -845,9 +1113,34 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
                 {loading ? t.loading : (tab === 'login' ? t.submitLogin : t.submitReg)}
               </Box>
 
+              {tab === 'login' && (
+                <Typography
+                  onClick={() => {
+                    setAuthMode('forgot');
+                    setError('');
+                    setSuccess('');
+                  }}
+                  sx={{
+                    fontFamily:    MONO,
+                    fontSize:      '9px',
+                    color:         NC.orange,
+                    textAlign:     'center',
+                    cursor:        'pointer',
+                    letterSpacing: '0.06em',
+                    '&:hover':     { color: NC.textPrimary },
+                    transition:    'color 0.2s',
+                  }}
+                >
+                  {t.forgotLink}
+                </Typography>
+              )}
+
               {/* Switch tab link */}
               <Typography
-                onClick={() => setTab(tab === 'login' ? 'register' : 'login')}
+                onClick={() => {
+                  setSuccess('');
+                  setTab(tab === 'login' ? 'register' : 'login');
+                }}
                 sx={{
                   fontFamily:    MONO,
                   fontSize:      '9px',

@@ -23,7 +23,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import pool from './db.js';
 import { verifyToken } from './middleware/auth-middleware.js';
-import { generateCode, sendVerificationEmail } from './email.js';
+import { generateCode, sendVerificationEmail, sendPasswordResetEmail } from './email.js';
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
 
@@ -47,6 +47,26 @@ function safeUser(row) {
     email_verified: row.email_verified ?? false,
     createdAt:      row.created_at,
   };
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RESET_CODE_TTL_MS = 15 * 60 * 1000;
+const RESET_RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_RESET_ATTEMPTS = 5;
+
+function normalizeEmail(email) {
+  return typeof email === 'string' ? email.toLowerCase().trim() : '';
+}
+
+function validEmail(email) {
+  return EMAIL_RE.test(email);
+}
+
+function forgotPasswordResponse(res) {
+  return res.json({
+    success: true,
+    message: 'If the email exists, a reset code has been sent.',
+  });
 }
 
 // ── Bankroll helpers ───────────────────────────────────────────────────────────
@@ -211,6 +231,144 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('[auth] login error:', err.message);
     return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const normalizedEmail = normalizeEmail(req.body?.email);
+    if (!normalizedEmail || !validEmail(normalizedEmail)) {
+      return res.status(400).json({ success: false, error: 'Valid email is required' });
+    }
+
+    const { rows } = await pool.query(
+      'SELECT id, email, password_reset_requested_at FROM users WHERE email = $1',
+      [normalizedEmail]
+    );
+    const user = rows[0];
+
+    if (!user) {
+      return forgotPasswordResponse(res);
+    }
+
+    if (user.password_reset_requested_at) {
+      const lastRequest = new Date(user.password_reset_requested_at).getTime();
+      if (Date.now() - lastRequest < RESET_RESEND_COOLDOWN_MS) {
+        return forgotPasswordResponse(res);
+      }
+    }
+
+    const code = generateCode();
+    const codeHash = await bcrypt.hash(code, 10);
+    const expires = new Date(Date.now() + RESET_CODE_TTL_MS);
+
+    await pool.query(
+      `UPDATE users
+       SET password_reset_code_hash = $1,
+           password_reset_expires = $2,
+           password_reset_requested_at = NOW(),
+           password_reset_attempts = 0
+       WHERE id = $3`,
+      [codeHash, expires, user.id]
+    );
+
+    await sendPasswordResetEmail(user.email, code);
+    return forgotPasswordResponse(res);
+  } catch (err) {
+    console.error('[auth] forgot-password error:', err.message);
+    return res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const normalizedEmail = normalizeEmail(req.body?.email);
+    const code = String(req.body?.code ?? '').replace(/\D/g, '').slice(0, 6);
+    const { password } = req.body ?? {};
+
+    if (!normalizedEmail || !validEmail(normalizedEmail)) {
+      return res.status(400).json({ success: false, error: 'Valid email is required' });
+    }
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ success: false, error: 'Reset code must be 6 digits' });
+    }
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, password_reset_code_hash, password_reset_expires, password_reset_attempts
+       FROM users
+       WHERE email = $1`,
+      [normalizedEmail]
+    );
+    const user = rows[0];
+    const invalidMessage = 'Invalid or expired reset code';
+
+    if (
+      !user ||
+      !user.password_reset_code_hash ||
+      !user.password_reset_expires ||
+      new Date(user.password_reset_expires) < new Date()
+    ) {
+      return res.status(400).json({ success: false, error: invalidMessage });
+    }
+
+    const attempts = Number(user.password_reset_attempts ?? 0);
+    if (attempts >= MAX_RESET_ATTEMPTS) {
+      await pool.query(
+        `UPDATE users
+         SET password_reset_code_hash = NULL,
+             password_reset_expires = NULL,
+             password_reset_requested_at = NULL,
+             password_reset_attempts = 0
+         WHERE id = $1`,
+        [user.id]
+      );
+      return res.status(400).json({ success: false, error: invalidMessage });
+    }
+
+    const validCode = await bcrypt.compare(code, user.password_reset_code_hash);
+    if (!validCode) {
+      const nextAttempts = attempts + 1;
+      if (nextAttempts >= MAX_RESET_ATTEMPTS) {
+        await pool.query(
+          `UPDATE users
+           SET password_reset_code_hash = NULL,
+               password_reset_expires = NULL,
+               password_reset_requested_at = NULL,
+               password_reset_attempts = 0
+           WHERE id = $1`,
+          [user.id]
+        );
+      } else {
+        await pool.query(
+          'UPDATE users SET password_reset_attempts = $1 WHERE id = $2',
+          [nextAttempts, user.id]
+        );
+      }
+      return res.status(400).json({ success: false, error: invalidMessage });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await pool.query(
+      `UPDATE users
+       SET password_hash = $1,
+           email_verified = true,
+           password_reset_code_hash = NULL,
+           password_reset_expires = NULL,
+           password_reset_requested_at = NULL,
+           password_reset_attempts = 0
+       WHERE id = $2`,
+      [passwordHash, user.id]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[auth] reset-password error:', err.message);
+    return res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
