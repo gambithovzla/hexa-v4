@@ -23,7 +23,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import pool from './db.js';
 import { verifyToken } from './middleware/auth-middleware.js';
-import { generateCode, sendVerificationEmail, sendPasswordResetEmail } from './email.js';
+import { generateCode, isEmailConfigured, sendVerificationEmail, sendPasswordResetEmail } from './email.js';
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
 
@@ -240,6 +240,12 @@ router.post('/forgot-password', async (req, res) => {
     const normalizedEmail = normalizeEmail(req.body?.email);
     if (!normalizedEmail || !validEmail(normalizedEmail)) {
       return res.status(400).json({ success: false, error: 'Valid email is required' });
+    }
+    if (!isEmailConfigured()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Email service is not configured. Please contact support.',
+      });
     }
 
     const { rows } = await pool.query(

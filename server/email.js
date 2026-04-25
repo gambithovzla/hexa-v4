@@ -1,19 +1,39 @@
 import { Resend } from 'resend';
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+let resendClient = null;
+let resendApiKey = null;
+
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return null;
+  if (!resendClient || resendApiKey !== apiKey) {
+    resendClient = new Resend(apiKey);
+    resendApiKey = apiKey;
+  }
+  return resendClient;
+}
+
+export function isEmailConfigured() {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
+function getEmailFrom() {
+  return process.env.EMAIL_FROM || 'H.E.X.A. Oracle <noreply@hexaoracle.lat>';
+}
 
 export function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export async function sendVerificationEmail(email, code) {
+  const resend = getResendClient();
   if (!resend) {
     console.warn('[email] RESEND_API_KEY not set - skipping email, code:', code);
     return false;
   }
   try {
     await resend.emails.send({
-      from: 'H.E.X.A. Oracle <noreply@hexaoracle.lat>',
+      from: getEmailFrom(),
       to: email,
       subject: 'Your H.E.X.A. verification code',
       html: `
@@ -35,13 +55,14 @@ export async function sendVerificationEmail(email, code) {
 }
 
 export async function sendPasswordResetEmail(email, code) {
+  const resend = getResendClient();
   if (!resend) {
     console.warn('[email] RESEND_API_KEY not set - skipping password reset email, code:', code);
     return false;
   }
   try {
     await resend.emails.send({
-      from: 'H.E.X.A. Oracle <noreply@hexaoracle.lat>',
+      from: getEmailFrom(),
       to: email,
       subject: 'Reset your H.E.X.A. password',
       html: `
