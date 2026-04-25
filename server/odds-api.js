@@ -16,6 +16,8 @@ const _cache = new Map();
 const _propCache = new Map();
 let _lastFetchMeta = {
   keyConfigured: Boolean(process.env.ODDS_API_KEY),
+  backupKeyConfigured: Boolean(process.env.ODDS_API_BACKUP_KEY),
+  keySlot: null,
   cacheKey: null,
   requestedDate: null,
   events: 0,
@@ -86,6 +88,7 @@ function setLastFetchMeta(patch) {
   _lastFetchMeta = {
     ..._lastFetchMeta,
     keyConfigured: Boolean(process.env.ODDS_API_KEY),
+    backupKeyConfigured: Boolean(process.env.ODDS_API_BACKUP_KEY),
     fetchedAt: new Date().toISOString(),
     ...patch,
   };
@@ -95,6 +98,7 @@ export function getOddsApiStatus() {
   return {
     ..._lastFetchMeta,
     keyConfigured: Boolean(process.env.ODDS_API_KEY),
+    backupKeyConfigured: Boolean(process.env.ODDS_API_BACKUP_KEY),
     cachedEvents: [..._cache.values()].reduce((sum, entry) => sum + (entry.data?.length ?? 0), 0),
   };
 }
@@ -110,17 +114,21 @@ export function getOddsApiStatus() {
  * @returns {Promise<Array>} Array of normalized game odds objects
  */
 export async function getGameOdds(options = {}) {
-  const apiKey = process.env.ODDS_API_KEY;
+  const primaryApiKey = process.env.ODDS_API_KEY;
+  const backupApiKey = process.env.ODDS_API_BACKUP_KEY;
+  let apiKey = primaryApiKey || backupApiKey;
+  let keySlot = primaryApiKey ? 'primary' : 'backup';
   const requestedDate = normalizeDateArg(options);
   const cacheKey = getCacheKey(requestedDate);
 
-  console.log('[odds-api] API key present:', apiKey ? `${apiKey.substring(0, 8)}...` : 'MISSING');
+  console.log('[odds-api] API key present:', apiKey ? `${keySlot}:${apiKey.substring(0, 8)}...` : 'MISSING');
   console.log('[odds-api] Spring Training:', isSpringTraining());
 
   if (!apiKey) {
     console.warn('[odds-api] ODDS_API_KEY not set — skipping fetch');
     setLastFetchMeta({
       cacheKey,
+      keySlot: null,
       requestedDate,
       events: 0,
       rawEvents: null,
@@ -139,6 +147,7 @@ export async function getGameOdds(options = {}) {
     console.log('[odds-api] Returning cached data:', cached.data.length, 'events', cacheKey);
     setLastFetchMeta({
       cacheKey,
+      keySlot: cached.keySlot ?? null,
       requestedDate,
       events: cached.data.length,
       rawEvents: cached.rawEvents ?? null,
@@ -179,10 +188,129 @@ export async function getGameOdds(options = {}) {
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+      const retryBackupFullMarkets = async () => {
+        if (!backupApiKey || backupApiKey === apiKey || !body.includes('OUT_OF_USAGE_CREDITS')) return null;
+        console.warn('[odds-api] Primary key is out of usage credits; retrying full markets with backup key');
+        const backupParams = new URLSearchParams({
+          apiKey: backupApiKey,
+          regions: 'us',
+          markets: 'h2h,spreads,totals',
+          oddsFormat: 'american',
+          dateFormat: 'iso',
+        });
+        const window = getDateWindow(requestedDate);
+        if (window) {
+          backupParams.set('commenceTimeFrom', window.from);
+          backupParams.set('commenceTimeTo', window.to);
+        }
+        const backupUrl = `${ODDS_API_BASE}/sports/baseball_mlb/odds/?${backupParams.toString()}`;
+        const backupRes = await fetch(backupUrl);
+        const backupQuota = {
+          remaining: backupRes.headers.get('x-requests-remaining'),
+          used: backupRes.headers.get('x-requests-used'),
+          last: backupRes.headers.get('x-requests-last'),
+        };
+        if (!backupRes.ok) return null;
+
+        const backupRaw = await backupRes.json();
+        const backupRawEvents = Array.isArray(backupRaw) ? backupRaw.length : null;
+        const backupFirstEventBookmakers = Array.isArray(backupRaw) && backupRaw[0]?.bookmakers
+          ? backupRaw[0].bookmakers.length
+          : null;
+        const backupData = (Array.isArray(backupRaw) ? backupRaw : []).map(normalizeEvent).filter(Boolean);
+        _cache.set(cacheKey, {
+          data: backupData,
+          ts: Date.now(),
+          quota: backupQuota,
+          rawEvents: backupRawEvents,
+          normalizedEvents: backupData.length,
+          firstEventBookmakers: backupFirstEventBookmakers,
+          markets: 'h2h,spreads,totals',
+          keySlot: 'backup',
+        });
+        setLastFetchMeta({
+          cacheKey,
+          keySlot: 'backup',
+          requestedDate,
+          events: backupData.length,
+          rawEvents: backupRawEvents,
+          normalizedEvents: backupData.length,
+          firstEventBookmakers: backupFirstEventBookmakers,
+          status: backupRes.status,
+          ok: true,
+          error: null,
+          quota: backupQuota,
+          markets: 'h2h,spreads,totals',
+          fallbackReason: 'primary_out_of_usage_credits',
+        });
+        return backupData;
+      };
+      const backupFullMarketData = await retryBackupFullMarkets();
+      if (backupFullMarketData) return backupFullMarketData;
+      const retryMoneylineOnly = async () => {
+        if (!body.includes('OUT_OF_USAGE_CREDITS') || Number(quota.remaining) < 1) return null;
+        console.warn('[odds-api] Remaining quota cannot cover h2h+spreads+totals; retrying with h2h moneyline only');
+        const fallbackParams = new URLSearchParams({
+          apiKey,
+          regions: 'us',
+          markets: 'h2h',
+          oddsFormat: 'american',
+          dateFormat: 'iso',
+        });
+        const window = getDateWindow(requestedDate);
+        if (window) {
+          fallbackParams.set('commenceTimeFrom', window.from);
+          fallbackParams.set('commenceTimeTo', window.to);
+        }
+        const fallbackUrl = `${ODDS_API_BASE}/sports/baseball_mlb/odds/?${fallbackParams.toString()}`;
+        const fallbackRes = await fetch(fallbackUrl);
+        const fallbackQuota = {
+          remaining: fallbackRes.headers.get('x-requests-remaining'),
+          used: fallbackRes.headers.get('x-requests-used'),
+          last: fallbackRes.headers.get('x-requests-last'),
+        };
+        if (!fallbackRes.ok) return null;
+
+        const fallbackRaw = await fallbackRes.json();
+        const fallbackRawEvents = Array.isArray(fallbackRaw) ? fallbackRaw.length : null;
+        const fallbackFirstEventBookmakers = Array.isArray(fallbackRaw) && fallbackRaw[0]?.bookmakers
+          ? fallbackRaw[0].bookmakers.length
+          : null;
+        const fallbackData = (Array.isArray(fallbackRaw) ? fallbackRaw : []).map(normalizeEvent).filter(Boolean);
+        _cache.set(cacheKey, {
+          data: fallbackData,
+          ts: Date.now(),
+          quota: fallbackQuota,
+          rawEvents: fallbackRawEvents,
+          normalizedEvents: fallbackData.length,
+          firstEventBookmakers: fallbackFirstEventBookmakers,
+          markets: 'h2h',
+          keySlot,
+        });
+        setLastFetchMeta({
+          cacheKey,
+          keySlot,
+          requestedDate,
+          events: fallbackData.length,
+          rawEvents: fallbackRawEvents,
+          normalizedEvents: fallbackData.length,
+          firstEventBookmakers: fallbackFirstEventBookmakers,
+          status: fallbackRes.status,
+          ok: true,
+          error: null,
+          quota: fallbackQuota,
+          markets: 'h2h',
+          partialMarkets: true,
+        });
+        return fallbackData;
+      };
+      const moneylineOnlyData = await retryMoneylineOnly();
+      if (moneylineOnlyData) return moneylineOnlyData;
       console.warn(`[odds-api] API error ${res.status} — body: ${body.substring(0, 200)}`);
       console.warn('[odds-api] Note: The Odds API does not list Spring Training games. Returning cached data.');
       setLastFetchMeta({
         cacheKey,
+        keySlot,
         requestedDate,
         events: cached?.data?.length ?? 0,
         rawEvents: cached?.rawEvents ?? null,
@@ -214,6 +342,7 @@ export async function getGameOdds(options = {}) {
       _cache.set(cacheKey, { ...cached, ts: Date.now() });
       setLastFetchMeta({
         cacheKey,
+        keySlot: cached.keySlot ?? keySlot,
         requestedDate,
         events: cached.data.length,
         rawEvents,
@@ -231,9 +360,10 @@ export async function getGameOdds(options = {}) {
       console.warn('[odds-api] 0 events returned — likely all games started or Spring Training');
     }
 
-    _cache.set(cacheKey, { data, ts: Date.now(), quota, rawEvents, normalizedEvents: data.length, firstEventBookmakers });
+    _cache.set(cacheKey, { data, ts: Date.now(), quota, rawEvents, normalizedEvents: data.length, firstEventBookmakers, keySlot });
     setLastFetchMeta({
       cacheKey,
+      keySlot,
       requestedDate,
       events: data.length,
       rawEvents,
@@ -249,6 +379,7 @@ export async function getGameOdds(options = {}) {
     console.error('[odds-api] fetch error:', err.message);
     setLastFetchMeta({
       cacheKey,
+      keySlot: cached?.keySlot ?? keySlot,
       requestedDate,
       events: cached?.data?.length ?? 0,
       rawEvents: cached?.rawEvents ?? null,

@@ -193,6 +193,7 @@ Ver [.env.example](.env.example) para la lista completa. Resumen:
 | `DATABASE_URL` | Sí | Connection string Postgres |
 | `JWT_SECRET` | Sí | Secreto para firmar tokens (cambiar en prod) |
 | `ODDS_API_KEY` | Si para cuotas reales | Key de The Odds API para moneyline/runline/totales MLB |
+| `ODDS_API_BACKUP_KEY` | No | Key secundaria de The Odds API; se usa si la principal queda sin créditos |
 | `PORT` | No | Puerto del server (default `3001`) |
 | `NODE_ENV` | No | `development` / `production` |
 | `XAI_API_KEY` | No | Key xAI para modos Grok / Dual |
