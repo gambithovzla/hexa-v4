@@ -263,6 +263,7 @@ function normalizePlayByPlay(raw, gamePk) {
   const ld = raw?.liveData ?? {};
   const linescore = ld?.linescore ?? {};
   const plays = ld?.plays ?? {};
+  const boxscore = ld?.boxscore ?? {};
 
   const status = gd?.status ?? {};
   const isLive = isLiveDetailedState(status);
@@ -357,6 +358,7 @@ function normalizePlayByPlay(raw, gamePk) {
       walks: normalizedPlays.filter(p => p.isWalk).length,
     },
     plays: normalizedPlays,
+    playerStats: extractPlayerStats(boxscore),
     lastUpdated: new Date().toISOString(),
   };
 }
