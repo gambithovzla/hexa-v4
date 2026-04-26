@@ -42,6 +42,7 @@ import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
 import LearningCenter      from './components/LearningCenter';
 import MLBStandingsPanel   from './components/MLBStandingsPanel';
+import WhatsAppSupport     from './components/WhatsAppSupport';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
 
@@ -249,7 +250,7 @@ function MobileBackBar({ lang, matchup, onBack }) {
   );
 }
 
-function AppFooter() {
+function AppFooter({ lang }) {
   return (
     <Box
       component="footer"
@@ -262,6 +263,7 @@ function AppFooter() {
         textAlign:  'center',
       }}
     >
+      <WhatsAppSupport lang={lang} variant="footer" />
       <Typography
         sx={{
           fontFamily:   BARLOW,
@@ -585,7 +587,7 @@ export default function App() {
         </Box>
 
         {/* ── Footer ── */}
-        <AppFooter />
+        <AppFooter lang={lang} />
       </Box>
   );
 }
