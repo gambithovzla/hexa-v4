@@ -115,7 +115,9 @@ export function createArchitect({ _callArchitect }) {
     mode,
     N,
     lang = 'en',
-    engine = 'claude-sonnet-4-6',
+    provider = 'anthropic',
+    tier = 'fast',
+    model,
     timeoutMs = 90_000,
   }) {
     if (!composedParlays?.length) {
@@ -130,11 +132,14 @@ export function createArchitect({ _callArchitect }) {
       rawText = await _callArchitect({
         systemPrompt,
         userPrompt,
-        model: engine,
+        provider,
+        tier,
+        model,
         timeoutMs,
       });
     } catch (err) {
       console.error('[parlay-synergy] architect LLM call failed:', err.message);
+      if (err.noFallback) throw err;
       return buildFallback(composedParlays);
     }
 

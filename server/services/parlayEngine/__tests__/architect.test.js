@@ -174,6 +174,31 @@ describe('askArchitect — happy path', () => {
     assert.strictEqual(result.hidden_correlations_detected.length, 1);
     assert.strictEqual(result.hidden_correlations_detected[0].type, 'positive');
   });
+
+  it('passes the selected provider and model to the LLM caller', async () => {
+    let captured = null;
+    const ask = createArchitect({
+      _callArchitect: async (opts) => {
+        captured = opts;
+        return validDecisionJson();
+      },
+    });
+
+    await ask({
+      candidatePool: POOL,
+      composedParlays: makeComposedParlays(),
+      mode: 'balanced',
+      N: 3,
+      lang: 'en',
+      provider: 'openai',
+      tier: 'deep',
+      model: 'gpt-5.5',
+    });
+
+    assert.strictEqual(captured.provider, 'openai');
+    assert.strictEqual(captured.tier, 'deep');
+    assert.strictEqual(captured.model, 'gpt-5.5');
+  });
 });
 
 // ── Fallback scenarios ────────────────────────────────────────────────────
@@ -248,6 +273,30 @@ describe('askArchitect — fallback', () => {
     // Fallback uses top-1 composer parlay legs
     const expectedIds = makeComposedParlays()[0].legs.map(l => l.candidateId);
     assert.deepStrictEqual(result.final_legs, expectedIds);
+  });
+
+  it('rethrows selected-provider configuration errors instead of falling back', async () => {
+    const ask = createArchitect({
+      _callArchitect: async () => {
+        const err = new Error('OPENAI_API_KEY is not configured');
+        err.noFallback = true;
+        throw err;
+      },
+    });
+
+    await assert.rejects(
+      () => ask({
+        candidatePool: POOL,
+        composedParlays: makeComposedParlays(),
+        mode: 'balanced',
+        N: 3,
+        lang: 'en',
+        provider: 'openai',
+        tier: 'deep',
+        model: 'gpt-5.5',
+      }),
+      /OPENAI_API_KEY is not configured/,
+    );
   });
 
   it('fallback combined_probability equals top composer combinedMarginalProbability', async () => {
