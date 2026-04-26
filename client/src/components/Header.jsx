@@ -17,6 +17,7 @@ import HexaHelpModal from './HexaHelpModal';
 import PricingModal from './PricingModal';
 import AdminCreditPanel from './AdminCreditPanel';
 import TerminalGuide from './TerminalGuide';
+import WhatsAppSupport from './WhatsAppSupport';
 import { useAuth } from '../store/authStore';
 import { C, BARLOW, MONO } from '../theme';
 
@@ -1167,6 +1168,9 @@ export default function Header({ lang = 'en', onLangToggle, activeTab, onTabChan
 
         {/* Help button */}
         <HelpButton lang={lang} />
+
+        {/* WhatsApp support */}
+        <WhatsAppSupport lang={lang} />
 
         {/* Language toggle */}
         <LanguageToggle lang={lang} onToggle={onLangToggle} />
