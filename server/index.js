@@ -50,6 +50,9 @@ import {
   composeParlays,
   askArchitect,
   resolveLegs,
+  assertArchitectProviderConfigured,
+  normalizeArchitectProvider,
+  resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
 import { runParlaySynergyMigrations } from './migrate.js';
 
@@ -1021,21 +1024,18 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     minConfidence  = 55,
     allowSGP       = true,
     lang           = 'en',
-    engine         = 'sonnet',
+    engine         = 'anthropic',
     model          = 'fast',
     date,
   } = req.body;
 
   const resolvedDate   = date || new Date().toISOString().split('T')[0];
   const resolvedLang   = normalizeRequestLanguage(lang);
-  const resolvedEngine = normalizeRequestedEngine(engine);
-
-  // Resolve the actual LLM model string from engine + model tier
-  const LLM_MODEL_MAP = {
-    sonnet: { fast: 'claude-sonnet-4-6', deep: 'claude-sonnet-4-6' },
-    grok:   { fast: process.env.XAI_ORACLE_MODEL ?? 'grok-4-fast-reasoning', deep: process.env.XAI_ORACLE_MODEL ?? 'grok-4-fast-reasoning' },
-  };
-  const resolvedModel = LLM_MODEL_MAP[resolvedEngine]?.[model] ?? 'claude-sonnet-4-6';
+  const resolvedEngine = normalizeArchitectProvider(engine);
+  const resolvedModelSelection = resolveArchitectModelSelection({
+    provider: resolvedEngine,
+    tier: model,
+  });
 
   // ── Input validation ────────────────────────────────────────────────────
   if (!gameIds || !Array.isArray(gameIds) || gameIds.length < 2) {
@@ -1050,6 +1050,11 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
   }
   if (model && !['fast', 'deep'].includes(model)) {
     return res.status(400).json({ success: false, error: 'Invalid model' });
+  }
+  try {
+    assertArchitectProviderConfigured(resolvedEngine);
+  } catch (err) {
+    return res.status(400).json({ success: false, error: err.message, engine: resolvedEngine });
   }
 
   const PARLAY_SYNERGY_COST = model === 'deep' ? 12 : 6;
@@ -1168,7 +1173,9 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       mode,
       N: requestedLegs,
       lang: resolvedLang,
-      engine: resolvedModel,
+      provider: resolvedModelSelection.provider,
+      tier: resolvedModelSelection.tier,
+      model: resolvedModelSelection.model,
     });
     const llmMs    = Date.now() - llmStart;
     const totalMs  = Date.now() - totalStart;
@@ -1253,7 +1260,10 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
           validated:                      true,
           overrode_composer:              overrodeComposer,
           hidden_correlations_detected:   architectDecision.hidden_correlations_detected ?? [],
-          model:                          resolvedModel,
+          provider:                       resolvedModelSelection.provider,
+          provider_label:                 resolvedModelSelection.providerLabel,
+          model:                          resolvedModelSelection.model,
+          tier:                           resolvedModelSelection.tier,
           timings: { composer_ms: composerMs, llm_ms: llmMs, total_ms: totalMs },
         },
       },

@@ -6,7 +6,12 @@ export { buildCorrelationMatrix, getCorrelation, getRiskDistance, pairKey } from
 export { composeParlays, isParlayValid } from './composer.js';
 export { askArchitect, createArchitect, resolveLegs } from './architect.js';
 export { PARLAY_ARCHITECT_SYSTEM, buildArchitectUserMessage } from './prompts.js';
-export { callArchitect } from './llmClient.js';
+export {
+  callArchitect,
+  assertArchitectProviderConfigured,
+  normalizeArchitectProvider,
+  resolveArchitectModelSelection,
+} from './llmClient.js';
 // Phase 3: correl.js     → buildCorrelationMatrix
 // Phase 4: composer.js   → composeParlays
 // Phase 5: architect.js  → askArchitect

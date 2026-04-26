@@ -34,6 +34,13 @@ const L = {
       dreamer:      'Longest parlays, max reward',
     },
     legs: 'LEGS',
+    engine: 'ENGINE',
+    engineDesc: 'Choose exactly one LLM for this run',
+    engines: {
+      anthropic: 'Anthropic',
+      openai:    'GPT-5.5',
+      xai:       'Grok Reasoning',
+    },
     model: 'MODEL TIER',
     fast: 'Fast',
     deep: 'Deep',
@@ -66,6 +73,7 @@ const L = {
     candPool: 'Pool',
     rejected: 'Rejected',
     model_used: 'Model',
+    engine_used: 'Engine',
     selectAll: 'SELECT ALL',
     clearAll: 'CLEAR ALL',
   },
@@ -92,6 +100,13 @@ const L = {
       dreamer:      'Parlays largos, máxima recompensa',
     },
     legs: 'PATAS',
+    engine: 'MOTOR',
+    engineDesc: 'Elige exactamente un LLM para esta corrida',
+    engines: {
+      anthropic: 'Anthropic',
+      openai:    'GPT-5.5',
+      xai:       'Grok Reasoning',
+    },
     model: 'NIVEL DE MODELO',
     fast: 'Rápido',
     deep: 'Profundo',
@@ -124,12 +139,19 @@ const L = {
     candPool: 'Pool',
     rejected: 'Rechazados',
     model_used: 'Modelo',
+    engine_used: 'Motor',
     selectAll: 'SELECCIONAR TODO',
     clearAll: 'LIMPIAR',
   },
 };
 
 const MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
+
+const LLM_ENGINES = [
+  { key: 'anthropic', short: 'ANTHROPIC', color: C.cyan },
+  { key: 'openai', short: 'GPT-5.5', color: C.accent },
+  { key: 'xai', short: 'GROK', color: C.green },
+];
 
 const LEGS_MARKS = [2, 5, 10, 15, 20, 25, 30].map(v => ({ value: v, label: String(v) }));
 
@@ -383,6 +405,7 @@ function ResultPanel({ result, t, lang, expandedAlt, setExpandedAlt }) {
           </Typography>
         </Box>
         <Box sx={{ px: '14px', py: '10px' }}>
+          <StatRow label={t.engine_used} value={architect_meta?.provider_label ?? architect_meta?.provider ?? '—'} color={C.accent} />
           <StatRow label={t.model_used} value={architect_meta?.model ?? '—'} color={C.textSecondary} />
           <StatRow label={t.candPool}   value={composer_meta?.candidate_pool_size ?? '—'} />
           <StatRow label={t.rejected}   value={composer_meta?.rejected_by_no_go ?? '—'} />
@@ -406,6 +429,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [mode, setMode] = useState('balanced');
   const [requestedLegs, setRequestedLegs] = useState(3);
+  const [llmEngine, setLlmEngine] = useState('anthropic');
   const [model, setModel] = useState('fast');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -446,6 +470,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
           gameIds:       [...selectedIds],
           requestedLegs,
           mode,
+          engine: llmEngine,
           model,
           lang,
           date,
@@ -691,6 +716,49 @@ export default function ParlayArchitect({ lang = 'en' }) {
                 }
               </Typography>
             )}
+          </Panel>
+
+          {/* LLM engine */}
+          <Panel>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', mb: '8px' }}>
+              <SectionLabel>{t.engine}</SectionLabel>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.54rem', color: C.textDim, letterSpacing: '0.06em', textAlign: 'right' }}>
+                {t.engineDesc}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: '7px' }}>
+              {LLM_ENGINES.map(({ key, short, color }) => {
+                const active = llmEngine === key;
+                return (
+                  <Box
+                    key={key}
+                    onClick={() => setLlmEngine(key)}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      py: '8px',
+                      px: '9px',
+                      cursor: 'pointer',
+                      border: `1px solid ${active ? color : C.borderLight}`,
+                      borderLeft: `3px solid ${active ? color : 'transparent'}`,
+                      bgcolor: active ? `${color}14` : 'transparent',
+                      boxShadow: active ? `0 0 14px ${color}22` : 'none',
+                      transition: 'all 0.12s ease',
+                      '&:hover': { borderColor: color, bgcolor: `${color}0f` },
+                    }}
+                  >
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.66rem', color: active ? color : C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      {t.engines[key]}
+                    </Typography>
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.54rem', color: active ? color : C.textMuted, letterSpacing: '0.14em' }}>
+                      [{short}]
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
           </Panel>
 
           {/* Model tier */}
