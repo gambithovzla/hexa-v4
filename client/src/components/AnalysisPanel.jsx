@@ -27,6 +27,7 @@ const L = {
       moneyline:  'Moneyline',
       runline:    'Run Line',
       totals:     'Over/Under',
+      props:      'Player Props',
       pitcherprops:'🔥 Pitcher Props (Strikeouts)',
       batterprops: '🦇 Batter Props (HR, Hits)',
       fadehits:    '🚫 FADE HITS',
@@ -83,6 +84,7 @@ const L = {
       moneyline:  'Moneyline',
       runline:    'Línea de Carreras',
       totals:     'Totales (O/U)',
+      props:      'Props de Jugador',
       pitcherprops:'🔥 Pitcher Props (Ponches)',
       batterprops: '🦇 Batter Props (HR, Hits)',
       fadehits:    '🚫 FADE HITS',
@@ -310,6 +312,7 @@ function BetTypeSelect({ value, onChange, t }) {
     { value: 'moneyline',   label: t.betType.moneyline   },
     { value: 'runline',     label: t.betType.runline      },
     { value: 'totals',      label: t.betType.totals       },
+    { value: 'props',       label: t.betType.props        },
     { value: 'Pitcher Props', label: t.betType.pitcherprops },
     { value: 'Batter Props',  label: t.betType.batterprops  },
     { value: 'fade_hits',     label: t.betType.fadehits     },
@@ -431,8 +434,8 @@ function ModelPicker({ value, onChange, t, lang, isAdmin = false }) {
           boxShadow:     C.greenGlow,
         }}>
           {lang === 'es'
-            ? 'H.E.X.A. evaluará TODOS los tipos de apuesta y te dará el que tenga mayor probabilidad de acierto.'
-            : 'H.E.X.A. will evaluate ALL bet types and give you the one with the highest probability of hitting.'}
+            ? 'H.E.X.A. rankeará el enfoque elegido y te dará el pick con mayor probabilidad de acierto.'
+            : 'H.E.X.A. will rank the selected focus and give you the pick with the highest probability of hitting.'}
         </Box>
       )}
     </Box>
@@ -1178,6 +1181,7 @@ export default function AnalysisPanel({
             date:    selectedDate,
             lang,
             engine: engineMode,
+            betType,
           };
         } else {
           const g = selectedGames[0];
@@ -1186,6 +1190,7 @@ export default function AnalysisPanel({
             date:   selectedDate,
             lang,
             engine: engineMode,
+            betType,
           };
         }
       } else if (mode === 'single') {
@@ -1411,10 +1416,8 @@ export default function AnalysisPanel({
           <MatchupHeader games={selectedGames} mode={mode} />
         )}
 
-        {/* Bet type — hidden in safe mode (system decides) */}
-        {modelMode !== 'safe' && (
-          <BetTypeSelect value={betType} onChange={setBetType} t={t} />
-        )}
+        {/* Bet type */}
+        <BetTypeSelect value={betType} onChange={setBetType} t={t} />
 
         {/* Model picker */}
         <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} isAdmin={isAdmin} />

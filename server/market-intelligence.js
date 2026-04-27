@@ -1,4 +1,5 @@
 import { calculateImpliedProbability } from './odds-api.js';
+import { filterCandidatesByMarketFocus, normalizeMarketFocus } from './market-focus.js';
 
 function toNumber(value) {
   const parsed = Number(value);
@@ -707,6 +708,7 @@ export function buildDeterministicSafePayload({
   xgboostResult = null,
   lang = 'en',
   llmData = null,
+  marketFocus = 'all',
 }) {
   const ml = oddsData?.odds?.moneyline ?? {};
   const rl = oddsData?.odds?.runLine ?? {};
@@ -734,7 +736,7 @@ export function buildDeterministicSafePayload({
     ...buildPitcherPropCandidates({ features, oddsData, lang }),
   ];
 
-  const candidates = [
+  const supportedCandidates = [
     {
       pick: `${awayAbbr} Moneyline`,
       type: 'Moneyline',
@@ -790,7 +792,12 @@ export function buildDeterministicSafePayload({
       line: ou.total ?? 8.5,
     },
     ...playerPropCandidates,
-  ]
+  ];
+  const normalizedMarketFocus = normalizeMarketFocus(marketFocus);
+  const focusedSupportedCandidates = filterCandidatesByMarketFocus(supportedCandidates, normalizedMarketFocus);
+  const candidateInput = focusedSupportedCandidates.length > 0 ? focusedSupportedCandidates : supportedCandidates;
+
+  const candidates = candidateInput
     .map((candidate) => {
       const impliedProbability = candidate.odds != null
         ? calculateImpliedProbability(candidate.odds)
@@ -882,6 +889,22 @@ export function buildDeterministicSafePayload({
   if (!alertFlags.includes(deterministicFlag)) {
     alertFlags.push(deterministicFlag);
   }
+  if (normalizedMarketFocus !== 'all') {
+    const focusFlag = lang === 'es'
+      ? `Safe selector: enfoque de mercado ${normalizedMarketFocus}`
+      : `Safe selector: market focus ${normalizedMarketFocus}`;
+    if (!alertFlags.includes(focusFlag)) {
+      alertFlags.push(focusFlag);
+    }
+    if (focusedSupportedCandidates.length === 0) {
+      const fallbackFlag = lang === 'es'
+        ? 'No hubo candidatos disponibles para el enfoque solicitado; se uso el ranking general.'
+        : 'No candidates were available for the requested focus; general ranking was used.';
+      if (!alertFlags.includes(fallbackFlag)) {
+        alertFlags.push(fallbackFlag);
+      }
+    }
+  }
   if (belowThreshold) {
     const thresholdFlag = lang === 'es'
       ? `Sin Safe Pick claro: ningun mercado supera ${SAFE_PROBABILITY_THRESHOLD}% de probabilidad`
@@ -941,5 +964,6 @@ export function buildDeterministicSafePayload({
     engine_variants: Array.isArray(llmData?.engine_variants) ? llmData.engine_variants : null,
     selection_method: 'deterministic_supported_markets_v2',
     safe_scope: buildSafeScope({ oddsData, lang }),
+    market_focus: normalizedMarketFocus,
   };
 }

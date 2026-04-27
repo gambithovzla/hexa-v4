@@ -258,7 +258,7 @@ export function clearPoolCache() {
  * 'all' values pass everything through.
  *
  * Allowed values: 'all' | 'moneyline' | 'runline' | 'totals' |
- *                 'pitcher_props' | 'batter_props'
+ *                 'props' | 'pitcher_props' | 'batter_props'
  */
 export function filterCandidatesByBetType(candidates, betType) {
   if (!betType || betType === 'all') return candidates;
@@ -269,6 +269,8 @@ export function filterCandidatesByBetType(candidates, betType) {
       return candidates.filter(c => c.marketType === 'runline');
     case 'totals':
       return candidates.filter(c => c.marketType === 'overunder');
+    case 'props':
+      return candidates.filter(c => c.marketType === 'playerprop');
     case 'pitcher_props':
       return candidates.filter(c => c.marketType === 'playerprop' && c.propKind === 'k');
     case 'batter_props':

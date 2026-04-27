@@ -83,6 +83,7 @@ const L = {
       moneyline:    'Moneyline',
       runline:      'Run Line',
       totals:       'Over/Under',
+      props:        'Player Props',
       pitcher_props:'Pitcher Props (Ks)',
       batter_props: 'Batter Props (Hits)',
     },
@@ -159,6 +160,7 @@ const L = {
       moneyline:    'Moneyline',
       runline:      'Línea de Carreras',
       totals:       'Totales (O/U)',
+      props:        'Props de Jugador',
       pitcher_props:'Pitcher Props (Ponches)',
       batter_props: 'Batter Props (Hits)',
     },
@@ -166,8 +168,7 @@ const L = {
 };
 
 const MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
-
-const BET_TYPES = ['all', 'moneyline', 'runline', 'totals', 'pitcher_props', 'batter_props'];
+const BET_TYPES = ['all', 'moneyline', 'runline', 'totals', 'props', 'pitcher_props', 'batter_props'];
 
 const LLM_ENGINES = [
   { key: 'anthropic', short: 'ANTHROPIC', color: C.cyan },
