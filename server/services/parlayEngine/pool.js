@@ -250,6 +250,36 @@ export function clearPoolCache() {
   poolCache.clear();
 }
 
+/**
+ * Filter a candidate pool by bet-type focus.
+ *
+ * Mirrors the "Bet Focus" selector exposed in the single-game Analysis view so
+ * the user can constrain the architect to a single market family. Unknown or
+ * 'all' values pass everything through.
+ *
+ * Allowed values: 'all' | 'moneyline' | 'runline' | 'totals' |
+ *                 'props' | 'pitcher_props' | 'batter_props'
+ */
+export function filterCandidatesByBetType(candidates, betType) {
+  if (!betType || betType === 'all') return candidates;
+  switch (betType) {
+    case 'moneyline':
+      return candidates.filter(c => c.marketType === 'moneyline');
+    case 'runline':
+      return candidates.filter(c => c.marketType === 'runline');
+    case 'totals':
+      return candidates.filter(c => c.marketType === 'overunder');
+    case 'props':
+      return candidates.filter(c => c.marketType === 'playerprop');
+    case 'pitcher_props':
+      return candidates.filter(c => c.marketType === 'playerprop' && c.propKind === 'k');
+    case 'batter_props':
+      return candidates.filter(c => c.marketType === 'playerprop' && c.propKind === 'hits');
+    default:
+      return candidates;
+  }
+}
+
 // Default export uses real production dependencies.
 export const buildCandidatePool = createPoolBuilder({
   _getTodayGames: getTodayGames,

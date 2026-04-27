@@ -3,7 +3,7 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPoolBuilder, clearPoolCache } from '../pool.js';
+import { createPoolBuilder, clearPoolCache, filterCandidatesByBetType } from '../pool.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -281,5 +281,39 @@ describe('buildCandidatePool', () => {
 
     assert.ok(result.length >= 2, `expected >=2 candidates even without odds, got ${result.length}`);
     assert.ok(result.every(c => c.marketType === 'moneyline'), 'main-market candidates preserved');
+  });
+});
+
+describe('filterCandidatesByBetType', () => {
+  function pool() {
+    return [
+      { candidateId: 'a', marketType: 'moneyline',  propKind: null   },
+      { candidateId: 'b', marketType: 'moneyline',  propKind: null   },
+      { candidateId: 'c', marketType: 'runline',    propKind: null   },
+      { candidateId: 'd', marketType: 'overunder',  propKind: null   },
+      { candidateId: 'e', marketType: 'playerprop', propKind: 'hits' },
+      { candidateId: 'f', marketType: 'playerprop', propKind: 'k'    },
+    ];
+  }
+
+  it('passes through everything for "all" or undefined', () => {
+    const p = pool();
+    assert.strictEqual(filterCandidatesByBetType(p, 'all').length, 6);
+    assert.strictEqual(filterCandidatesByBetType(p, undefined).length, 6);
+    assert.strictEqual(filterCandidatesByBetType(p, null).length, 6);
+  });
+
+  it('isolates each market family', () => {
+    const p = pool();
+    assert.deepStrictEqual(filterCandidatesByBetType(p, 'moneyline').map(c => c.candidateId), ['a', 'b']);
+    assert.deepStrictEqual(filterCandidatesByBetType(p, 'runline').map(c => c.candidateId), ['c']);
+    assert.deepStrictEqual(filterCandidatesByBetType(p, 'totals').map(c => c.candidateId), ['d']);
+    assert.deepStrictEqual(filterCandidatesByBetType(p, 'pitcher_props').map(c => c.candidateId), ['f']);
+    assert.deepStrictEqual(filterCandidatesByBetType(p, 'batter_props').map(c => c.candidateId), ['e']);
+  });
+
+  it('treats unknown values as a no-op', () => {
+    const p = pool();
+    assert.strictEqual(filterCandidatesByBetType(p, 'lottery').length, 6);
   });
 });

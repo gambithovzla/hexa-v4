@@ -14,6 +14,7 @@ import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken, requireVerifiedEmail } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
+import { regradeBacktestProps } from './services/backtestRegrader.js';
 import pool from './db.js';
 import lemonRouter from './lemon.js';
 import picksRouter from './routes/picks.js';
@@ -46,6 +47,7 @@ import { getGameHighlightsAvailability } from './live-feed.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
 import {
   buildCandidatePool,
+  filterCandidatesByBetType,
   enrichPoolWithRiskVectors,
   buildCorrelationMatrix,
   composeParlays,
@@ -149,6 +151,21 @@ function normalizeOracleConfidence(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return Math.round(parsed);
+}
+
+// Cheap structural check used by the backtest grader to short-circuit player
+// prop picks before the loose Over/Under regex below mistakes them for game
+// totals. Recognises "<player> Over/Under <line> <stat>" and the stat-first
+// variant "<player> <stat> Over/Under <line>" in EN/ES.
+const PLAYER_PROP_STAT_TOKENS = '(?:total\\s+bases?|tb|bases\\s+totales|strikeouts?|ks?|ponches?|hits?|home\\s+runs?|hrs?|jonrones?|cuadrangulares?|rbis?|carreras?\\s+impulsadas?|stolen\\s+bases?|sbs?|bases?\\s+robadas?|walks?|bbs?|bases?\\s+por\\s+bolas?|runs?\\s+scored|carreras?\\s+anotadas?)';
+const PLAYER_PROP_DIRECTIONS = '(?:over|under|m[aá]s\\s+de|menos\\s+de)';
+const PLAYER_PROP_RE_DIR_FIRST = new RegExp(`\\b${PLAYER_PROP_DIRECTIONS}\\s+\\d+\\.?\\d*\\s+${PLAYER_PROP_STAT_TOKENS}\\b`, 'i');
+const PLAYER_PROP_RE_STAT_FIRST = new RegExp(`\\b${PLAYER_PROP_STAT_TOKENS}\\s+${PLAYER_PROP_DIRECTIONS}\\s+\\d+\\.?\\d*\\b`, 'i');
+
+function looksLikePlayerProp(pickStr) {
+  if (!pickStr) return false;
+  const s = String(pickStr);
+  return PLAYER_PROP_RE_DIR_FIRST.test(s) || PLAYER_PROP_RE_STAT_FIRST.test(s);
 }
 
 function buildFeatureStorePayload(gameData, requestedDate, features = {}) {
@@ -1027,8 +1044,8 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     lang           = 'en',
     engine         = 'anthropic',
     model          = 'fast',
+    betType        = 'all',
     date,
-    betType,
     marketFocus,
   } = req.body;
 
@@ -1055,6 +1072,10 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
   if (model && !['fast', 'deep'].includes(model)) {
     return res.status(400).json({ success: false, error: 'Invalid model' });
   }
+  const VALID_BET_TYPES = ['all', 'moneyline', 'runline', 'totals', 'props', 'pitcher_props', 'batter_props'];
+  if (betType && !VALID_BET_TYPES.includes(betType)) {
+    return res.status(400).json({ success: false, error: `Invalid betType. Must be one of: ${VALID_BET_TYPES.join(', ')}` });
+  }
   try {
     assertArchitectProviderConfigured(resolvedEngine);
   } catch (err) {
@@ -1073,14 +1094,30 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     const totalStart = Date.now();
 
     // ── Step 1: Candidate pool (cached, fast on repeat calls) ───────────
-    const candidates = await buildCandidatePool({ gameIds, date: resolvedDate, lang: resolvedLang });
+    const rawCandidates = await buildCandidatePool({ gameIds, date: resolvedDate, lang: resolvedLang });
 
-    if (candidates.length === 0) {
+    if (rawCandidates.length === 0) {
       console.warn(`[parlay-synergy] empty candidate pool for gameIds=[${gameIds.join(',')}] date=${resolvedDate}`);
       return res.status(422).json({
         success: false,
         error: 'No candidates found for the provided games. Try a different date or game selection. / No se encontraron candidatos para los juegos indicados.',
         debug: { gameIds, date: resolvedDate, reason: 'empty_pool' },
+      });
+    }
+
+    // ── Step 1b: Apply betType filter ────────────────────────────────────
+    const candidates = filterCandidatesByBetType(rawCandidates, betType);
+    if (betType && betType !== 'all') {
+      console.log(`[parlay-synergy] betType="${betType}" filter: ${rawCandidates.length} → ${candidates.length} candidates`);
+    }
+    if (candidates.length === 0) {
+      console.warn(`[parlay-synergy] betType="${betType}" filter emptied pool (raw=${rawCandidates.length}) for gameIds=[${gameIds.join(',')}]`);
+      return res.status(422).json({
+        success: false,
+        error: resolvedLang === 'es'
+          ? `Ningún candidato disponible para el filtro "${betType}" en los juegos seleccionados. Prueba otro tipo de pick o selecciona más juegos.`
+          : `No candidates match the "${betType}" filter for the selected games. Try a different pick type or add more games.`,
+        debug: { gameIds, date: resolvedDate, betType, rawPoolSize: rawCandidates.length, reason: 'empty_after_bet_type_filter' },
       });
     }
 
@@ -1258,8 +1295,10 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
         })),
         composer_meta: {
           mode,
-          market_focus:        resolvedMarketFocus,
+          bet_type:             betType,
+          market_focus:         resolvedMarketFocus,
           candidate_pool_size:  enriched.length,
+          raw_pool_size:        rawCandidates.length,
           unfiltered_candidate_pool_size: enrichedAll.length,
           priced_candidate_count: pricedCandidateCount,
           null_odds_count:      enriched.length - pricedCandidateCount,
@@ -2950,6 +2989,44 @@ app.get('/api/admin/backtest-stats', verifyToken, async (req, res) => {
   }
 });
 
+// POST /api/admin/regrade-backtest-props — re-grade prop rows in backtest_results
+// against the real MLB boxscore. Defaults to dry-run; pass apply:true to write.
+app.post('/api/admin/regrade-backtest-props', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ success: false, error: 'Admin access required' });
+  }
+  const { apply = false, from = null, to = null, runId = null, limit = null } = req.body ?? {};
+  const safeLimit = limit != null ? Math.min(Math.max(parseInt(limit, 10) || 0, 0), 5000) : null;
+  try {
+    const start = Date.now();
+    const result = await regradeBacktestProps({
+      pool,
+      apply: !!apply,
+      from,
+      to,
+      runId,
+      limit: safeLimit,
+      maxMismatchExamples: 100,
+      onLog: ({ level, msg }) => {
+        if (level === 'warn') console.warn(msg); else console.log(msg);
+      },
+    });
+    res.json({
+      success: true,
+      data: {
+        apply: result.apply,
+        stats: result.stats,
+        mismatches: result.mismatches,
+        elapsed_ms: Date.now() - start,
+        filters: { from, to, runId, limit: safeLimit },
+      },
+    });
+  } catch (err) {
+    console.error('[regrade] endpoint failed:', err);
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // GET /api/admin/historical-games?date=YYYY-MM-DD — fetch completed games for a date
 app.get('/api/admin/historical-games', verifyToken, async (req, res) => {
   if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
@@ -3039,9 +3116,32 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
       /run\s*line|rl/i.test(pick) ? 'runline' : 'other'
     ) : 'unknown';
 
-    // Resolve result
+    // Resolve result.
+    //
+    // Player props MUST be tried first — otherwise picks like
+    // "Wilyer Abreu Over 1.5 Total Bases" get matched by the loose
+    // /(Over|O)\s+(\d+\.?\d*)/ regex below, which then compares the prop's
+    // line against the GAME total runs and almost always returns WIN.
     let actualResult = null;
-    if (pick && homeScore != null && awayScore != null) {
+    if (pick && looksLikePlayerProp(pick)) {
+      try {
+        const boxscorePlayers = await getGameBoxscore(gamePk);
+        if (boxscorePlayers) {
+          const propResult = resolvePlayerProp(pick, boxscorePlayers);
+          if (propResult?.result) {
+            actualResult = propResult.result;
+            pickType = `prop_${propResult.propType}`;
+            console.log(`[backtest] Prop resolved: ${propResult.playerName} ${propResult.propType} ${propResult.direction ?? ''} ${propResult.line} — actual: ${propResult.actual} — ${actualResult}`);
+          } else if (propResult?.error) {
+            console.warn(`[backtest] Prop unresolvable (${propResult.error}): "${pick}"`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[backtest] Props resolver failed: ${err.message}`);
+      }
+    }
+
+    if (!actualResult && pick && homeScore != null && awayScore != null) {
       const total = parseInt(homeScore) + parseInt(awayScore);
       const cleaned = pick.replace(/\s*\([+-]?\d+\)\s*$/i, '').replace(/\s+[+-]\d{2,3}\s*$/i, '').replace(/\s*\(estimated\s+line\)\s*$/i, '').replace(/\s*\(est\.?\)\s*$/i, '').replace(/\s*\([^)]*total[^)]*\)\s*$/i, '').trim();
 
@@ -3055,24 +3155,6 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
         const pickedAway = awayTeam?.toLowerCase().includes(teamToken) || teamToken.includes(awayTeam?.toLowerCase()?.split(' ').pop());
         if (pickedHome) actualResult = parseInt(homeScore) > parseInt(awayScore) ? 'win' : 'loss';
         else if (pickedAway) actualResult = parseInt(awayScore) > parseInt(homeScore) ? 'win' : 'loss';
-      }
-    }
-
-    // Si no se resolvió con los patterns estándar, intentar como player prop
-    if (!actualResult && pick) {
-      try {
-        const boxscorePlayers = await getGameBoxscore(gamePk);
-        if (boxscorePlayers) {
-          const propResult = resolvePlayerProp(pick, boxscorePlayers);
-          if (propResult?.result) {
-            actualResult = propResult.result;
-            // Override pickType for props
-            pickType = `prop_${propResult.propType}`;
-            console.log(`[backtest] Prop resolved: ${propResult.playerName} ${propResult.propType} — actual: ${propResult.actual} — ${actualResult}`);
-          }
-        }
-      } catch (err) {
-        console.warn(`[backtest] Props resolver failed: ${err.message}`);
       }
     }
 
