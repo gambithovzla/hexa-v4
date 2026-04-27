@@ -33,6 +33,13 @@ const L = {
       aggressive:   'Max risk diversity',
       dreamer:      'Longest parlays, max reward',
     },
+    market: 'MARKET FOCUS',
+    markets: {
+      all: 'All Types',
+      props: 'Player Props',
+      pitcherprops: 'Pitcher Props',
+      batterprops: 'Batter Props',
+    },
     legs: 'LEGS',
     engine: 'ENGINE',
     engineDesc: 'Choose exactly one LLM for this run',
@@ -99,6 +106,13 @@ const L = {
       aggressive:   'Máxima diversidad de riesgo',
       dreamer:      'Parlays largos, máxima recompensa',
     },
+    market: 'ENFOQUE',
+    markets: {
+      all: 'Todos',
+      props: 'Props de Jugador',
+      pitcherprops: 'Pitcher Props',
+      batterprops: 'Batter Props',
+    },
     legs: 'PATAS',
     engine: 'MOTOR',
     engineDesc: 'Elige exactamente un LLM para esta corrida',
@@ -146,6 +160,7 @@ const L = {
 };
 
 const MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
+const MARKET_FOCUS = ['all', 'props', 'pitcherprops', 'batterprops'];
 
 const LLM_ENGINES = [
   { key: 'anthropic', short: 'ANTHROPIC', color: C.cyan },
@@ -428,6 +443,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
 
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [mode, setMode] = useState('balanced');
+  const [marketFocus, setMarketFocus] = useState('all');
   const [requestedLegs, setRequestedLegs] = useState(3);
   const [llmEngine, setLlmEngine] = useState('anthropic');
   const [model, setModel] = useState('fast');
@@ -470,6 +486,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
           gameIds:       [...selectedIds],
           requestedLegs,
           mode,
+          marketFocus,
           engine: llmEngine,
           model,
           lang,
@@ -479,7 +496,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
       setResult(json.data);
-      addRun({ date, mode, requestedLegs, gameIds: [...selectedIds], result: json.data, architect_meta: json.data?.architect_meta });
+      addRun({ date, mode, marketFocus, requestedLegs, gameIds: [...selectedIds], result: json.data, architect_meta: json.data?.architect_meta });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -676,6 +693,32 @@ export default function ParlayArchitect({ lang = 'en' }) {
                   </Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.54rem', color: C.textMuted, mt: '1px', lineHeight: 1.3 }}>
                     {t.modeDesc[m]}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Panel>
+
+          {/* Market focus */}
+          <Panel>
+            <SectionLabel>{t.market}</SectionLabel>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+              {MARKET_FOCUS.map(focus => (
+                <Box
+                  key={focus}
+                  onClick={() => setMarketFocus(focus)}
+                  sx={{
+                    py: '7px',
+                    px: '6px',
+                    cursor: 'pointer',
+                    border: `1px solid ${marketFocus === focus ? C.cyan : C.borderLight}`,
+                    bgcolor: marketFocus === focus ? 'rgba(0,217,255,0.07)' : 'transparent',
+                    transition: 'all 0.1s',
+                    '&:hover': { borderColor: C.cyan, bgcolor: 'rgba(0,217,255,0.04)' },
+                  }}
+                >
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: marketFocus === focus ? C.cyan : C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {t.markets[focus]}
                   </Typography>
                 </Box>
               ))}

@@ -12,6 +12,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 import { calculateParallelScore } from './services/xgboostValidator.js';
 import { createXaiChatCompletion, getXaiModelId } from './services/xaiClient.js';
+import { marketFocusInstruction, normalizeMarketFocus } from './market-focus.js';
 
 dotenv.config();
 
@@ -272,9 +273,13 @@ function buildUserMessage({ matchup, betType, context, riskProfile, mode, lang, 
 
   switch (mode) {
     case 'single': {
-      const betInstruction = betType === 'fade_hits'
+      const focus = normalizeMarketFocus(betType);
+      const focusInstruction = marketFocusInstruction(focus);
+      const betInstruction = focus === 'fade_hits'
         ? `MANDATORY BET TYPE: You MUST deliver your pick as a PLAYER PROP — Under Hits.\n\n## FADE HITS MODE — SPECIAL INSTRUCTIONS\nYour task is to find the BEST "Under Hits" player prop in this game.\n\nScan BOTH lineups and identify the batter with the HIGHEST probability of going hitless or getting Under 1.5 Hits.\n\nPRIORITY SIGNALS FOR FADE HITS:\n1. Batter xBA < .230 — weak contact profile\n2. Batter rolling_woba_7d < .260 — cold streak\n3. Batter splits vs pitcher hand: if batting < .200 vs LHP/RHP → STRONG FADE\n4. Opposing pitcher Whiff% > 28% AND xwOBA_against < .310 — dominant pitcher suppresses hits\n5. Batter K% > 28% — high strikeout rate = fewer opportunities for hits\n6. Batter in bottom of lineup (7-9 spot) — fewer at-bats = fewer hit opportunities\n\nCROSSING RULES:\n- If batter xBA < .210 AND opposing pitcher xwOBA_against < .300 → STRONG FADE (Under 0.5 Hits)\n- If batter splits vs hand < .180 AND pitcher Whiff% > 30% → STRONG FADE\n- If batter is cold (7d wOBA < .240) AND facing elite pitcher → FADE with confidence\n- Prefer Under 0.5 Hits (+120 to +170 range) when the data strongly supports it\n- Use Under 1.5 Hits (-130 to +100 range) when the fade signal is moderate\n\nYour pick MUST be a player Under Hits prop. Format: "[Player Name] Under [0.5 or 1.5] Hits"\nEvaluate ALL batters in both lineups. Pick the ONE with highest probability of Under hitting.\n\nIn your oracle_report, explain: which batter you chose, why their contact profile is weak, how the opposing pitcher suppresses hits, and the specific splits/Statcast data that support the fade.`
-        : betType && betType !== 'all' && betType !== 'general'
+        : focusInstruction
+        ? `MANDATORY BET TYPE: ${focusInstruction}`
+        : betType && focus !== 'all'
         ? `MANDATORY BET TYPE: You MUST deliver your pick as a ${betType.toUpperCase()} bet. Do not switch to moneyline, over-under, or any other bet type regardless of your analysis. Analyze the ${betType} market specifically and deliver the best pick within that market.`
         : `Bet focus: all types — select the highest-value bet type based on the data.`;
       const bankrollLine = userBankroll != null
@@ -300,7 +305,11 @@ function buildUserMessage({ matchup, betType, context, riskProfile, mode, lang, 
 
     case 'parlay': {
       const numLegs = legs ?? games.length;
-      const parlayBetInstruction = betType && betType !== 'all' && betType !== 'general'
+      const focus = normalizeMarketFocus(betType);
+      const focusInstruction = marketFocusInstruction(focus, { parlay: true });
+      const parlayBetInstruction = focusInstruction
+        ? `MANDATORY BET TYPE: ${focusInstruction}`
+        : betType && focus !== 'all'
         ? `MANDATORY BET TYPE: Every leg MUST be a ${betType.toUpperCase()} bet. Do not mix in moneyline, over-under, or any other bet type. Build each leg within the ${betType} market specifically.`
         : `Bet focus: all types — select the highest-value bet type per leg based on the data.`;
       return (

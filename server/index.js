@@ -29,6 +29,7 @@ import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
 import { calculateParallelScore } from './services/xgboostValidator.js';
 import { buildDeterministicSafePayload, buildValueBreakdown } from './market-intelligence.js';
+import { filterCandidatesByMarketFocus, normalizeMarketFocus } from './market-focus.js';
 import {
   buildShadowActualOutcome,
   getShadowModeDashboard,
@@ -1027,11 +1028,14 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     engine         = 'anthropic',
     model          = 'fast',
     date,
+    betType,
+    marketFocus,
   } = req.body;
 
   const resolvedDate   = date || new Date().toISOString().split('T')[0];
   const resolvedLang   = normalizeRequestLanguage(lang);
   const resolvedEngine = normalizeArchitectProvider(engine);
+  const resolvedMarketFocus = normalizeMarketFocus(marketFocus ?? betType);
   const resolvedModelSelection = resolveArchitectModelSelection({
     provider: resolvedEngine,
     tier: model,
@@ -1102,7 +1106,18 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     }
 
     // ── Step 3: Risk vector enrichment ──────────────────────────────────
-    const enriched = enrichPoolWithRiskVectors(candidates, featuresByGamePk, gameDataByGamePk);
+    const enrichedAll = enrichPoolWithRiskVectors(candidates, featuresByGamePk, gameDataByGamePk);
+    const enriched = filterCandidatesByMarketFocus(enrichedAll, resolvedMarketFocus);
+    if (enriched.length === 0) {
+      await refundCredits(updatedUser.id, PARLAY_SYNERGY_COST, updatedUser.is_admin);
+      return res.status(422).json({
+        success: false,
+        error: resolvedLang === 'es'
+          ? 'No se encontraron candidatos para el enfoque de mercado solicitado. Prueba All Types o selecciona mas juegos.'
+          : 'No candidates found for the requested market focus. Try All Types or select more games.',
+        debug: { gameIds, date: resolvedDate, marketFocus: resolvedMarketFocus, originalPoolSize: enrichedAll.length },
+      });
+    }
     const oddsStatus = getOddsApiStatus();
     const pricedCandidateCount = enriched.filter(c => c.odds != null).length;
     const oddsWarnings = [];
@@ -1243,7 +1258,9 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
         })),
         composer_meta: {
           mode,
+          market_focus:        resolvedMarketFocus,
           candidate_pool_size:  enriched.length,
+          unfiltered_candidate_pool_size: enrichedAll.length,
           priced_candidate_count: pricedCandidateCount,
           null_odds_count:      enriched.length - pricedCandidateCount,
           odds_api:             oddsStatus,
@@ -1406,9 +1423,10 @@ app.post('/api/admin/parlay-synergy/:id/resolve', verifyToken, isAdmin, async (r
 
 // POST /api/analyze/safe — Safe Pick mode (supports single gameId or multiple gameIds for parlay safe picks)
 app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => {
-  const { gameId, gameIds, lang = 'en', date, engine = 'sonnet' } = req.body;
+  const { gameId, gameIds, lang = 'en', date, engine = 'sonnet', betType, marketFocus } = req.body;
   const resolvedDate = date || new Date().toISOString().split('T')[0];
   const resolvedEngine = normalizeRequestedEngine(engine);
+  const resolvedMarketFocus = normalizeMarketFocus(marketFocus ?? betType);
 
   // Determine if this is a multi-game safe pick request
   const ids = gameIds && Array.isArray(gameIds) && gameIds.length > 0
@@ -1474,6 +1492,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             xgboostResult,
             lang,
             llmData: analysis.data,
+            marketFocus: resolvedMarketFocus,
           });
 
           const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
