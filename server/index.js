@@ -14,6 +14,7 @@ import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken, requireVerifiedEmail } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
+import { regradeBacktestProps } from './services/backtestRegrader.js';
 import pool from './db.js';
 import lemonRouter from './lemon.js';
 import picksRouter from './routes/picks.js';
@@ -2967,6 +2968,44 @@ app.get('/api/admin/backtest-stats', verifyToken, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/regrade-backtest-props — re-grade prop rows in backtest_results
+// against the real MLB boxscore. Defaults to dry-run; pass apply:true to write.
+app.post('/api/admin/regrade-backtest-props', verifyToken, async (req, res) => {
+  if (!req.user.is_admin) {
+    return res.status(403).json({ success: false, error: 'Admin access required' });
+  }
+  const { apply = false, from = null, to = null, runId = null, limit = null } = req.body ?? {};
+  const safeLimit = limit != null ? Math.min(Math.max(parseInt(limit, 10) || 0, 0), 5000) : null;
+  try {
+    const start = Date.now();
+    const result = await regradeBacktestProps({
+      pool,
+      apply: !!apply,
+      from,
+      to,
+      runId,
+      limit: safeLimit,
+      maxMismatchExamples: 100,
+      onLog: ({ level, msg }) => {
+        if (level === 'warn') console.warn(msg); else console.log(msg);
+      },
+    });
+    res.json({
+      success: true,
+      data: {
+        apply: result.apply,
+        stats: result.stats,
+        mismatches: result.mismatches,
+        elapsed_ms: Date.now() - start,
+        filters: { from, to, runId, limit: safeLimit },
+      },
+    });
+  } catch (err) {
+    console.error('[regrade] endpoint failed:', err);
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
