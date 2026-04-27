@@ -1,6 +1,6 @@
 // Parlay Synergy Engine — barrel export
 
-export { buildCandidatePool, createPoolBuilder, clearPoolCache } from './pool.js';
+export { buildCandidatePool, createPoolBuilder, clearPoolCache, filterCandidatesByBetType } from './pool.js';
 export { enrichWithRiskVector, enrichPoolWithRiskVectors } from './risk.js';
 export { buildCorrelationMatrix, getCorrelation, getRiskDistance, pairKey } from './correl.js';
 export { composeParlays, isParlayValid } from './composer.js';

@@ -76,6 +76,16 @@ const L = {
     engine_used: 'Engine',
     selectAll: 'SELECT ALL',
     clearAll: 'CLEAR ALL',
+    betType: {
+      label:        'BET FOCUS',
+      desc:         'Restrict candidate pool to a single market family',
+      all:          'All Types',
+      moneyline:    'Moneyline',
+      runline:      'Run Line',
+      totals:       'Over/Under',
+      pitcher_props:'Pitcher Props (Ks)',
+      batter_props: 'Batter Props (Hits)',
+    },
   },
   es: {
     title: 'PARLAY ARCHITECT',
@@ -142,10 +152,22 @@ const L = {
     engine_used: 'Motor',
     selectAll: 'SELECCIONAR TODO',
     clearAll: 'LIMPIAR',
+    betType: {
+      label:        'TIPO DE PICK',
+      desc:         'Restringe el pool a una sola familia de mercados',
+      all:          'Todos los Tipos',
+      moneyline:    'Moneyline',
+      runline:      'Línea de Carreras',
+      totals:       'Totales (O/U)',
+      pitcher_props:'Pitcher Props (Ponches)',
+      batter_props: 'Batter Props (Hits)',
+    },
   },
 };
 
 const MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
+
+const BET_TYPES = ['all', 'moneyline', 'runline', 'totals', 'pitcher_props', 'batter_props'];
 
 const LLM_ENGINES = [
   { key: 'anthropic', short: 'ANTHROPIC', color: C.cyan },
@@ -431,6 +453,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
   const [requestedLegs, setRequestedLegs] = useState(3);
   const [llmEngine, setLlmEngine] = useState('anthropic');
   const [model, setModel] = useState('fast');
+  const [betType, setBetType] = useState('all');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -472,6 +495,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
           mode,
           engine: llmEngine,
           model,
+          betType,
           lang,
           date,
         }),
@@ -479,7 +503,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
       setResult(json.data);
-      addRun({ date, mode, requestedLegs, gameIds: [...selectedIds], result: json.data, architect_meta: json.data?.architect_meta });
+      addRun({ date, mode, requestedLegs, betType, gameIds: [...selectedIds], result: json.data, architect_meta: json.data?.architect_meta });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -676,6 +700,37 @@ export default function ParlayArchitect({ lang = 'en' }) {
                   </Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.54rem', color: C.textMuted, mt: '1px', lineHeight: 1.3 }}>
                     {t.modeDesc[m]}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Panel>
+
+          {/* Bet focus */}
+          <Panel>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', mb: '8px' }}>
+              <SectionLabel>{t.betType.label}</SectionLabel>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textDim, letterSpacing: '0.06em', textAlign: 'right', maxWidth: '60%', lineHeight: 1.3 }}>
+                {t.betType.desc}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+              {BET_TYPES.map(bt => (
+                <Box
+                  key={bt}
+                  onClick={() => setBetType(bt)}
+                  sx={{
+                    py: '7px',
+                    px: '6px',
+                    cursor: 'pointer',
+                    border: `1px solid ${betType === bt ? C.cyan : C.borderLight}`,
+                    bgcolor: betType === bt ? 'rgba(0,217,255,0.08)' : 'transparent',
+                    transition: 'all 0.1s',
+                    '&:hover': { borderColor: C.cyan, bgcolor: 'rgba(0,217,255,0.04)' },
+                  }}
+                >
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: betType === bt ? C.cyan : C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.3 }}>
+                    {t.betType[bt]}
                   </Typography>
                 </Box>
               ))}
