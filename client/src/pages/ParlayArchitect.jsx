@@ -447,7 +447,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
   const t = L[lang] ?? L.en;
   const { token } = useAuth();
   const { games, date, setDate, gamesLoading } = useGames();
-  const { grouped, groupedDates, stats, winRate, addRun, markResult, deleteRun } = useParlayArchitectHistory(token);
+  const { grouped, groupedDates, stats, winRate, addRun, markResult, autoResolve, deleteRun } = useParlayArchitectHistory(token);
 
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [mode, setMode] = useState('balanced');
@@ -951,6 +951,7 @@ export default function ParlayArchitect({ lang = 'en' }) {
         stats={stats}
         winRate={winRate}
         onMark={markResult}
+        onAutoResolve={autoResolve}
         onDelete={deleteRun}
       />
     </Box>

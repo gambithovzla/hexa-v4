@@ -117,6 +117,44 @@ export default function useParlayArchitectHistory(token) {
     });
   }, []);
 
+  // Server-side auto-resolution. Only works for entries persisted on the
+  // server (id like "db_N"); local-only runs are ignored. Returns the
+  // server's verdict so the caller can show a toast/inline message.
+  const autoResolve = useCallback(async (id) => {
+    if (!token) return { ok: false, reason: 'not authenticated' };
+    const dbId = typeof id === 'string' && id.startsWith('db_') ? Number(id.slice(3)) : null;
+    if (!dbId) return { ok: false, reason: 'local-only run — cannot auto-resolve' };
+
+    try {
+      const res = await fetch(`${API_URL}/api/parlay-architect/${dbId}/auto-resolve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        return { ok: false, reason: json.error || `HTTP ${res.status}` };
+      }
+      const out = json.data;
+      setHistory(prev => {
+        const next = prev.map(e => {
+          if (e.id !== id) return e;
+          const resolved = out.status !== 'pending';
+          return {
+            ...e,
+            leg_results: out.legResults,
+            legs_hit:    out.legsHit,
+            result:      resolved ? out.status : e.result,
+          };
+        });
+        persist(next);
+        return next;
+      });
+      return { ok: true, data: out };
+    } catch (err) {
+      return { ok: false, reason: err.message };
+    }
+  }, [token]);
+
   const deleteRun = useCallback((id) => {
     setHistory(prev => {
       const next = prev.filter(e => e.id !== id);
@@ -145,5 +183,5 @@ export default function useParlayArchitectHistory(token) {
     ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100)
     : null;
 
-  return { history, grouped, groupedDates, stats, winRate, addRun, markResult, deleteRun };
+  return { history, grouped, groupedDates, stats, winRate, addRun, markResult, autoResolve, deleteRun };
 }
