@@ -1,71 +1,109 @@
-/* ── H.E.X.A. V4 — Global Design System ──────────────────────────────────── */
+/* ── H.E.X.A. V4 — Global Design System (Cyberpunk redesign) ─────────────── */
 /*
  * Theming contract:
  *   ThemeProvider sets `data-theme="light|dark"` on the <html> element.
  *   :root defaults to DARK values; [data-theme="light"] overrides them.
  *   Existing components that use `var(--*)` automatically follow the mode.
- *   Legacy dark-only hardcoded styles still work — they fall through as-is.
+ *
+ * Cyberpunk redesign tokens come from the design_handoff_hexa_upgrade brief.
+ * Every legacy var (--neon-*, --bg-card, --text-*) survives so old components
+ * still resolve; their values just shift to the new palette.
  */
 
-/* ── DARK (default) ────────────────────────────────────────────────────── */
+/* ── DARK (default · cyberpunk) ────────────────────────────────────────── */
 :root,
 :root[data-theme='dark'] {
-  /* Backgrounds */
-  --bg-primary:   #000000;
-  --bg-secondary: #050508;
-  --bg-card:      #07090E;
-  --bg-elevated:  #0A0D14;
+  /* Canvas + panel layers */
+  --bg-0:         #05080a;
+  --bg-1:         #0a1015;
+  --bg-2:         #0f1820;
+  --bg-3:         #15212c;
 
-  /* Neon accent palette */
-  --neon-cyan:        #00D9FF;
-  --neon-cyan-dim:    rgba(0, 217, 255, 0.08);
-  --neon-cyan-line:   rgba(0, 217, 255, 0.25);
-  --neon-cyan-glow:   0 0 8px rgba(0, 217, 255, 0.55), 0 0 20px rgba(0, 217, 255, 0.2);
+  /* Legacy aliases */
+  --bg-primary:   #05080a;
+  --bg-secondary: #0a1015;
+  --bg-card:      #0a1015;
+  --bg-elevated:  #0f1820;
 
-  --neon-orange:      #FF6600;
-  --neon-orange-dim:  rgba(255, 102, 0, 0.08);
-  --neon-orange-line: rgba(255, 102, 0, 0.3);
-  --neon-orange-glow: 0 0 8px rgba(255, 102, 0, 0.65), 0 0 20px rgba(255, 102, 0, 0.25);
+  --line:         #1a2c38;
+  --line-strong:  #25404f;
 
-  --neon-green:       #00FF88;
-  --neon-green-dim:   rgba(0, 255, 136, 0.08);
-  --neon-green-line:  rgba(0, 255, 136, 0.25);
-  --neon-green-glow:  0 0 8px rgba(0, 255, 136, 0.55), 0 0 20px rgba(0, 255, 136, 0.2);
+  /* Cyberpunk accents */
+  --neon-cyan:        #22F0FF;
+  --neon-cyan-dim:    rgba(34, 240, 255, 0.10);
+  --neon-cyan-line:   rgba(34, 240, 255, 0.28);
+  --neon-cyan-glow:   0 0 10px rgba(34, 240, 255, 0.50), 0 0 24px rgba(34, 240, 255, 0.20);
+
+  --neon-orange:      #FF7A1A;
+  --neon-orange-dim:  rgba(255, 122, 26, 0.10);
+  --neon-orange-line: rgba(255, 122, 26, 0.32);
+  --neon-orange-glow: 0 0 10px rgba(255, 122, 26, 0.55), 0 0 24px rgba(255, 122, 26, 0.22);
+
+  --neon-green:       #2BFF88;
+  --neon-green-dim:   rgba(43, 255, 136, 0.10);
+  --neon-green-line:  rgba(43, 255, 136, 0.28);
+  --neon-green-glow:  0 0 10px rgba(43, 255, 136, 0.50), 0 0 24px rgba(43, 255, 136, 0.20);
+
+  --neon-pink:        #FF3D6E;
+  --neon-pink-dim:    rgba(255, 61, 110, 0.10);
+  --neon-pink-line:   rgba(255, 61, 110, 0.28);
+  --neon-pink-glow:   0 0 10px rgba(255, 61, 110, 0.50), 0 0 24px rgba(255, 61, 110, 0.20);
 
   --accent:   var(--neon-orange);
   --accent-2: var(--neon-cyan);
   --success:  var(--neon-green);
-  --warning:  #FF9900;
-  --danger:   #FF2244;
+  --warning:  #FFD23F;
+  --danger:   var(--neon-pink);
   --gold:     #FFB800;
 
-  --border:       rgba(0, 217, 255, 0.2);
-  --border-light: rgba(0, 217, 255, 0.1);
+  --border:       rgba(34, 240, 255, 0.22);
+  --border-light: rgba(34, 240, 255, 0.10);
 
-  --text-primary: #E8F4FF;
-  --text-muted:   rgba(0, 217, 255, 0.5);
+  /* Ink scale */
+  --ink-0:        #e6f7ff;
+  --ink-1:        #aac4d2;
+  --ink-2:        #6f8a98;
+  --ink-3:        #3d5563;
+  --text-primary: #e6f7ff;
+  --text-muted:   #6f8a98;
 
-  --font-mono:    'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace;
-  --font-display: 'Orbitron', 'Share Tech Mono', monospace;
+  /* Type stacks */
+  --font-display: 'Space Grotesk', 'Orbitron', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Share Tech Mono', 'SF Mono', monospace;
+
+  /* Geometry */
+  --hex-clip: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+
+  /* Tweakable intensity multipliers (sidebar/topbar tweaks panel can drive these) */
+  --glow-mul:    1;
+  --grid-mul:    1;
+  --particle-mul: 1;
+  --glitch-mul:  0;
 
   /* Scanline intensity — dark shows a faint CRT texture, light hides it */
-  --scanline-alpha: 0.012;
+  --scanline-alpha: 0.022;
 
   /* Corner-bracket accents on .hexa-card */
   --hexa-card-bracket-tl: var(--neon-cyan);
   --hexa-card-bracket-br: var(--neon-orange);
-  --hexa-card-shadow:     inset 0 0 40px rgba(0, 0, 0, 0.8);
+  --hexa-card-shadow:     inset 0 0 40px rgba(0, 0, 0, 0.55);
 }
 
 /* ── LIGHT (Day terminal) ──────────────────────────────────────────────── */
 :root[data-theme='light'] {
-  /* Warm paper backgrounds */
+  --bg-0:         #F5F2EB;
+  --bg-1:         #FFFFFF;
+  --bg-2:         #FAF7F0;
+  --bg-3:         #F0EBDD;
+
   --bg-primary:   #F5F2EB;
   --bg-secondary: #EEE9DE;
   --bg-card:      #FFFFFF;
   --bg-elevated:  #FFFFFF;
 
-  /* Deep, readable accents — no glow */
+  --line:         rgba(0, 93, 125, 0.18);
+  --line-strong:  rgba(0, 93, 125, 0.32);
+
   --neon-cyan:        #005D7D;
   --neon-cyan-dim:    rgba(0, 93, 125, 0.08);
   --neon-cyan-line:   rgba(0, 93, 125, 0.28);
@@ -81,23 +119,35 @@
   --neon-green-line:  rgba(0, 122, 64, 0.28);
   --neon-green-glow:  none;
 
+  --neon-pink:        #A8173A;
+  --neon-pink-dim:    rgba(168, 23, 58, 0.08);
+  --neon-pink-line:   rgba(168, 23, 58, 0.28);
+  --neon-pink-glow:   none;
+
   --accent:   var(--neon-orange);
   --accent-2: var(--neon-cyan);
   --success:  var(--neon-green);
   --warning:  #A05E00;
-  --danger:   #A8173A;
+  --danger:   var(--neon-pink);
   --gold:     #8A6500;
 
   --border:       rgba(0, 93, 125, 0.24);
   --border-light: rgba(0, 93, 125, 0.12);
 
+  --ink-0:        #0A1014;
+  --ink-1:        rgba(10, 16, 20, 0.72);
+  --ink-2:        rgba(10, 16, 20, 0.58);
+  --ink-3:        rgba(10, 16, 20, 0.36);
   --text-primary: #0A1014;
   --text-muted:   rgba(10, 16, 20, 0.48);
 
-  /* Scanlines off for readability on paper */
+  --glow-mul:    0;
+  --grid-mul:    0.4;
+  --particle-mul: 0;
+  --glitch-mul:  0;
+
   --scanline-alpha: 0;
 
-  /* Inside-shadow replaced by a crisp hairline in light mode */
   --hexa-card-bracket-tl: var(--neon-cyan);
   --hexa-card-bracket-br: var(--neon-orange);
   --hexa-card-shadow:     0 1px 2px rgba(10, 16, 20, 0.04);
@@ -110,11 +160,12 @@
 html, body {
   margin:      0;
   padding:     0;
-  background:  var(--bg-primary);
-  color:       var(--text-primary);
-  font-family: var(--font-mono);
+  background:  var(--bg-0);
+  color:       var(--ink-0);
+  font-family: var(--font-display);
+  font-feature-settings: 'ss01', 'ss02';
   font-size:   14px;
-  line-height: 1.6;
+  line-height: 1.5;
   -webkit-font-smoothing:  antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition:  background-color 0.25s ease, color 0.25s ease;
@@ -127,18 +178,50 @@ html, body, #root {
 
 body {
   min-height: 100vh;
+  position: relative;
+  background:
+    radial-gradient(ellipse 1200px 600px at 80% -10%, rgba(34, 240, 255, calc(0.06 * var(--glow-mul))), transparent 60%),
+    radial-gradient(ellipse 900px 500px at 0% 30%, rgba(255, 122, 26, calc(0.04 * var(--glow-mul))), transparent 60%),
+    var(--bg-0);
+}
+
+/* Subtle hex grid backdrop (dark only — light flips --grid-mul down) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(34, 240, 255, calc(0.025 * var(--grid-mul))) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 240, 255, calc(0.025 * var(--grid-mul))) 1px, transparent 1px);
+  background-size: 56px 56px;
+  pointer-events: none;
+  z-index: 0;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 90%);
+          mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 90%);
+}
+
+/* CRT scanline overlay (very faint — controlled by --scanline-alpha) */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
   background-image: repeating-linear-gradient(
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 217, 255, var(--scanline-alpha)) 2px,
-    rgba(0, 217, 255, var(--scanline-alpha)) 4px
+    rgba(34, 240, 255, var(--scanline-alpha)) 2px,
+    rgba(34, 240, 255, var(--scanline-alpha)) 3px
   );
+  pointer-events: none;
+  z-index: 999;
+  mix-blend-mode: overlay;
 }
 
+#root { position: relative; z-index: 1; }
+
 /* ── Scrollbars ────────────────────────────────────────────────────────── */
-::-webkit-scrollbar       { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-0); }
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 0;
@@ -150,22 +233,22 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--bg-primary);
+  scrollbar-color: var(--border) var(--bg-0);
 }
 
 /* ── Global Component Overrides ────────────────────────────────────────── */
 
 button, [role="button"] {
-  font-family:    var(--font-mono) !important;
-  letter-spacing: 0.08em;
+  font-family:    var(--font-display) !important;
+  letter-spacing: 0.04em;
 }
 
 input, textarea, select {
-  font-family:      var(--font-mono) !important;
-  background:       var(--bg-card);
+  font-family:      var(--font-display) !important;
+  background:       var(--bg-1);
   border:           1px solid var(--neon-cyan-line);
   color:            var(--text-primary);
-  letter-spacing:   0.04em;
+  letter-spacing:   0.02em;
   transition:       border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -177,9 +260,9 @@ input:focus, textarea:focus {
 
 /* --- Cards / Panels -------------------------------------------------------- */
 .hexa-card {
-  background:    var(--bg-card);
+  background:    var(--bg-1);
   border:        1px solid var(--neon-cyan-line);
-  border-radius: 0;
+  border-radius: 8px;
   box-shadow:    var(--hexa-card-shadow);
   position:      relative;
   overflow:      hidden;
@@ -207,14 +290,28 @@ input:focus, textarea:focus {
   border-right:  2px solid var(--hexa-card-bracket-br);
 }
 
+/* ── Hexagonal clip helper (used by avatars, signal dots, FAB) ─────────── */
+.hex-clip {
+  -webkit-clip-path: var(--hex-clip);
+          clip-path: var(--hex-clip);
+}
+
 /* ── Neon Text Utilities ───────────────────────────────────────────────── */
 .text-cyan   { color: var(--neon-cyan); }
 .text-orange { color: var(--neon-orange); }
 .text-green  { color: var(--neon-green); }
+.text-pink   { color: var(--neon-pink); }
 
 .glow-cyan   { text-shadow: var(--neon-cyan-glow); }
 .glow-orange { text-shadow: var(--neon-orange-glow); }
 .glow-green  { text-shadow: var(--neon-green-glow); }
+.glow-pink   { text-shadow: var(--neon-pink-glow); }
+
+/* ── Pulse (live dots) ─────────────────────────────────────────────────── */
+@keyframes hexa-pulse {
+  0%, 100% { opacity: 1;   box-shadow: 0 0 0 0   rgba(43, 255, 136, 0.55); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 6px rgba(43, 255, 136, 0); }
+}
 
 /* ── Selection ─────────────────────────────────────────────────────────── */
 ::selection {
