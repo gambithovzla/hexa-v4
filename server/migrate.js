@@ -454,6 +454,16 @@ export async function runParlaySynergyMigrations() {
         ADD COLUMN IF NOT EXISTS leg_results JSONB
     `);
 
+    await client.query(`
+      ALTER TABLE parlay_synergy_runs
+        ADD COLUMN IF NOT EXISTS bet_type VARCHAR(32)
+    `);
+
+    await client.query(`
+      ALTER TABLE parlay_synergy_runs
+        ADD COLUMN IF NOT EXISTS market_focus VARCHAR(32)
+    `);
+
     await client.query('COMMIT');
     console.log('[migrate] parlay_synergy_runs table ready');
   } catch (err) {
