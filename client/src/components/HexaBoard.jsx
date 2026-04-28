@@ -197,77 +197,32 @@ function InsightMedia({ insight, size = 40, tone }) {
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
-function BrandHero({ lang }) {
-  const { C, MONO, DISPLAY, SPACE } = useHexaTheme();
-  const isEs = lang === 'es';
+function BrandHero() {
+  const { C, SPACE } = useHexaTheme();
   return (
     <Box
       sx={{
-        display:         'flex',
-        alignItems:      'center',
-        gap:             { xs: SPACE.md, sm: SPACE.lg },
-        mb:              SPACE.lg,
-        px:              { xs: SPACE.md, sm: SPACE.lg },
-        py:              { xs: SPACE.sm, sm: SPACE.md },
-        border:          `1px solid ${C.cyanLine}`,
-        borderLeft:      `3px solid ${C.cyan}`,
-        bgcolor:         'rgba(0,0,0,0.35)',
-        backgroundImage: 'linear-gradient(135deg, rgba(0,217,255,0.06) 0%, transparent 55%)',
-        position:        'relative',
-        overflow:        'hidden',
+        mb:           SPACE.lg,
+        border:       `1px solid ${C.cyanLine}`,
+        borderLeft:   `3px solid ${C.cyan}`,
+        bgcolor:      'rgba(0,0,0,0.35)',
+        position:     'relative',
+        overflow:     'hidden',
+        lineHeight:   0,
       }}
     >
       <Box
         component="img"
-        src="/hexa-hero.png"
-        alt="H.E.X.A."
+        src="/banner%20hexa%20principal.png"
+        alt="H.E.X.A. — Hybrid Expert X-Analysis"
         sx={{
-          height:        { xs: 96, sm: 140, md: 180 },
-          width:         'auto',
-          flexShrink:    0,
-          filter:        'drop-shadow(0 0 18px rgba(0,217,255,0.35))',
+          width:         '100%',
+          height:        'auto',
+          display:       'block',
           userSelect:    'none',
           pointerEvents: 'none',
         }}
       />
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography
-          sx={{
-            fontFamily:    DISPLAY,
-            fontWeight:    900,
-            fontSize:      { xs: '1.5rem', sm: '2rem', md: '2.4rem' },
-            letterSpacing: '0.32em',
-            color:         C.textPrimary,
-            lineHeight:    1,
-            textShadow:    C.cyanGlow,
-          }}
-        >
-          H.E.X.A.
-        </Typography>
-        <Typography
-          sx={{
-            fontFamily:    MONO,
-            fontSize:      { xs: '0.6rem', sm: '0.72rem' },
-            letterSpacing: '0.24em',
-            color:         C.cyan,
-            mt:            '6px',
-          }}
-        >
-          {isEs ? 'ANALIZA · DECIDE · GANA' : 'ANALYZE · DECIDE · WIN'}
-        </Typography>
-        <Typography
-          sx={{
-            fontFamily:    MONO,
-            fontSize:      { xs: '0.58rem', sm: '0.64rem' },
-            letterSpacing: '0.18em',
-            color:         C.textMuted,
-            mt:            '4px',
-            display:       { xs: 'none', sm: 'block' },
-          }}
-        >
-          HYBRID EXPERT X-ANALYSIS
-        </Typography>
-      </Box>
     </Box>
   );
 }
@@ -503,7 +458,7 @@ export default function HexaBoard({ lang = 'es' }) {
 
   return (
     <Box sx={{ maxWidth: 1040, mx: 'auto', width: '100%' }}>
-      <BrandHero lang={lang} />
+      <BrandHero />
       <BoardHeader
         t={t}
         data={data}
