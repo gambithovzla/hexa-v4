@@ -15,11 +15,16 @@ export const lightPalette = {
 
   // ── Backgrounds — warm paper ───────────────────────────────────────────
   bg:          '#F5F2EB',   // cream paper (main canvas)
+  bg1:         '#FFFFFF',   // panel base
+  bg2:         '#FAF7F0',   // panel raised
+  bg3:         '#F0EBDD',   // panel raised+
   surface:     '#FFFFFF',   // card face
   surfaceAlt:  '#EEE9DE',   // nested / expanded drawer
   elevated:    '#FFFFFF',
 
   // ── Borders — deep teal instead of neon cyan ───────────────────────────
+  line:        'rgba(0, 93, 125, 0.18)',
+  lineStrong:  'rgba(0, 93, 125, 0.32)',
   border:      'rgba(0, 93, 125, 0.24)',
   borderLight: 'rgba(0, 93, 125, 0.12)',
 
@@ -41,15 +46,26 @@ export const lightPalette = {
   greenLine:   'rgba(0, 122, 64, 0.28)',
   greenGlow:   'none',
 
+  // ── Pink (losses) ──────────────────────────────────────────────────────
+  pink:        '#A8173A',
+  pinkDim:     'rgba(168, 23, 58, 0.08)',
+  pinkLine:    'rgba(168, 23, 58, 0.3)',
+  pinkGlow:    'none',
+
   // ── Semantic ───────────────────────────────────────────────────────────
   amber:       '#A05E00',
   amberDim:    'rgba(160, 94, 0, 0.08)',
   amberLine:   'rgba(160, 94, 0, 0.3)',
+  warn:        '#A05E00',
   red:         '#A8173A',
   redDim:      'rgba(168, 23, 58, 0.08)',
   redLine:     'rgba(168, 23, 58, 0.3)',
 
   // ── Text — near-black ink on cream ─────────────────────────────────────
+  ink0:          '#0A1014',
+  ink1:          'rgba(10, 16, 20, 0.72)',
+  ink2:          'rgba(10, 16, 20, 0.58)',
+  ink3:          'rgba(10, 16, 20, 0.36)',
   textPrimary:   '#0A1014',
   textSecondary: 'rgba(10, 16, 20, 0.72)',
   textTertiary:  'rgba(10, 16, 20, 0.58)',

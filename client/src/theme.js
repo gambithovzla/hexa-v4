@@ -18,8 +18,11 @@
 import darkPalette from './palettes/dark.js';
 
 // ── Font stacks — palette-independent ───────────────────────────────────────
-export const MONO    = "'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace";
-export const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
+// Cyberpunk redesign: Space Grotesk for display copy, JetBrains Mono for
+// numerals/labels. Orbitron + Share Tech Mono are kept in the stack as
+// fallback so anything still referencing them visually degrades gracefully.
+export const MONO    = "'JetBrains Mono', 'Share Tech Mono', 'SF Mono', 'Courier New', monospace";
+export const DISPLAY = "'Space Grotesk', 'Orbitron', system-ui, sans-serif";
 
 // Legacy aliases
 export const BARLOW  = DISPLAY;

@@ -34,6 +34,7 @@ import { motion } from 'framer-motion';
 import { useHexaTheme } from '../themeProvider';
 import { staggerContainer } from '../motion';
 import { HeroCard, InsightCard, DataChip } from './premium';
+import HexaCyberHero from './hero/HexaCyberHero';
 import TeamLogo from './TeamLogo';
 import PlayerHeadshot from './PlayerHeadshot';
 
@@ -197,101 +198,240 @@ function InsightMedia({ insight, size = 40, tone }) {
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
-function BrandHero() {
-  const { C, SPACE } = useHexaTheme();
+function BrandHero({ t, data, lang }) {
+  // Live counts from the board feed; if data hasn't loaded yet we fall back to em-dashes
+  const totalGames    = data?.totalGames    ?? null;
+  const teamsAnalyzed = data?.teamsAnalyzed ?? null;
+  const insightsCount = data?.insights?.length ?? null;
+  const topInsight    = data?.insights?.[0] ?? null;
+  const topLabel      = topInsight ? (t.typeLabels[topInsight.type] ?? '—') : null;
+
+  const fmt = (n) => (n == null ? '—' : String(n));
+
+  const stats = [
+    { label: lang === 'es' ? 'Juegos' : 'Games',      value: fmt(totalGames),    tone: 'cyan' },
+    { label: lang === 'es' ? 'Equipos' : 'Teams',     value: fmt(teamsAnalyzed), tone: 'cyan' },
+    { label: lang === 'es' ? 'Señales' : 'Signals',   value: fmt(insightsCount), tone: 'green' },
+    { label: lang === 'es' ? 'Estado' : 'Status',     value: data?.cached ? (lang === 'es' ? 'CACHE' : 'CACHED') : 'LIVE',
+      tone: data?.cached ? 'orange' : 'green' },
+  ];
+
+  const headline = lang === 'es' ? 'Inteligencia MLB en tiempo real' : 'MLB intelligence, real-time';
+  const subline  = topLabel
+    ? (lang === 'es'
+        ? `Señal destacada: ${topLabel.toLowerCase()}`
+        : `Top signal: ${topLabel.toLowerCase()}`)
+    : (lang === 'es'
+        ? 'Picks, edges y oportunidades calculadas por el oráculo H.E.X.A.'
+        : 'Picks, edges and opportunities computed by the H.E.X.A. oracle');
+
   return (
-    <Box
-      sx={{
-        mb:           SPACE.lg,
-        border:       `1px solid ${C.cyanLine}`,
-        borderLeft:   `3px solid ${C.cyan}`,
-        bgcolor:      'rgba(0,0,0,0.35)',
-        position:     'relative',
-        overflow:     'hidden',
-        lineHeight:   0,
-      }}
-    >
-      <Box
-        component="img"
-        src="/banner%20hexa%20principal.png"
-        alt="H.E.X.A. — Hybrid Expert X-Analysis"
-        sx={{
-          width:         '100%',
-          height:        'auto',
-          display:       'block',
-          userSelect:    'none',
-          pointerEvents: 'none',
-        }}
-      />
-    </Box>
+    <HexaCyberHero
+      eyebrow={lang === 'es' ? '// SISTEMA EN LÍNEA' : '// SYSTEM ONLINE'}
+      title={headline}
+      subtitle={subline}
+      stats={stats}
+    />
   );
 }
 
 function BoardHeader({ t, data, ageMin, refreshing, loading, onRefresh }) {
-  const { C, MONO, DISPLAY, SCALE, SPACE } = useHexaTheme();
+  const { C, MONO, SCALE, SPACE } = useHexaTheme();
 
+  // The hero block now carries the title; this strip is just a status bar.
   return (
     <Box
       sx={{
         display:        'flex',
-        alignItems:     { xs: 'flex-start', sm: 'flex-end' },
+        alignItems:     'center',
         justifyContent: 'space-between',
-        mb:             SPACE.lg,
+        mb:             SPACE.md,
         flexWrap:       'wrap',
-        gap:            SPACE.md,
+        gap:            SPACE.sm,
+        px:             '4px',
       }}
     >
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography
-          sx={{
-            fontFamily:    DISPLAY,
-            fontWeight:    800,
-            letterSpacing: '0.24em',
-            fontSize:      { xs: '1.15rem', sm: '1.5rem' },
-            color:         C.accent,
-            textShadow:    C.accentGlow,
-          }}
-        >
-          {t.title}
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: SCALE.micro, color: C.textMuted, letterSpacing: '0.14em', mt: '4px' }}>
-          {t.subtitle}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <Box sx={{
+          width: 8, height: 8, borderRadius: '50%',
+          bgcolor: data ? C.green : C.ink3,
+          boxShadow: data && C.glowsEnabled ? `0 0 8px ${C.green}` : 'none',
+          animation: data ? 'hexa-pulse 1.6s ease-in-out infinite' : 'none',
+        }} />
+        <Typography sx={{ fontFamily: MONO, fontSize: SCALE.micro, color: C.ink2, letterSpacing: '0.16em' }}>
+          {data ? `${t.updated}: ${ageMin != null ? t.ago(ageMin) : '—'} · ${data.cached ? t.cached : t.fresh}` : t.subtitle}
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' }}>
-        {data && (
-          <Typography sx={{ fontFamily: MONO, fontSize: SCALE.micro, color: C.textMuted, letterSpacing: '0.08em' }}>
-            {t.updated}: {ageMin != null ? t.ago(ageMin) : '—'} · {data.cached ? t.cached : t.fresh}
-            {data.totalGames   != null && ` · ${data.totalGames} ${t.games}`}
-            {data.teamsAnalyzed != null && ` · ${data.teamsAnalyzed} ${t.teams}`}
-          </Typography>
-        )}
-        <Box
-          component="button"
-          onClick={onRefresh}
-          disabled={refreshing || loading}
-          sx={{
-            px:            SPACE.md,
-            py:            '6px',
-            border:        `1px solid ${C.cyanLine}`,
-            bgcolor:       C.cyanDim,
-            color:         C.cyan,
-            fontFamily:    MONO,
-            fontSize:      SCALE.micro,
-            fontWeight:    700,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            cursor:        (refreshing || loading) ? 'default' : 'pointer',
-            opacity:       (refreshing || loading) ? 0.5 : 1,
-            transition:    'all 0.2s',
-            '&:hover':     { borderColor: C.cyan, boxShadow: C.cyanGlow, color: C.textPrimary },
-          }}
-        >
-          {refreshing ? t.refreshing : t.refresh}
-        </Box>
+      <Box
+        component="button"
+        onClick={onRefresh}
+        disabled={refreshing || loading}
+        sx={{
+          px:            '14px',
+          py:            '6px',
+          border:        `1px solid ${C.cyanLine}`,
+          bgcolor:       C.cyanDim,
+          color:         C.cyan,
+          fontFamily:    MONO,
+          fontSize:      SCALE.micro,
+          fontWeight:    700,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          cursor:        (refreshing || loading) ? 'default' : 'pointer',
+          opacity:       (refreshing || loading) ? 0.5 : 1,
+          transition:    'all 0.2s',
+          borderRadius:  '4px',
+          '&:hover':     { borderColor: C.cyan, boxShadow: C.glowsEnabled ? C.cyanGlow : 'none', color: C.ink0 },
+        }}
+      >
+        {refreshing ? t.refreshing : t.refresh}
       </Box>
     </Box>
+  );
+}
+
+// ── KPI strip — 4 cards above the feed showing category breakdown ───────────
+function BoardKpiStrip({ insights, lang }) {
+  const { C, MONO, DISPLAY, SCALE, SPACE } = useHexaTheme();
+
+  // Bucket insights by category — same map BoardHeader uses for the chips.
+  const buckets = useMemo(() => {
+    const out = { offense: [], pitching: [], streaks: [], matchups: [] };
+    insights.forEach((ins, i) => {
+      const cat = TYPE_CATEGORY[ins.type];
+      if (cat && out[cat]) out[cat].push(i + 1); // store 1-based index for sparkline
+    });
+    return out;
+  }, [insights]);
+
+  const cards = [
+    {
+      key:   'offense',
+      label: lang === 'es' ? 'Ofensiva' : 'Offense',
+      tone:  C.green,
+      toneLine: C.greenLine,
+      toneDim:  C.greenDim,
+      points: buckets.offense,
+    },
+    {
+      key:   'pitching',
+      label: lang === 'es' ? 'Pitching' : 'Pitching',
+      tone:  C.amber,
+      toneLine: C.amberLine,
+      toneDim:  C.amberDim,
+      points: buckets.pitching,
+    },
+    {
+      key:   'streaks',
+      label: lang === 'es' ? 'Rachas' : 'Streaks',
+      tone:  C.cyan,
+      toneLine: C.cyanLine,
+      toneDim:  C.cyanDim,
+      points: buckets.streaks,
+    },
+    {
+      key:   'matchups',
+      label: lang === 'es' ? 'Duelos' : 'Matchups',
+      tone:  C.accent,
+      toneLine: C.accentLine,
+      toneDim:  C.accentDim,
+      points: buckets.matchups,
+    },
+  ];
+
+  return (
+    <Box
+      sx={{
+        display:             'grid',
+        gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+        gap:                 SPACE.sm,
+        mb:                  SPACE.lg,
+      }}
+    >
+      {cards.map((card) => {
+        const count = card.points.length;
+        const max   = Math.max(insights.length, 6);
+        return (
+          <Box
+            key={card.key}
+            sx={{
+              position:     'relative',
+              p:            '14px',
+              border:       `1px solid ${card.toneLine}`,
+              borderLeft:   `2px solid ${card.tone}`,
+              bgcolor:      C.bg1,
+              borderRadius: '8px',
+              overflow:     'hidden',
+              transition:   'border-color 0.18s, transform 0.18s',
+              '&:hover':    { transform: 'translateY(-1px)', borderColor: card.tone },
+            }}
+          >
+            {/* Background gradient swoosh */}
+            <Box aria-hidden sx={{
+              position: 'absolute', inset: 0,
+              background: `linear-gradient(135deg, ${card.toneDim} 0%, transparent 60%)`,
+              pointerEvents: 'none',
+            }} />
+            <Box sx={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <Typography sx={{
+                fontFamily: MONO, fontSize: '0.56rem', letterSpacing: '0.18em',
+                color: C.ink2, textTransform: 'uppercase',
+              }}>
+                {card.label}
+              </Typography>
+              <Box component="span" sx={{
+                fontFamily: MONO, fontSize: '0.52rem',
+                color: card.tone, opacity: 0.7,
+              }}>
+                /{insights.length || 0}
+              </Box>
+            </Box>
+            <Typography sx={{
+              fontFamily: DISPLAY, fontSize: '1.6rem', fontWeight: 700,
+              color: card.tone, lineHeight: 1.1, mt: '4px', position: 'relative', zIndex: 1,
+              textShadow: C.glowsEnabled ? `0 0 12px ${card.tone}55` : 'none',
+            }}>
+              {count}
+            </Typography>
+            {/* Mini sparkline */}
+            <Box sx={{ mt: '6px', height: 16, position: 'relative', zIndex: 1 }}>
+              <Sparkline points={card.points} max={max} color={card.tone} />
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function Sparkline({ points, max, color }) {
+  if (!points || points.length === 0) {
+    return (
+      <Box sx={{
+        height: '100%', borderTop: `1px dashed ${color}`, opacity: 0.25,
+      }} />
+    );
+  }
+  const w = 100;
+  const h = 16;
+  const d = points
+    .map((p, i) => {
+      const x = (i / Math.max(points.length - 1, 1)) * w;
+      const y = h - (p / max) * h;
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <path d={d} stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      {points.map((p, i) => {
+        const x = (i / Math.max(points.length - 1, 1)) * w;
+        const y = h - (p / max) * h;
+        return <circle key={i} cx={x} cy={y} r="1.6" fill={color} />;
+      })}
+    </svg>
   );
 }
 
@@ -458,7 +598,7 @@ export default function HexaBoard({ lang = 'es' }) {
 
   return (
     <Box sx={{ maxWidth: 1040, mx: 'auto', width: '100%' }}>
-      <BrandHero />
+      <BrandHero t={t} data={data} lang={lang} />
       <BoardHeader
         t={t}
         data={data}
@@ -534,6 +674,11 @@ export default function HexaBoard({ lang = 'es' }) {
               }} : undefined}
             />
           </Box>
+
+          {/* ── 1.5 · KPI strip (category breakdown + sparkline) ───────── */}
+          {data?.insights && data.insights.length > 0 && (
+            <BoardKpiStrip insights={data.insights} lang={lang} />
+          )}
 
           {/* ── 2 · Category filters ──────────────────────────────────── */}
           {rest.length > 0 && (
