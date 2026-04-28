@@ -34,6 +34,7 @@ import { motion } from 'framer-motion';
 import { useHexaTheme } from '../themeProvider';
 import { staggerContainer } from '../motion';
 import { HeroCard, InsightCard, DataChip } from './premium';
+import HexaCyberHero from './hero/HexaCyberHero';
 import TeamLogo from './TeamLogo';
 import PlayerHeadshot from './PlayerHeadshot';
 
@@ -197,33 +198,40 @@ function InsightMedia({ insight, size = 40, tone }) {
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
-function BrandHero() {
-  const { C, SPACE } = useHexaTheme();
+function BrandHero({ t, data, lang }) {
+  // Live counts from the board feed; if data hasn't loaded yet we fall back to em-dashes
+  const totalGames    = data?.totalGames    ?? null;
+  const teamsAnalyzed = data?.teamsAnalyzed ?? null;
+  const insightsCount = data?.insights?.length ?? null;
+  const topInsight    = data?.insights?.[0] ?? null;
+  const topLabel      = topInsight ? (t.typeLabels[topInsight.type] ?? '—') : null;
+
+  const fmt = (n) => (n == null ? '—' : String(n));
+
+  const stats = [
+    { label: lang === 'es' ? 'Juegos' : 'Games',      value: fmt(totalGames),    tone: 'cyan' },
+    { label: lang === 'es' ? 'Equipos' : 'Teams',     value: fmt(teamsAnalyzed), tone: 'cyan' },
+    { label: lang === 'es' ? 'Señales' : 'Signals',   value: fmt(insightsCount), tone: 'green' },
+    { label: lang === 'es' ? 'Estado' : 'Status',     value: data?.cached ? (lang === 'es' ? 'CACHE' : 'CACHED') : 'LIVE',
+      tone: data?.cached ? 'orange' : 'green' },
+  ];
+
+  const headline = lang === 'es' ? 'Inteligencia MLB en tiempo real' : 'MLB intelligence, real-time';
+  const subline  = topLabel
+    ? (lang === 'es'
+        ? `Señal destacada: ${topLabel.toLowerCase()}`
+        : `Top signal: ${topLabel.toLowerCase()}`)
+    : (lang === 'es'
+        ? 'Picks, edges y oportunidades calculadas por el oráculo H.E.X.A.'
+        : 'Picks, edges and opportunities computed by the H.E.X.A. oracle');
+
   return (
-    <Box
-      sx={{
-        mb:           SPACE.lg,
-        border:       `1px solid ${C.cyanLine}`,
-        borderLeft:   `3px solid ${C.cyan}`,
-        bgcolor:      'rgba(0,0,0,0.35)',
-        position:     'relative',
-        overflow:     'hidden',
-        lineHeight:   0,
-      }}
-    >
-      <Box
-        component="img"
-        src="/banner%20hexa%20principal.png"
-        alt="H.E.X.A. — Hybrid Expert X-Analysis"
-        sx={{
-          width:         '100%',
-          height:        'auto',
-          display:       'block',
-          userSelect:    'none',
-          pointerEvents: 'none',
-        }}
-      />
-    </Box>
+    <HexaCyberHero
+      eyebrow={lang === 'es' ? '// SISTEMA EN LÍNEA' : '// SYSTEM ONLINE'}
+      title={headline}
+      subtitle={subline}
+      stats={stats}
+    />
   );
 }
 
@@ -458,7 +466,7 @@ export default function HexaBoard({ lang = 'es' }) {
 
   return (
     <Box sx={{ maxWidth: 1040, mx: 'auto', width: '100%' }}>
-      <BrandHero />
+      <BrandHero t={t} data={data} lang={lang} />
       <BoardHeader
         t={t}
         data={data}
