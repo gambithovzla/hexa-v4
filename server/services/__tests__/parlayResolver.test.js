@@ -3,7 +3,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregateParlay } from '../parlayResolver.js';
+import { aggregateParlay, hydrateLegsFromPool } from '../parlayResolver.js';
 
 describe('aggregateParlay', () => {
   it('returns win when every leg is a win', () => {
@@ -74,5 +74,46 @@ describe('aggregateParlay', () => {
     ]);
     assert.equal(out.status, 'pending');
     assert.equal(out.legsHit, 1);
+  });
+});
+
+describe('hydrateLegsFromPool', () => {
+  const POOL = [
+    { candidateId: 'cand_A', gamePk: 100, pick: 'BOS ML', matchup: 'BOS @ TOR', type: 'ml' },
+    { candidateId: 'cand_B', gamePk: 200, pick: 'Over 8.5', matchup: 'NYY @ BAL', type: 'total' },
+  ];
+
+  it('hydrates legacy [id, id, ...] rows from candidate_pool', () => {
+    const legs = hydrateLegsFromPool(['cand_A', 'cand_B'], POOL);
+    assert.equal(legs.length, 2);
+    assert.equal(legs[0].gamePk, 100);
+    assert.equal(legs[0].pick, 'BOS ML');
+    assert.equal(legs[1].gamePk, 200);
+  });
+
+  it('hydrates legacy [{candidateId}] objects without gamePk/pick', () => {
+    const legs = hydrateLegsFromPool([{ candidateId: 'cand_A' }], POOL);
+    assert.equal(legs[0].gamePk, 100);
+    assert.equal(legs[0].pick, 'BOS ML');
+  });
+
+  it('passes through new-format legs untouched', () => {
+    const input = [{ candidateId: 'cand_X', gamePk: 999, pick: 'NYM ML', gameDate: '2026-04-25' }];
+    const legs = hydrateLegsFromPool(input, POOL);
+    assert.equal(legs[0].gamePk, 999);
+    assert.equal(legs[0].pick, 'NYM ML');
+    assert.equal(legs[0].gameDate, '2026-04-25');
+  });
+
+  it('returns minimal stub when candidateId is missing from the pool', () => {
+    const legs = hydrateLegsFromPool(['unknown_id'], POOL);
+    assert.equal(legs.length, 1);
+    assert.equal(legs[0].candidateId, 'unknown_id');
+    assert.equal(legs[0].gamePk, undefined);
+  });
+
+  it('returns [] for non-array input', () => {
+    assert.deepEqual(hydrateLegsFromPool(null, POOL), []);
+    assert.deepEqual(hydrateLegsFromPool(undefined, POOL), []);
   });
 });

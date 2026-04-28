@@ -606,7 +606,14 @@ async function persistParlayRun({
           confidence_in_decision:      architectDecision.confidence_in_decision,
           _fallback:                   architectDecision._fallback ?? false,
         }),
-        JSON.stringify(finalLegs.map(l => l.candidateId)),
+        JSON.stringify(finalLegs.map(l => ({
+          candidateId: l.candidateId,
+          gamePk:      l.gamePk,
+          pick:        l.pick,
+          matchup:     l.matchup,
+          type:        l.type,
+          gameDate:    resolvedDate,
+        }))),
         architectDecision.combined_probability,
         architectDecision.combined_decimal_odds,
         architectDecision.synergy_type ?? null,
@@ -1448,7 +1455,7 @@ app.post('/api/parlay-architect/:id/auto-resolve', verifyToken, async (req, res)
   }
   try {
     const { rows } = await pool.query(
-      `SELECT id, user_id, game_date, chosen_legs, resolved
+      `SELECT id, user_id, game_date, chosen_legs, candidate_pool, resolved
          FROM parlay_synergy_runs
         WHERE id = $1`,
       [runId],

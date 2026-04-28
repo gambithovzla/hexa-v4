@@ -18,6 +18,34 @@ import {
   resolvePickFromFinalState,
 } from '../pick-resolver.js';
 
+/**
+ * Older parlay_synergy_runs rows persisted `chosen_legs` as an array of bare
+ * candidateIds (e.g. ["cand_1","cand_2"]). The resolver needs `{ gamePk, pick }`
+ * per leg, so this helper hydrates ID-only entries against the candidate_pool
+ * column. New rows already store full leg objects and pass through unchanged.
+ */
+export function hydrateLegsFromPool(legs, candidatePool) {
+  if (!Array.isArray(legs)) return [];
+  const pool = Array.isArray(candidatePool) ? candidatePool : [];
+  const byId = new Map(pool.map(c => [String(c?.candidateId ?? ''), c]));
+
+  return legs.map(leg => {
+    if (leg && typeof leg === 'object' && (leg.gamePk != null || leg.pick)) {
+      return leg;
+    }
+    const candidateId = leg && typeof leg === 'object' ? leg.candidateId : leg;
+    const match = byId.get(String(candidateId ?? ''));
+    if (!match) return { candidateId };
+    return {
+      candidateId: match.candidateId ?? candidateId,
+      gamePk:      match.gamePk      ?? null,
+      pick:        match.pick        ?? '',
+      matchup:     match.matchup     ?? null,
+      type:        match.type        ?? null,
+    };
+  });
+}
+
 function normalizeDate(value) {
   if (!value) return null;
   const raw = String(value).trim();
@@ -206,9 +234,9 @@ export async function resolveParlayLegs(legs, ctx = {}) {
  */
 export async function resolveParlayRunById({ runId, row = null, gamesByDate, liveDataCache }) {
   let parlayRow = row;
-  if (!parlayRow) {
+  if (!parlayRow || parlayRow.candidate_pool === undefined) {
     const { rows } = await pool.query(
-      `SELECT id, game_date, chosen_legs, resolved
+      `SELECT id, game_date, chosen_legs, candidate_pool, resolved
          FROM parlay_synergy_runs
         WHERE id = $1`,
       [runId],
@@ -217,8 +245,8 @@ export async function resolveParlayRunById({ runId, row = null, gamesByDate, liv
   }
   if (!parlayRow) throw new Error(`parlay_synergy_runs id=${runId} not found`);
 
-  const legs = parlayRow.chosen_legs ?? [];
-  const totalLegs = Array.isArray(legs) ? legs.length : 0;
+  const legs = hydrateLegsFromPool(parlayRow.chosen_legs ?? [], parlayRow.candidate_pool ?? []);
+  const totalLegs = legs.length;
 
   const { legResults, aggregate } = await resolveParlayLegs(legs, {
     gamesByDate, liveDataCache,
@@ -269,7 +297,7 @@ export async function resolvePendingParlays({ limit = 200 } = {}) {
   const summary = { scanned: 0, finalized: 0, wins: 0, losses: 0, pushes: 0, stillPending: 0, errors: [] };
 
   const { rows } = await pool.query(
-    `SELECT id, game_date, chosen_legs
+    `SELECT id, game_date, chosen_legs, candidate_pool
        FROM parlay_synergy_runs
       WHERE resolved = false
       ORDER BY game_date DESC, id ASC
