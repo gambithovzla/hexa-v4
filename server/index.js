@@ -23,6 +23,7 @@ import insightsRouter from './routes/insights.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
+import { loadLearningsForUser } from './services/parlayLearnings.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
@@ -566,6 +567,7 @@ async function persistParlayRun({
   model, resolvedEngine, isAdminRun, cost,
   enriched, composedParlays, architectDecision,
   finalLegs, composerMs, llmMs, totalMs,
+  betType, marketFocus,
 }) {
   try {
     await pool.query(
@@ -575,10 +577,12 @@ async function persistParlayRun({
         candidate_pool, composed_top3, architect_output,
         chosen_legs, combined_prob, combined_dec_odds,
         synergy_type, warnings,
-        timings, credits_charged, is_admin_run
+        timings, credits_charged, is_admin_run,
+        bet_type, market_focus
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+        $21,$22
       )`,
       [
         String(userId),
@@ -621,6 +625,8 @@ async function persistParlayRun({
         JSON.stringify({ composer_ms: composerMs, llm_ms: llmMs, total_ms: totalMs }),
         cost,
         isAdminRun ?? false,
+        betType ?? null,
+        marketFocus ?? null,
       ]
     );
   } catch (err) {
@@ -1343,6 +1349,7 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       isAdminRun: updatedUser.is_admin, cost: PARLAY_SYNERGY_COST,
       enriched, composedParlays, architectDecision,
       finalLegs, composerMs, llmMs, totalMs,
+      betType, marketFocus: resolvedMarketFocus,
     });
 
     // ── Fase 7: Shadow mode — async compare with legacy analyzeParlay ─────
@@ -1378,6 +1385,7 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT
          id, created_at, game_date, mode, requested_legs, game_pks,
+         engine, model, bet_type, market_focus,
          architect_output, composed_top3, combined_prob, combined_dec_odds,
          synergy_type, warnings, resolved, hit, legs_hit, leg_results
        FROM parlay_synergy_runs
@@ -1401,6 +1409,10 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
         mode:                  row.mode,
         requested_legs:        row.requested_legs,
         game_ids:              row.game_pks ?? [],
+        engine:                row.engine ?? null,
+        model:                 row.model ?? null,
+        bet_type:              row.bet_type ?? null,
+        market_focus:          row.market_focus ?? null,
         synergy_type:          row.synergy_type ?? null,
         synergy_thesis:        architectOutput.synergy_thesis ?? null,
         combined_probability:  row.combined_prob ?? null,
@@ -1418,6 +1430,18 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
 
     res.json({ success: true, data: entries });
   } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/parlay-architect/learnings — per-dimension performance aggregates
+// for the authenticated user. Pure aggregation over their resolved history.
+app.get('/api/parlay-architect/learnings', verifyToken, async (req, res) => {
+  try {
+    const data = await loadLearningsForUser(req.user.id);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('[parlay-learnings] failed:', err.message);
     res.status(500).json({ success: false, error: safeError(err) });
   }
 });

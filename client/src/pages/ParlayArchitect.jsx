@@ -3,9 +3,11 @@ import { Box, Typography, Slider } from '@mui/material';
 import { useAuth } from '../store/authStore';
 import useGames from '../hooks/useGames';
 import useParlayArchitectHistory from '../hooks/useParlayArchitectHistory';
+import useParlayLearnings from '../hooks/useParlayLearnings';
 import OracleLoadingOverlay from '../components/OracleLoadingOverlay';
 import ParlayLegCard from '../components/ParlayLegCard';
 import ParlayArchitectHistory from '../components/ParlayArchitectHistory';
+import HexaLearnings from '../components/HexaLearnings';
 import { C, MONO, BARLOW } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -448,6 +450,10 @@ export default function ParlayArchitect({ lang = 'en' }) {
   const { token } = useAuth();
   const { games, date, setDate, gamesLoading } = useGames();
   const { grouped, groupedDates, stats, winRate, addRun, markResult, autoResolve, deleteRun } = useParlayArchitectHistory(token);
+  const { data: learningsData, loading: learningsLoading, error: learningsError } = useParlayLearnings(
+    token,
+    `${stats.total}-${stats.resolved}`,
+  );
 
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [mode, setMode] = useState('balanced');
@@ -942,6 +948,14 @@ export default function ParlayArchitect({ lang = 'en' }) {
           )}
         </Box>
       </Box>
+
+      {/* ── Learnings ── */}
+      <HexaLearnings
+        lang={lang}
+        data={learningsData}
+        loading={learningsLoading}
+        error={learningsError}
+      />
 
       {/* ── History ── */}
       <ParlayArchitectHistory
