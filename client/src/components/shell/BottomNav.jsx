@@ -28,7 +28,7 @@ const ICONS = {
   board:   <Icon d="M3 3h18v18H3z M3 9h18 M9 21V9" />,
   live:    <Icon d="M3 12h4 M17 12h4 M12 3v4 M12 17v4 M5 5l3 3 M16 16l3 3 M5 19l3-3 M16 8l3-3" />,
   oracle:  <Icon d="M12 2l9 5v10l-9 5-9-5V7z M3 7l9 5 9-5" size={28} />,
-  picks:   <Icon d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" size={28} />,
+  game:    <Icon d="M12 2l9 5v10l-9 5-9-5V7z M12 8v4 M12 16h.01" size={28} />,
   history: <Icon d="M3 12a9 9 0 1 0 3-6.7 M3 4v5h5 M12 7v5l3 2" />,
   account: <Icon d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />,
 };
@@ -83,11 +83,11 @@ export default function BottomNav({
   const { C } = useHexaTheme();
 
   const fabIsOracle = isAdmin && Boolean(onOracleChat);
-  const fabAction = fabIsOracle ? onOracleChat : () => onTabChange?.('semana');
+  const fabAction = fabIsOracle ? onOracleChat : () => onTabChange?.('game');
   const fabLabel  = fabIsOracle
     ? L('Oracle', 'Oracle', lang)
-    : L('Picks',  'Picks',  lang);
-  const fabIcon = fabIsOracle ? ICONS.oracle : ICONS.picks;
+    : L('Game', 'Juego', lang);
+  const fabIcon = fabIsOracle ? ICONS.oracle : ICONS.game;
 
   return (
     <Box
