@@ -15,7 +15,7 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-import Header               from './components/Header';
+import { Shell }             from './components/shell';
 import GameSelector         from './components/GameSelector';
 import AnalysisPanel        from './components/AnalysisPanel';
 import HistoryPanel         from './components/HistoryPanel';
@@ -420,36 +420,24 @@ export default function App() {
   }
 
   return (
-    <Box
-        sx={{
-          minHeight:       '100vh',
-          bgcolor:         C.bg,
-          display:         'flex',
-          flexDirection:   'column',
-        }}
+    <>
+      {/* ── Oracle loading overlay (blocks UI during analysis) ── */}
+      {isAnalyzing && <OracleLoadingOverlay lang={lang} />}
+
+      <Shell
+        lang={lang}
+        onLangToggle={setLang}
+        activeTab={activeTab}
+        onTabChange={isAnalyzing ? () => {} : setActiveTab}
+        disabled={isAnalyzing}
+        isAdmin={isAdmin}
+        performancePublic={performancePublic}
+        onOracleChat={() => setShowOracleChat(true)}
+        onMethodology={() => setShowMethodology(true)}
+        onPerformance={() => setShowPerformance(true)}
       >
-        {/* ── Oracle loading overlay (blocks UI during analysis) ── */}
-        {isAnalyzing && <OracleLoadingOverlay lang={lang} />}
-
-        {/* ── Sticky header + tab bar ── */}
-        <Header
-          lang={lang}
-          onLangToggle={setLang}
-          activeTab={activeTab}
-          onTabChange={isAnalyzing ? () => {} : setActiveTab}
-          disabled={isAnalyzing}
-          onMethodology={() => setShowMethodology(true)}
-          onPerformance={() => setShowPerformance(true)}
-          isAdmin={isAdmin}
-          performancePublic={performancePublic}
-          onOracleChat={() => setShowOracleChat(true)}
-        />
-
-        {/* ── Main content ── */}
         <Box
-          component="main"
           sx={{
-            flex:      1,
             px:        { xs: 2, sm: 3 },
             py:        3,
             pb:        { xs: 'calc(20px + env(safe-area-inset-bottom))', md: '24px' },
@@ -588,6 +576,7 @@ export default function App() {
 
         {/* ── Footer ── */}
         <AppFooter lang={lang} />
-      </Box>
+      </Shell>
+    </>
   );
 }
