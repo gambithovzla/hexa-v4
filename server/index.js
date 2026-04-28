@@ -22,6 +22,7 @@ import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-histor
 import insightsRouter from './routes/insights.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
+import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
@@ -1371,7 +1372,7 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
       `SELECT
          id, created_at, game_date, mode, requested_legs, game_pks,
          architect_output, composed_top3, combined_prob, combined_dec_odds,
-         synergy_type, warnings, resolved, hit, legs_hit
+         synergy_type, warnings, resolved, hit, legs_hit, leg_results
        FROM parlay_synergy_runs
        WHERE user_id = $1
        ORDER BY created_at DESC
@@ -1402,6 +1403,7 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
         warnings:              row.warnings ?? [],
         result:                row.resolved ? (row.hit ? 'win' : 'loss') : 'pending',
         legs_hit:              row.legs_hit ?? null,
+        leg_results:           row.leg_results ?? null,
         _fallback:             architectOutput._fallback ?? false,
         _source:               'server',
       };
@@ -1431,6 +1433,46 @@ app.get('/api/admin/parlay-synergy/recent', verifyToken, isAdmin, async (req, re
        LIMIT 50`
     );
     res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/parlay-architect/:id/auto-resolve — grade each leg of a user's own
+// run against final game state and aggregate. Same logic as the scheduled
+// scan, but scoped to one row and accessible to the owning user.
+app.post('/api/parlay-architect/:id/auto-resolve', verifyToken, async (req, res) => {
+  const runId = Number(req.params.id);
+  if (!Number.isInteger(runId) || runId < 1) {
+    return res.status(400).json({ success: false, error: 'Invalid run id' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, user_id, game_date, chosen_legs, resolved
+         FROM parlay_synergy_runs
+        WHERE id = $1`,
+      [runId],
+    );
+    const row = rows[0];
+    if (!row) return res.status(404).json({ success: false, error: 'Run not found' });
+    if (String(row.user_id) !== String(req.user.id) && !req.user.is_admin) {
+      return res.status(403).json({ success: false, error: 'Not your run' });
+    }
+
+    const out = await resolveParlayRunById({ runId, row });
+    res.json({ success: true, data: out });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/parlay-synergy/auto-resolve-all — scan every unresolved run
+// and persist outcomes (admin only). Same call the scheduler makes.
+app.post('/api/admin/parlay-synergy/auto-resolve-all', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const limit = Number.isFinite(Number(req.body?.limit)) ? Number(req.body.limit) : 200;
+    const summary = await resolvePendingParlays({ limit });
+    res.json({ success: true, data: summary });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -3559,9 +3601,17 @@ runMigrations()
         // Window: 19:00–05:59 ET (west coast games finish ~7pm ET; extras/rain delays can run past 3am)
         if (etHour >= 19 || etHour < 6) {
           console.log(`[pick-resolver] Scheduled run triggered (ET hour: ${etHour})`);
-          resolvePendingPicks().catch(err => {
-            console.error('[pick-resolver] Scheduled run failed:', err.message);
-          });
+          resolvePendingPicks()
+            .catch(err => {
+              console.error('[pick-resolver] Scheduled run failed:', err.message);
+            })
+            .finally(() => {
+              // Resolve parlays after individual picks so live-feed cache is warm
+              // (both call getLiveGameData per gamePk, but each has its own cache).
+              resolvePendingParlays().catch(err => {
+                console.error('[parlay-resolver] Scheduled run failed:', err.message);
+              });
+            });
         }
       }, THIRTY_MIN).unref();
 

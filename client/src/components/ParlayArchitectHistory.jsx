@@ -13,6 +13,14 @@ const L = {
     markWin:  'WIN',
     markLoss: 'LOSS',
     markPush: 'PUSH',
+    auto:     'AUTO',
+    autoBusy: 'GRADING…',
+    autoPending: (resolved, total) => `${resolved}/${total} games final — try again later`,
+    autoNoLegs: 'Nothing to grade',
+    autoLocalOnly: 'Local-only run — sign in to enable auto-grade',
+    autoError: (msg) => `Auto-grade failed: ${msg}`,
+    legPending: 'PEND',
+    legUnresolved: 'N/A',
     legsHit:  'legs hit',
     showLegs: 'LEGS',
     hideLegs: 'HIDE',
@@ -39,6 +47,14 @@ const L = {
     markWin:  'GANÓ',
     markLoss: 'PERDIÓ',
     markPush: 'EMPATE',
+    auto:     'AUTO',
+    autoBusy: 'CALIFICANDO…',
+    autoPending: (resolved, total) => `${resolved}/${total} juegos finalizados — reintenta luego`,
+    autoNoLegs: 'Nada que calificar',
+    autoLocalOnly: 'Corrida local — inicia sesión para auto-calificar',
+    autoError: (msg) => `Auto-calificación falló: ${msg}`,
+    legPending: 'PEND',
+    legUnresolved: 'N/A',
     legsHit:  'patas acertadas',
     showLegs: 'PATAS',
     hideLegs: 'OCULTAR',
@@ -85,8 +101,32 @@ function ResultBadge({ result, t }) {
   );
 }
 
-function ResolveButtons({ entry, t, onMark }) {
+function ResolveButtons({ entry, t, onMark, onAutoResolve }) {
   const [legsHit, setLegsHit] = useState('');
+  const [autoState, setAutoState] = useState({ busy: false, message: null, color: null });
+
+  const isLocalOnly = typeof entry.id === 'string' ? !entry.id.startsWith('db_') : true;
+
+  async function handleAuto() {
+    if (!onAutoResolve || autoState.busy) return;
+    setAutoState({ busy: true, message: null, color: null });
+    const out = await onAutoResolve(entry.id);
+    if (!out?.ok) {
+      setAutoState({ busy: false, message: t.autoError(out?.reason ?? 'unknown'), color: C.red });
+      return;
+    }
+    const d = out.data;
+    if (d.totalLegs === 0) {
+      setAutoState({ busy: false, message: t.autoNoLegs, color: C.amber });
+      return;
+    }
+    if (d.status === 'pending') {
+      setAutoState({ busy: false, message: t.autoPending(d.legsResolved, d.totalLegs), color: C.amber });
+      return;
+    }
+    // resolved — entry.result will update via the hook; clear local message
+    setAutoState({ busy: false, message: null, color: null });
+  }
 
   if (entry.result !== 'pending') {
     return (
@@ -102,63 +142,115 @@ function ResolveButtons({ entry, t, onMark }) {
   }
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-        <input
-          type="number"
-          min={0}
-          max={entry.requested_legs}
-          value={legsHit}
-          onChange={e => setLegsHit(e.target.value)}
-          placeholder="—"
-          title={t.legsHit}
-          style={{
-            width: '28px',
-            background: 'transparent',
-            border: `1px solid ${C.borderLight}`,
-            color: '#E8F4FF',
-            fontFamily: "'Share Tech Mono', monospace",
-            fontSize: '0.64rem',
-            padding: '2px 3px',
-            outline: 'none',
-            textAlign: 'center',
-          }}
-        />
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted }}>/{entry.requested_legs}</Typography>
-      </Box>
-      {[
-        { key: 'win',  label: t.markWin,  color: C.green },
-        { key: 'loss', label: t.markLoss, color: C.red   },
-        { key: 'push', label: t.markPush, color: C.amber },
-      ].map(({ key, label, color }) => (
-        <Box
-          key={key}
-          onClick={() => onMark(entry.id, key, legsHit !== '' ? Number(legsHit) : null)}
-          sx={{
-            border: `1px solid ${color}40`,
-            bgcolor: `${color}10`,
-            px: '6px',
-            py: '2px',
-            cursor: 'pointer',
-            '&:hover': { bgcolor: `${color}22` },
-          }}
-        >
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-            {label}
-          </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+          <input
+            type="number"
+            min={0}
+            max={entry.requested_legs}
+            value={legsHit}
+            onChange={e => setLegsHit(e.target.value)}
+            placeholder="—"
+            title={t.legsHit}
+            style={{
+              width: '28px',
+              background: 'transparent',
+              border: `1px solid ${C.borderLight}`,
+              color: '#E8F4FF',
+              fontFamily: "'Share Tech Mono', monospace",
+              fontSize: '0.64rem',
+              padding: '2px 3px',
+              outline: 'none',
+              textAlign: 'center',
+            }}
+          />
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted }}>/{entry.requested_legs}</Typography>
         </Box>
-      ))}
+        {[
+          { key: 'win',  label: t.markWin,  color: C.green },
+          { key: 'loss', label: t.markLoss, color: C.red   },
+          { key: 'push', label: t.markPush, color: C.amber },
+        ].map(({ key, label, color }) => (
+          <Box
+            key={key}
+            onClick={() => onMark(entry.id, key, legsHit !== '' ? Number(legsHit) : null)}
+            sx={{
+              border: `1px solid ${color}40`,
+              bgcolor: `${color}10`,
+              px: '6px',
+              py: '2px',
+              cursor: 'pointer',
+              '&:hover': { bgcolor: `${color}22` },
+            }}
+          >
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+              {label}
+            </Typography>
+          </Box>
+        ))}
+        {onAutoResolve && (
+          <Box
+            onClick={isLocalOnly ? undefined : handleAuto}
+            title={isLocalOnly ? t.autoLocalOnly : undefined}
+            sx={{
+              border: `1px solid ${C.cyan}40`,
+              bgcolor: `${C.cyan}10`,
+              px: '6px',
+              py: '2px',
+              cursor: isLocalOnly || autoState.busy ? 'not-allowed' : 'pointer',
+              opacity: isLocalOnly ? 0.4 : autoState.busy ? 0.7 : 1,
+              '&:hover': isLocalOnly || autoState.busy ? {} : { bgcolor: `${C.cyan}22` },
+            }}
+          >
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.cyan, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+              {autoState.busy ? t.autoBusy : t.auto}
+            </Typography>
+          </Box>
+        )}
+      </Box>
+      {autoState.message && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.54rem', color: autoState.color ?? C.textMuted, letterSpacing: '0.04em' }}>
+          {autoState.message}
+        </Typography>
+      )}
     </Box>
   );
 }
 
-function LegDetail({ leg, index, lang }) {
+function LegResultBadge({ legResult, t }) {
+  if (!legResult) return null;
+  const r = legResult.result;
+  const map = {
+    win:  { label: t.win,  color: C.green },
+    loss: { label: t.loss, color: C.red   },
+    push: { label: t.push, color: C.amber },
+  };
+  const s = r ? map[r] : null;
+  const fallback = legResult.status === 'pending'
+    ? { label: t.legPending, color: C.textMuted }
+    : { label: t.legUnresolved, color: C.textMuted };
+  const { label, color } = s ?? fallback;
+  return (
+    <Box
+      title={legResult.reason ?? legResult.status ?? ''}
+      sx={{ border: `1px solid ${color}40`, bgcolor: `${color}12`, px: '4px', py: '0px', flexShrink: 0 }}
+    >
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
+function LegDetail({ leg, index, lang, legResult, t }) {
   return (
     <Box sx={{ borderLeft: `2px solid ${C.accent}`, pl: '10px', py: '2px' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '2px', flexWrap: 'wrap' }}>
         <Box sx={{ bgcolor: C.accent, color: '#000', fontFamily: MONO, fontSize: '0.52rem', fontWeight: 700, px: '4px', py: '1px', flexShrink: 0 }}>
           {index}
         </Box>
+        <LegResultBadge legResult={legResult} t={t} />
         <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.textPrimary, fontWeight: 600 }}>
           {leg.pick}
         </Typography>
@@ -176,6 +268,11 @@ function LegDetail({ leg, index, lang }) {
           </Typography>
         )}
       </Box>
+      {legResult?.actual != null && legResult?.line != null && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, lineHeight: 1.5, mt: '1px' }}>
+          actual: {legResult.actual} · line: {legResult.line}
+        </Typography>
+      )}
       {leg.reasoning && (
         <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted, lineHeight: 1.5, mt: '2px' }}>
           {leg.reasoning.slice(0, 200)}{leg.reasoning.length > 200 ? '…' : ''}
@@ -185,9 +282,28 @@ function LegDetail({ leg, index, lang }) {
   );
 }
 
-function HistoryEntry({ entry, t, lang, onMark, onDelete }) {
+function HistoryEntry({ entry, t, lang, onMark, onAutoResolve, onDelete }) {
   const [showLegs, setShowLegs] = useState(false);
   const modeColor = MODE_COLOR[entry.mode] ?? C.textMuted;
+
+  // Index leg_results by candidateId (falls back to position) so order changes
+  // in chosen_legs don't desync the badges.
+  const legResultsByCandidate = (() => {
+    const map = new Map();
+    if (!Array.isArray(entry.leg_results)) return map;
+    entry.leg_results.forEach((lr, i) => {
+      const key = lr?.candidateId ?? `__idx_${i}`;
+      map.set(key, lr);
+    });
+    return map;
+  })();
+  function getLegResult(leg, i) {
+    if (!Array.isArray(entry.leg_results)) return null;
+    if (leg?.candidateId && legResultsByCandidate.has(leg.candidateId)) {
+      return legResultsByCandidate.get(leg.candidateId);
+    }
+    return entry.leg_results[i] ?? null;
+  }
 
   return (
     <Box sx={{ borderBottom: `1px solid ${C.borderLight}`, '&:last-child': { borderBottom: 'none' } }}>
@@ -266,7 +382,7 @@ function HistoryEntry({ entry, t, lang, onMark, onDelete }) {
 
       {/* Resolve row */}
       <Box sx={{ px: '12px', pb: '8px' }}>
-        <ResolveButtons entry={entry} t={t} onMark={onMark} />
+        <ResolveButtons entry={entry} t={t} onMark={onMark} onAutoResolve={onAutoResolve} />
       </Box>
 
       {/* Expanded: thesis + legs */}
@@ -294,7 +410,14 @@ function HistoryEntry({ entry, t, lang, onMark, onDelete }) {
           )}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {entry.legs.map((leg, i) => (
-              <LegDetail key={leg.candidateId ?? i} leg={leg} index={i + 1} lang={lang} />
+              <LegDetail
+                key={leg.candidateId ?? i}
+                leg={leg}
+                index={i + 1}
+                lang={lang}
+                t={t}
+                legResult={getLegResult(leg, i)}
+              />
             ))}
           </Box>
         </Box>
@@ -305,7 +428,7 @@ function HistoryEntry({ entry, t, lang, onMark, onDelete }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ParlayArchitectHistory({ lang = 'en', grouped, groupedDates, stats, winRate, onMark, onDelete }) {
+export default function ParlayArchitectHistory({ lang = 'en', grouped, groupedDates, stats, winRate, onMark, onAutoResolve, onDelete }) {
   const t = L[lang] ?? L.en;
 
   return (
@@ -351,6 +474,7 @@ export default function ParlayArchitectHistory({ lang = 'en', grouped, groupedDa
                     t={t}
                     lang={lang}
                     onMark={onMark}
+                    onAutoResolve={onAutoResolve}
                     onDelete={onDelete}
                   />
                 ))}
