@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Box } from '@mui/material';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import BottomNav from './BottomNav';
 import { useHexaTheme } from '../../themeProvider';
 
 const STORAGE_KEY = 'hexa_sidebar_collapsed';
@@ -112,10 +113,19 @@ export default function Shell({
           activeTab={activeTab}
           onMobileMenu={() => setMobileOpen(true)}
         />
-        <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
+        <Box component="main" sx={{ flex: 1, minWidth: 0, pb: { xs: '76px', md: 0 } }}>
           {children}
         </Box>
       </Box>
+
+      {/* Mobile bottom nav (the FAB triggers Oracle Chat for admins, Picks for everyone else) */}
+      <BottomNav
+        lang={lang}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        isAdmin={isAdmin}
+        onOracleChat={onOracleChat}
+      />
     </Box>
   );
 }
