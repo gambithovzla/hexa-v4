@@ -21,10 +21,10 @@
 
   "batter": {
     "hit_streak_min_games": 3,
-    "hit_streak_lookback": 7,
+    "hit_streak_lookback": 30,
     "cold_batter_min_games_no_hit": 3,
     "cold_batter_min_at_bats_per_game": 2,
-    "max_batters_per_team": 4
+    "max_batters_per_team": 9
   },
 
   "matchup": {
