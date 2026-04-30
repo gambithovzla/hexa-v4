@@ -23,7 +23,7 @@ import insightsRouter from './routes/insights.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
-import { loadLearningsForUser } from './services/parlayLearnings.js';
+import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
@@ -1251,14 +1251,18 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     const alternatives  = composedParlays.slice(1);
 
     // Resolve architect's chosen leg IDs back to full candidate objects
-    const actualBuiltLegs = topComposed.legs.length;
+    const composerBuiltLegs = topComposed.legs.length;
     let finalLegs = resolveLegs(architectDecision.final_legs, enriched);
-    if (finalLegs.length < actualBuiltLegs) {
+    if (finalLegs.length < composerBuiltLegs) {
       // Fallback: architect returned bad IDs — use top composer parlay
       console.warn('[parlay-synergy] architect leg resolution incomplete, falling back to composer top');
       finalLegs = topComposed.legs;
     }
-    const partialWarning = topComposed.partial_warning ?? null;
+    const actualBuiltLegs = finalLegs.length;
+    const partialWarning = topComposed.partial_warning
+      ?? (actualBuiltLegs < requestedLegs
+        ? `Pool only supported ${actualBuiltLegs} of ${requestedLegs} requested legs.`
+        : null);
 
     const overrodeComposer =
       architectDecision.decision !== 'confirm' || architectDecision.chosen_index !== 0;
@@ -1283,6 +1287,8 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       data: {
         chosen_parlay: {
           legs:                  legSummary(finalLegs),
+          actual_legs:           actualBuiltLegs,
+          requested_legs:        requestedLegs,
           combined_probability:  architectDecision.combined_probability,
           combined_decimal_odds: architectDecision.combined_decimal_odds,
           combined_edge_score:   finalLegs.reduce((s, l) => s + (l.edge ?? 0), 0),
@@ -1386,7 +1392,7 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
       `SELECT
          id, created_at, game_date, mode, requested_legs, game_pks,
          engine, model, bet_type, market_focus,
-         architect_output, composed_top3, combined_prob, combined_dec_odds,
+         architect_output, composed_top3, chosen_legs, combined_prob, combined_dec_odds,
          synergy_type, warnings, resolved, hit, legs_hit, leg_results
        FROM parlay_synergy_runs
        WHERE user_id = $1
@@ -1400,6 +1406,15 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
       const composedTop3    = row.composed_top3 ?? [];
       const chosenIndex     = architectOutput.chosen_index ?? 0;
       const chosenParlay    = composedTop3[chosenIndex] ?? composedTop3[0] ?? null;
+      const composedLegs    = chosenParlay?.legs ?? [];
+      const composedById    = new Map(composedLegs.map(leg => [String(leg?.candidateId ?? ''), leg]));
+      const storedLegs      = Array.isArray(row.chosen_legs) ? row.chosen_legs : [];
+      const actualLegs      = storedLegs.length > 0
+        ? storedLegs.map(leg => {
+            const candidateId = leg && typeof leg === 'object' ? leg.candidateId : leg;
+            return { ...(composedById.get(String(candidateId ?? '')) ?? {}), ...(leg && typeof leg === 'object' ? leg : { candidateId }) };
+          })
+        : composedLegs;
 
       return {
         id:                    `db_${row.id}`,
@@ -1408,6 +1423,7 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
         date:                  row.game_date,
         mode:                  row.mode,
         requested_legs:        row.requested_legs,
+        actual_legs:           getActualLegCount({ legs: actualLegs, leg_results: row.leg_results, requested_legs: row.requested_legs }),
         game_ids:              row.game_pks ?? [],
         engine:                row.engine ?? null,
         model:                 row.model ?? null,
@@ -1418,7 +1434,7 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
         combined_probability:  row.combined_prob ?? null,
         combined_decimal_odds: row.combined_dec_odds ?? null,
         combined_edge_score:   null,
-        legs:                  chosenParlay?.legs ?? [],
+        legs:                  actualLegs,
         warnings:              row.warnings ?? [],
         result:                row.resolved ? (row.hit ? 'win' : 'loss') : 'pending',
         legs_hit:              row.legs_hit ?? null,

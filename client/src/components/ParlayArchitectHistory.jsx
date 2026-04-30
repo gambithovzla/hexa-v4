@@ -148,6 +148,24 @@ function fmtPct(v)  { return v != null ? `${(Number(v) * 100).toFixed(1)}%` : '�
 function fmtOdds(v) { return v != null ? `×${Number(v).toFixed(2)}` : '—'; }
 function fmtEdge(v) { return v != null ? `${Number(v).toFixed(1)}` : '—'; }
 
+function actualLegCount(entry) {
+  const explicit = Number(entry?.actual_legs);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  if (Array.isArray(entry?.legs) && entry.legs.length > 0) return entry.legs.length;
+  if (Array.isArray(entry?.leg_results) && entry.leg_results.length > 0) return entry.leg_results.length;
+  const requested = Number(entry?.requested_legs);
+  return Number.isFinite(requested) && requested > 0 ? requested : 0;
+}
+
+function missedLegCount(entry) {
+  if (entry?.result !== 'loss') return null;
+  if (Array.isArray(entry.leg_results) && entry.leg_results.length > 0) {
+    return entry.leg_results.filter(lr => lr?.result === 'loss').length;
+  }
+  if (entry.legs_hit == null) return null;
+  return Math.max(0, actualLegCount(entry) - Number(entry.legs_hit));
+}
+
 function ResultBadge({ result, t }) {
   const map = {
     pending: { label: t.pending, color: C.textMuted,  bg: 'transparent', border: C.borderLight },
@@ -166,8 +184,8 @@ function ResultBadge({ result, t }) {
 }
 
 function MissByBadge({ entry, t }) {
-  if (entry.result !== 'loss' || entry.legs_hit == null || entry.requested_legs == null) return null;
-  const miss = entry.requested_legs - entry.legs_hit;
+  const miss = missedLegCount(entry);
+  if (miss == null) return null;
   if (miss <= 0) return null;
   const color = miss === 1 ? C.amber : miss === 2 ? `${C.amber}` : C.red;
   return (
@@ -184,6 +202,12 @@ function ResolveButtons({ entry, t, onMark, onAutoResolve }) {
   const [autoState, setAutoState] = useState({ busy: false, message: null, color: null });
 
   const isLocalOnly = typeof entry.id === 'string' ? !entry.id.startsWith('db_') : true;
+  const totalLegs = actualLegCount(entry);
+  const defaultLegsHit = (outcome) => {
+    if (legsHit !== '') return Number(legsHit);
+    if (outcome === 'win') return totalLegs;
+    return null;
+  };
 
   async function handleAuto() {
     if (!onAutoResolve || autoState.busy) return;
@@ -225,7 +249,7 @@ function ResolveButtons({ entry, t, onMark, onAutoResolve }) {
           <input
             type="number"
             min={0}
-            max={entry.requested_legs}
+            max={totalLegs || undefined}
             value={legsHit}
             onChange={e => setLegsHit(e.target.value)}
             placeholder="—"
@@ -242,7 +266,7 @@ function ResolveButtons({ entry, t, onMark, onAutoResolve }) {
               textAlign: 'center',
             }}
           />
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted }}>/{entry.requested_legs}</Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted }}>/{totalLegs || '—'}</Typography>
         </Box>
         {[
           { key: 'win',  label: t.markWin,  color: C.green },
@@ -251,7 +275,7 @@ function ResolveButtons({ entry, t, onMark, onAutoResolve }) {
         ].map(({ key, label, color }) => (
           <Box
             key={key}
-            onClick={() => onMark(entry.id, key, legsHit !== '' ? Number(legsHit) : null)}
+            onClick={() => onMark(entry.id, key, defaultLegsHit(key))}
             sx={{
               border: `1px solid ${color}40`,
               bgcolor: `${color}10`,
@@ -362,6 +386,7 @@ function LegDetail({ leg, index, lang, legResult, t }) {
 function HistoryEntry({ entry, t, lang, onMark, onAutoResolve, onDelete }) {
   const [showLegs, setShowLegs] = useState(false);
   const modeColor = MODE_COLOR[entry.mode] ?? C.textMuted;
+  const totalLegs = actualLegCount(entry);
 
   const legResultsByCandidate = (() => {
     const map = new Map();
@@ -388,14 +413,14 @@ function HistoryEntry({ entry, t, lang, onMark, onAutoResolve, onDelete }) {
           <MissByBadge entry={entry} t={t} />
           {entry.legs_hit != null && entry.result !== 'pending' && (
             <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted }}>
-              {entry.legs_hit}/{entry.requested_legs}
+              {entry.legs_hit}/{totalLegs || '—'}
             </Typography>
           )}
           <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: modeColor, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             {entry.mode}
           </Typography>
           <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted }}>
-            {entry.requested_legs}L
+            {totalLegs || entry.requested_legs}L
           </Typography>
         </Box>
 
@@ -766,10 +791,10 @@ function entryMatchesFilters(entry, filters) {
 
   if (filters.missBy !== 'any') {
     if (filters.missBy === 'clean') {
-      if (!(entry.result === 'win' && entry.legs_hit === entry.requested_legs)) return false;
+      if (!(entry.result === 'win' && entry.legs_hit === actualLegCount(entry))) return false;
     } else {
-      if (entry.result !== 'loss' || entry.legs_hit == null || entry.requested_legs == null) return false;
-      const miss = entry.requested_legs - entry.legs_hit;
+      const miss = missedLegCount(entry);
+      if (miss == null) return false;
       if (filters.missBy === '3plus') {
         if (miss < 3) return false;
       } else if (miss !== filters.missBy) {

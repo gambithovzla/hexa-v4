@@ -124,6 +124,15 @@ function modeColor(mode) {
   return { conservative: C.green, balanced: C.cyan, aggressive: C.amber, dreamer: C.red }[mode] ?? C.textMuted;
 }
 
+function actualLegCount(run) {
+  const explicit = Number(run?.actual_legs);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  if (Array.isArray(run?.chosen_legs) && run.chosen_legs.length > 0) return run.chosen_legs.length;
+  if (Array.isArray(run?.leg_results) && run.leg_results.length > 0) return run.leg_results.length;
+  const requested = Number(run?.requested_legs);
+  return Number.isFinite(requested) && requested > 0 ? requested : null;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color }) {
@@ -140,6 +149,7 @@ function StatCard({ label, value, color }) {
 }
 
 function StatusBadge({ run, t }) {
+  const totalLegs = actualLegCount(run);
   if (!run.resolved) {
     const isFallback = run.architect_output?._fallback;
     return (
@@ -160,7 +170,7 @@ function StatusBadge({ run, t }) {
   return (
     <Box sx={{ border: `1px solid ${color}40`, bgcolor: `${color}12`, px: '5px', py: '1px' }}>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-        {label}{run.legs_hit != null ? ` (${run.legs_hit}/${run.requested_legs})` : ''}
+        {label}{run.legs_hit != null ? ` (${run.legs_hit}/${totalLegs ?? run.requested_legs})` : ''}
       </Typography>
     </Box>
   );
@@ -170,6 +180,7 @@ function ResolveControls({ run, t, token, onResolved }) {
   const [legsHit, setLegsHit] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const totalLegs = actualLegCount(run);
 
   async function resolve(hit) {
     setBusy(true);
@@ -178,11 +189,11 @@ function ResolveControls({ run, t, token, onResolved }) {
       const res = await fetch(`${API_URL}/api/admin/parlay-synergy/${run.id}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ hit, legs_hit: legsHit !== '' ? Number(legsHit) : null }),
+        body: JSON.stringify({ hit, legs_hit: legsHit !== '' ? Number(legsHit) : (hit ? totalLegs : null) }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'error');
-      onResolved(run.id, hit, legsHit !== '' ? Number(legsHit) : null);
+      onResolved(run.id, hit, legsHit !== '' ? Number(legsHit) : (hit ? totalLegs : null));
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -197,7 +208,7 @@ function ResolveControls({ run, t, token, onResolved }) {
         <input
           type="number"
           min={0}
-          max={run.requested_legs}
+          max={totalLegs ?? undefined}
           value={legsHit}
           onChange={e => setLegsHit(e.target.value)}
           placeholder="—"
@@ -256,9 +267,9 @@ function RunDetail({ run, t, lang }) {
             {t.chosenLegs}
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-            {legs.map((id, i) => (
+            {legs.map((leg, i) => (
               <Box key={i} sx={{ border: `1px solid ${C.borderLight}`, px: '6px', py: '2px' }}>
-                <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.cyan }}>{id}</Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.cyan }}>{leg?.candidateId ?? leg?.pick ?? leg}</Typography>
               </Box>
             ))}
           </Box>
@@ -323,6 +334,7 @@ function RunRow({ run, t, lang, token, onResolved }) {
   const [expanded, setExpanded] = useState(false);
   const archOut = run.architect_output ?? {};
   const timings = run.timings ?? {};
+  const totalLegs = actualLegCount(run);
 
   return (
     <>
@@ -339,7 +351,7 @@ function RunRow({ run, t, lang, token, onResolved }) {
       }}>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted }}>{fmtDate(run.game_date ?? run.created_at)}</Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: modeColor(run.mode), textTransform: 'uppercase' }}>{run.mode ?? '—'}</Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: C.cyan, textAlign: 'center' }}>{run.requested_legs ?? '—'}</Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: C.cyan, textAlign: 'center' }}>{totalLegs ?? run.requested_legs ?? '—'}</Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {run.synergy_type ? run.synergy_type.replace(/_/g, ' ') : '—'}
         </Typography>

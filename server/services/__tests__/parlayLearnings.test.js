@@ -3,7 +3,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregateLearnings } from '../parlayLearnings.js';
+import { aggregateLearnings, countMissedLegs, getActualLegCount } from '../parlayLearnings.js';
 
 function entry(overrides = {}) {
   return {
@@ -73,6 +73,36 @@ describe('aggregateLearnings', () => {
     assert.equal(out.missBreakdown.missBy1, 2);
     assert.equal(out.missBreakdown.missBy2, 1);
     assert.equal(out.missBreakdown.missBy3plus, 1);
+  });
+
+  it('uses actual built legs and per-leg losses for partial dreamers', () => {
+    const partial = entry({
+      mode: 'dreamer',
+      result: 'loss',
+      requested_legs: 20,
+      legs_hit: 8,
+      legs: Array.from({ length: 10 }, (_, i) => ({ candidateId: `L${i + 1}`, type: 'moneyline' })),
+      leg_results: [
+        { candidateId: 'L1', result: 'win' },
+        { candidateId: 'L2', result: 'win' },
+        { candidateId: 'L3', result: 'win' },
+        { candidateId: 'L4', result: 'win' },
+        { candidateId: 'L5', result: 'win' },
+        { candidateId: 'L6', result: 'win' },
+        { candidateId: 'L7', result: 'win' },
+        { candidateId: 'L8', result: 'win' },
+        { candidateId: 'L9', result: 'push' },
+        { candidateId: 'L10', result: 'loss' },
+      ],
+    });
+
+    assert.equal(getActualLegCount(partial), 10);
+    assert.equal(countMissedLegs(partial), 1);
+
+    const out = aggregateLearnings([partial]);
+    assert.equal(out.missBreakdown.missBy1, 1);
+    assert.equal(out.missBreakdown.missBy3plus, 0);
+    assert.equal(out.byLegCount[0].key, '10');
   });
 
   it('aggregates per-leg-type from leg_results', () => {
