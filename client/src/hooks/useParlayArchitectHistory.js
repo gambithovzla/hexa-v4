@@ -12,6 +12,7 @@
  *     date:                string  (YYYY-MM-DD game date)
  *     mode:                string
  *     requested_legs:      number
+ *     actual_legs:         number
  *     game_ids:            number[]
  *     synergy_type:        string | null
  *     synergy_thesis:      string | null
@@ -80,12 +81,17 @@ export default function useParlayArchitectHistory(token) {
 
   const addRun = useCallback(({ date, mode, requestedLegs, gameIds, result, architect_meta }) => {
     const chosen = result?.chosen_parlay ?? {};
+    const actualLegs = Number(chosen.actual_legs)
+      || (Array.isArray(chosen.legs) ? chosen.legs.length : 0)
+      || Number(result?.composer_meta?.built_legs)
+      || requestedLegs;
     const entry = {
       id:                    Date.now(),
       created_at:            new Date().toISOString(),
       date:                  date ?? new Date().toISOString().slice(0, 10),
       mode,
       requested_legs:        requestedLegs,
+      actual_legs:           actualLegs,
       game_ids:              gameIds ?? [],
       synergy_type:          chosen.synergy_type ?? null,
       synergy_thesis:        chosen.synergy_thesis ?? null,
@@ -142,6 +148,7 @@ export default function useParlayArchitectHistory(token) {
           return {
             ...e,
             leg_results: out.legResults,
+            actual_legs: out.totalLegs || e.actual_legs,
             legs_hit:    out.legsHit,
             result:      resolved ? out.status : e.result,
           };

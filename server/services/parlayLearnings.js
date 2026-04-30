@@ -11,6 +11,35 @@ import pool from '../db.js';
 
 const UNKNOWN = '__unknown__';
 
+export function getActualLegCount(entry) {
+  const explicit = Number(entry?.actual_legs);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+  if (Array.isArray(entry?.legs) && entry.legs.length > 0) {
+    return entry.legs.length;
+  }
+
+  if (Array.isArray(entry?.leg_results) && entry.leg_results.length > 0) {
+    return entry.leg_results.length;
+  }
+
+  const requested = Number(entry?.requested_legs);
+  return Number.isFinite(requested) && requested > 0 ? requested : null;
+}
+
+export function countMissedLegs(entry) {
+  if (!entry || entry.result !== 'loss') return null;
+
+  if (Array.isArray(entry.leg_results) && entry.leg_results.length > 0) {
+    return entry.leg_results.filter(lr => lr?.result === 'loss').length;
+  }
+
+  if (entry.legs_hit == null) return null;
+  const actualLegs = getActualLegCount(entry);
+  if (actualLegs == null) return null;
+  return Math.max(0, actualLegs - Number(entry.legs_hit));
+}
+
 function bumpParlayBucket(map, rawKey, entry) {
   const key = rawKey == null || rawKey === '' ? UNKNOWN : String(rawKey);
   let row = map.get(key);
@@ -40,9 +69,7 @@ function bumpParlayBucket(map, rawKey, entry) {
   }
   if (
     entry.result === 'loss'
-    && entry.legs_hit != null
-    && entry.requested_legs != null
-    && entry.requested_legs - entry.legs_hit === 1
+    && countMissedLegs(entry) === 1
   ) {
     row.missBy1++;
   }
@@ -151,7 +178,7 @@ export function aggregateLearnings(entries, { includePending = false } = {}) {
     bumpParlayBucket(byEngine,   e.engine,                     e);
     bumpParlayBucket(byModel,    e.model,                      e);
     bumpParlayBucket(bySynergy,  e.synergy_type,               e);
-    bumpParlayBucket(byLegCount, e.requested_legs,             e);
+    bumpParlayBucket(byLegCount, getActualLegCount(e),         e);
 
     // Per-leg-type aggregate. We index leg_results by candidateId so reordered
     // legs don't desync from results.
@@ -169,8 +196,9 @@ export function aggregateLearnings(entries, { includePending = false } = {}) {
       });
     }
 
-    if (e.result === 'loss' && e.legs_hit != null && e.requested_legs != null) {
-      const miss = e.requested_legs - e.legs_hit;
+    if (e.result === 'loss') {
+      const miss = countMissedLegs(e);
+      if (miss == null) continue;
       missBreakdown.totalLosses++;
       if      (miss === 1) missBreakdown.missBy1++;
       else if (miss === 2) missBreakdown.missBy2++;
@@ -206,7 +234,7 @@ export async function loadLearningsForUser(userId) {
     `SELECT
        id, game_date, mode, requested_legs,
        engine, model, bet_type, market_focus,
-       composed_top3, architect_output,
+       composed_top3, architect_output, chosen_legs,
        combined_dec_odds, synergy_type,
        resolved, hit, legs_hit, leg_results
      FROM parlay_synergy_runs
@@ -221,18 +249,28 @@ export async function loadLearningsForUser(userId) {
     const composedTop3    = row.composed_top3 ?? [];
     const chosenIndex     = architectOutput.chosen_index ?? 0;
     const chosenParlay    = composedTop3[chosenIndex] ?? composedTop3[0] ?? null;
+    const composedLegs    = chosenParlay?.legs ?? [];
+    const composedById    = new Map(composedLegs.map(leg => [String(leg?.candidateId ?? ''), leg]));
+    const storedLegs      = Array.isArray(row.chosen_legs) ? row.chosen_legs : [];
+    const actualLegs      = storedLegs.length > 0
+      ? storedLegs.map(leg => {
+          const candidateId = leg && typeof leg === 'object' ? leg.candidateId : leg;
+          return { ...(composedById.get(String(candidateId ?? '')) ?? {}), ...(leg && typeof leg === 'object' ? leg : { candidateId }) };
+        })
+      : composedLegs;
     return {
       id:                    `db_${row.id}`,
       date:                  row.game_date,
       mode:                  row.mode,
       requested_legs:        row.requested_legs,
+      actual_legs:           getActualLegCount({ legs: actualLegs, leg_results: row.leg_results, requested_legs: row.requested_legs }),
       engine:                row.engine ?? null,
       model:                 row.model ?? null,
       bet_type:              row.bet_type ?? null,
       market_focus:          row.market_focus ?? null,
       synergy_type:          row.synergy_type ?? null,
       combined_decimal_odds: row.combined_dec_odds ?? null,
-      legs:                  chosenParlay?.legs ?? [],
+      legs:                  actualLegs,
       result:                row.resolved ? (row.hit ? 'win' : 'loss') : 'pending',
       legs_hit:              row.legs_hit ?? null,
       leg_results:           row.leg_results ?? null,
