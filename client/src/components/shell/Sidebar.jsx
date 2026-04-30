@@ -14,6 +14,7 @@
  *   onToggleCollapse — () => void
  *   onAdminLink      — (url) => void   (for /admin/* navigations)
  *   onOracleChat     — () => void
+ *   onCreditManager  — () => void
  *   onMethodology    — () => void
  *   onPerformance    — () => void
  */
@@ -230,6 +231,7 @@ export default function Sidebar({
   collapsed = false,
   onToggleCollapse,
   onOracleChat,
+  onCreditManager,
   onMethodology,
   onPerformance,
   performancePublic = false,
@@ -278,6 +280,8 @@ export default function Sidebar({
     ].filter(Boolean);
 
     const cuenta = [
+      isAdmin && { key: 'credit-manager', action: onCreditManager,
+        icon: ICONS.credit, label: L('Grant Credits', 'Asignar creditos', lang) },
       { key: 'bankroll', tab: 'bankroll', icon: ICONS.bankroll,
         label: 'Bankroll' },
       { key: 'guide', tab: 'guide', icon: ICONS.guide,
@@ -292,7 +296,7 @@ export default function Sidebar({
       { label: L('Analysis',      'Análisis',      lang), items: analisis },
       { label: L('Account',       'Cuenta',        lang), items: cuenta },
     ].filter(g => g.items.length > 0);
-  }, [lang, isAdmin, performancePublic, onOracleChat, onMethodology, onPerformance]);
+  }, [lang, isAdmin, performancePublic, onOracleChat, onCreditManager, onMethodology, onPerformance]);
 
   const handleClick = (item) => {
     if (item.tab) onTabChange?.(item.tab);
