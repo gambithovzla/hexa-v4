@@ -3,27 +3,50 @@ import pool from './db.js';
 
 const BMC_WEBHOOK_SECRET = process.env.BMC_WEBHOOK_SECRET;
 
-function resolveCredits(extras) {
-  if (!Array.isArray(extras) || extras.length === 0) return 0;
+// BMC sends different event types depending on product configuration:
+//   - extra_purchase.created  → one-time "Extras"
+//   - shop_order.created      → digital Shop products
+// Both carry the same conceptual fields (supporter_email, an array of items
+// with title/amount), but the items live under different keys per event type.
+const SUPPORTED_EVENT_TYPES = new Set([
+  'extra_purchase.created',
+  'shop_order.created',
+]);
+
+function extractItems(eventType, data) {
+  if (eventType === 'shop_order.created') {
+    return data.items ?? data.products ?? data.line_items ?? [];
+  }
+  // extra_purchase.created
+  return data.extras ?? [];
+}
+
+function resolveCredits(items) {
+  if (!Array.isArray(items) || items.length === 0) return 0;
 
   let total = 0;
-  for (const extra of extras) {
-    const title  = (extra.title ?? '').toLowerCase();
-    const amount = String(extra.amount ?? '');
+  for (const item of items) {
+    const title    = (item.title ?? item.name ?? item.product_name ?? '').toLowerCase();
+    const amount   = String(item.amount ?? item.price ?? '');
+    const quantity = Number(item.quantity ?? 1) || 1;
 
-    if (title.includes('rookie') || amount === '7.99')   { total += 15;  continue; }
-    if (title.includes('all-star') || amount === '19.99') { total += 50;  continue; }
-    if (title.includes('mvp') || amount === '39.99')      { total += 120; continue; }
-
-    // Fallback: ~2 credits per dollar
-    const dollars = parseFloat(amount);
-    if (!isNaN(dollars) && dollars > 0) {
-      const fallback = Math.round(dollars * 2);
-      console.warn(`[bmc-webhook] Unknown extra "${extra.title}" ($${amount}) — assigning ${fallback} credits (fallback ~$1=2cr)`);
-      total += fallback;
-    } else {
-      console.warn(`[bmc-webhook] Cannot determine credits for extra "${extra.title}" ($${amount})`);
+    let perUnit = 0;
+    if (title.includes('rookie')   || amount === '7.99')  perUnit = 15;
+    else if (title.includes('all-star') || amount === '19.99') perUnit = 50;
+    else if (title.includes('mvp')      || amount === '39.99') perUnit = 120;
+    else {
+      // Fallback: ~2 credits per dollar
+      const dollars = parseFloat(amount);
+      if (!isNaN(dollars) && dollars > 0) {
+        perUnit = Math.round(dollars * 2);
+        console.warn(`[bmc-webhook] Unknown item "${item.title ?? item.name}" ($${amount}) — assigning ${perUnit} credits/unit (fallback ~$1=2cr)`);
+      } else {
+        console.warn(`[bmc-webhook] Cannot determine credits for item "${item.title ?? item.name}" ($${amount})`);
+        continue;
+      }
     }
+
+    total += perUnit * quantity;
   }
 
   return total;
@@ -54,32 +77,37 @@ export async function handleBMCWebhook(req, res) {
       }
     }
 
-    if (payload?.type !== 'extra_purchase.created') {
-      console.log(`[bmc-webhook] Ignoring event type "${payload?.type}"`);
+    const eventType = payload?.type;
+
+    if (!SUPPORTED_EVENT_TYPES.has(eventType)) {
+      // Log full payload (without secrets) so we can wire up new event types
+      // when BMC introduces them or the creator adds new product categories.
+      console.log(`[bmc-webhook] Ignoring event type "${eventType}" — payload keys: ${Object.keys(payload?.data ?? {}).join(',')}`);
       return res.status(200).json({ success: true });
     }
 
     const data = payload?.data ?? {};
 
-    if (data.status !== 'succeeded') {
-      console.log(`[bmc-webhook] Skipping purchase ${data.id} with status "${data.status}"`);
+    if (data.status && data.status !== 'succeeded') {
+      console.log(`[bmc-webhook] Skipping ${eventType} ${data.id} with status "${data.status}"`);
       return res.status(200).json({ success: true });
     }
 
-    const supporter_email = data.supporter_email;
+    const supporter_email = data.supporter_email ?? data.email ?? data.buyer_email;
     if (!supporter_email) {
-      console.warn('[bmc-webhook] No supporter_email in payload — ignoring');
+      console.warn(`[bmc-webhook] No supporter email in ${eventType} payload — ignoring`);
       return res.status(200).json({ success: true });
     }
 
-    const purchase_id    = data.id;
-    const extras         = data.extras ?? [];
-    const email          = supporter_email.toLowerCase().trim();
-    const credits        = resolveCredits(extras);
-    const product_name   = extras[0]?.title ?? null;
-    const purchase_amount = extras[0]?.amount ?? null;
+    const items           = extractItems(eventType, data);
+    const purchase_id     = data.id;
+    const email           = supporter_email.toLowerCase().trim();
+    const credits         = resolveCredits(items);
+    const product_name    = items[0]?.title ?? items[0]?.name ?? null;
+    const purchase_amount = items[0]?.amount ?? items[0]?.price ?? null;
 
     if (credits === 0) {
+      console.warn(`[bmc-webhook] ${eventType} ${purchase_id} for ${email} resolved to 0 credits — items: ${JSON.stringify(items)}`);
       return res.status(200).json({ success: true });
     }
 
@@ -94,7 +122,7 @@ export async function handleBMCWebhook(req, res) {
         'UPDATE users SET credits = credits + $1 WHERE email = $2',
         [credits, email]
       );
-      console.log(`[bmc-webhook] Credited ${credits} credits to ${email} (supporter: "${data.supporter_name}", extras: ${extras.length})`);
+      console.log(`[bmc-webhook] Credited ${credits} credits to ${email} (event: ${eventType}, items: ${items.length})`);
     } else {
       await pool.query(
         `INSERT INTO pending_credits (email, credits, source, purchase_id, amount, product_name)
@@ -107,7 +135,7 @@ export async function handleBMCWebhook(req, res) {
           product_name,
         ]
       );
-      console.log(`[bmc-webhook] User ${email} not found — saved ${credits} pending credits (supporter: "${data.supporter_name}", extras: ${extras.length})`);
+      console.log(`[bmc-webhook] User ${email} not found — saved ${credits} pending credits (event: ${eventType}, items: ${items.length})`);
     }
 
     return res.status(200).json({ success: true });
