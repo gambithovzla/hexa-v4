@@ -143,6 +143,28 @@ export async function runMigrations() {
       )
     `);
 
+    // ── bmc_processed_purchases (dedup across webhook + poller) ──────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bmc_processed_purchases (
+        purchase_id  VARCHAR(100)  PRIMARY KEY,
+        source       VARCHAR(20)   NOT NULL,
+        email        VARCHAR(255),
+        credits      INTEGER,
+        product_name VARCHAR(255),
+        amount       DECIMAL(10,2),
+        processed_at TIMESTAMP     DEFAULT NOW()
+      )
+    `);
+
+    // Seed: mark BMC purchases that were already credited manually before
+    // the poller existed. ON CONFLICT DO NOTHING makes this idempotent and
+    // safe to leave in place across redeploys.
+    await client.query(`
+      INSERT INTO bmc_processed_purchases (purchase_id, source, email, credits, product_name, amount)
+      VALUES ('6472416', 'manual', 'enriquerafael2002@gmail.com', 50, 'HEXA All-Star - 50 Credits', 19.99)
+      ON CONFLICT (purchase_id) DO NOTHING
+    `);
+
     // ── is_admin column (safe for existing DBs) ──────────────────────────────
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false`);
     await client.query(`UPDATE users SET is_admin = true WHERE email = 'cdanielrr@hotmail.com'`);

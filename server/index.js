@@ -21,6 +21,7 @@ import picksRouter from './routes/picks.js';
 import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-history.js';
 import insightsRouter from './routes/insights.js';
 import { handleBMCWebhook } from './bmc-webhook.js';
+import { pollBMCExtras } from './bmc-poller.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
@@ -3679,6 +3680,21 @@ runMigrations()
           });
         }
       }, TWO_HOURS).unref();
+
+      // ── BMC purchase poller: every 10 min (fallback for missing webhooks) ─
+      const TEN_MIN = 10 * 60 * 1000;
+      // Run once shortly after startup so retroactive purchases get credited
+      // without waiting a full interval.
+      setTimeout(() => {
+        pollBMCExtras().catch(err => {
+          console.error('[bmc-poller] Initial run failed:', err.message);
+        });
+      }, 60_000).unref();
+      setInterval(() => {
+        pollBMCExtras().catch(err => {
+          console.error('[bmc-poller] Scheduled run failed:', err.message);
+        });
+      }, TEN_MIN).unref();
 
       if (process.env.X_AUTO_PUBLISH_ENABLED === '1') {
         const intervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);
