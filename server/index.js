@@ -47,6 +47,7 @@ import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
+import { mountAdminDbExplorer } from './admin-db-explorer.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
 import {
   buildCandidatePool,
@@ -1769,6 +1770,9 @@ app.post('/api/admin/grant-credits', verifyToken, isAdmin, async (req, res) => {
     res.status(500).json({ error: 'Failed to update credits', details: safeError(err) });
   }
 });
+
+// GET /api/admin/db/* — read-only DB explorer (admin only)
+mountAdminDbExplorer(app, { verifyToken, isAdmin });
 
 // POST /api/analyze/batch — Admin Batch Scan: analyze multiple games individually in parallel
 app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
