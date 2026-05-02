@@ -15,6 +15,7 @@
  *   onAdminLink      — (url) => void   (for /admin/* navigations)
  *   onOracleChat     — () => void
  *   onCreditManager  — () => void
+ *   onDbExplorer     — () => void
  *   onMethodology    — () => void
  *   onPerformance    — () => void
  */
@@ -51,6 +52,7 @@ const ICONS = {
   backtests:  <Icon d="M4 4h16v16H4z M4 9h16 M9 9v11" />,
   dataset:    <Icon d="M5 5h14v6H5z M5 13h14v6H5z M9 8h6 M9 16h6" />,
   credit:     <Icon d="M3 7h18v10H3z M3 11h18" />,
+  database:   <Icon d="M4 5c0-1.5 3.5-3 8-3s8 1.5 8 3v14c0 1.5-3.5 3-8 3s-8-1.5-8-3z M4 5c0 1.5 3.5 3 8 3s8-1.5 8-3 M4 12c0 1.5 3.5 3 8 3s8-1.5 8-3" />,
   manual:     <Icon d="M4 4h12l4 4v12H4z M16 4v4h4 M8 12h8 M8 16h6" />,
   collapse:   <Icon d="M15 5l-7 7 7 7" />,
   expand:     <Icon d="M9 5l7 7-7 7" />,
@@ -232,6 +234,7 @@ export default function Sidebar({
   onToggleCollapse,
   onOracleChat,
   onCreditManager,
+  onDbExplorer,
   onMethodology,
   onPerformance,
   performancePublic = false,
@@ -282,6 +285,8 @@ export default function Sidebar({
     const cuenta = [
       isAdmin && { key: 'credit-manager', action: onCreditManager,
         icon: ICONS.credit, label: L('Grant Credits', 'Asignar creditos', lang) },
+      isAdmin && { key: 'db-explorer', action: onDbExplorer,
+        icon: ICONS.database, label: L('DB Explorer', 'Explorador BD', lang) },
       { key: 'bankroll', tab: 'bankroll', icon: ICONS.bankroll,
         label: 'Bankroll' },
       { key: 'guide', tab: 'guide', icon: ICONS.guide,
@@ -296,7 +301,7 @@ export default function Sidebar({
       { label: L('Analysis',      'Análisis',      lang), items: analisis },
       { label: L('Account',       'Cuenta',        lang), items: cuenta },
     ].filter(g => g.items.length > 0);
-  }, [lang, isAdmin, performancePublic, onOracleChat, onCreditManager, onMethodology, onPerformance]);
+  }, [lang, isAdmin, performancePublic, onOracleChat, onCreditManager, onDbExplorer, onMethodology, onPerformance]);
 
   const handleClick = (item) => {
     if (item.tab) onTabChange?.(item.tab);

@@ -15,6 +15,7 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import BottomNav from './BottomNav';
 import AdminCreditPanel from '../AdminCreditPanel';
+import AdminDbExplorerPanel from '../AdminDbExplorerPanel';
 import { useHexaTheme } from '../../themeProvider';
 
 const STORAGE_KEY = 'hexa_sidebar_collapsed';
@@ -39,6 +40,7 @@ export default function Shell({
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [creditPanelOpen, setCreditPanelOpen] = useState(false);
+  const [dbExplorerOpen, setDbExplorerOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
@@ -92,6 +94,7 @@ export default function Shell({
             onToggleCollapse={() => setCollapsed(c => !c)}
             onOracleChat={() => { onOracleChat?.(); setMobileOpen(false); }}
             onCreditManager={() => { setCreditPanelOpen(true); setMobileOpen(false); }}
+            onDbExplorer={() => { setDbExplorerOpen(true); setMobileOpen(false); }}
             onMethodology={() => { onMethodology?.(); setMobileOpen(false); }}
             onPerformance={() => { onPerformance?.(); setMobileOpen(false); }}
             performancePublic={performancePublic}
@@ -134,6 +137,13 @@ export default function Shell({
         <AdminCreditPanel
           lang={lang}
           onClose={() => setCreditPanelOpen(false)}
+        />
+      )}
+
+      {dbExplorerOpen && (
+        <AdminDbExplorerPanel
+          lang={lang}
+          onClose={() => setDbExplorerOpen(false)}
         />
       )}
     </Box>
