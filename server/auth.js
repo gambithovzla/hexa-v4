@@ -165,7 +165,7 @@ router.post('/register', async (req, res) => {
 
     let newUser = rows[0];
 
-    // Claim any pending BMC credits for this email
+    // Claim any historical pending credits for this email (legacy gateway purchases)
     const pending = await pool.query(
       'SELECT id, credits FROM pending_credits WHERE email = $1 AND claimed = false',
       [normalizedEmail]
@@ -183,7 +183,7 @@ router.post('/register', async (req, res) => {
         [pendingIds]
       );
       newUser = updated.rows[0];
-      console.log(`[auth] Claimed ${totalPending} pending BMC credits for ${normalizedEmail}`);
+      console.log(`[auth] Claimed ${totalPending} pending credits for ${normalizedEmail}`);
     }
 
     // Generate and send verification code

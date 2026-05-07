@@ -57,7 +57,7 @@ El servidor orquesta cuatro flujos críticos:
 - **Auth**: JWT (`jsonwebtoken`) + bcryptjs, middleware en [server/middleware/auth-middleware.js](server/middleware/auth-middleware.js)
 - **LLMs**: `@anthropic-ai/sdk` (Claude Opus/Sonnet/Haiku 4.x) + cliente xAI propio en [server/services/xaiClient.js](server/services/xaiClient.js)
 - **Email**: Resend
-- **Monetización**: webhooks de Buy Me a Coffee ([server/bmc-webhook.js](server/bmc-webhook.js)) y Lemon Squeezy ([server/lemon.js](server/lemon.js))
+- **Monetización**: NowPayments (cripto) — checkout en [server/nowpayments.js](server/nowpayments.js) e IPN en [server/nowpayments-webhook.js](server/nowpayments-webhook.js)
 
 ### Frontend ([client/](client/))
 - **Framework**: React 18 + Vite 5
@@ -104,7 +104,7 @@ hexa-v4/
 │   ├── migrate.js             migraciones SQL embebidas
 │   ├── db.js                  pool Postgres
 │   ├── email.js · resend
-│   ├── bmc-webhook.js · lemon.js
+│   ├── nowpayments.js · nowpayments-webhook.js · plans.js
 │   ├── middleware/
 │   │   ├── auth-middleware.js (verifyToken · requireVerifiedEmail · isAdmin)
 │   │   └── content-api-key.js (API key para consumidores externos read-only)
@@ -276,9 +276,12 @@ Todos bajo `/api`. Los marcados con 🔒 requieren JWT; los marcados con 👑 re
 ### Content API (API key, read-only)
 Ver [server/routes/content.js](server/routes/content.js) y [server/middleware/content-api-key.js](server/middleware/content-api-key.js). Pensado para consumidores externos (social media, bots).
 
-### Webhooks
-- `POST /api/bmc/webhook` — Buy Me a Coffee
-- Rutas de Lemon Squeezy montadas desde [server/lemon.js](server/lemon.js)
+### Pagos (NowPayments)
+- `POST /api/nowpayments/checkout` — crea un invoice en NowPayments para el plan elegido (`{ planId: 'rookie' | 'allstar' | 'mvp' }`). Auth Bearer + email verificado obligatorio. Devuelve `{ url }` para redirigir al usuario.
+- `POST /api/nowpayments/webhook` — IPN firmado con HMAC-SHA512 (`x-nowpayments-sig`). Actualiza `nowpayments_invoices` y suma créditos al usuario en `payment_status === 'finished'`. Idempotente vía UPDATE atómico.
+- Catálogo de planes en [server/plans.js](server/plans.js) (Rookie $7.99/15cr · All-Star $19.99/50cr · MVP $39.99/120cr).
+- Setup: en [account.nowpayments.io](https://account.nowpayments.io) → Settings → API keys + IPN settings (callback URL: `https://<host>/api/nowpayments/webhook`). Variables: `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET`, `NOWPAYMENTS_API_BASE` (sandbox: `https://api-sandbox.nowpayments.io`).
+- Las tablas `bmc_processed_purchases` y `pending_credits` se conservan como auditoría histórica de las pasarelas anteriores (Buy Me a Coffee, Lemon Squeezy) — solo lectura.
 
 ---
 

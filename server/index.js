@@ -16,12 +16,11 @@ import { runMigrations } from './migrate.js';
 import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
 import { regradeBacktestProps } from './services/backtestRegrader.js';
 import pool from './db.js';
-import lemonRouter from './lemon.js';
+import nowpaymentsRouter from './nowpayments.js';
+import { handleNowPaymentsWebhook } from './nowpayments-webhook.js';
 import picksRouter from './routes/picks.js';
 import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-history.js';
 import insightsRouter from './routes/insights.js';
-import { handleBMCWebhook } from './bmc-webhook.js';
-import { pollBMCExtras } from './bmc-poller.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
@@ -469,9 +468,7 @@ const limiter = rateLimit({
   max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) =>
-    req.path.startsWith('/api/lemon/webhook') ||
-    req.path.startsWith('/api/bmc/webhook'),
+  skip: (req) => req.path.startsWith('/api/nowpayments/webhook'),
 });
 app.use(limiter);
 
@@ -485,19 +482,18 @@ const analysisLimiter = rateLimit({
 });
 
 // ── Body parsers (raw must come before json for webhook routes) ────────────────
-app.use('/api/lemon/webhook', express.raw({ type: 'application/json' }));
-app.use('/api/bmc/webhook',   express.raw({ type: 'application/json' }));
+app.use('/api/nowpayments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '1mb' }));
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth',      authRouter);
-app.use('/api/bankroll',  bankrollRouter);
-app.use('/api/lemon',     lemonRouter);
-app.use('/api/picks',     picksRouter);
-app.use('/api/oracle',    oracleHistoryRouter);
-app.use('/api/insights',  insightsRouter);
+app.use('/api/auth',         authRouter);
+app.use('/api/bankroll',     bankrollRouter);
+app.use('/api/nowpayments',  nowpaymentsRouter);
+app.use('/api/picks',        picksRouter);
+app.use('/api/oracle',       oracleHistoryRouter);
+app.use('/api/insights',     insightsRouter);
 app.use('/api/admin/content', contentAdminRouter);
-app.post('/api/bmc/webhook', handleBMCWebhook);
+app.post('/api/nowpayments/webhook', handleNowPaymentsWebhook);
 
 // ── Content API — read-only, API-key auth (external consumer) ─────────────────
 const contentLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false });
@@ -3684,21 +3680,6 @@ runMigrations()
           });
         }
       }, TWO_HOURS).unref();
-
-      // ── BMC purchase poller: every 10 min (fallback for missing webhooks) ─
-      const TEN_MIN = 10 * 60 * 1000;
-      // Run once shortly after startup so retroactive purchases get credited
-      // without waiting a full interval.
-      setTimeout(() => {
-        pollBMCExtras().catch(err => {
-          console.error('[bmc-poller] Initial run failed:', err.message);
-        });
-      }, 60_000).unref();
-      setInterval(() => {
-        pollBMCExtras().catch(err => {
-          console.error('[bmc-poller] Scheduled run failed:', err.message);
-        });
-      }, TEN_MIN).unref();
 
       if (process.env.X_AUTO_PUBLISH_ENABLED === '1') {
         const intervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);

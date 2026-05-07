@@ -1,17 +1,20 @@
 /**
  * PricingModal.jsx
- * Buy Me a Coffee credit purchase modal for H.E.X.A. V4.
+ * Credit purchase modal for H.E.X.A. V4 — checkout via NowPayments (crypto).
  *
  * Props:
  *   onClose — () => void
  *   lang    — 'en' | 'es'
  */
 
+import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from '../store/authStore';
 import { C, BARLOW, MONO, SANS } from '../theme';
 
 const DM = SANS;
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const PLANS = [
   {
@@ -19,7 +22,6 @@ const PLANS = [
     label:     'HEXA Rookie',
     price:     '$7.99',
     credits:   { en: '15 credits', es: '15 créditos' },
-    href:      'https://buymeacoffee.com/Gambitho/e/522545',
     highlight: false,
     badge:     null,
     btnLabel:  { en: 'Buy Rookie', es: 'Comprar Rookie' },
@@ -29,7 +31,6 @@ const PLANS = [
     label:     'HEXA All-Star',
     price:     '$19.99',
     credits:   { en: '50 credits', es: '50 créditos' },
-    href:      'https://buymeacoffee.com/Gambitho/e/522546',
     highlight: true,
     badge:     'MÁS POPULAR',
     btnLabel:  { en: 'Buy All-Star', es: 'Comprar All-Star' },
@@ -39,15 +40,16 @@ const PLANS = [
     label:     'HEXA MVP',
     price:     '$39.99',
     credits:   { en: '120 credits', es: '120 créditos' },
-    href:      'https://buymeacoffee.com/Gambitho/e/522547',
     highlight: false,
     badge:     null,
     btnLabel:  { en: 'Buy MVP', es: 'Comprar MVP' },
   },
 ];
 
-function PlanCard({ plan, lang }) {
+function PlanCard({ plan, lang, onBuy, loading, disabled }) {
   const isEs = lang === 'es';
+  const isLoading = loading === plan.id;
+  const isDisabled = disabled || (loading && !isLoading);
   return (
     <Box
       sx={{
@@ -104,12 +106,12 @@ function PlanCard({ plan, lang }) {
         </Typography>
       </Box>
 
-      {/* Buy button — direct BMC link */}
+      {/* Buy button — calls NowPayments checkout */}
       <Box
-        component="a"
-        href={plan.href}
-        target="_blank"
-        rel="noopener noreferrer"
+        component="button"
+        type="button"
+        onClick={() => onBuy?.(plan.id)}
+        disabled={isDisabled}
         sx={{
           mt:             'auto',
           px:             '12px',
@@ -123,24 +125,58 @@ function PlanCard({ plan, lang }) {
           fontWeight:     700,
           letterSpacing:  '0.08em',
           textTransform:  'uppercase',
-          cursor:         'pointer',
+          cursor:         isDisabled ? 'not-allowed' : 'pointer',
+          opacity:        isDisabled && !isLoading ? 0.5 : 1,
           transition:     'all 0.15s',
-          textDecoration: 'none',
-          display:        'block',
           textAlign:      'center',
-          '&:hover':      { bgcolor: plan.highlight ? 'rgba(79,195,247,0.15)' : 'rgba(255,255,255,0.04)', borderColor: plan.highlight ? C.accent : '#2a4060' },
+          width:          '100%',
+          '&:hover':      isDisabled ? {} : { bgcolor: plan.highlight ? 'rgba(79,195,247,0.15)' : 'rgba(255,255,255,0.04)', borderColor: plan.highlight ? C.accent : '#2a4060' },
         }}
       >
-        {isEs ? plan.btnLabel.es : plan.btnLabel.en}
+        {isLoading
+          ? (isEs ? 'Redirigiendo…' : 'Redirecting…')
+          : (isEs ? plan.btnLabel.es : plan.btnLabel.en)}
       </Box>
     </Box>
   );
 }
 
 export default function PricingModal({ onClose, lang = 'es', onRequestVerify }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const isEs = lang === 'es';
   const needsVerification = Boolean(user) && user.email_verified === false;
+
+  const [loading, setLoading] = useState(null);
+  const [error,   setError]   = useState(null);
+
+  const handleBuy = async (planId) => {
+    if (!token) {
+      setError(isEs ? 'Inicia sesión para comprar créditos.' : 'Please sign in to purchase credits.');
+      return;
+    }
+    setError(null);
+    setLoading(planId);
+    try {
+      const res = await fetch(`${API_URL}/api/nowpayments/checkout`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ planId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || 'CHECKOUT_FAILED');
+      }
+      window.location.href = data.url;
+    } catch (e) {
+      setLoading(null);
+      setError(
+        isEs
+          ? 'No se pudo iniciar el pago. Inténtalo de nuevo.'
+          : 'Could not start checkout. Please try again.'
+      );
+      console.error('[PricingModal] checkout failed:', e);
+    }
+  };
 
   return (
     /* Overlay */
@@ -283,8 +319,23 @@ export default function PricingModal({ onClose, lang = 'es', onRequestVerify }) 
             }}
           >
             {PLANS.map(plan => (
-              <PlanCard key={plan.id} plan={plan} lang={lang} />
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                lang={lang}
+                onBuy={handleBuy}
+                loading={loading}
+              />
             ))}
+          </Box>
+        )}
+
+        {/* Error banner */}
+        {error && !needsVerification && (
+          <Box sx={{ mx: '24px', mb: '12px', p: '10px 12px', border: '1px solid rgba(255,80,80,0.4)', bgcolor: 'rgba(255,80,80,0.08)' }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: '#FF7070' }}>
+              {error}
+            </Typography>
           </Box>
         )}
 
@@ -292,8 +343,8 @@ export default function PricingModal({ onClose, lang = 'es', onRequestVerify }) 
         <Box sx={{ px: '24px', pb: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <Typography sx={{ fontFamily: DM, fontSize: '0.72rem', color: C.textMuted, lineHeight: 1.6 }}>
             {isEs
-              ? 'Los créditos nunca vencen. Pagos procesados de forma segura por Buy Me a Coffee.'
-              : 'Credits never expire. Payments securely processed by Buy Me a Coffee.'}
+              ? 'Los créditos nunca vencen. Pagos en cripto procesados de forma segura por NowPayments (BTC, USDT, ETH y más).'
+              : 'Credits never expire. Crypto payments securely processed by NowPayments (BTC, USDT, ETH and more).'}
           </Typography>
           <Typography sx={{ fontFamily: BARLOW, fontSize: '0.68rem', fontWeight: 700, color: '#FFB800', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             🚀 {isEs

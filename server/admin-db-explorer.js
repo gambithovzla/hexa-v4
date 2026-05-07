@@ -88,6 +88,18 @@ const TABLES = {
     searchable: ['email', 'product_name', 'purchase_id'],
     defaultOrder: 'processed_at',
   },
+  nowpayments_invoices: {
+    columns: [
+      'id', 'order_id', 'user_id', 'invoice_id', 'plan_id', 'credits',
+      'price_usd', 'pay_currency', 'status', 'created_at', 'completed_at',
+    ],
+    filterable: [
+      'id', 'order_id', 'user_id', 'invoice_id', 'plan_id', 'status',
+      'pay_currency',
+    ],
+    searchable: ['order_id', 'invoice_id', 'user_id', 'plan_id'],
+    defaultOrder: 'created_at',
+  },
   backtest_results: {
     columns: [
       'id', 'run_id', 'historical_date', 'game_pk', 'matchup', 'home_team',
