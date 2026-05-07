@@ -165,6 +165,25 @@ export async function runMigrations() {
       ON CONFLICT (purchase_id) DO NOTHING
     `);
 
+    // ── nowpayments_invoices (active gateway — crypto via NowPayments) ────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nowpayments_invoices (
+        id            SERIAL        PRIMARY KEY,
+        order_id      VARCHAR(100)  UNIQUE NOT NULL,
+        user_id       TEXT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        invoice_id    VARCHAR(255),
+        plan_id       VARCHAR(50)   NOT NULL,
+        credits       INTEGER       NOT NULL,
+        price_usd     DECIMAL(10,2) NOT NULL,
+        pay_currency  VARCHAR(20),
+        status        VARCHAR(20)   DEFAULT 'new',
+        created_at    TIMESTAMP     DEFAULT NOW(),
+        completed_at  TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_np_invoices_user_id ON nowpayments_invoices(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_np_invoices_status  ON nowpayments_invoices(status)`);
+
     // ── is_admin column (safe for existing DBs) ──────────────────────────────
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false`);
     await client.query(`UPDATE users SET is_admin = true WHERE email = 'cdanielrr@hotmail.com'`);
