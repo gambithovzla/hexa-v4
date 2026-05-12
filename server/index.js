@@ -60,7 +60,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations } from './migrate.js';
 
 dotenv.config();
 
@@ -3585,6 +3585,7 @@ app.post('/api/admin/feature-store/backfill', verifyToken, async (req, res) => {
 
 runMigrations()
   .then(() => runParlaySynergyMigrations())
+  .then(() => runSprint1Migrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {

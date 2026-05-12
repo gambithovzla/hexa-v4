@@ -12,6 +12,7 @@ import { getLiveGameData } from './live-feed.js';
 import { updatePickFeatureResult } from './feature-store.js';
 import { updateShadowModelRunsForGame } from './shadow-model.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
+import { enrichResolvedPickFeatures } from './services/pickPostgameEnricher.js';
 
 // ── Nickname → abbreviation (lowercase keys for case-insensitive lookup) ─────
 
@@ -857,5 +858,13 @@ export async function resolvePendingPicks() {
     `[pick-resolver] Done â€” resolved: ${summary.resolved}, wins: ${summary.wins}, ` +
     `losses: ${summary.losses}, pushes: ${summary.pushes}, errors: ${summary.errors.length}`
   );
+
+  // Fire-and-forget: fill game scores on pick_features rows that were just resolved
+  if (summary.resolved > 0) {
+    enrichResolvedPickFeatures({ limit: summary.resolved + 5 }).catch(err =>
+      console.warn(`[pick-resolver] post-game enrich failed: ${err.message}`)
+    );
+  }
+
   return summary;
 }

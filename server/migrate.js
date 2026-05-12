@@ -515,3 +515,62 @@ export async function runParlaySynergyMigrations() {
     client.release();
   }
 }
+
+// Sprint 1 — dataset gaps: new columns on pick_features for real ML training
+export async function runSprint1Migrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Game outcomes — required for moneyline, O/U, and run-line models
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_score INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_score INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS total_runs INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS winner_team_id INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS game_status VARCHAR(32)`);
+
+    // Structured pick fields — replaces unstructured text for training
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS market_type VARCHAR(16)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS side VARCHAR(16)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS line DECIMAL(6,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_kind VARCHAR(32)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_id INTEGER`);
+
+    // Pitcher fatigue / context features
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_pitcher_days_rest INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_pitcher_days_rest INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_pitcher_pitches_last_start INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_pitcher_pitches_last_start INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_bullpen_pitches_last_3d INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_bullpen_pitches_last_3d INTEGER`);
+
+    // Game context
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS is_day_game BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS is_dome BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS game_number_in_series INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS umpire_id INTEGER`);
+
+    // Oracle metadata for model versioning and auditing
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prompt_version VARCHAR(32)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS oracle_model VARCHAR(48)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS oracle_confidence INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS kelly_fraction DECIMAL(6,4)`);
+
+    // Source flag: separates real picks from admin tests and backtest rows
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS source VARCHAR(16) DEFAULT 'live'`);
+
+    // Indexes for efficient export queries
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pick_features_source ON pick_features(source)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pick_features_market_type ON pick_features(market_type)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pick_features_game_date ON pick_features(game_date)`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] sprint-1 pick_features columns ready');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] sprint-1 migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
