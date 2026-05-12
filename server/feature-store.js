@@ -35,6 +35,29 @@ export async function savePickFeatures({
   pick,
   result,
   userEmail = null,
+  // Sprint 1 — structured pick fields
+  marketType = null,
+  side = null,
+  line = null,
+  propKind = null,
+  propPlayerId = null,
+  // Sprint 1 — pitcher fatigue / game context
+  homePitcherDaysRest = null,
+  awayPitcherDaysRest = null,
+  homePitcherPitchesLastStart = null,
+  awayPitcherPitchesLastStart = null,
+  homeBullpenPitchesLast3d = null,
+  awayBullpenPitchesLast3d = null,
+  isDayGame = null,
+  isDome = null,
+  gameNumberInSeries = null,
+  umpireId = null,
+  // Sprint 1 — oracle metadata
+  promptVersion = null,
+  oracleModel = null,
+  oracleConfidence = null,
+  kellyFraction = null,
+  source = 'live',
 }) {
   try {
     // Calculate average lineup xwOBA
@@ -82,6 +105,13 @@ export async function savePickFeatures({
       features.data_quality_score, features.signal_coherence_score,
       features.odds_ml_home, features.odds_ml_away, features.odds_ou_total,
       pick, normalizedResult, userEmail ?? null,
+      // Sprint 1 new fields
+      marketType, side, line, propKind, propPlayerId,
+      homePitcherDaysRest, awayPitcherDaysRest,
+      homePitcherPitchesLastStart, awayPitcherPitchesLastStart,
+      homeBullpenPitchesLast3d, awayBullpenPitchesLast3d,
+      isDayGame, isDome, gameNumberInSeries, umpireId,
+      promptVersion, oracleModel, oracleConfidence, kellyFraction, source,
     ];
 
     const existing = pickId != null
@@ -105,8 +135,15 @@ export async function savePickFeatures({
           data_quality_score = $21, signal_coherence_score = $22,
           odds_ml_home = $23, odds_ml_away = $24, odds_ou_total = $25,
           pick = $26, result = $27, user_email = $28,
+          market_type = $29, side = $30, line = $31, prop_kind = $32, prop_player_id = $33,
+          home_pitcher_days_rest = $34, away_pitcher_days_rest = $35,
+          home_pitcher_pitches_last_start = $36, away_pitcher_pitches_last_start = $37,
+          home_bullpen_pitches_last_3d = $38, away_bullpen_pitches_last_3d = $39,
+          is_day_game = $40, is_dome = $41, game_number_in_series = $42, umpire_id = $43,
+          prompt_version = $44, oracle_model = $45, oracle_confidence = $46,
+          kelly_fraction = $47, source = $48,
           pick_time_lima = COALESCE(pick_time_lima, (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
-        WHERE id = $29
+        WHERE id = $49
       `, [...values, existing.rows[0].id]);
     } else {
       await pool.query(`
@@ -116,8 +153,20 @@ export async function savePickFeatures({
           home_team_ops, away_team_ops, home_lineup_avg_xwoba, away_lineup_avg_xwoba,
           park_factor_overall, park_factor_hr, temperature, wind_speed,
           data_quality_score, signal_coherence_score,
-          odds_ml_home, odds_ml_away, odds_ou_total, pick, result, user_email, pick_time_lima)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
+          odds_ml_home, odds_ml_away, odds_ou_total, pick, result, user_email,
+          market_type, side, line, prop_kind, prop_player_id,
+          home_pitcher_days_rest, away_pitcher_days_rest,
+          home_pitcher_pitches_last_start, away_pitcher_pitches_last_start,
+          home_bullpen_pitches_last_3d, away_bullpen_pitches_last_3d,
+          is_day_game, is_dome, game_number_in_series, umpire_id,
+          prompt_version, oracle_model, oracle_confidence, kelly_fraction, source,
+          pick_time_lima)
+        VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+          $21,$22,$23,$24,$25,$26,$27,$28,
+          $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,
+          (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP
+        )
       `, values);
     }
 

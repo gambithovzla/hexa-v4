@@ -11,7 +11,10 @@
     "audit": "node scripts/system-audit.js",
     "regrade-backtest-props": "node scripts/regrade-backtest-props.js",
     "force_rebuild": "echo 1",
-    "test:parlay": "node --test server/services/parlayEngine/__tests__/pool.test.js server/services/parlayEngine/__tests__/risk.test.js server/services/parlayEngine/__tests__/correl.test.js server/services/parlayEngine/__tests__/composer.test.js server/services/parlayEngine/__tests__/architect.test.js server/services/parlayEngine/__tests__/market-focus.test.js"
+    "test:parlay": "node --test server/services/parlayEngine/__tests__/pool.test.js server/services/parlayEngine/__tests__/risk.test.js server/services/parlayEngine/__tests__/correl.test.js server/services/parlayEngine/__tests__/composer.test.js server/services/parlayEngine/__tests__/architect.test.js server/services/parlayEngine/__tests__/market-focus.test.js",
+    "test:parsers": "node --test server/parsers/__tests__/pickParser.test.js",
+    "training:backfill": "node scripts/training/backfill-pick-features.js",
+    "training:export": "node scripts/training/export-dataset.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
