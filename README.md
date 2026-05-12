@@ -1,30 +1,8 @@
 # H.E.X.A. v4
 
-**H.E.X.A.** (Heuristic Evaluation & eXpert Analytics) es una plataforma de análisis predictivo de MLB que combina modelos de lenguaje (Claude y Grok/xAI), estadísticas avanzadas (Statcast / Baseball Savant), líneas de casas de apuestas en tiempo real y un validador tabular propio (XGBoost) para producir picks, parlays, análisis "safe" y contenido editorial.
+**H.E.X.A.** (Heuristic Evaluation & eXpert Analytics) es una plataforma de análisis predictivo de MLB que combina modelos de lenguaje (Claude y Grok/xAI), estadísticas avanzadas (Statcast / Baseball Savant), líneas de casas de apuestas en tiempo real y un validador tabular propio para producir picks, parlays, análisis "safe" y contenido editorial.
 
-Este repositorio contiene el monorepo completo: API en Node/Express + Postgres y cliente React/Vite.
-
----
-
-## Tabla de contenido
-
-- [Arquitectura](#arquitectura)
-- [Stack técnico](#stack-técnico)
-- [Estructura del repo](#estructura-del-repo)
-- [Requisitos previos](#requisitos-previos)
-- [Setup local](#setup-local)
-- [Variables de entorno](#variables-de-entorno)
-- [Scripts disponibles](#scripts-disponibles)
-- [Endpoints principales](#endpoints-principales)
-- [Features destacadas](#features-destacadas)
-- [Base de datos y migraciones](#base-de-datos-y-migraciones)
-- [Despliegue](#despliegue)
-- [Operación y observabilidad](#operación-y-observabilidad)
-- [Convenciones de contribución](#convenciones-de-contribución)
-
----
-
-## Arquitectura
+Monorepo: API en Node/Express + Postgres y cliente React/Vite.
 
 ```
 ┌────────────────────────┐        ┌─────────────────────────┐
@@ -39,117 +17,33 @@ Este repositorio contiene el monorepo completo: API en Node/Express + Postgres y
                                                   (Statcast)
 ```
 
-El servidor orquesta cuatro flujos críticos:
-
-1. **Oracle** — construye contexto por partido (Statcast, clima, lineups, odds) y lo manda a Claude y/o Grok.
-2. **Pick lifecycle** — parseo, guardado, tracking en vivo, resolución automática al final del juego y postmortem por LLM.
-3. **Shadow model** — corre un validador XGBoost en paralelo al LLM para medir divergencias (observabilidad de modelo).
-4. **Content pipeline** — genera borradores editoriales en español/inglés, los encola y publica en X (OAuth 1.0a).
-
 ---
 
-## Stack técnico
+## 📚 Documentación
 
-### Backend ([server/](server/))
-- **Runtime**: Node.js 20 (ESM, `"type": "module"`)
-- **HTTP**: Express 4 + Helmet + CORS + express-rate-limit
-- **DB**: PostgreSQL vía `pg` (pool)
-- **Auth**: JWT (`jsonwebtoken`) + bcryptjs, middleware en [server/middleware/auth-middleware.js](server/middleware/auth-middleware.js)
-- **LLMs**: `@anthropic-ai/sdk` (Claude Opus/Sonnet/Haiku 4.x) + cliente xAI propio en [server/services/xaiClient.js](server/services/xaiClient.js)
-- **Email**: Resend
-- **Monetización**: NowPayments (cripto) — checkout en [server/nowpayments.js](server/nowpayments.js) e IPN en [server/nowpayments-webhook.js](server/nowpayments-webhook.js)
+Para profundidad técnica completa, ver carpeta [`docs/`](docs/):
 
-### Frontend ([client/](client/))
-- **Framework**: React 18 + Vite 5
-- **UI**: MUI 6, Emotion, Framer Motion, Recharts
-- **PWA**: `vite-plugin-pwa`
-- Páginas principales: [DevUIShowcase.jsx](client/src/pages/DevUIShowcase.jsx), [PerformanceDashboard.jsx](client/src/pages/PerformanceDashboard.jsx)
+| Doc | Cubre |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Subsistemas, diagrama, flujos críticos, decisiones arquitectónicas |
+| [docs/ml-pipeline.md](docs/ml-pipeline.md) | Oracle dual LLM, shadow validator, feature store, CLV, plan modelo Python |
+| [docs/integrations.md](docs/integrations.md) | APIs externas (Claude, xAI, MLB, Savant, Odds, Weather, Resend, NowPayments, X) |
+| [docs/content-pipeline.md](docs/content-pipeline.md) | Generación de drafts, cola editorial, OAuth 1.0a publisher para X |
+| [docs/admin-and-ops.md](docs/admin-and-ops.md) | DB explorer, backtest, jobs, logging, deployment, monitoring gaps |
+| [docs/data-schema.md](docs/data-schema.md) | 16 tablas Postgres — columnas, índices, FKs, estado para training |
+| [docs/roadmap.md](docs/roadmap.md) | Sprints en ejecución y backlog priorizado por tier |
 
----
+Para Claude Code (convenciones, frozen files, patrones): ver [CLAUDE.md](CLAUDE.md).
 
-## Estructura del repo
-
-```
-hexa-v4/
-├── client/                    React + Vite SPA
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── hooks/
-│   │   ├── store/
-│   │   ├── i18n/
-│   │   ├── palettes/ · themeProvider.jsx · theme.js
-│   │   └── App.jsx · main.jsx
-│   └── vite.config.js · vercel.json
-│
-├── server/
-│   ├── index.js               entrypoint Express (boot, rate limits, rutas inline)
-│   ├── oracle.js              motor de prompts LLM (Claude + Grok + dual)
-│   ├── context-builder.js     arma el payload por partido
-│   ├── mlb-api.js             wrapper MLB Stats API
-│   ├── savant-fetcher.js      cache Statcast
-│   ├── odds-api.js            líneas + implied probability
-│   ├── weather-api.js         clima de estadio
-│   ├── live-feed.js           play-by-play y progress tracking
-│   ├── pick-resolver.js       resolución automática post-game
-│   ├── pick-postmortem.js     análisis retrospectivo por LLM
-│   ├── pick-tracker.js        progreso de picks en vivo
-│   ├── closing-line-capture.js captura CLV al cerrar líneas
-│   ├── line-movement.js       snapshots de movimiento de odds
-│   ├── feature-store.js       persistencia de features por pick
-│   ├── shadow-model.js        runner del XGBoost validator
-│   ├── market-intelligence.js value breakdown determinístico
-│   ├── oracle-memory.js       caché de sesiones Oracle
-│   ├── auth.js                signup/login/bankroll
-│   ├── migrate.js             migraciones SQL embebidas
-│   ├── db.js                  pool Postgres
-│   ├── email.js · resend
-│   ├── nowpayments.js · nowpayments-webhook.js · plans.js
-│   ├── middleware/
-│   │   ├── auth-middleware.js (verifyToken · requireVerifiedEmail · isAdmin)
-│   │   └── content-api-key.js (API key para consumidores externos read-only)
-│   ├── routes/
-│   │   ├── picks.js           CRUD picks
-│   │   ├── oracle-history.js  sesiones de análisis
-│   │   ├── insights.js        stats agregadas
-│   │   ├── content.js         Content API pública (read-only)
-│   │   ├── content-admin.js   cola editorial interna
-│   │   └── content-dto.js     transformaciones
-│   ├── services/
-│   │   ├── xaiClient.js       cliente xAI/Grok
-│   │   ├── xgboostValidator.js validador tabular local
-│   │   ├── hexaBoardService.js Hexa Board (tablero diario)
-│   │   ├── hexaSmartSignalsService.js señales
-│   │   ├── contentDraftService.js · contentQueueService.js · xPublisher.js
-│   │   ├── public-stats.js    stats públicos para Content API
-│   │   └── hexaThresholds.json umbrales tunables
-│   └── prompts/
-│       └── x-content-prompts.js
-│
-├── scripts/
-│   ├── system-audit.js        `npm run audit`
-│   ├── backup.js
-│   └── training/
-│       ├── historical-fetcher.js
-│       └── run-backtest.js
-│
-├── .env.example               (ver sección de variables)
-├── package.json               scripts raíz (dev, dev:all, audit)
-├── railway.json               config Railway (Nixpacks)
-└── README.md
-```
+Para el motor Parlay Synergy: ver [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 
 ---
 
 ## Requisitos previos
 
-- **Node.js 20+** (el repo usa ESM y `node --watch`)
+- **Node.js 20+** (usa ESM y `node --watch`)
 - **PostgreSQL 14+**
-- Cuentas/API keys:
-  - Anthropic (`ANTHROPIC_API_KEY`) — obligatoria
-  - xAI (`XAI_API_KEY`) — opcional, requerida solo para modo Grok / Dual
-  - Resend — si activas email verificado
-  - X / Twitter — si activas publicación automática
+- API keys (mínimo): Anthropic (Claude). Opcionales: xAI, The Odds API, Resend, NowPayments, X.
 
 ---
 
@@ -169,7 +63,7 @@ cp .env.example .env
 # editar .env con tus keys y DATABASE_URL
 
 # 4. Crear DB Postgres (una vez)
-createdb hexadb     # o equivalente en tu setup
+createdb hexadb
 
 # 5. Correr migraciones (automático al iniciar el server)
 npm run dev         # arranca API en :3001 y aplica migraciones
@@ -183,9 +77,7 @@ npm run dev:all
 
 ---
 
-## Variables de entorno
-
-Ver [.env.example](.env.example) para la lista completa. Resumen:
+## Variables de entorno (resumen)
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
@@ -193,19 +85,15 @@ Ver [.env.example](.env.example) para la lista completa. Resumen:
 | `DATABASE_URL` | Sí | Connection string Postgres |
 | `JWT_SECRET` | Sí | Secreto para firmar tokens (cambiar en prod) |
 | `ODDS_API_KEY` | Si para cuotas reales | Key de The Odds API para moneyline/runline/totales MLB |
-| `ODDS_API_BACKUP_KEY` | No | Key secundaria de The Odds API; se usa si la principal queda sin créditos |
-| `PORT` | No | Puerto del server (default `3001`) |
-| `NODE_ENV` | No | `development` / `production` |
 | `XAI_API_KEY` | No | Key xAI para modos Grok / Dual |
-| `XAI_ORACLE_MODEL` | No | Override modelo Grok (default `grok-4-fast-reasoning`) |
-| `XAI_SAFE_MODEL` | No | Override modelo Grok para modo safe |
-| `CONTENT_DRAFT_MODEL` | No | Modelo usado para borradores de contenido (default Haiku) |
-| `CONTENT_API_KEYS` | No | `label:secret,label2:secret2` para Content API pública |
+| `RESEND_API_KEY` | No | Si activas email verificado |
+| `NOWPAYMENTS_API_KEY` + `NOWPAYMENTS_IPN_SECRET` | No | Pagos cripto |
 | `X_CONSUMER_KEY` / `X_CONSUMER_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET` | No | OAuth 1.0a para publicar en X |
-| `X_AUTO_PUBLISH_ENABLED` | No | `0`/`1` — habilita worker de publicación |
-| `X_AUTO_PUBLISH_INTERVAL_MINUTES` | No | Intervalo del worker (default `5`) |
 | `SHADOW_MODE_ENABLED` | No | Activa el shadow validator |
-| `SHADOW_MODE_MODEL_KEY` / `SHADOW_MODE_MODEL_VERSION` | No | Metadata del modelo sombra |
+| `PARLAY_SYNERGY_ENABLED` | No | Motor parlay nuevo (default `false`) |
+| `X_AUTO_PUBLISH_ENABLED` | No | `0`/`1` — habilita worker de publicación X |
+
+Lista completa con descripciones en [.env.example](.env.example) y [docs/integrations.md](docs/integrations.md).
 
 ---
 
@@ -219,7 +107,8 @@ Desde la raíz ([package.json](package.json)):
 | `npm start` | API en modo producción |
 | `npm run client` | Dev server de Vite (`client/`) |
 | `npm run dev:all` | API + cliente en paralelo (`concurrently`) |
-| `npm run audit` | Ejecuta [scripts/system-audit.js](scripts/system-audit.js) |
+| `npm run audit` | Diagnóstico del sistema ([scripts/system-audit.js](scripts/system-audit.js)) |
+| `npm run test:parlay` | Tests del Parlay Synergy Engine |
 
 Desde `client/`:
 
@@ -231,90 +120,77 @@ Desde `client/`:
 
 ---
 
-## Endpoints principales
+## Estructura del repo
 
-Todos bajo `/api`. Los marcados con 🔒 requieren JWT; los marcados con 👑 requieren rol admin.
+```
+hexa-v4/
+├── client/                 React + Vite SPA (MUI, Framer Motion, Recharts, PWA)
+├── server/                 Node 20 ESM + Express
+│   ├── index.js            entrypoint (rutas, jobs, rate limits)
+│   ├── oracle.js           motor LLM dual (Claude + Grok)
+│   ├── context-builder.js  arma payload por partido
+│   ├── feature-store.js    persistencia de features para training
+│   ├── migrate.js          migraciones SQL embebidas
+│   ├── services/           xPublisher, contentDraftService, parlayEngine, etc.
+│   ├── routes/             picks, content, insights, oracle-history
+│   ├── middleware/         auth, content-api-key
+│   └── prompts/            x-content-prompts
+├── scripts/
+│   ├── system-audit.js
+│   └── training/           run-backtest, historical-fetcher
+├── docs/                   documentación viva por tema
+├── CLAUDE.md               convenciones para Claude Code
+├── .env.example
+├── railway.json            config Railway (Nixpacks)
+└── README.md               (este archivo)
+```
 
-### Datos públicos
-- `GET /api/games` — partidos del día
-- `GET /api/teams` — catálogo de equipos
-- `GET /api/odds/today` — odds agregadas
-- `GET /api/hexa/board` — tablero Hexa (picks sugeridos del día)
-- `GET /api/savant/status` — estado del caché Statcast
-- `GET /api/settings/performance-public` — stats públicos de performance
+Estructura completa con descripciones: [docs/architecture.md](docs/architecture.md#3-subsistemas).
 
-### Análisis (Oracle) 🔒
-- `POST /api/analyze/game` — análisis por partido (modes: `deep`, `safe`, `parlay`)
-- `POST /api/analyze/parlay` — análisis de parlay
-- `POST /api/analyze/safe` — modo conservador
-- `POST /api/analyze/chat` 👑 — chat libre con Oracle
-- `POST /api/analyze/chat-jornada` 👑 — chat para jornada completa
-- `POST /api/analyze/batch` 👑 — batch de partidos
-- `GET /api/games/:gameId/context` 🔒 — payload completo de contexto
+---
 
-### Picks 🔒 (ver [server/routes/picks.js](server/routes/picks.js))
-- `POST /api/picks` — registrar pick
-- `GET /api/picks` — listar
-- `DELETE /api/picks/:id`
-- `POST /api/picks/:id/postmortem` — genera postmortem por LLM
-- `GET /api/picks/resolve` · `POST /api/picks/resolve-game` — resolución
-- `POST /api/picks/live-progress` — progreso en vivo
-- `GET /api/picks/clv-stats` — closing line value
+## Endpoints principales (resumen)
 
-### Live feed
-- `GET /api/games/:gamePk/live`
-- `GET /api/games/:gamePk/play-by-play`
-- `POST /api/games/live`
-- `GET /api/games/:gamePk/highlights-link`
+Todos bajo `/api`. Los protegidos requieren JWT (`🔒`); los admin requieren rol admin (`👑`).
 
-### Admin 👑
-- `POST /api/admin/grant-credits`
-- `GET /api/admin/backtest-stats` · `GET /api/admin/historical-games` · `POST /api/admin/run-backtest`
-- `GET /api/admin/shadow-model` · `GET /api/admin/feature-store` · `POST /api/admin/feature-store/backfill`
-- `POST /api/savant/refresh`
+- **Públicos**: `/games`, `/teams`, `/odds/today`, `/hexa/board`.
+- **Auth** (`/auth/*`): register, login, me, verify-email, forgot-password.
+- **Análisis** (`/analyze/*`) 🔒: game, parlay, safe, parlay-synergy (👑 beta).
+- **Picks** (`/picks/*`) 🔒: CRUD, postmortem, live-progress, clv-stats.
+- **Live** (`/games/:gamePk/*`): live, play-by-play, highlights-link.
+- **Admin** (`/admin/*`) 👑: grant-credits, run-backtest, shadow-model, feature-store, db/tables, content/queue, parlay-synergy.
+- **Pagos** (`/nowpayments/*`): checkout, webhook IPN HMAC-SHA512.
+- **Content API** (read-only, API key): `/content/v1/games`, `/board`, `/picks`, `/insights`, `/performance`.
 
-### Content API (API key, read-only)
-Ver [server/routes/content.js](server/routes/content.js) y [server/middleware/content-api-key.js](server/middleware/content-api-key.js). Pensado para consumidores externos (social media, bots).
-
-### Pagos (NowPayments)
-- `POST /api/nowpayments/checkout` — crea un invoice en NowPayments para el plan elegido (`{ planId: 'rookie' | 'allstar' | 'mvp' }`). Auth Bearer + email verificado obligatorio. Devuelve `{ url }` para redirigir al usuario.
-- `POST /api/nowpayments/webhook` — IPN firmado con HMAC-SHA512 (`x-nowpayments-sig`). Actualiza `nowpayments_invoices` y suma créditos al usuario en `payment_status === 'finished'`. Idempotente vía UPDATE atómico.
-- Catálogo de planes en [server/plans.js](server/plans.js) (Rookie $7.99/15cr · All-Star $19.99/50cr · MVP $39.99/120cr).
-- Setup: en [account.nowpayments.io](https://account.nowpayments.io) → Settings → API keys + IPN settings (callback URL: `https://<host>/api/nowpayments/webhook`). Variables: `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET`, `NOWPAYMENTS_API_BASE` (sandbox: `https://api-sandbox.nowpayments.io`).
-- Las tablas `bmc_processed_purchases` y `pending_credits` se conservan como auditoría histórica de las pasarelas anteriores (Buy Me a Coffee, Lemon Squeezy) — solo lectura.
+Listado exhaustivo: [docs/architecture.md sección 6](docs/architecture.md#6-endpoints--vista-panorámica).
 
 ---
 
 ## Features destacadas
 
 ### Oracle multi-motor
-[server/oracle.js](server/oracle.js) soporta tres motores seleccionables por request:
-- `sonnet` — Claude Sonnet 4.6 (default)
-- `grok` — xAI `grok-4-fast-reasoning`
-- `dual` — ejecuta ambos en paralelo y mergea
+[server/oracle.js](server/oracle.js) soporta tres motores seleccionables por request: `sonnet` (Claude Sonnet 4.6), `grok` (xAI), `dual` (ambos en paralelo con detección de divergencia). Modelos: Opus 4.7 (premium), Sonnet 4.6 (deep), Haiku 4.5 (content drafts). Detalle: [docs/ml-pipeline.md sección 2](docs/ml-pipeline.md#2-oracle--motor-llm-dual).
 
-Modelos configurables: Opus 4.7 (premium), Sonnet 4.6 (deep), Haiku 4.5 (content drafts).
-
-### Shadow model
-[server/shadow-model.js](server/shadow-model.js) + [server/services/xgboostValidator.js](server/services/xgboostValidator.js) corren un validador tabular en paralelo al LLM para detectar divergencias. Dashboard admin en `/api/admin/shadow-model`.
+### Shadow validator (en migración a XGBoost real)
+[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre un validador tabular determinístico en paralelo al LLM para observabilidad. **Hoy son pesos hardcodeados** — Sprint 2 lo reemplaza con un microservicio Python XGBoost real entrenado con los >500 picks históricos. Detalle: [docs/ml-pipeline.md sección 10](docs/ml-pipeline.md#10-plan-modelo-python-entrenado-propio).
 
 ### Closing Line Value (CLV)
-[server/closing-line-capture.js](server/closing-line-capture.js) captura la línea de cierre y permite medir el EV de cada pick vs. mercado. Stats en `/api/picks/clv-stats`.
+Captura líneas iniciales y de cierre por pick. Stats en `/api/picks/clv-stats`.
 
 ### Feature store
-[server/feature-store.js](server/feature-store.js) persiste el snapshot de features (Statcast, odds, clima, lineups) de cada pick para backtesting y reentrenamiento del modelo sombra.
+Cada pick persiste sus features (Statcast, odds, clima, lineups) en tabla `pick_features` para backtesting y reentrenamiento.
 
-### Content pipeline para X
-- [server/services/contentDraftService.js](server/services/contentDraftService.js) — drafts con Haiku
-- [server/services/contentQueueService.js](server/services/contentQueueService.js) — cola editorial
-- [server/services/xPublisher.js](server/services/xPublisher.js) — publicación OAuth 1.0a
-- Worker opcional (`X_AUTO_PUBLISH_ENABLED=1`)
+### Parlay Synergy Engine
+Motor combinatorial para parlays (correlación, ortogonalidad de riesgo, coherencia de game script). LLM como arquitecto-validador, no selector ciego. Admin-only en beta. Brief técnico: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
+
+### Content pipeline X
+Genera drafts editoriales con Claude Haiku, los encola, y los publica en X (Twitter) vía OAuth 1.0a HMAC-SHA1. Detalle: [docs/content-pipeline.md](docs/content-pipeline.md).
 
 ---
 
 ## Base de datos y migraciones
 
-Las migraciones viven en [server/migrate.js](server/migrate.js) y se ejecutan automáticamente al arrancar el server. No hay herramienta externa (knex / prisma) — cada migración es una función SQL idempotente.
+Las migraciones viven en [server/migrate.js](server/migrate.js) y se ejecutan automáticamente al arrancar el server. No hay herramienta externa (Knex / Prisma) — cada migración es una función SQL idempotente con `CREATE TABLE IF NOT EXISTS` y `ALTER TABLE ADD COLUMN IF NOT EXISTS`.
 
 Para un reset local:
 ```bash
@@ -322,40 +198,43 @@ dropdb hexadb && createdb hexadb
 npm run dev   # reaplica todo
 ```
 
+Schema completo: [docs/data-schema.md](docs/data-schema.md).
+
 ---
 
 ## Despliegue
 
-### API (Railway)
-- Config en [railway.json](railway.json) — builder Nixpacks, start command `node index.js`, restart on failure.
-- Variables de entorno: las mismas de `.env.example`.
-- Postgres: addon de Railway o externo (Supabase, Neon, etc.) vía `DATABASE_URL`.
+- **API**: Railway con Nixpacks ([railway.json](railway.json)). Variables en Railway dashboard.
+- **Cliente**: Vercel ([client/vercel.json](client/vercel.json)). Build de `client/`.
+- **Postgres**: Railway addon o externo (Neon, Supabase) vía `DATABASE_URL`.
 
-### Cliente (Vercel)
-- Config en [client/vercel.json](client/vercel.json).
-- Build: `npm run build` desde `client/`.
-- Asegurar que el cliente apunte a la URL pública de la API.
+Detalle de deploy + rollback: [docs/admin-and-ops.md sección 10](docs/admin-and-ops.md#10-deployment).
 
 ---
 
-## Operación y observabilidad
+## Estado del proyecto y próximos pasos
 
-- **Rate limiting**: todas las rutas de análisis pasan por `analysisLimiter` (express-rate-limit).
-- **Safe errors**: en producción nunca se filtra el stack — helper `safeError()` en [server/index.js](server/index.js).
-- **Helmet**: cabeceras de seguridad activas por defecto.
-- **Email verification**: `requireVerifiedEmail` en endpoints sensibles (crear pick, etc.).
-- **Audit**: `npm run audit` ejecuta un diagnóstico del sistema.
-- **Backfill histórico**: [scripts/training/historical-fetcher.js](scripts/training/historical-fetcher.js) + [scripts/training/run-backtest.js](scripts/training/run-backtest.js) para reentrenar / validar.
+**Foco actual** (Q2 2026): entrenar modelo propio Python con los >500 picks resueltos. Esto desbloquea ensemble real (Claude + Grok + modelo entrenado), probabilidades calibradas, SHAP feature importance, y auto-retraining semanal.
+
+Sprints planificados:
+- ✅ **Sprint 0**: Documentación viva (este README + `/docs/` + CLAUDE.md).
+- 🔄 **Sprint 1**: Cerrar gaps del dataset (scores reales, pick estructurado, backfill, export Parquet).
+- ⏳ **Sprint 2**: Sidecar Python FastAPI + XGBoost real, deploy en Railway.
+- ⏳ **Sprint 3**: Integración Node↔Python + calibration dashboard.
+- ⏳ **Sprint 4** (opcional): Ensemble meta-learner.
+
+Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
 
 ---
 
 ## Convenciones de contribución
 
 - **Branch main protegida** — trabajar siempre en feature branches y abrir PR.
-- Mensajes de commit estilo convencional (`feat:`, `fix:`, `chore:`, etc.) — ver `git log`.
+- Mensajes de commit estilo convencional (`feat:`, `fix:`, `chore:`, etc.).
 - **No commitear `.env`** ni credenciales — solo `.env.example`.
 - **ESM únicamente**: imports con extensión `.js` explícita.
 - Cambios que tocan prompts del LLM deberían pasar por `npm run audit` y validarse contra backtest antes de merge.
+- **Frozen files** (no modificar sin permiso explícito): `oracle.js`, `context-builder.js`, `market-intelligence.js`, `xgboostValidator.js`, `parlayEngine/*`. Ver [CLAUDE.md](CLAUDE.md) para lista completa y patrones para extender sin tocar.
 
 ---
 
