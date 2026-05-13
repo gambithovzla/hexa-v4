@@ -1,0 +1,273 @@
+"""FastAPI app — the HTTP surface the Node Oracle talks to.
+
+Endpoints:
+  - GET  /health                 → liveness + model state
+  - POST /predict/moneyline      → P(home wins)
+  - POST /predict/overunder      → P(OVER hits)
+  - POST /predict/runline        → P(home covers -1.5)
+  - POST /predict/batch          → batch any market
+  - GET  /calibration            → reliability diagram of last test set
+  - POST /retrain                → fire training run (admin token required)
+
+Auth: every non-/health endpoint requires
+  Authorization: Bearer ${HEXA_ML_INTERNAL_TOKEN}
+when the env var is set (it's blank in dev for convenience).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
+
+from . import __version__
+from .config import get_settings
+from .predict import ModelNotAvailable, Prediction, get_registry
+
+logger = logging.getLogger("hexa_ml.serve")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Pre-load whatever artifacts exist so the first request is faster."""
+    artifacts = Path(get_settings().artifacts_dir)
+    if artifacts.exists():
+        results = get_registry().reload()
+        logger.info("Startup reload: %s", results)
+    else:
+        logger.info("No artifacts dir yet — running cold")
+    yield
+
+
+app = FastAPI(
+    title="H.E.X.A. ML Sidecar",
+    version=__version__,
+    description="XGBoost prediction service for MLB markets.",
+    lifespan=lifespan,
+)
+
+bearer = HTTPBearer(auto_error=False)
+
+
+def require_internal_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+) -> None:
+    """Reject requests that lack the shared token.
+
+    When `HEXA_ML_INTERNAL_TOKEN` is empty (dev), auth is disabled. In
+    production Railway always injects it.
+    """
+    expected = get_settings().internal_token
+    if not expected:
+        return
+    if credentials is None or credentials.credentials != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing bearer token",
+        )
+
+
+# ── Request / response models ─────────────────────────────────────────────
+class FeaturePayload(BaseModel):
+    """One game's features. All fields optional — XGBoost handles NaN."""
+
+    home_pitcher_xwoba: float | None = None
+    away_pitcher_xwoba: float | None = None
+    home_pitcher_whiff: float | None = None
+    away_pitcher_whiff: float | None = None
+    home_pitcher_k_pct: float | None = None
+    away_pitcher_k_pct: float | None = None
+    home_pitcher_era: float | None = None
+    away_pitcher_era: float | None = None
+    home_pitcher_days_rest: float | None = None
+    away_pitcher_days_rest: float | None = None
+    home_pitcher_pitches_last_start: float | None = None
+    away_pitcher_pitches_last_start: float | None = None
+    home_bullpen_pitches_last_3d: float | None = None
+    away_bullpen_pitches_last_3d: float | None = None
+    home_team_ops: float | None = None
+    away_team_ops: float | None = None
+    home_lineup_avg_xwoba: float | None = None
+    away_lineup_avg_xwoba: float | None = None
+    park_factor_overall: float | None = None
+    park_factor_hr: float | None = None
+    temperature: float | None = None
+    wind_speed: float | None = None
+    is_day_game: float | None = None
+    is_dome: float | None = None
+    game_number_in_series: float | None = None
+    odds_ml_home: float | None = None
+    odds_ml_away: float | None = None
+    odds_ou_total: float | None = None
+    # OverUnder needs the line itself as a feature
+    line: float | None = None
+
+    model_config = {"extra": "allow"}
+
+
+class PredictionOut(BaseModel):
+    market: str
+    probability: float = Field(..., ge=0, le=1)
+    confidence: float = Field(..., ge=0, le=100)
+    top_features: list[tuple[str, float]]
+    model_version: str | None
+
+
+class BatchItem(FeaturePayload):
+    market: str = Field(..., pattern="^(moneyline|overunder|runline)$")
+    game_pk: int | None = None
+
+
+class BatchRequest(BaseModel):
+    items: list[BatchItem] = Field(..., max_length=50)
+
+
+class BatchResponse(BaseModel):
+    predictions: list[dict[str, Any]]
+
+
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+    models_loaded: list[str]
+    models_available: list[str]
+    manifest: dict
+
+
+class RetrainRequest(BaseModel):
+    market: str = Field(default="all", pattern="^(moneyline|overunder|runline|all)$")
+    csv: str | None = None
+
+
+class RetrainResponse(BaseModel):
+    status: str
+    summary: dict
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────
+def _to_dict(p: Prediction) -> dict[str, Any]:
+    return {
+        "market": p.market,
+        "probability": p.probability,
+        "confidence": p.confidence,
+        "top_features": p.top_features,
+        "model_version": p.model_version,
+    }
+
+
+def _predict_one(market: str, payload: FeaturePayload) -> PredictionOut:
+    try:
+        prediction = get_registry().predict(market, payload.model_dump(exclude_none=False))
+    except ModelNotAvailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    return PredictionOut(**_to_dict(prediction))
+
+
+# ── Routes ────────────────────────────────────────────────────────────────
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    """Liveness check — also reports which markets have trained artifacts."""
+    registry = get_registry()
+    available = [m for m in ("moneyline", "overunder", "runline") if registry.has_artifact(m)]
+    return HealthResponse(
+        status="ok",
+        version=__version__,
+        models_loaded=registry.loaded_markets(),
+        models_available=available,
+        manifest=registry.manifest,
+    )
+
+
+@app.post(
+    "/predict/moneyline",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_moneyline(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("moneyline", payload)
+
+
+@app.post(
+    "/predict/overunder",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_overunder(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("overunder", payload)
+
+
+@app.post(
+    "/predict/runline",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_runline(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("runline", payload)
+
+
+@app.post(
+    "/predict/batch",
+    response_model=BatchResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_batch(payload: BatchRequest) -> BatchResponse:
+    """Score multiple games in one call — groups by market so each model
+    only loads once even if the client mixes markets."""
+    registry = get_registry()
+    by_market: dict[str, list[tuple[int, dict]]] = {}
+    for idx, item in enumerate(payload.items):
+        market = item.market
+        by_market.setdefault(market, []).append((idx, item.model_dump(exclude={"market"})))
+
+    out: list[dict | None] = [None] * len(payload.items)
+    for market, items in by_market.items():
+        try:
+            preds = registry.predict_batch(market, [row for _, row in items])
+        except ModelNotAvailable as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+        for (idx, _), p in zip(items, preds, strict=False):
+            out[idx] = _to_dict(p)
+
+    return BatchResponse(predictions=[item or {} for item in out])
+
+
+@app.get("/calibration", dependencies=[Depends(require_internal_token)])
+def calibration() -> dict:
+    """Return the most recent reliability stats from the manifest."""
+    manifest = get_registry().manifest
+    return {"manifest": manifest}
+
+
+@app.post(
+    "/retrain",
+    response_model=RetrainResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def retrain(payload: RetrainRequest) -> RetrainResponse:
+    """Run training synchronously, then reload models from disk.
+
+    Wrapped in a thread because XGBoost holds the GIL during fit().
+    """
+    from .train import MARKETS, train_all
+
+    markets = MARKETS if payload.market == "all" else (payload.market,)
+
+    def _run() -> dict:
+        return train_all(csv_path=payload.csv, markets=markets)
+
+    summary = await asyncio.to_thread(_run)
+    get_registry().reload()
+    return RetrainResponse(status="ok", summary=summary)

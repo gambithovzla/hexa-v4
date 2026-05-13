@@ -1,0 +1,58 @@
+"""Runtime configuration loaded from env vars.
+
+Uses pydantic-settings so the same Settings object can be reused in tests
+with overrides. The fields mirror what Railway exposes (DATABASE_URL,
+HEXA_ML_INTERNAL_TOKEN) plus tunable training hyperparameters.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """All env vars used by the ML sidecar."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # ── Connection ────────────────────────────────────────────────────────
+    database_url: str = Field(default="", validation_alias="DATABASE_URL")
+    internal_token: str = Field(
+        default="", validation_alias="HEXA_ML_INTERNAL_TOKEN"
+    )
+
+    # ── Paths ─────────────────────────────────────────────────────────────
+    artifacts_dir: Path = Field(default=Path("artifacts"))
+    data_dir: Path = Field(default=Path("data"))
+
+    # ── Training hyperparameters ──────────────────────────────────────────
+    # Temporal split: test set = last N days of resolved picks
+    test_days: int = Field(default=30, ge=7, le=180)
+    # Minimum resolved picks required to train a market
+    min_train_size: int = Field(default=100, ge=20)
+    # Acceptance threshold (Brier score) — moneyline floor for production
+    moneyline_brier_ceiling: float = Field(default=0.24)
+
+    # ── Server ────────────────────────────────────────────────────────────
+    port: int = Field(default=8000, validation_alias="PORT")
+    log_level: str = Field(default="info", validation_alias="LOG_LEVEL")
+
+
+_settings: Settings | None = None
+
+
+def get_settings() -> Settings:
+    """Cached settings — call this everywhere instead of instantiating."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+
+def reset_settings_for_tests() -> None:
+    """Pytest helper — wipes the cache so a fresh Settings() reads env again."""
+    global _settings
+    _settings = None

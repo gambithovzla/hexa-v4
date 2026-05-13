@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Trained model artifacts — never commit
+artifacts/*.pkl
+artifacts/*.json
+data/*.csv
+data/*.parquet
+
+# Keep dirs in git
+!artifacts/.gitkeep
+!data/.gitkeep
