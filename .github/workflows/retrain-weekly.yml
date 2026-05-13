@@ -1,0 +1,62 @@
+name: Retrain ML models weekly
+
+# Every Sunday at 06:00 UTC (≈ 01:00 ET) — slate is fully resolved by then.
+# Manual trigger supported for ad-hoc retrains after dataset changes.
+
+on:
+  schedule:
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+    inputs:
+      market:
+        description: "Which market to train"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - moneyline
+          - overunder
+          - runline
+
+jobs:
+  retrain:
+    name: Trigger sidecar retrain
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Validate required secrets
+        env:
+          HEXA_ML_API_URL: ${{ secrets.HEXA_ML_API_URL }}
+          HEXA_ML_INTERNAL_TOKEN: ${{ secrets.HEXA_ML_INTERNAL_TOKEN }}
+        run: |
+          if [ -z "$HEXA_ML_API_URL" ] || [ -z "$HEXA_ML_INTERNAL_TOKEN" ]; then
+            echo "::error::HEXA_ML_API_URL and HEXA_ML_INTERNAL_TOKEN must be set as repo secrets."
+            exit 1
+          fi
+
+      - name: Trigger retrain
+        env:
+          HEXA_ML_API_URL: ${{ secrets.HEXA_ML_API_URL }}
+          HEXA_ML_INTERNAL_TOKEN: ${{ secrets.HEXA_ML_INTERNAL_TOKEN }}
+          MARKET: ${{ inputs.market || 'all' }}
+        run: |
+          echo "Triggering retrain for market: $MARKET"
+          response=$(curl --silent --show-error --fail \
+            --max-time 900 \
+            --request POST \
+            --url "$HEXA_ML_API_URL/retrain" \
+            --header "Authorization: Bearer $HEXA_ML_INTERNAL_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "{\"market\":\"$MARKET\"}")
+          echo "$response" | head -c 4000
+
+      - name: Verify health after retrain
+        env:
+          HEXA_ML_API_URL: ${{ secrets.HEXA_ML_API_URL }}
+        run: |
+          health=$(curl --silent --show-error --fail "$HEXA_ML_API_URL/health")
+          echo "$health"
+          # Confirm at least one market is now loaded
+          echo "$health" | grep -q '"models_loaded":\s*\[' || (echo "::error::No models loaded after retrain" && exit 1)
