@@ -574,3 +574,36 @@ export async function runSprint1Migrations() {
     client.release();
   }
 }
+
+// Sprint 3 — Node ↔ Python sidecar: persist Python model score alongside
+// the existing legacy shadow validator score in shadow_model_runs.
+export async function runSprint3Migrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Python model result columns (all nullable — sidecar may be disabled or down)
+    await client.query(`
+      ALTER TABLE shadow_model_runs
+        ADD COLUMN IF NOT EXISTS python_model_score   DECIMAL(6,4)
+    `);
+    await client.query(`
+      ALTER TABLE shadow_model_runs
+        ADD COLUMN IF NOT EXISTS python_model_version VARCHAR(80)
+    `);
+    // Status of the Python call: 'ok' | 'disabled' | 'unavailable' | 'error'
+    await client.query(`
+      ALTER TABLE shadow_model_runs
+        ADD COLUMN IF NOT EXISTS python_model_status  VARCHAR(20)
+    `);
+
+    await client.query('COMMIT');
+    console.log('[migrate] sprint-3 shadow_model_runs Python columns ready');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] sprint-3 migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

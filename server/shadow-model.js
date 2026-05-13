@@ -1,5 +1,10 @@
 import pool from './db.js';
 import { getLiveGameData } from './live-feed.js';
+import {
+  buildMLFeaturePayload,
+  isEnabled as isMlSidecarEnabled,
+  predictMoneyline,
+} from './services/mlModelClient.js';
 
 const DISABLED_VALUES = new Set(['0', 'false', 'off', 'no']);
 const SHADOW_MODE_ENABLED = !DISABLED_VALUES.has(String(process.env.SHADOW_MODE_ENABLED ?? 'true').toLowerCase());
@@ -202,6 +207,61 @@ export function getShadowModeConfig() {
   };
 }
 
+/**
+ * Fire-and-forget: call the Python ML sidecar and update the shadow_model_runs
+ * row with the result. Errors are caught and logged — never propagate up.
+ *
+ * @param {number} rowId        — shadow_model_runs.id to update
+ * @param {object} statcastData — from buildShadowStatcastData()
+ * @param {object} features     — raw features from context-builder
+ */
+async function _enrichWithPythonScore(rowId, statcastData, features) {
+  if (!isMlSidecarEnabled()) {
+    await pool.query(
+      `UPDATE shadow_model_runs SET python_model_status = 'disabled' WHERE id = $1`,
+      [rowId]
+    );
+    return;
+  }
+
+  try {
+    const featurePayload = buildMLFeaturePayload(statcastData, features);
+    const prediction = await predictMoneyline(featurePayload);
+
+    if (!prediction) {
+      await pool.query(
+        `UPDATE shadow_model_runs SET python_model_status = 'unavailable' WHERE id = $1`,
+        [rowId]
+      );
+      return;
+    }
+
+    await pool.query(
+      `UPDATE shadow_model_runs
+       SET python_model_score   = $1,
+           python_model_version = $2,
+           python_model_status  = 'ok',
+           updated_at           = NOW()
+       WHERE id = $3`,
+      [
+        prediction.probability,
+        prediction.model_version ?? null,
+        rowId,
+      ]
+    );
+  } catch (err) {
+    console.warn(`[shadow-model] Python enrichment failed for run ${rowId}: ${err.message}`);
+    try {
+      await pool.query(
+        `UPDATE shadow_model_runs SET python_model_status = 'error' WHERE id = $1`,
+        [rowId]
+      );
+    } catch {
+      // Swallow — do not let a logging failure mask the original error
+    }
+  }
+}
+
 export async function recordShadowModelRun(params) {
   if (!SHADOW_MODE_ENABLED) return null;
   if (!params?.analysisData || !params?.xgboostResult || !params?.gameData?.gamePk) return null;
@@ -278,6 +338,9 @@ export async function recordShadowModelRun(params) {
       ]
     );
 
+    // Fire-and-forget Python enrichment (never blocks the caller)
+    _enrichWithPythonScore(existingId, params.statcastData, params.features).catch(() => {});
+
     return { id: existingId, ...payload };
   }
 
@@ -327,7 +390,14 @@ export async function recordShadowModelRun(params) {
     ]
   );
 
-  return { id: insert.rows[0]?.id ?? null, ...payload };
+  const newId = insert.rows[0]?.id ?? null;
+
+  // Fire-and-forget Python enrichment (never blocks the caller)
+  if (newId != null) {
+    _enrichWithPythonScore(newId, params.statcastData, params.features).catch(() => {});
+  }
+
+  return { id: newId, ...payload };
 }
 
 export async function updateShadowModelRunsForGame({

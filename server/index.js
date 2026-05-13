@@ -60,7 +60,8 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations } from './migrate.js';
+import { getCalibration as getMlCalibration, getCircuitState as getMlCircuitState, isEnabled as isMlSidecarEnabled } from './services/mlModelClient.js';
 
 dotenv.config();
 
@@ -3339,6 +3340,92 @@ app.get('/api/admin/shadow-model', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/ml-calibration — proxy the Python sidecar's calibration data (admin only)
+app.get('/api/admin/ml-calibration', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const circuit = getMlCircuitState();
+    const enabled = isMlSidecarEnabled();
+
+    if (!enabled) {
+      return res.json({
+        success: true,
+        enabled: false,
+        circuit,
+        message: 'ML sidecar is disabled (ML_SIDECAR_ENABLED=false). Set to true and provide HEXA_ML_API_URL to activate.',
+        calibration: null,
+        shadow_comparison: null,
+      });
+    }
+
+    // Fetch calibration from Python sidecar (may return null if circuit is open or sidecar is down)
+    const calibration = await getMlCalibration();
+
+    // Pull comparison data from shadow_model_runs: legacy vs python model accuracy
+    const comparisonRes = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE python_model_status = 'ok') AS python_scored,
+        COUNT(*) FILTER (WHERE python_model_status = 'disabled') AS python_disabled,
+        COUNT(*) FILTER (WHERE python_model_status = 'unavailable') AS python_unavailable,
+        COUNT(*) FILTER (WHERE python_model_status = 'error') AS python_error,
+        COUNT(*) FILTER (WHERE python_model_status IS NULL) AS python_null,
+        COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL AND python_model_status = 'ok') AS python_resolved,
+        COUNT(*) FILTER (
+          WHERE actual_winner_id IS NOT NULL
+            AND python_model_status = 'ok'
+            AND python_model_score IS NOT NULL
+            AND (
+              (python_model_score >= 0.5 AND actual_winner_id = home_team_id::TEXT) OR
+              (python_model_score < 0.5  AND actual_winner_id = away_team_id::TEXT)
+            )
+        ) AS python_correct,
+        COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL AND shadow_predicted_winner_id IS NOT NULL) AS legacy_resolved,
+        COUNT(*) FILTER (
+          WHERE actual_winner_id IS NOT NULL
+            AND shadow_predicted_winner_id = actual_winner_id
+        ) AS legacy_correct,
+        ROUND(AVG(python_model_score)::numeric, 4) AS avg_python_prob,
+        MIN(created_at) AS first_run,
+        MAX(created_at) AS last_run
+      FROM shadow_model_runs
+    `);
+
+    // Rolling 30d accuracy by model source
+    const rolling30dRes = await pool.query(`
+      SELECT
+        TO_CHAR(created_at::date, 'YYYY-MM-DD') AS day,
+        COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL) AS resolved,
+        COUNT(*) FILTER (
+          WHERE actual_winner_id IS NOT NULL
+            AND shadow_predicted_winner_id = actual_winner_id
+        ) AS legacy_hits,
+        COUNT(*) FILTER (
+          WHERE actual_winner_id IS NOT NULL
+            AND python_model_status = 'ok'
+            AND python_model_score IS NOT NULL
+            AND (
+              (python_model_score >= 0.5 AND actual_winner_id = home_team_id::TEXT) OR
+              (python_model_score < 0.5  AND actual_winner_id = away_team_id::TEXT)
+            )
+        ) AS python_hits
+      FROM shadow_model_runs
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY 1
+      ORDER BY 1 DESC
+    `);
+
+    return res.json({
+      success: true,
+      enabled: true,
+      circuit,
+      calibration: calibration ?? null,
+      shadow_comparison: comparisonRes.rows[0] ?? null,
+      rolling_30d: rolling30dRes.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // GET /api/admin/feature-store — view ML training dataset (admin only)
 app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
   if (!req.user.is_admin) return res.status(403).json({ success: false, error: 'Admin access required' });
@@ -3586,6 +3673,7 @@ app.post('/api/admin/feature-store/backfill', verifyToken, async (req, res) => {
 runMigrations()
   .then(() => runParlaySynergyMigrations())
   .then(() => runSprint1Migrations())
+  .then(() => runSprint3Migrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
