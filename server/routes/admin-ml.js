@@ -1,0 +1,449 @@
+/**
+ * server/routes/admin-ml.js
+ *
+ * Admin endpoints for the ML Control Center. All routes require verifyToken + requireAdmin.
+ *
+ *   GET  /api/admin/ml/status                       Quick health: sidecar enabled, circuit state, last ping
+ *   GET  /api/admin/ml/ensemble                     Ensemble manifest (per-source Brier + learned weights)
+ *   POST /api/admin/ml/retrain                      Trigger per-market retrain on the Python sidecar
+ *   POST /api/admin/ml/retrain/ensemble             Trigger ensemble retrain on the Python sidecar
+ *   GET  /api/admin/ml/retrain-log                  Last 20 retrain attempts (from ml_retrain_log)
+ *   GET  /api/admin/picks/:pickId/ensemble-breakdown
+ *                                                   Per-pick breakdown: 3 source probs + ensemble combination
+ *
+ * The retrain endpoints proxy directly to the Python sidecar (not via mlModelClient,
+ * which has a 500ms timeout for inference). Each invocation writes an audit row to
+ * ml_retrain_log so the dashboard can render history. A simple in-process rate limit
+ * prevents accidental double-trigger (1 retrain per scope every 5 minutes).
+ */
+
+import express from 'express';
+import pool from '../db.js';
+import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
+import {
+  getCalibration as getMlCalibration,
+  getCircuitState as getMlCircuitState,
+  isEnabled as isMlSidecarEnabled,
+  isEnsembleEnabled as isMlEnsembleEnabled,
+  getEnsembleCalibration as getMlEnsembleCalibration,
+  predictEnsemble as predictMlEnsemble,
+} from '../services/mlModelClient.js';
+
+const router = express.Router();
+router.use(verifyToken, requireAdmin);
+
+// ── Sidecar config (admin-only paths bypass the 500ms inference timeout) ──────
+
+const ML_API_URL = (process.env.HEXA_ML_API_URL ?? '').replace(/\/$/, '');
+const ML_TOKEN   = process.env.HEXA_ML_INTERNAL_TOKEN ?? '';
+const RETRAIN_TIMEOUT_MS = 5 * 60 * 1000;   // 5 minutes — training can be slow
+const HEALTH_TIMEOUT_MS  = 2_000;
+
+const ALLOWED_MARKETS = new Set(['all', 'moneyline', 'overunder', 'runline']);
+
+// In-process rate limit: 1 retrain per scope every 5 minutes.
+const _lastRetrainAt = new Map();
+const RETRAIN_COOLDOWN_MS = 5 * 60 * 1000;
+
+function _buildHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (ML_TOKEN) headers['Authorization'] = `Bearer ${ML_TOKEN}`;
+  return headers;
+}
+
+async function _fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function _logRetrain({ userId, market, scope, status, brier, logloss, nTrain, nTest, durationMs, error, response }) {
+  try {
+    await pool.query(
+      `INSERT INTO ml_retrain_log
+         (user_id, market, scope, status, brier, logloss, n_train, n_test, duration_ms, error, response, finished_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, NOW())`,
+      [
+        userId ?? null,
+        market,
+        scope,
+        status,
+        brier ?? null,
+        logloss ?? null,
+        nTrain ?? null,
+        nTest ?? null,
+        durationMs ?? null,
+        error ?? null,
+        response ? JSON.stringify(response) : null,
+      ]
+    );
+  } catch (err) {
+    console.warn(`[admin-ml] failed to write ml_retrain_log: ${err.message}`);
+  }
+}
+
+function _extractMetrics(payload, market) {
+  // /retrain         → { status, summary: { [market]: {n_train, n_test, brier_test, logloss_test, ...} | null } }
+  // /retrain/ensemble → { status, summary: { [market]: {...ensemble metrics...} } }
+  if (!payload || typeof payload !== 'object') return { brier: null, logloss: null, nTrain: null, nTest: null };
+  const summary = payload.summary ?? payload.manifest ?? payload;
+  const block = summary?.[market] ?? summary?.moneyline ?? null;
+  if (!block) return { brier: null, logloss: null, nTrain: null, nTest: null };
+  return {
+    brier:   block.brier_test   ?? block.brier        ?? block.brier_ensemble ?? null,
+    logloss: block.logloss_test ?? block.logloss      ?? null,
+    nTrain:  block.n_train      ?? null,
+    nTest:   block.n_test       ?? null,
+  };
+}
+
+// ── GET /api/admin/ml/status ─────────────────────────────────────────────────
+
+router.get('/status', async (_req, res) => {
+  const enabled = isMlSidecarEnabled();
+  const ensembleEnabled = isMlEnsembleEnabled();
+  const circuit = getMlCircuitState();
+
+  const result = {
+    success: true,
+    enabled,
+    ensemble_enabled: ensembleEnabled,
+    sidecar_url: ML_API_URL || null,
+    circuit,
+    health: null,
+    health_latency_ms: null,
+    last_retrain: null,
+  };
+
+  if (enabled && ML_API_URL) {
+    const t0 = Date.now();
+    try {
+      const resp = await _fetchWithTimeout(`${ML_API_URL}/health`, { method: 'GET', headers: _buildHeaders() }, HEALTH_TIMEOUT_MS);
+      result.health_latency_ms = Date.now() - t0;
+      if (resp.ok) {
+        result.health = await resp.json();
+      } else {
+        result.health = { ok: false, status: resp.status };
+      }
+    } catch (err) {
+      result.health = { ok: false, error: err.message };
+      result.health_latency_ms = Date.now() - t0;
+    }
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT market, scope, status, brier, n_train, duration_ms, created_at, finished_at
+         FROM ml_retrain_log
+        ORDER BY created_at DESC
+        LIMIT 1`
+    );
+    result.last_retrain = rows[0] ?? null;
+  } catch {
+    /* table may not exist yet on first deploy — ignore */
+  }
+
+  res.json(result);
+});
+
+// ── GET /api/admin/ml/ensemble ───────────────────────────────────────────────
+
+router.get('/ensemble', async (_req, res) => {
+  const enabled = isMlEnsembleEnabled();
+  const manifest = enabled ? await getMlEnsembleCalibration() : null;
+  res.json({ success: true, enabled, manifest });
+});
+
+// ── GET /api/admin/ml/retrain-log ────────────────────────────────────────────
+
+router.get('/retrain-log', async (req, res) => {
+  const limit = Math.min(Number(req.query.limit ?? 50) || 50, 200);
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.id, r.user_id, u.email AS user_email,
+              r.market, r.scope, r.status, r.brier, r.logloss,
+              r.n_train, r.n_test, r.duration_ms, r.error,
+              r.created_at, r.finished_at
+         FROM ml_retrain_log r
+         LEFT JOIN users u ON u.id = r.user_id
+        ORDER BY r.created_at DESC
+        LIMIT $1`,
+      [limit]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /api/admin/ml/retrain ───────────────────────────────────────────────
+
+router.post('/retrain', async (req, res) => {
+  if (!isMlSidecarEnabled() || !ML_API_URL) {
+    return res.status(400).json({
+      success: false,
+      error: 'ML_SIDECAR_ENABLED=false or HEXA_ML_API_URL not set. Configure these env vars on the server first.',
+    });
+  }
+
+  const market = String(req.body?.market ?? 'all').toLowerCase();
+  if (!ALLOWED_MARKETS.has(market)) {
+    return res.status(400).json({ success: false, error: `Invalid market. Must be one of: ${Array.from(ALLOWED_MARKETS).join(', ')}` });
+  }
+
+  // Cooldown — protects against double-clicks and runaway retries.
+  const scopeKey = `market:${market}`;
+  const last = _lastRetrainAt.get(scopeKey) ?? 0;
+  const wait = RETRAIN_COOLDOWN_MS - (Date.now() - last);
+  if (wait > 0) {
+    return res.status(429).json({
+      success: false,
+      error: `Cooldown active. Try again in ${Math.ceil(wait / 1000)}s.`,
+      cooldown_seconds_remaining: Math.ceil(wait / 1000),
+    });
+  }
+  _lastRetrainAt.set(scopeKey, Date.now());
+
+  const t0 = Date.now();
+  const body = { market };
+  if (req.body?.force === true) body.force = true;
+  if (Number.isFinite(Number(req.body?.min_train_size_override))) {
+    body.min_train_size_override = Number(req.body.min_train_size_override);
+  }
+
+  let response = null;
+  let httpStatus = 0;
+  let errorText = null;
+
+  try {
+    const resp = await _fetchWithTimeout(
+      `${ML_API_URL}/retrain`,
+      { method: 'POST', headers: _buildHeaders(), body: JSON.stringify(body) },
+      RETRAIN_TIMEOUT_MS
+    );
+    httpStatus = resp.status;
+    if (resp.ok) {
+      response = await resp.json().catch(() => null);
+    } else {
+      errorText = await resp.text().catch(() => '');
+    }
+  } catch (err) {
+    errorText = err.message;
+  }
+
+  const durationMs = Date.now() - t0;
+  const status = response && !errorText ? 'success' : 'failed';
+  const metrics = _extractMetrics(response, market === 'all' ? 'moneyline' : market);
+
+  await _logRetrain({
+    userId: req.user?.id,
+    market,
+    scope: 'market',
+    status,
+    ...metrics,
+    durationMs,
+    error: errorText,
+    response,
+  });
+
+  if (status !== 'success') {
+    return res.status(httpStatus >= 400 ? httpStatus : 502).json({
+      success: false,
+      error: errorText ?? 'Retrain failed',
+      duration_ms: durationMs,
+    });
+  }
+
+  res.json({
+    success: true,
+    duration_ms: durationMs,
+    market,
+    metrics,
+    response,
+  });
+});
+
+// ── POST /api/admin/ml/retrain/ensemble ──────────────────────────────────────
+
+router.post('/retrain/ensemble', async (req, res) => {
+  if (!isMlEnsembleEnabled()) {
+    return res.status(400).json({
+      success: false,
+      error: 'ENSEMBLE_ENABLED=false or sidecar disabled. Set ENSEMBLE_ENABLED=true to use the meta-learner.',
+    });
+  }
+
+  const scopeKey = 'ensemble';
+  const last = _lastRetrainAt.get(scopeKey) ?? 0;
+  const wait = RETRAIN_COOLDOWN_MS - (Date.now() - last);
+  if (wait > 0) {
+    return res.status(429).json({
+      success: false,
+      error: `Cooldown active. Try again in ${Math.ceil(wait / 1000)}s.`,
+      cooldown_seconds_remaining: Math.ceil(wait / 1000),
+    });
+  }
+  _lastRetrainAt.set(scopeKey, Date.now());
+
+  const t0 = Date.now();
+  const body = {};
+  if (req.body?.force === true) body.force = true;
+  if (Number.isFinite(Number(req.body?.min_rows))) body.min_rows = Number(req.body.min_rows);
+
+  let response = null;
+  let httpStatus = 0;
+  let errorText = null;
+
+  try {
+    const resp = await _fetchWithTimeout(
+      `${ML_API_URL}/retrain/ensemble`,
+      { method: 'POST', headers: _buildHeaders(), body: JSON.stringify(body) },
+      RETRAIN_TIMEOUT_MS
+    );
+    httpStatus = resp.status;
+    if (resp.ok) {
+      response = await resp.json().catch(() => null);
+    } else {
+      errorText = await resp.text().catch(() => '');
+    }
+  } catch (err) {
+    errorText = err.message;
+  }
+
+  const durationMs = Date.now() - t0;
+  const status = response && !errorText ? 'success' : 'failed';
+  const metrics = _extractMetrics(response, 'ensemble');
+
+  await _logRetrain({
+    userId: req.user?.id,
+    market: 'ensemble',
+    scope: 'ensemble',
+    status,
+    ...metrics,
+    durationMs,
+    error: errorText,
+    response,
+  });
+
+  if (status !== 'success') {
+    return res.status(httpStatus >= 400 ? httpStatus : 502).json({
+      success: false,
+      error: errorText ?? 'Ensemble retrain failed',
+      duration_ms: durationMs,
+    });
+  }
+
+  res.json({
+    success: true,
+    duration_ms: durationMs,
+    metrics,
+    response,
+  });
+});
+
+// ── GET /api/admin/picks/:pickId/ensemble-breakdown ──────────────────────────
+
+router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
+  const pickId = Number(req.params.pickId);
+  if (!Number.isFinite(pickId)) {
+    return res.status(400).json({ success: false, error: 'Invalid pick id' });
+  }
+
+  try {
+    const pickRes = await pool.query(
+      `SELECT id, matchup, pick, oracle_confidence, result, game_pk, created_at
+         FROM picks
+        WHERE id = $1 AND deleted_at IS NULL`,
+      [pickId]
+    );
+    if (!pickRes.rows.length) {
+      return res.status(404).json({ success: false, error: 'Pick not found' });
+    }
+    const pick = pickRes.rows[0];
+
+    const shadowRes = await pool.query(
+      `SELECT oracle_home_win_prob, shadow_home_win_prob,
+              python_model_score, python_model_status, python_model_version,
+              shadow_predicted_winner_id, actual_winner_id,
+              actual_home_score, actual_away_score,
+              home_team_id, away_team_id, home_team_abbr, away_team_abbr,
+              created_at AS shadow_created_at
+         FROM shadow_model_runs
+        WHERE pick_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [pickId]
+    );
+
+    if (!shadowRes.rows.length) {
+      return res.json({
+        success: true,
+        pick,
+        sources: null,
+        ensemble: null,
+        reason: 'No shadow_model_runs row for this pick yet.',
+      });
+    }
+
+    const r = shadowRes.rows[0];
+    const sources = {
+      oracle:  r.oracle_home_win_prob != null ? Number(r.oracle_home_win_prob) : null,
+      legacy:  r.shadow_home_win_prob != null ? Number(r.shadow_home_win_prob) : null,
+      python:  r.python_model_score   != null ? Number(r.python_model_score)   : null,
+    };
+
+    let ensemble = null;
+    const haveAll = sources.oracle != null && sources.legacy != null && sources.python != null;
+    if (haveAll && isMlEnsembleEnabled()) {
+      const result = await predictMlEnsemble({
+        market: 'moneyline',
+        oracle_prob: sources.oracle,
+        legacy_prob: sources.legacy,
+        python_prob: sources.python,
+      });
+      if (result) {
+        ensemble = {
+          probability: result.probability,
+          confidence:  result.confidence,
+          weights:     result.weights,
+          model_version: result.model_version,
+        };
+      }
+    }
+
+    // Resolution check — was the home side correct?
+    let resolution = null;
+    if (r.actual_winner_id) {
+      const homeWon = String(r.actual_winner_id) === String(r.home_team_id);
+      resolution = {
+        actual_winner_id: r.actual_winner_id,
+        actual_home_score: r.actual_home_score,
+        actual_away_score: r.actual_away_score,
+        home_won: homeWon,
+        oracle_correct:  sources.oracle  != null ? (sources.oracle  >= 0.5) === homeWon : null,
+        legacy_correct:  sources.legacy  != null ? (sources.legacy  >= 0.5) === homeWon : null,
+        python_correct:  sources.python  != null ? (sources.python  >= 0.5) === homeWon : null,
+        ensemble_correct: ensemble?.probability != null ? (ensemble.probability >= 0.5) === homeWon : null,
+      };
+    }
+
+    res.json({
+      success: true,
+      pick,
+      teams: { home: r.home_team_abbr, away: r.away_team_abbr },
+      sources,
+      ensemble,
+      resolution,
+      python_model_status: r.python_model_status,
+      python_model_version: r.python_model_version,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+export default router;

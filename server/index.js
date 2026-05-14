@@ -44,6 +44,7 @@ import {
 import { buildHexaBoard } from './services/hexaBoardService.js';
 import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
+import adminMlRouter from './routes/admin-ml.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { mountAdminDbExplorer } from './admin-db-explorer.js';
@@ -501,6 +502,7 @@ app.use('/api/picks',        picksRouter);
 app.use('/api/oracle',       oracleHistoryRouter);
 app.use('/api/insights',     insightsRouter);
 app.use('/api/admin/content', contentAdminRouter);
+app.use('/api/admin', adminMlRouter);
 app.post('/api/nowpayments/webhook', handleNowPaymentsWebhook);
 
 // ── Content API — read-only, API-key auth (external consumer) ─────────────────
