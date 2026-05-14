@@ -149,9 +149,9 @@ def train_all(
                 if metrics
                 else None
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Training failed for %s", market)
-            summary[market] = None
+            summary[market] = {"error": type(exc).__name__, "detail": str(exc)}
 
     manifest_path = out_path / "manifest.json"
     manifest_path.write_text(
