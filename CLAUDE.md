@@ -87,7 +87,7 @@ hexa-v4/
 
 ### Admin
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
-- Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin).
+- Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
 
 ### Routes principales
 - [server/routes/picks.js](server/routes/picks.js)
@@ -95,11 +95,17 @@ hexa-v4/
 - [server/routes/content-admin.js](server/routes/content-admin.js)
 - [server/routes/insights.js](server/routes/insights.js)
 - [server/routes/oracle-history.js](server/routes/oracle-history.js)
+- [server/routes/admin-ml.js](server/routes/admin-ml.js) — Admin ML Control Center (status, retrain proxy con audit log, ensemble breakdown por pick, chat-picks stats).
 
 ### Frontend
 - [client/src/App.jsx](client/src/App.jsx) — root + routing.
-- [client/src/pages/](client/src/pages/) — pages (PerformanceDashboard, ParlayArchitect, DevUIShowcase, MLCalibrationDashboard).
-- [client/src/components/](client/src/components/) — componentes (AdminCreditPanel, AdminDbExplorerPanel, AnalysisPanel, OracleChat, BankrollTracker, HexaBoard, LearningCenter, MethodologyPage, etc).
+- [client/src/pages/](client/src/pages/) — pages (PerformanceDashboard, ParlayArchitect, DevUIShowcase, MLCalibrationDashboard, AdminMLControlCenter).
+- [client/src/components/](client/src/components/) — componentes (AdminCreditPanel, AdminDbExplorerPanel, AdminEnsembleBadge, AnalysisPanel, OracleChat, BankrollTracker, HexaBoard, LearningCenter, MethodologyPage, etc).
+
+### Admin ML Control Center (Sprint 5 UI)
+- [client/src/pages/AdminMLControlCenter.jsx](client/src/pages/AdminMLControlCenter.jsx) — página `/admin/ml-control` con HUD de circuit breaker, cards por mercado, retrain on-demand, ensemble panel, chat-picks bucket stats, retrain audit log.
+- [client/src/components/AdminEnsembleBadge.jsx](client/src/components/AdminEnsembleBadge.jsx) — chip lazy-loaded que aparece bajo cada PickCard (admin-only) y muestra Oracle/Legacy/Python/Ensemble probs por pick.
+- [server/services/chatPickExtractor.js](server/services/chatPickExtractor.js) — captura picks de Oracle Chat con JSON tail + Haiku fallback, persiste en `picks` con `source='oracle_chat'`.
 
 ### ML sidecar Python
 - [ml/hexa_ml/serve.py](ml/hexa_ml/serve.py) — FastAPI app (endpoints: /health, /predict/\*, /calibration, /retrain, /retrain/ensemble).
@@ -311,31 +317,38 @@ Estado del pipeline ML:
 - ✅ Sprint 2 — sidecar Python FastAPI + XGBoost real en `ml/`, desplegado en Railway como servicio separado.
 - ✅ Sprint 3 — integración Node↔Python (mlModelClient.js, circuit breaker), shadow_model_runs enriquecido, dashboard `/admin/ml-calibration`.
 - ✅ Sprint 4 — ensemble meta-learner (LogReg oracle+legacy+python), `/predict/ensemble`, `/admin/ml-ensemble-calibration`.
+- ✅ Sprint 5 UI — Admin ML Control Center (`/admin/ml-control`): HUD live, retrain on-demand por mercado + ensemble + RETRAIN ALL, per-pick ensemble breakdown badge en HistoryPanel, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Chat→Training pipeline con `source='oracle_chat'` aislado del training default. Sprint 5 Player Props pendiente (banner "coming soon" visible).
 
 **Estado en producción (2026-05-14)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
-- Runline: pendiente de acumular 60+ picks (tiene 27 hoy)
+- Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".
 - Backfill ejecutado: 583/635 filas de `pick_features` tienen `market_type` parseado
 - Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC)
 
-**Variables en Railway Hexa ML**: `DATABASE_URL` (public URL), `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `MIN_TRAIN_SIZE=60`, `TEST_DAYS=7`
+**Variables en Railway Hexa ML**: `DATABASE_URL` (public URL), `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `MIN_TRAIN_SIZE=60`, `RUNLINE_MIN_TRAIN_SIZE=25` (override), `TEST_DAYS=7`
 
-**Variables en Railway hexa-v4**: `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app`, `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`
+**Variables en Railway hexa-v4**: `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app`, `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `CHAT_EXTRACTOR_HAIKU_FALLBACK=1` (default), `CHAT_EXTRACTOR_HAIKU_MODEL=claude-haiku-4-5-20251001` (default)
 
-**Para reentrenar manualmente**:
+**Para reentrenar manualmente (CLI)**:
 ```bash
 curl -X POST https://hexa-ml-production.up.railway.app/retrain \
   -H "Authorization: Bearer hexa-ml-secret-2026" \
-  -H "Content-Type: application/json" -d '{}'
+  -H "Content-Type: application/json" -d '{"market":"all"}'
 ```
+
+**Para reentrenar desde la UI**: ir a `/admin/ml-control` → click en `▶ RETRAIN` por mercado o `▶▶ RETRAIN ALL MARKETS`. Cada disparo escribe una fila en `ml_retrain_log` (admin, market, brier, n_train, duration, error). Cooldown anti-doble-click: 5 minutos por scope.
 
 **Si pick_features necesita backfill** (añadir DATABASE_URL público al .env local primero):
 ```bash
 node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 ```
 
-Próximo paso recomendado (Tier S del backlog): equity curve + Sharpe + drawdown dashboard usando datos que ya existen en `picks`.
+**Picks desde Oracle Chat**: cuando el Oracle recomienda un pick durante una sesión de chat, el extractor (JSON tail + Haiku fallback) lo persiste en `picks` con `source='oracle_chat'` y `chat_session_id` apuntando a `oracle_sessions`. Estos picks **no entran al training default** (el sidecar Python filtra por `source = 'live'`). Para inspeccionarlos: panel "Chat-sourced picks" en `/admin/ml-control`. Para suprimir extracción en un chat exploratorio: header `X-HEXA-Skip-Pick-Extract: 1` (o el checkbox "NO GUARDAR PARA ENTRENAMIENTO" en OracleChat).
+
+Próximos pasos:
+- Sprint 5 Player Props (training para hits / total_bases / strikeouts) — requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en savant-fetcher.
+- Equity curve + Sharpe + drawdown dashboard usando datos que ya existen en `picks` (Tier S del backlog).
 
 ---
 

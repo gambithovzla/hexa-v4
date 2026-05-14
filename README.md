@@ -93,8 +93,11 @@ npm run dev:all
 | `PARLAY_SYNERGY_ENABLED` | No | Motor parlay nuevo (default `false`) |
 | `X_AUTO_PUBLISH_ENABLED` | No | `0`/`1` — habilita worker de publicación X |
 | `ML_SIDECAR_ENABLED` | No | `true` para activar llamadas al sidecar Python XGBoost |
+| `ENSEMBLE_ENABLED` | No | `true` para habilitar el meta-learner ensemble |
 | `HEXA_ML_API_URL` | No (con sidecar) | URL base del sidecar Python Railway |
 | `HEXA_ML_INTERNAL_TOKEN` | No (con sidecar) | Token de autenticación Node→Python |
+| `CHAT_EXTRACTOR_HAIKU_FALLBACK` | No | `0` para deshabilitar fallback Haiku del extractor de chat (default `1`) |
+| `CHAT_EXTRACTOR_HAIKU_MODEL` | No | Override del modelo Haiku usado (default `claude-haiku-4-5-20251001`) |
 
 Lista completa con descripciones en [.env.example](.env.example) y [docs/integrations.md](docs/integrations.md).
 
@@ -164,7 +167,7 @@ Todos bajo `/api`. Los protegidos requieren JWT (`🔒`); los admin requieren ro
 - **Análisis** (`/analyze/*`) 🔒: game, parlay, safe, parlay-synergy (👑 beta).
 - **Picks** (`/picks/*`) 🔒: CRUD, postmortem, live-progress, clv-stats.
 - **Live** (`/games/:gamePk/*`): live, play-by-play, highlights-link.
-- **Admin** (`/admin/*`) 👑: grant-credits, run-backtest, shadow-model, feature-store, db/tables, content/queue, parlay-synergy.
+- **Admin** (`/admin/*`) 👑: grant-credits, run-backtest, shadow-model, feature-store, db/tables, content/queue, parlay-synergy, **ml/status, ml/retrain, ml/retrain/ensemble, ml/retrain-log, ml/ensemble, ml/chat-picks-stats, picks/:id/ensemble-breakdown**.
 - **Pagos** (`/nowpayments/*`): checkout, webhook IPN HMAC-SHA512.
 - **Content API** (read-only, API key): `/content/v1/games`, `/board`, `/picks`, `/insights`, `/performance`.
 
@@ -191,6 +194,12 @@ Motor combinatorial para parlays (correlación, ortogonalidad de riesgo, coheren
 
 ### Content pipeline X
 Genera drafts editoriales con Claude Haiku, los encola, y los publica en X (Twitter) vía OAuth 1.0a HMAC-SHA1. Detalle: [docs/content-pipeline.md](docs/content-pipeline.md).
+
+### Admin ML Control Center (`/admin/ml-control`)
+Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, ensemble), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d de accuracy legacy-vs-python, pesos aprendidos del ensemble meta-learner, y un audit log de retrains manuales. Permite disparar retrains por mercado o globales con un click — cada disparo se registra en `ml_retrain_log` con duración y métricas. Por cada pick de la historia, el admin ve un chip expandible (`AdminEnsembleBadge`) con la prob de Oracle/Legacy/Python/Ensemble + correctness ✓/✗ cuando el partido resolvió.
+
+### Oracle Chat → Training pipeline
+Los picks que el Oracle recomienda durante una sesión de chat se persisten automáticamente para alimentar el entrenamiento futuro. El extractor inyecta una instrucción interna que pide al Oracle terminar con `<<<HEXA_PICK_JSON>>>{...}<<<END>>>` cuando hay un pick concreto; si no aparece y la pregunta lo amerita, un Haiku fallback parsea la respuesta. Los picks se guardan con `source='oracle_chat'` y `chat_session_id` linkeado a `oracle_sessions` — están aislados del training default (`source='live'`) y son visibles en la sección "Chat-sourced picks" del Control Center. Opt-out por chat: checkbox "NO GUARDAR PARA ENTRENAMIENTO" o header `X-HEXA-Skip-Pick-Extract: 1`.
 
 ---
 
@@ -227,7 +236,9 @@ Estado:
 - ✅ **Sprint 1**: Dataset completo — 22 columnas nuevas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js, backfill de 620+ picks históricos.
 - ✅ **Sprint 2**: Sidecar Python FastAPI + XGBoost real en `ml/`, desplegado en Railway como servicio separado (`hexa-ml`). Modelos activos: moneyline (Brier 0.205, ROI +18.3%), overunder (Brier 0.138, ROI +8.5%). URL: `https://hexa-ml-production.up.railway.app`.
 - ✅ **Sprint 3**: Integración Node↔Python activa (`ML_SIDECAR_ENABLED=true` en prod) con circuit breaker y fallback al validator legacy. Dashboard `/admin/ml-calibration` operativo.
-- ⏳ **Sprint 4** (opcional): Ensemble meta-learner ponderado — pendiente de confirmar que ambos modelos superan baseline individual de forma sostenida.
+- ✅ **Sprint 4**: Ensemble meta-learner (LogReg sobre Oracle+Legacy+Python en logit space). Endpoints `/predict/ensemble` y `/calibration/ensemble`. Sólo se guarda artifact cuando supera a la mejor fuente individual.
+- ✅ **Sprint 5 UI**: Admin ML Control Center en `/admin/ml-control` — HUD live, retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Oracle Chat → Training pipeline (JSON tail + Haiku fallback, bucket `source='oracle_chat'`).
+- ⏳ **Sprint 5 Player Props** (pendiente): training para hits / total_bases / strikeouts — requiere features per-batter en `savant-fetcher.js`. Banner "coming soon" en el Control Center.
 
 Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
 
