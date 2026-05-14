@@ -345,6 +345,53 @@ router.post('/retrain/ensemble', async (req, res) => {
   });
 });
 
+// ── GET /api/admin/ml/chat-picks-stats ───────────────────────────────────────
+
+router.get('/chat-picks-stats', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         COUNT(*)                                  AS total,
+         COUNT(*) FILTER (WHERE result = 'win')    AS wins,
+         COUNT(*) FILTER (WHERE result = 'loss')   AS losses,
+         COUNT(*) FILTER (WHERE result IS NULL OR result = 'pending') AS pending,
+         COUNT(DISTINCT chat_session_id) FILTER (WHERE chat_session_id IS NOT NULL) AS unique_sessions,
+         MIN(created_at)                           AS first_at,
+         MAX(created_at)                           AS last_at
+       FROM picks
+       WHERE source = 'oracle_chat' AND deleted_at IS NULL`
+    );
+
+    const byMarketRes = await pool.query(
+      `SELECT pf.market_type, COUNT(*) AS n
+         FROM pick_features pf
+         JOIN picks p ON p.id = pf.pick_id
+        WHERE p.source = 'oracle_chat' AND pf.market_type IS NOT NULL
+        GROUP BY pf.market_type
+        ORDER BY n DESC`
+    );
+
+    const recentRes = await pool.query(
+      `SELECT p.id, p.matchup, p.pick, p.oracle_confidence, p.result, p.created_at,
+              pf.market_type, pf.side, pf.line
+         FROM picks p
+         LEFT JOIN pick_features pf ON pf.pick_id = p.id
+        WHERE p.source = 'oracle_chat' AND p.deleted_at IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT 20`
+    );
+
+    res.json({
+      success: true,
+      summary: rows[0] ?? null,
+      by_market: byMarketRes.rows,
+      recent: recentRes.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── GET /api/admin/picks/:pickId/ensemble-breakdown ──────────────────────────
 
 router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {

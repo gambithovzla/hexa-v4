@@ -480,6 +480,83 @@ function WeightBadge({ label, value }) {
   );
 }
 
+// ── Chat-sourced picks section ───────────────────────────────────────────────
+
+function ChatPicksSection({ stats }) {
+  const s = stats?.summary;
+  if (!s) {
+    return (
+      <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '16px 18px', mt: 3, overflow: 'hidden' }}>
+        <CornerBrackets color={ACCENT} />
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED, letterSpacing: '2px' }}>
+          Loading chat-sourced picks…
+        </Typography>
+      </Box>
+    );
+  }
+  const total   = Number(s.total ?? 0);
+  const wins    = Number(s.wins ?? 0);
+  const losses  = Number(s.losses ?? 0);
+  const pending = Number(s.pending ?? 0);
+  const sessions = Number(s.unique_sessions ?? 0);
+  const settled = wins + losses;
+  const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
+
+  return (
+    <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '18px 18px 16px', mt: 3, overflow: 'hidden' }}>
+      <CornerBrackets color={ACCENT} size={12} />
+
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
+        <Box>
+          <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px' }}>
+            ORACLE CHAT // TRAINING BUCKET
+          </Typography>
+          <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.15rem', fontWeight: 700, color: ACCENT, lineHeight: 1.1 }}>
+            Chat-sourced Picks
+          </Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ background: 'rgba(255,122,26,0.05)', border: `1px solid ${ACCENT}33`, p: '10px 12px', mb: 2 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, lineHeight: 1.6 }}>
+          Picks extracted from Oracle chat sessions, stored with <code>source='oracle_chat'</code>.
+          By default these are <strong>excluded</strong> from training (the Python sidecar filters on
+          <code> source = 'live'</code>) to avoid biasing the model with hypothetical questions. They
+          remain available for opt-in retraining or for tracking the Oracle's casual judgement quality.
+        </Typography>
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1.5 }}>
+        <Metric label="TOTAL"      value={total} color={CYAN} />
+        <Metric label="WINS"       value={wins} color={GREEN} />
+        <Metric label="LOSSES"     value={losses} color={RED} />
+        <Metric label="PENDING"    value={pending} color={AMBER} />
+        <Metric label="WIN RATE"   value={winRate ? `${winRate}%` : '—'} color={winRate && Number(winRate) >= 50 ? GREEN : MUTED} />
+      </Box>
+
+      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 2 }}>
+        SESSIONS: <span style={{ color: INK1 }}>{sessions}</span>
+        {' · '}FIRST: <span style={{ color: INK1 }}>{s.first_at ? new Date(s.first_at).toISOString().slice(0,10) : '—'}</span>
+        {' · '}LAST: <span style={{ color: INK1 }}>{s.last_at ? timeAgo(s.last_at) : '—'}</span>
+      </Typography>
+
+      {stats?.by_market?.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
+          {stats.by_market.map((m) => (
+            <Box key={m.market_type} sx={{
+              px: '8px', py: '4px', border: `1px solid ${BORDER}`,
+              fontFamily: MONO, fontSize: '9px', color: INK1, letterSpacing: '1.5px',
+            }}>
+              <span style={{ color: MUTED }}>{(m.market_type || '?').toUpperCase()}: </span>
+              <span style={{ color: MARKET_TINTS[m.market_type] ?? ACCENT, fontWeight: 700 }}>{m.n}</span>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // ── Retrain audit log ────────────────────────────────────────────────────────
 function RetrainLog({ rows }) {
   if (!rows?.length) return <EmptyChart text="No retrains logged yet. Click RETRAIN above to fire the first one." />;
@@ -546,6 +623,7 @@ export default function AdminMLControlCenter({ token, onBack }) {
   const [calibration, setCalibration] = useState(null);
   const [ensemble, setEnsemble]     = useState(null);
   const [logRows, setLogRows]       = useState([]);
+  const [chatStats, setChatStats]   = useState(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyMarket, setBusyMarket] = useState(null);   // string | 'ensemble' | 'all'
@@ -601,11 +679,21 @@ export default function AdminMLControlCenter({ token, onBack }) {
     }
   }, [headers]);
 
+  const fetchChatStats = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_URL}/api/admin/ml/chat-picks-stats`, { headers });
+      if (!r.ok) throw new Error(`chat-stats http ${r.status}`);
+      setChatStats(await r.json());
+    } catch (err) {
+      console.warn('[AdminMLControlCenter] chat-stats fetch failed', err.message);
+    }
+  }, [headers]);
+
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchStatus(), fetchCalibration(), fetchEnsemble(), fetchLog()]);
+    await Promise.all([fetchStatus(), fetchCalibration(), fetchEnsemble(), fetchLog(), fetchChatStats()]);
     setRefreshing(false);
-  }, [fetchStatus, fetchCalibration, fetchEnsemble, fetchLog]);
+  }, [fetchStatus, fetchCalibration, fetchEnsemble, fetchLog, fetchChatStats]);
 
   useEffect(() => {
     let alive = true;
@@ -789,6 +877,9 @@ export default function AdminMLControlCenter({ token, onBack }) {
         onRetrain={handleRetrainEnsemble}
         busy={busyMarket === 'ensemble' || busyMarket === 'all'}
       />
+
+      {/* Chat-sourced picks bucket */}
+      <ChatPicksSection stats={chatStats} />
 
       {/* Retrain audit log */}
       <SectionTitle>Retrain Audit Log</SectionTitle>
