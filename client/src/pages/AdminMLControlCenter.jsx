@@ -100,8 +100,6 @@ const STRINGS = {
     allOkMsg:         (s) => `Completed in ${s}s — see retrain log for per-market metrics.`,
     comingSoon:       'Hits, Total Bases, Strikeouts — coming soon',
     propsDesc:        'Player-prop training requires per-batter features (xBA, xSLG, splits vs handedness, recent form 7d/14d) that are not yet in the pipeline. A dedicated sprint will extend savant-fetcher with batter leaderboards and add per-prop_kind models alongside the existing game-level ones.',
-    chatExcluded:     (e1, e2, e3) => `Picks extracted from Oracle chat sessions, stored with ${e1}. By default these are ${e2} from training (the Python sidecar filters on ${e3}) to avoid biasing the model with hypothetical questions. They remain available for opt-in retraining or for tracking the Oracle's casual judgement quality.`,
-    ensembleDesc:     (e1, e2, e3, e4) => `The ensemble is a calibrated ${e1} that combines three sources of home-win probability — the ${e2} (Claude/Grok), the ${e3} deterministic validator, and the trained ${e4} — into a single calibrated number. Each source enters in logit space; the model learns per-source weights against resolved games. A saved artifact only beats the best individual source on out-of-sample Brier (or you use --force).`,
   },
   es: {
     dashboard:        'Panel de Operaciones ML',
@@ -153,8 +151,6 @@ const STRINGS = {
     allOkMsg:         (s) => `Completado en ${s}s — ver historial para métricas por mercado.`,
     comingSoon:       'Hits, Total Bases, Ponches — próximamente',
     propsDesc:        'El entrenamiento de props por jugador requiere features individuales (xBA, xSLG, splits por lateralidad, forma reciente 7d/14d) que aún no están en el pipeline. Un sprint dedicado extenderá savant-fetcher con leaderboards de bateadores y añadirá modelos por prop_kind junto a los modelos de nivel de juego existentes.',
-    chatExcluded:     (e1, e2, e3) => `Picks extraídos de sesiones de chat del Oracle, almacenados con ${e1}. Por defecto están ${e2} del entrenamiento (el sidecar Python filtra por ${e3}) para no sesgar el modelo con preguntas hipotéticas. Disponibles para reentrenamiento opt-in o para monitorear la calidad del juicio casual del Oracle.`,
-    ensembleDesc:     (e1, e2, e3, e4) => `El ensemble es una ${e1} calibrada que combina tres fuentes de probabilidad de victoria del equipo local — el ${e2} (Claude/Grok), el validador ${e3} determinístico, y el ${e4} entrenado — en un único número calibrado. Cada fuente entra en espacio logit; el modelo aprende pesos por fuente contra partidos resueltos. Un artefacto guardado solo supera a la mejor fuente individual en Brier fuera de muestra.`,
   },
 };
 
@@ -512,13 +508,22 @@ function EnsemblePanel({ ensemble, onRetrain, busy, T }) {
       </Box>
 
       <Box sx={{ background: 'rgba(43,255,136,0.04)', border: `1px solid ${GREEN}33`, p: '12px 14px', mb: 2 }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, lineHeight: 1.6 }}>
-          {T.ensembleDesc(
-            <strong style={{ color: GREEN }}>LogisticRegression</strong>,
-            <strong style={{ color: AMBER }}>Oracle</strong>,
-            <strong style={{ color: ACCENT }}>Legacy</strong>,
-            <strong style={{ color: CYAN }}> Python XGBoost</strong>,
-          )}
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, lineHeight: 1.6 }} component="div">
+          {T.lang === 'en' ? <>
+            The ensemble is a calibrated <strong style={{ color: GREEN }}>LogisticRegression</strong> that combines three sources of
+            home-win probability — the <strong style={{ color: AMBER }}>Oracle</strong> (Claude/Grok),
+            the <strong style={{ color: ACCENT }}>Legacy</strong> deterministic validator, and the trained
+            <strong style={{ color: CYAN }}> Python XGBoost</strong> — into a single calibrated number.
+            Each source enters in logit space; the model learns per-source weights against resolved games.
+            A saved artifact only beats the best individual source on out-of-sample Brier (or you use <code>--force</code>).
+          </> : <>
+            El ensemble es una <strong style={{ color: GREEN }}>LogisticRegression</strong> calibrada que combina tres fuentes de probabilidad de victoria
+            del equipo local — el <strong style={{ color: AMBER }}>Oracle</strong> (Claude/Grok), el validador
+            <strong style={{ color: ACCENT }}> Legacy</strong> determinístico, y el
+            <strong style={{ color: CYAN }}> Python XGBoost</strong> entrenado — en un único número calibrado.
+            Cada fuente entra en espacio logit; el modelo aprende pesos por fuente contra partidos resueltos.
+            Un artefacto guardado solo supera a la mejor fuente individual en Brier fuera de muestra.
+          </>}
         </Typography>
       </Box>
 
@@ -623,12 +628,18 @@ function ChatPicksSection({ stats, T }) {
       </Box>
 
       <Box sx={{ background: 'rgba(255,122,26,0.05)', border: `1px solid ${ACCENT}33`, p: '10px 12px', mb: 2 }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, lineHeight: 1.6 }}>
-          {T.chatExcluded(
-            <code>source='oracle_chat'</code>,
-            <strong>excluidos / excluded</strong>,
-            <code>source = 'live'</code>,
-          )}
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, lineHeight: 1.6 }} component="div">
+          {T.lang === 'en' ? <>
+            Picks extracted from Oracle chat sessions, stored with <code>source='oracle_chat'</code>.
+            By default these are <strong>excluded</strong> from training (the Python sidecar filters on
+            <code> source = 'live'</code>) to avoid biasing the model with hypothetical questions. They
+            remain available for opt-in retraining or for tracking the Oracle's casual judgement quality.
+          </> : <>
+            Picks extraídos de sesiones de chat del Oracle, almacenados con <code>source='oracle_chat'</code>.
+            Por defecto están <strong>excluidos</strong> del entrenamiento (el sidecar Python filtra por
+            <code> source = 'live'</code>) para no sesgar el modelo con preguntas hipotéticas.
+            Disponibles para reentrenamiento opt-in o para monitorear la calidad del juicio casual del Oracle.
+          </>}
         </Typography>
       </Box>
 
@@ -726,7 +737,7 @@ function Toast({ toast, onClose }) {
 // ── Main component ──────────────────────────────────────────────────────────
 
 export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
-  const T = STRINGS[lang] ?? STRINGS.es;
+  const T = { ...(STRINGS[lang] ?? STRINGS.es), lang };
 
   const [status, setStatus]         = useState(null);
   const [calibration, setCalibration] = useState(null);
