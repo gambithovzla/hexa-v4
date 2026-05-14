@@ -37,6 +37,7 @@ import BacktestRunner     from './components/BacktestRunner';
 import DatasetDashboard  from './components/DatasetDashboardV2';
 import ShadowModeDashboard    from './components/ShadowModeDashboard';
 import SynergyRunsDashboard  from './components/SynergyRunsDashboard';
+import MLCalibrationDashboard from './pages/MLCalibrationDashboard';
 import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
@@ -396,6 +397,10 @@ export default function App() {
   }
   if (window.location.pathname === '/admin/synergy-runs') {
     return <SynergyRunsDashboard lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/ml-calibration') {
+    const token = localStorage.getItem('hexa_token');
+    return <MLCalibrationDashboard token={token} onBack={() => { window.location.href = '/'; }} />;
   }
 
 

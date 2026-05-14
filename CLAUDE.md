@@ -26,7 +26,7 @@ hexa-v4/
 ├── server/        # Node 20 ESM, Express 4, Postgres
 ├── client/        # React 18, Vite, MUI, PWA
 ├── scripts/       # audit, training, backup
-├── ml/            # (futuro) microservicio Python ML
+├── ml/            # microservicio Python ML (FastAPI + XGBoost, deploy separado en Railway)
 ├── docs/          # documentación viva por tema
 ├── .env.example   # todas las env vars con comentarios
 ├── railway.json   # config deploy server
@@ -98,8 +98,26 @@ hexa-v4/
 
 ### Frontend
 - [client/src/App.jsx](client/src/App.jsx) — root + routing.
-- [client/src/pages/](client/src/pages/) — pages (PerformanceDashboard, ParlayArchitect, DevUIShowcase).
+- [client/src/pages/](client/src/pages/) — pages (PerformanceDashboard, ParlayArchitect, DevUIShowcase, MLCalibrationDashboard).
 - [client/src/components/](client/src/components/) — componentes (AdminCreditPanel, AdminDbExplorerPanel, AnalysisPanel, OracleChat, BankrollTracker, HexaBoard, LearningCenter, MethodologyPage, etc).
+
+### ML sidecar Python
+- [ml/hexa_ml/serve.py](ml/hexa_ml/serve.py) — FastAPI app (endpoints: /health, /predict/\*, /calibration, /retrain, /retrain/ensemble).
+- [ml/hexa_ml/train.py](ml/hexa_ml/train.py) — pipeline de entrenamiento XGBoost (temporal split, Brier eval).
+- [ml/hexa_ml/models/ensemble.py](ml/hexa_ml/models/ensemble.py) — meta-learner LogReg que combina oracle + legacy + python.
+- [ml/hexa_ml/predict.py](ml/hexa_ml/predict.py) — ModelRegistry singleton (thread-safe).
+- [ml/hexa_ml/features.py](ml/hexa_ml/features.py) — feature engineering desde pick_features.
+- [ml/hexa_ml/calibration.py](ml/hexa_ml/calibration.py) — PlattCalibrator + Brier score.
+- [ml/Dockerfile](ml/Dockerfile) — imagen multi-stage Python 3.11.
+- [ml/railway.json](ml/railway.json) — config deploy Railway del sidecar.
+
+### Scripts de training / dataset
+- [scripts/training/export-dataset.js](scripts/training/export-dataset.js) — exporta pick_features a CSV/Parquet.
+- [scripts/training/backfill-pick-features.js](scripts/training/backfill-pick-features.js) — backfill de scores históricos.
+
+### Parsers y enrichers (Sprint 1)
+- [server/parsers/pickParser.js](server/parsers/pickParser.js) — parsea "NYY ML" → `{market_type, side, line}`.
+- [server/services/pickPostgameEnricher.js](server/services/pickPostgameEnricher.js) — backfill de scores post-game desde MLB API.
 
 ---
 
@@ -111,9 +129,10 @@ Estos archivos están congelados por el brief del Parlay Synergy Engine y por es
 - `server/context-builder.js`
 - `server/market-intelligence.js`
 - `server/services/xgboostValidator.js`
-- `server/shadow-model.js`
+- `server/shadow-model.js` ← ya se modificó en Sprint 3 para inyectar Python score; está estable
 - Prompts existentes dentro de `server/oracle.js`
 - `server/services/parlayEngine/*` (recién implementado, refactors solo con permiso)
+- `server/services/mlModelClient.js` ← cliente del sidecar Python, no tocar flujo del circuit breaker
 
 Para añadir lógica nueva que parezca tocar estos archivos: **crear archivos nuevos** que los **importen** y orquesten, sin modificar el original. Patrón usado en `parlayEngine/llmClient.js` (instancia propia de Anthropic SDK en lugar de tocar `oracle.js`).
 
@@ -284,14 +303,18 @@ Lista completa en [.env.example](.env.example).
 
 ## Roadmap activo
 
-Foco actual: **entrenar modelo propio Python con 500+ picks resueltos**. Plan completo y backlog en [docs/roadmap.md](docs/roadmap.md).
+El pipeline de ML propio está completo. Próximo foco: activar el sidecar en Railway y acumular datos para reentrenamiento. Backlog en [docs/roadmap.md](docs/roadmap.md).
 
-Estado:
+Estado del pipeline ML:
 - ✅ Sprint 0 — documentación viva (este archivo + `/docs/`).
-- 🔄 Sprint 1 — cerrar gaps del dataset (scores reales, parser estructurado del pick, backfill, export Parquet).
-- ⏳ Sprint 2 — sidecar Python FastAPI + XGBoost real.
-- ⏳ Sprint 3 — integración Node↔Python + calibration dashboard.
-- ⏳ Sprint 4 (opcional) — ensemble meta-learner.
+- ✅ Sprint 1 — gaps del dataset cerrados: 22 columnas nuevas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js.
+- ✅ Sprint 2 — sidecar Python FastAPI + XGBoost real en `ml/`, Dockerfile, railway.json, retrain-weekly.yml.
+- ✅ Sprint 3 — integración Node↔Python (mlModelClient.js, circuit breaker), shadow_model_runs enriquecido, dashboard `/admin/ml-calibration`.
+- ✅ Sprint 4 — ensemble meta-learner (LogReg que combina oracle+legacy+python), `/predict/ensemble`, `/admin/ml-ensemble-calibration`.
+
+**Para activar en producción**: ver sección "Activar el sidecar Python" en [docs/ml-pipeline.md](docs/ml-pipeline.md). Las 3 env vars necesarias: `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL`, `HEXA_ML_INTERNAL_TOKEN`.
+
+Próximo paso recomendado (Tier S del backlog): equity curve + Sharpe + drawdown dashboard usando datos que ya existen en `picks`.
 
 ---
 
