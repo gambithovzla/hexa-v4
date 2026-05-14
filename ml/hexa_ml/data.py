@@ -162,6 +162,86 @@ def make_target(df: pd.DataFrame, market: str) -> pd.Series:
     raise ValueError(f"Unknown market: {market}")
 
 
+def load_ensemble_training_data(
+    *,
+    database_url: str | None = None,
+    market: str = "moneyline",
+) -> pd.DataFrame:
+    """Pull ensemble training rows from `shadow_model_runs` (Sprint 3 schema).
+
+    Returns rows where every source has a probability and the game is
+    resolved. The target `y` is 1 if the home team won, 0 otherwise.
+
+    Only `actual_status = 'resolved'` rows are returned — pushes and
+    pending games are excluded.
+
+    Per-market filtering is not enforced yet because shadow_model_runs
+    tracks game-winner predictions (moneyline only). Once the legacy
+    validator is extended to over/under and run-line we can add a
+    market_type column and filter here.
+    """
+    if market != "moneyline":
+        raise NotImplementedError(
+            f"Ensemble market '{market}' not supported yet — only 'moneyline' has "
+            "shadow_model_runs coverage. Extend shadow-model.js to score over/under "
+            "and run-line first."
+        )
+
+    url = database_url or get_settings().database_url
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is required to train the ensemble. "
+            "shadow_model_runs lives in Postgres and is not exported to CSV."
+        )
+
+    sql = """
+        SELECT
+          id,
+          game_pk,
+          game_date,
+          created_at,
+          home_team_id,
+          away_team_id,
+          oracle_home_win_prob,
+          shadow_home_win_prob,
+          python_model_score,
+          python_model_status,
+          actual_winner_id,
+          actual_home_score,
+          actual_away_score,
+          actual_status
+        FROM shadow_model_runs
+        WHERE actual_status = 'resolved'
+          AND oracle_home_win_prob IS NOT NULL
+          AND shadow_home_win_prob IS NOT NULL
+          AND python_model_score IS NOT NULL
+          AND python_model_status = 'ok'
+        ORDER BY created_at ASC
+    """
+
+    engine = create_engine(url)
+    try:
+        df = pd.read_sql(sql, engine)
+    finally:
+        engine.dispose()
+
+    if df.empty:
+        return df
+
+    df["y_true"] = (
+        df["actual_winner_id"].astype(str) == df["home_team_id"].astype(str)
+    ).astype(int)
+
+    for col in ("oracle_home_win_prob", "shadow_home_win_prob", "python_model_score"):
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
+    if df["game_date"].isna().all():
+        df["game_date"] = pd.to_datetime(df["created_at"], errors="coerce")
+
+    return df
+
+
 def temporal_split(
     df: pd.DataFrame, test_days: int
 ) -> tuple[pd.DataFrame, pd.DataFrame]:

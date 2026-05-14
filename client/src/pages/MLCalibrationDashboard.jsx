@@ -242,6 +242,106 @@ function extractReliabilityData(calibration, market = 'moneyline') {
   return m.reliability_diagram;
 }
 
+// ── Sprint 4: ensemble meta-learner section ───────────────────────────────────
+
+/**
+ * Renders the ensemble manifest: per-source Brier scores comparison + learned
+ * weights from the LogisticRegression meta-learner. Hidden gracefully when
+ * the ensemble is disabled or hasn't been trained yet.
+ */
+function EnsembleSection({ ensemble }) {
+  if (!ensemble) return null;
+
+  const enabled = ensemble.enabled;
+  const moneylineMetrics = ensemble?.manifest?.manifest?.markets?.moneyline ?? null;
+
+  return (
+    <>
+      <SectionTitle>Ensemble Meta-Learner — Sprint 4</SectionTitle>
+      <Box sx={{ background: SURFACE, border: `1px solid ${BORDER}`, p: '16px 12px', mb: 3 }}>
+        {!enabled && (
+          <Box sx={{ color: MUTED, fontFamily: MONO, fontSize: '12px', py: 2, textAlign: 'center' }}>
+            Ensemble disabled. Set <code>ENSEMBLE_ENABLED=true</code> and train via
+            <code> POST /retrain/ensemble</code> once enough resolved rows have all 3 sources populated.
+          </Box>
+        )}
+        {enabled && !moneylineMetrics && (
+          <Box sx={{ color: MUTED, fontFamily: MONO, fontSize: '12px', py: 2, textAlign: 'center' }}>
+            Ensemble enabled but not yet trained. Need at least 50 resolved picks where the Oracle,
+            legacy validator, and Python XGBoost all produced a probability.
+          </Box>
+        )}
+        {enabled && moneylineMetrics && (
+          <Box>
+            {/* Per-source Brier comparison */}
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED, mb: 1 }}>
+              Brier scores (lower is better):
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
+              <BrierBadge label="Oracle"   value={moneylineMetrics.brier_oracle}   color={AMBER} />
+              <BrierBadge label="Legacy"   value={moneylineMetrics.brier_legacy}   color={PURPLE} />
+              <BrierBadge label="Python"   value={moneylineMetrics.brier_python}   color={CYAN} />
+              <BrierBadge label="Ensemble" value={moneylineMetrics.brier_test}     color={GREEN} highlight />
+            </Box>
+
+            {/* Learned weights — interpretable per-source coefficients */}
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED, mb: 1, mt: 2 }}>
+              Learned weights (LogisticRegression coefficients on logit scale):
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+              <WeightBadge label="Oracle"    value={moneylineMetrics.coef_oracle} />
+              <WeightBadge label="Legacy"    value={moneylineMetrics.coef_legacy} />
+              <WeightBadge label="Python"    value={moneylineMetrics.coef_python} />
+              <WeightBadge label="Intercept" value={moneylineMetrics.intercept} />
+            </Box>
+
+            {/* Training stats */}
+            <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 2, textAlign: 'center' }}>
+              n_train={moneylineMetrics.n_train} · n_test={moneylineMetrics.n_test}
+              {moneylineMetrics.trained_at ? ` · trained ${new Date(moneylineMetrics.trained_at).toLocaleString()}` : ''}
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    </>
+  );
+}
+
+function BrierBadge({ label, value, color, highlight }) {
+  const v = Number(value);
+  const displayValue = Number.isFinite(v) ? v.toFixed(4) : '—';
+  return (
+    <Box sx={{
+      border: `1px solid ${highlight ? color : BORDER}`,
+      background: highlight ? `${color}11` : 'transparent',
+      px: 1.5, py: 0.75, flex: '1 1 110px', minWidth: 110,
+    }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, textTransform: 'uppercase', letterSpacing: '2px' }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: DISPLAY, fontSize: '18px', fontWeight: 700, color }}>
+        {displayValue}
+      </Typography>
+    </Box>
+  );
+}
+
+function WeightBadge({ label, value }) {
+  const v = Number(value);
+  const displayValue = Number.isFinite(v) ? (v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2)) : '—';
+  const color = Number.isFinite(v) && v < 0 ? RED : CYAN;
+  return (
+    <Box sx={{ border: `1px solid ${BORDER}`, px: 1.5, py: 0.75, flex: '1 1 110px', minWidth: 110 }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, textTransform: 'uppercase', letterSpacing: '2px' }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '16px', fontWeight: 600, color }}>
+        {displayValue}
+      </Typography>
+    </Box>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function MLCalibrationDashboard({ token, onBack }) {
@@ -408,6 +508,9 @@ export default function MLCalibrationDashboard({ token, onBack }) {
               Daily moneyline accuracy. 50% = random baseline. Higher is better.
             </Typography>
           </Box>
+
+          {/* ── Sprint 4: Ensemble meta-learner ──────────────────────────── */}
+          <EnsembleSection ensemble={data.ensemble} />
 
           {/* ── Raw manifest ─────────────────────────────────────────────── */}
           {data.calibration && (

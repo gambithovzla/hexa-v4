@@ -6,8 +6,11 @@ Endpoints:
   - POST /predict/overunder      → P(OVER hits)
   - POST /predict/runline        → P(home covers -1.5)
   - POST /predict/batch          → batch any market
+  - POST /predict/ensemble       → meta-learner combining oracle + legacy + python
   - GET  /calibration            → reliability diagram of last test set
+  - GET  /calibration/ensemble   → ensemble manifest (Sprint 4)
   - POST /retrain                → fire training run (admin token required)
+  - POST /retrain/ensemble       → fire ensemble training (admin token required)
 
 Auth: every non-/health endpoint requires
   Authorization: Bearer ${HEXA_ML_INTERNAL_TOKEN}
@@ -139,6 +142,8 @@ class HealthResponse(BaseModel):
     models_loaded: list[str]
     models_available: list[str]
     manifest: dict
+    ensembles_loaded: list[str] = []
+    ensembles_available: list[str] = []
 
 
 class RetrainRequest(BaseModel):
@@ -149,6 +154,39 @@ class RetrainRequest(BaseModel):
 class RetrainResponse(BaseModel):
     status: str
     summary: dict
+
+
+# ── Ensemble request / response models (Sprint 4) ─────────────────────────
+class EnsembleRequest(BaseModel):
+    """Inputs for the meta-learner — one probability per source.
+
+    All three sources are required so the meta-learner can apply the
+    weights it was trained with. The Node side only calls this when all
+    three are available; otherwise it should fall back to the Oracle.
+    """
+
+    market: str = Field(default="moneyline", pattern="^(moneyline)$")
+    oracle_prob: float = Field(..., ge=0, le=1)
+    legacy_prob: float = Field(..., ge=0, le=1)
+    python_prob: float = Field(..., ge=0, le=1)
+
+
+class EnsembleResponse(BaseModel):
+    market: str
+    probability: float = Field(..., ge=0, le=1)
+    confidence: float = Field(..., ge=0, le=100)
+    sources: dict[str, float]
+    weights: dict[str, float]
+    model_version: str | None
+
+
+class EnsembleRetrainRequest(BaseModel):
+    market: str = Field(default="moneyline", pattern="^(moneyline|all)$")
+    min_rows: int = Field(default=50, ge=20, le=10_000)
+    force: bool = Field(
+        default=False,
+        description="Save the artifact even when it does not beat individual sources.",
+    )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -179,12 +217,17 @@ def health() -> HealthResponse:
     """Liveness check — also reports which markets have trained artifacts."""
     registry = get_registry()
     available = [m for m in ("moneyline", "overunder", "runline") if registry.has_artifact(m)]
+    ensembles_available = [
+        m for m in ("moneyline",) if registry.has_ensemble_artifact(m)
+    ]
     return HealthResponse(
         status="ok",
         version=__version__,
         models_loaded=registry.loaded_markets(),
         models_available=available,
         manifest=registry.manifest,
+        ensembles_loaded=registry.loaded_ensembles(),
+        ensembles_available=ensembles_available,
     )
 
 
@@ -249,6 +292,64 @@ def calibration() -> dict:
     """Return the most recent reliability stats from the manifest."""
     manifest = get_registry().manifest
     return {"manifest": manifest}
+
+
+@app.post(
+    "/predict/ensemble",
+    response_model=EnsembleResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_ensemble_endpoint(payload: EnsembleRequest) -> EnsembleResponse:
+    """Combine oracle / legacy / python probabilities via the meta-learner."""
+    try:
+        prediction = get_registry().predict_ensemble(
+            market=payload.market,
+            oracle_prob=payload.oracle_prob,
+            legacy_prob=payload.legacy_prob,
+            python_prob=payload.python_prob,
+        )
+    except ModelNotAvailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    return EnsembleResponse(
+        market=prediction.market,
+        probability=prediction.probability,
+        confidence=prediction.confidence,
+        sources=prediction.sources,
+        weights=prediction.weights,
+        model_version=prediction.model_version,
+    )
+
+
+@app.get("/calibration/ensemble", dependencies=[Depends(require_internal_token)])
+def calibration_ensemble() -> dict:
+    """Return the ensemble manifest (per-source Brier scores + weights)."""
+    return {"manifest": get_registry().ensemble_manifest}
+
+
+@app.post(
+    "/retrain/ensemble",
+    response_model=RetrainResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def retrain_ensemble_endpoint(payload: EnsembleRetrainRequest) -> RetrainResponse:
+    """Train the ensemble meta-learner from `shadow_model_runs` rows."""
+    from .train_ensemble import ENSEMBLE_MARKETS, train_ensemble
+
+    markets = ENSEMBLE_MARKETS if payload.market == "all" else (payload.market,)
+
+    def _run() -> dict:
+        return train_ensemble(
+            markets=markets,
+            min_rows=payload.min_rows,
+            force_save=payload.force,
+        )
+
+    summary = await asyncio.to_thread(_run)
+    get_registry().reload()
+    return RetrainResponse(status="ok", summary=summary)
 
 
 @app.post(

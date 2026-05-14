@@ -38,6 +38,7 @@ function readBool(envKey, defaultValue) {
 }
 
 const ML_SIDECAR_ENABLED   = readBool('ML_SIDECAR_ENABLED', false);
+const ENSEMBLE_ENABLED     = readBool('ENSEMBLE_ENABLED', false);
 const ML_API_URL           = (process.env.HEXA_ML_API_URL ?? '').replace(/\/$/, '');
 const ML_TOKEN             = process.env.HEXA_ML_INTERNAL_TOKEN ?? '';
 const TIMEOUT_MS           = 500;
@@ -266,9 +267,58 @@ export async function getCalibration() {
   return _get('/calibration');
 }
 
+/**
+ * Fetch the ensemble manifest (Sprint 4) — per-source weights + Brier scores.
+ * @returns {Promise<Object|null>}
+ */
+export async function getEnsembleCalibration() {
+  if (!_guard()) return null;
+  return _get('/calibration/ensemble');
+}
+
+/**
+ * Combine the 3 source probabilities through the trained meta-learner.
+ * Returns null when the sidecar is unavailable, the ensemble hasn't been
+ * trained yet, or any source probability is missing.
+ *
+ * @param {Object} payload
+ * @param {string} [payload.market='moneyline']
+ * @param {number} payload.oracle_prob  — home win prob from the LLM Oracle
+ * @param {number} payload.legacy_prob  — home win prob from xgboostValidator.js
+ * @param {number} payload.python_prob  — home win prob from the Python XGBoost
+ * @returns {Promise<{
+ *   market: string,
+ *   probability: number,
+ *   confidence: number,
+ *   sources: {oracle: number, legacy: number, python: number},
+ *   weights: {oracle: number, legacy: number, python: number, intercept: number},
+ *   model_version: string|null
+ * }|null>}
+ */
+export async function predictEnsemble(payload) {
+  if (!_guard()) return null;
+  if (!payload) return null;
+  const required = ['oracle_prob', 'legacy_prob', 'python_prob'];
+  for (const key of required) {
+    const v = Number(payload[key]);
+    if (!Number.isFinite(v) || v < 0 || v > 1) return null;
+  }
+  return _post('/predict/ensemble', {
+    market: payload.market ?? 'moneyline',
+    oracle_prob: Number(payload.oracle_prob),
+    legacy_prob: Number(payload.legacy_prob),
+    python_prob: Number(payload.python_prob),
+  });
+}
+
 /** Whether the sidecar integration is enabled via env var. */
 export function isEnabled() {
   return ML_SIDECAR_ENABLED && Boolean(ML_API_URL);
+}
+
+/** Whether the ensemble meta-learner endpoint is enabled (Sprint 4). */
+export function isEnsembleEnabled() {
+  return ENSEMBLE_ENABLED && isEnabled();
 }
 
 /** Inspect current circuit breaker state (for health/debug endpoints). */
