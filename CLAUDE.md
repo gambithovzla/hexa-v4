@@ -303,16 +303,37 @@ Lista completa en [.env.example](.env.example).
 
 ## Roadmap activo
 
-El pipeline de ML propio está completo. Próximo foco: activar el sidecar en Railway y acumular datos para reentrenamiento. Backlog en [docs/roadmap.md](docs/roadmap.md).
+El pipeline de ML propio está **completo y en producción**. Los modelos XGBoost están entrenados y sirviendo predicciones en tiempo real. Backlog en [docs/roadmap.md](docs/roadmap.md).
 
 Estado del pipeline ML:
 - ✅ Sprint 0 — documentación viva (este archivo + `/docs/`).
 - ✅ Sprint 1 — gaps del dataset cerrados: 22 columnas nuevas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js.
-- ✅ Sprint 2 — sidecar Python FastAPI + XGBoost real en `ml/`, Dockerfile, railway.json, retrain-weekly.yml.
+- ✅ Sprint 2 — sidecar Python FastAPI + XGBoost real en `ml/`, desplegado en Railway como servicio separado.
 - ✅ Sprint 3 — integración Node↔Python (mlModelClient.js, circuit breaker), shadow_model_runs enriquecido, dashboard `/admin/ml-calibration`.
-- ✅ Sprint 4 — ensemble meta-learner (LogReg que combina oracle+legacy+python), `/predict/ensemble`, `/admin/ml-ensemble-calibration`.
+- ✅ Sprint 4 — ensemble meta-learner (LogReg oracle+legacy+python), `/predict/ensemble`, `/admin/ml-ensemble-calibration`.
 
-**Para activar en producción**: ver sección "Activar el sidecar Python" en [docs/ml-pipeline.md](docs/ml-pipeline.md). Las 3 env vars necesarias: `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL`, `HEXA_ML_INTERNAL_TOKEN`.
+**Estado en producción (2026-05-14)**:
+- Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
+- Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
+- Runline: pendiente de acumular 60+ picks (tiene 27 hoy)
+- Backfill ejecutado: 583/635 filas de `pick_features` tienen `market_type` parseado
+- Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC)
+
+**Variables en Railway Hexa ML**: `DATABASE_URL` (public URL), `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `MIN_TRAIN_SIZE=60`, `TEST_DAYS=7`
+
+**Variables en Railway hexa-v4**: `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app`, `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`
+
+**Para reentrenar manualmente**:
+```bash
+curl -X POST https://hexa-ml-production.up.railway.app/retrain \
+  -H "Authorization: Bearer hexa-ml-secret-2026" \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+**Si pick_features necesita backfill** (añadir DATABASE_URL público al .env local primero):
+```bash
+node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
+```
 
 Próximo paso recomendado (Tier S del backlog): equity curve + Sharpe + drawdown dashboard usando datos que ya existen en `picks`.
 

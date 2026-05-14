@@ -92,6 +92,9 @@ npm run dev:all
 | `SHADOW_MODE_ENABLED` | No | Activa el shadow validator |
 | `PARLAY_SYNERGY_ENABLED` | No | Motor parlay nuevo (default `false`) |
 | `X_AUTO_PUBLISH_ENABLED` | No | `0`/`1` — habilita worker de publicación X |
+| `ML_SIDECAR_ENABLED` | No | `true` para activar llamadas al sidecar Python XGBoost |
+| `HEXA_ML_API_URL` | No (con sidecar) | URL base del sidecar Python Railway |
+| `HEXA_ML_INTERNAL_TOKEN` | No (con sidecar) | Token de autenticación Node→Python |
 
 Lista completa con descripciones en [.env.example](.env.example) y [docs/integrations.md](docs/integrations.md).
 
@@ -135,9 +138,12 @@ hexa-v4/
 │   ├── routes/             picks, content, insights, oracle-history
 │   ├── middleware/         auth, content-api-key
 │   └── prompts/            x-content-prompts
+├── ml/                     sidecar Python FastAPI + XGBoost (desplegado en Railway)
+│   ├── hexa_ml/            módulo principal (serve, train, predict, features, models)
+│   └── Dockerfile
 ├── scripts/
 │   ├── system-audit.js
-│   └── training/           run-backtest, historical-fetcher
+│   └── training/           backfill-pick-features, export-dataset, run-backtest
 ├── docs/                   documentación viva por tema
 ├── CLAUDE.md               convenciones para Claude Code
 ├── .env.example
@@ -214,16 +220,14 @@ Detalle de deploy + rollback: [docs/admin-and-ops.md sección 10](docs/admin-and
 
 ## Estado del proyecto y próximos pasos
 
-**Pipeline ML propio completado** (Q2 2026): XGBoost entrenado con picks históricos + ensemble meta-learner que combina Claude + validador + Python. Probabilidades calibradas (Platt), auto-retraining semanal vía GitHub Actions, dashboard de calibración en `/admin/ml-calibration`.
+**Pipeline ML propio en producción** (Q2 2026): XGBoost entrenado con picks históricos resueltos, probabilidades calibradas con Platt, auto-retraining disponible vía `POST /retrain`, dashboard de calibración en `/admin/ml-calibration`.
 
 Estado:
 - ✅ **Sprint 0**: Documentación viva (este README + `/docs/` + CLAUDE.md).
-- ✅ **Sprint 1**: Dataset completo — 22 columnas nuevas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js.
-- ✅ **Sprint 2**: Sidecar Python FastAPI + XGBoost real en `ml/`. Pendiente de deploy en Railway.
-- ✅ **Sprint 3**: Integración Node↔Python (circuit breaker, mlModelClient), dashboard `/admin/ml-calibration`.
-- ✅ **Sprint 4**: Ensemble meta-learner (LogReg oracle+legacy+python), `/admin/ml-ensemble-calibration`.
-
-**Para activar**: crear servicio Railway apuntando a `ml/`, setear `ML_SIDECAR_ENABLED=true` + `HEXA_ML_API_URL` + `HEXA_ML_INTERNAL_TOKEN` en el server Node, correr `POST /retrain`.
+- ✅ **Sprint 1**: Dataset completo — 22 columnas nuevas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js, backfill de 620+ picks históricos.
+- ✅ **Sprint 2**: Sidecar Python FastAPI + XGBoost real en `ml/`, desplegado en Railway como servicio separado (`hexa-ml`). Modelos activos: moneyline (Brier 0.205, ROI +18.3%), overunder (Brier 0.138, ROI +8.5%). URL: `https://hexa-ml-production.up.railway.app`.
+- ✅ **Sprint 3**: Integración Node↔Python activa (`ML_SIDECAR_ENABLED=true` en prod) con circuit breaker y fallback al validator legacy. Dashboard `/admin/ml-calibration` operativo.
+- ⏳ **Sprint 4** (opcional): Ensemble meta-learner ponderado — pendiente de confirmar que ambos modelos superan baseline individual de forma sostenida.
 
 Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
 
