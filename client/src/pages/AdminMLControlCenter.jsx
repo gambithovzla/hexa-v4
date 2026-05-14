@@ -15,6 +15,7 @@
  * Props:
  *   token   — JWT (admin)
  *   onBack  — navigate back
+ *   lang    — 'es' | 'en' (default 'es')
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -46,6 +47,116 @@ const DIM     = 'rgba(34,240,255,0.10)';
 const MARKETS = ['moneyline', 'overunder', 'runline'];
 const MARKET_LABELS = { moneyline: 'Moneyline', overunder: 'Over / Under', runline: 'Runline' };
 const MARKET_TINTS  = { moneyline: CYAN, overunder: GREEN, runline: AMBER };
+
+// ── Bilingual strings ─────────────────────────────────────────────────────────
+const STRINGS = {
+  en: {
+    dashboard:        'Model Operations Dashboard',
+    online:           'ONLINE',
+    offline:          'OFFLINE',
+    degraded:         'DEGRADED',
+    enabled:          'ENABLED',
+    disabled:         'DISABLED',
+    refreshTip:       'Refresh now',
+    never:            'never',
+    lastRetrain:      'LAST RETRAIN',
+    earlyModel:       'EARLY MODEL',
+    earlyModelTip:    'Training set is below the standard floor of 60. Model is statistically thin — treat predictions as exploratory.',
+    trained:          'TRAINED',
+    skipped:          (floor) => `SKIPPED — need more resolved picks (configured floor: ${floor})`,
+    training:         '⟳ TRAINING…',
+    retrainMkt:       (m) => `▶ RETRAIN ${m.toUpperCase()}`,
+    noCalibBuckets:   'No calibration buckets yet — train the model first.',
+    noRolling:        'No resolved shadow runs in the last 30 days.',
+    predProbBucket:   'Predicted prob bucket',
+    perfectCalib:     'Perfect calibration',
+    actualHitRate:    'Actual hit rate',
+    legacyValidator:  'Legacy validator',
+    ensembleCombiner: 'Ensemble Combiner',
+    retrainEnsemble:  '▶ RETRAIN ENSEMBLE',
+    brierScores:      'BRIER SCORES (lower is better)',
+    learnedWeights:   'LEARNED WEIGHTS (logit-space coefficients)',
+    ensembleDisabled: 'Ensemble disabled. Set ENSEMBLE_ENABLED=true on the server to enable.',
+    ensembleNotTrained:'Ensemble enabled but not yet trained — click RETRAIN ENSEMBLE once ≥50 resolved picks have all 3 sources.',
+    chatTitle:        'Chat-sourced Picks',
+    chatLoading:      'Loading chat-sourced picks…',
+    noRetrains:       'No retrains logged yet. Click RETRAIN above to fire the first one.',
+    perMarketModels:  'Per-Market Models',
+    reliabilityDiagram:'Reliability Diagram',
+    reliabilityNote:  'Bars at the dashed 45° line = perfect calibration. Bars below = over-confident. Bars above = under-confident.',
+    rolling30d:       'Rolling 30d — Legacy vs Python',
+    rollingNote:      'Daily moneyline hit-rate from shadow_model_runs. 50% baseline = random.',
+    retrainLog:       'Retrain Audit Log',
+    back:             '← BACK',
+    retrainAll:       '▶▶ RETRAIN ALL MARKETS',
+    trainingAll:      '⟳ TRAINING ALL MARKETS…',
+    logCols:          ['When', 'Market', 'Status', 'Brier', 'N_train', 'Duration', 'By'],
+    toastOk:          (m) => `RETRAIN OK · ${m}`,
+    toastFail:        (m) => `RETRAIN FAILED · ${m}`,
+    ensembleOk:       'ENSEMBLE RETRAINED',
+    ensembleFail:     'ENSEMBLE RETRAIN FAILED',
+    allOk:            'RETRAIN ALL OK',
+    allFail:          'RETRAIN ALL FAILED',
+    allOkMsg:         (s) => `Completed in ${s}s — see retrain log for per-market metrics.`,
+    comingSoon:       'Hits, Total Bases, Strikeouts — coming soon',
+    propsDesc:        'Player-prop training requires per-batter features (xBA, xSLG, splits vs handedness, recent form 7d/14d) that are not yet in the pipeline. A dedicated sprint will extend savant-fetcher with batter leaderboards and add per-prop_kind models alongside the existing game-level ones.',
+    chatExcluded:     (e1, e2, e3) => `Picks extracted from Oracle chat sessions, stored with ${e1}. By default these are ${e2} from training (the Python sidecar filters on ${e3}) to avoid biasing the model with hypothetical questions. They remain available for opt-in retraining or for tracking the Oracle's casual judgement quality.`,
+    ensembleDesc:     (e1, e2, e3, e4) => `The ensemble is a calibrated ${e1} that combines three sources of home-win probability — the ${e2} (Claude/Grok), the ${e3} deterministic validator, and the trained ${e4} — into a single calibrated number. Each source enters in logit space; the model learns per-source weights against resolved games. A saved artifact only beats the best individual source on out-of-sample Brier (or you use --force).`,
+  },
+  es: {
+    dashboard:        'Panel de Operaciones ML',
+    online:           'EN LÍNEA',
+    offline:          'DESCONECTADO',
+    degraded:         'DEGRADADO',
+    enabled:          'ACTIVO',
+    disabled:         'INACTIVO',
+    refreshTip:       'Actualizar ahora',
+    never:            'nunca',
+    lastRetrain:      'ÚLT. REENTRENAMIENTO',
+    earlyModel:       'MODELO INICIAL',
+    earlyModelTip:    'El conjunto de entrenamiento está por debajo del umbral de 60. El modelo es estadísticamente débil — usa las predicciones como exploratorias.',
+    trained:          'ENTRENADO',
+    skipped:          (floor) => `OMITIDO — se necesitan más picks resueltos (mínimo: ${floor})`,
+    training:         '⟳ ENTRENANDO…',
+    retrainMkt:       (m) => `▶ REENTRENAR ${m.toUpperCase()}`,
+    noCalibBuckets:   'Sin datos de calibración — entrena el modelo primero.',
+    noRolling:        'Sin registros en shadow_model_runs en los últimos 30 días.',
+    predProbBucket:   'Prob. predicha',
+    perfectCalib:     'Calibración perfecta',
+    actualHitRate:    'Tasa real de aciertos',
+    legacyValidator:  'Validador Legacy',
+    ensembleCombiner: 'Combinador Ensemble',
+    retrainEnsemble:  '▶ REENTRENAR ENSEMBLE',
+    brierScores:      'PUNTAJES BRIER (menor es mejor)',
+    learnedWeights:   'PESOS APRENDIDOS (coeficientes logit)',
+    ensembleDisabled: 'Ensemble desactivado. Configura ENSEMBLE_ENABLED=true en el servidor.',
+    ensembleNotTrained:'Ensemble activo pero sin entrenar — presiona REENTRENAR ENSEMBLE cuando haya ≥50 picks resueltos con las 3 fuentes.',
+    chatTitle:        'Picks del Chat Oracle',
+    chatLoading:      'Cargando picks del chat…',
+    noRetrains:       'Sin reentrenamientos registrados. Haz clic en REENTRENAR arriba para disparar el primero.',
+    perMarketModels:  'Modelos por Mercado',
+    reliabilityDiagram:'Diagrama de Calibración',
+    reliabilityNote:  'Las barras en la línea de 45° = calibración perfecta. Por debajo = sobre-confiado. Por arriba = sub-confiado.',
+    rolling30d:       'Últimos 30 días — Legacy vs Python',
+    rollingNote:      'Tasa diaria de aciertos moneyline desde shadow_model_runs. 50% = aleatorio.',
+    retrainLog:       'Historial de Reentrenamiento',
+    back:             '← VOLVER',
+    retrainAll:       '▶▶ REENTRENAR TODOS',
+    trainingAll:      '⟳ ENTRENANDO TODOS…',
+    logCols:          ['Cuándo', 'Mercado', 'Estado', 'Brier', 'N_train', 'Duración', 'Por'],
+    toastOk:          (m) => `REENTRENADO OK · ${m}`,
+    toastFail:        (m) => `FALLO REENTRENAMIENTO · ${m}`,
+    ensembleOk:       'ENSEMBLE REENTRENADO',
+    ensembleFail:     'FALLO ENSEMBLE',
+    allOk:            'REENTRENADO TODO OK',
+    allFail:          'FALLO REENTRENAMIENTO GLOBAL',
+    allOkMsg:         (s) => `Completado en ${s}s — ver historial para métricas por mercado.`,
+    comingSoon:       'Hits, Total Bases, Ponches — próximamente',
+    propsDesc:        'El entrenamiento de props por jugador requiere features individuales (xBA, xSLG, splits por lateralidad, forma reciente 7d/14d) que aún no están en el pipeline. Un sprint dedicado extenderá savant-fetcher con leaderboards de bateadores y añadirá modelos por prop_kind junto a los modelos de nivel de juego existentes.',
+    chatExcluded:     (e1, e2, e3) => `Picks extraídos de sesiones de chat del Oracle, almacenados con ${e1}. Por defecto están ${e2} del entrenamiento (el sidecar Python filtra por ${e3}) para no sesgar el modelo con preguntas hipotéticas. Disponibles para reentrenamiento opt-in o para monitorear la calidad del juicio casual del Oracle.`,
+    ensembleDesc:     (e1, e2, e3, e4) => `El ensemble es una ${e1} calibrada que combina tres fuentes de probabilidad de victoria del equipo local — el ${e2} (Claude/Grok), el validador ${e3} determinístico, y el ${e4} entrenado — en un único número calibrado. Cada fuente entra en espacio logit; el modelo aprende pesos por fuente contra partidos resueltos. Un artefacto guardado solo supera a la mejor fuente individual en Brier fuera de muestra.`,
+  },
+};
 
 // ── CSS animations (mounted once) ────────────────────────────────────────────
 const CSS = `
@@ -117,7 +228,7 @@ function CornerBrackets({ color = CYAN, size = 10 }) {
 }
 
 // ── HUD: top status overlay ──────────────────────────────────────────────────
-function HUDStatusBar({ status, loading, onRefresh }) {
+function HUDStatusBar({ status, loading, onRefresh, T }) {
   const enabled         = !!status?.enabled;
   const ensembleEnabled = !!status?.ensemble_enabled;
   const circuit         = status?.circuit?.state ?? 'unknown';
@@ -128,6 +239,7 @@ function HUDStatusBar({ status, loading, onRefresh }) {
 
   const circuitColor = circuit === 'closed' ? GREEN : circuit === 'half-open' ? AMBER : circuit === 'open' ? RED : MUTED;
   const sidecarColor = enabled && healthOk ? GREEN : enabled ? AMBER : RED;
+  const sidecarLabel = enabled ? (healthOk ? T.online : T.degraded) : T.offline;
 
   return (
     <Box sx={{
@@ -139,34 +251,31 @@ function HUDStatusBar({ status, loading, onRefresh }) {
       overflow:     'hidden',
       animation:    'amlc-fadeIn 0.3s both',
     }}>
-      {/* Animated flow accent on top edge */}
       <Box className="amlc-flow-border" sx={{
         position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
       }} />
       <CornerBrackets color={CYAN} />
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        {/* Title block */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 220 }}>
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px' }}>
             HEXA.ML // CONTROL CENTER
           </Typography>
           <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.05rem', fontWeight: 700, color: INK0, lineHeight: 1.1 }}>
-            Model Operations Dashboard
+            {T.dashboard}
           </Typography>
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 200 }} />
 
-        {/* Indicator pills */}
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <StatusPill label="Sidecar"   value={enabled ? (healthOk ? 'ONLINE' : 'DEGRADED') : 'OFFLINE'} color={sidecarColor} pulse={!healthOk && enabled} />
-          <StatusPill label="Circuit"   value={String(circuit).toUpperCase()} color={circuitColor} pulse={circuit === 'half-open'} />
-          <StatusPill label="Ensemble"  value={ensembleEnabled ? 'ENABLED' : 'DISABLED'} color={ensembleEnabled ? GREEN : MUTED} />
-          <StatusPill label="Latency"   value={fmtMs(latency)} color={latency != null && latency < 800 ? GREEN : latency != null ? AMBER : MUTED} />
+          <StatusPill label="Sidecar"  value={sidecarLabel} color={sidecarColor} pulse={!healthOk && enabled} />
+          <StatusPill label="Circuit"  value={String(circuit).toUpperCase()} color={circuitColor} pulse={circuit === 'half-open'} />
+          <StatusPill label="Ensemble" value={ensembleEnabled ? T.enabled : T.disabled} color={ensembleEnabled ? GREEN : MUTED} />
+          <StatusPill label="Latency"  value={fmtMs(latency)} color={latency != null && latency < 800 ? GREEN : latency != null ? AMBER : MUTED} />
         </Box>
 
-        <Tooltip title="Refresh now">
+        <Tooltip title={T.refreshTip}>
           <Button
             onClick={onRefresh}
             disabled={loading}
@@ -181,12 +290,11 @@ function HUDStatusBar({ status, loading, onRefresh }) {
         </Tooltip>
       </Box>
 
-      {/* Sub-row: detail strip */}
       <Box sx={{ display: 'flex', gap: 3, mt: 1.5, flexWrap: 'wrap', fontFamily: MONO, fontSize: '10px', color: MUTED }}>
         <span>URL: <span style={{ color: INK1 }}>{sidecarUrl || '(none)'}</span></span>
         <span>FAILURES: <span style={{ color: status?.circuit?.failures ? AMBER : INK1 }}>{status?.circuit?.failures ?? 0}</span></span>
-        <span>LAST RETRAIN: <span style={{ color: INK1 }}>
-          {lastRetrain ? `${lastRetrain.market} → ${lastRetrain.status} · ${timeAgo(lastRetrain.created_at)}` : 'never'}
+        <span>{T.lastRetrain}: <span style={{ color: INK1 }}>
+          {lastRetrain ? `${lastRetrain.market} → ${lastRetrain.status} · ${timeAgo(lastRetrain.created_at)}` : T.never}
         </span></span>
       </Box>
     </Box>
@@ -209,7 +317,7 @@ function StatusPill({ label, value, color, pulse = false }) {
 }
 
 // ── Per-market card with retrain action ──────────────────────────────────────
-function MarketCard({ market, manifest, onRetrain, busy, index = 0 }) {
+function MarketCard({ market, manifest, onRetrain, busy, index = 0, T }) {
   const tint = MARKET_TINTS[market];
   const data = manifest?.markets?.[market] ?? null;
   const trained = data && !data.skipped && !data.error;
@@ -228,7 +336,6 @@ function MarketCard({ market, manifest, onRetrain, busy, index = 0 }) {
       '&:hover .amlc-mc-scan': { opacity: 1 },
     }}>
       <CornerBrackets color={tint} size={12} />
-      {/* hover scan effect */}
       <Box className="amlc-scan-line amlc-mc-scan" sx={{ opacity: 0, transition: 'opacity 0.3s' }} />
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
@@ -241,9 +348,9 @@ function MarketCard({ market, manifest, onRetrain, busy, index = 0 }) {
           </Typography>
         </Box>
         {early && (
-          <Tooltip title="Training set is below the standard floor of 60. Model is statistically thin — treat predictions as exploratory.">
+          <Tooltip title={T.earlyModelTip}>
             <Chip
-              label="EARLY MODEL"
+              label={T.earlyModel}
               size="small"
               sx={{ fontFamily: MONO, fontSize: '8px', color: AMBER, border: `1px solid ${AMBER}`, background: 'transparent', height: 18, letterSpacing: '1.5px' }}
             />
@@ -259,7 +366,7 @@ function MarketCard({ market, manifest, onRetrain, busy, index = 0 }) {
       </Box>
 
       <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 2 }}>
-        TRAINED: <span style={{ color: INK1 }}>{trainedAt ? `${fmtDate(trainedAt)} (${timeAgo(trainedAt)})` : 'never'}</span>
+        {T.trained}: <span style={{ color: INK1 }}>{trainedAt ? `${fmtDate(trainedAt)} (${timeAgo(trainedAt)})` : T.never}</span>
       </Typography>
       {!trained && data?.error && (
         <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: RED, mt: 0.5 }}>
@@ -268,7 +375,7 @@ function MarketCard({ market, manifest, onRetrain, busy, index = 0 }) {
       )}
       {!trained && data?.skipped && (
         <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: AMBER, mt: 0.5 }}>
-          SKIPPED — need more resolved picks (configured floor: {data?.min_train_size_used})
+          {T.skipped(data?.min_train_size_used)}
         </Typography>
       )}
 
@@ -283,7 +390,7 @@ function MarketCard({ market, manifest, onRetrain, busy, index = 0 }) {
           '&:disabled': { opacity: 0.4, borderColor: MUTED, color: MUTED },
         }}
       >
-        {busy ? '⟳ TRAINING…' : `▶ RETRAIN ${market.toUpperCase()}`}
+        {busy ? T.training : T.retrainMkt(market)}
       </Button>
     </Box>
   );
@@ -303,10 +410,10 @@ function Metric({ label, value, color = INK0 }) {
 }
 
 // ── Reliability diagram (per-market tabs) ────────────────────────────────────
-function ReliabilityPanel({ manifest, market }) {
+function ReliabilityPanel({ manifest, market, T }) {
   const buckets = manifest?.markets?.[market]?.reliability_diagram ?? [];
   if (!buckets.length) {
-    return <EmptyChart text="No calibration buckets yet — train the model first." />;
+    return <EmptyChart text={T.noCalibBuckets} />;
   }
   const data = buckets.map((b) => ({
     bucket: b.label ?? `${Math.round(((b.pred_mean ?? 0) * 100))}%`,
@@ -320,7 +427,7 @@ function ReliabilityPanel({ manifest, market }) {
         <XAxis
           dataKey="bucket"
           tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }}
-          label={{ value: 'Predicted prob bucket', position: 'insideBottom', offset: -4, fontFamily: MONO, fontSize: 10, fill: MUTED }}
+          label={{ value: T.predProbBucket, position: 'insideBottom', offset: -4, fontFamily: MONO, fontSize: 10, fill: MUTED }}
         />
         <YAxis
           tickFormatter={(v) => `${Math.round(v * 100)}%`}
@@ -331,8 +438,8 @@ function ReliabilityPanel({ manifest, market }) {
           contentStyle={{ background: SURFACE, border: `1px solid ${BORDER}`, fontFamily: MONO, fontSize: 11 }}
           formatter={(value, name) => [typeof value === 'number' ? value.toFixed(3) : value, name]}
         />
-        <Line type="linear" dataKey="perfect" stroke={MUTED} strokeDasharray="3 5" dot={false} name="Perfect calibration" strokeWidth={1} />
-        <Bar dataKey="actual" fill={MARKET_TINTS[market]} opacity={0.85} name="Actual hit rate" radius={[2, 2, 0, 0]} />
+        <Line type="linear" dataKey="perfect" stroke={MUTED} strokeDasharray="3 5" dot={false} name={T.perfectCalib} strokeWidth={1} />
+        <Bar dataKey="actual" fill={MARKET_TINTS[market]} opacity={0.85} name={T.actualHitRate} radius={[2, 2, 0, 0]} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -347,8 +454,8 @@ function EmptyChart({ text }) {
 }
 
 // ── Rolling 30d chart ────────────────────────────────────────────────────────
-function Rolling30dChart({ rolling }) {
-  if (!rolling?.length) return <EmptyChart text="No resolved shadow runs in the last 30 days." />;
+function Rolling30dChart({ rolling, T }) {
+  if (!rolling?.length) return <EmptyChart text={T.noRolling} />;
   const data = [...rolling].reverse().map((r) => ({
     day:    r.day?.slice(5) ?? '',
     legacy: r.resolved > 0 ? Number(pct(r.legacy_hits, r.resolved)) : null,
@@ -362,7 +469,7 @@ function Rolling30dChart({ rolling }) {
         <ReferenceLine y={50} stroke={MUTED} strokeDasharray="4 4" />
         <RTooltip contentStyle={{ background: SURFACE, border: `1px solid ${BORDER}`, fontFamily: MONO, fontSize: 11 }} />
         <Legend formatter={(v) => <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>{v}</span>} />
-        <Line type="monotone" dataKey="legacy" stroke={AMBER} strokeWidth={1.6} dot={false} name="Legacy validator" connectNulls />
+        <Line type="monotone" dataKey="legacy" stroke={AMBER} strokeWidth={1.6} dot={false} name={T.legacyValidator} connectNulls />
         <Line type="monotone" dataKey="python" stroke={CYAN}  strokeWidth={2.2} dot={false} name="Python XGBoost"    connectNulls />
       </LineChart>
     </ResponsiveContainer>
@@ -370,7 +477,7 @@ function Rolling30dChart({ rolling }) {
 }
 
 // ── Ensemble panel ───────────────────────────────────────────────────────────
-function EnsemblePanel({ ensemble, onRetrain, busy }) {
+function EnsemblePanel({ ensemble, onRetrain, busy, T }) {
   const enabled = ensemble?.enabled;
   const m = ensemble?.manifest?.manifest?.markets?.moneyline
         ?? ensemble?.manifest?.markets?.moneyline
@@ -387,7 +494,7 @@ function EnsemblePanel({ ensemble, onRetrain, busy }) {
             META-LEARNER // SPRINT 4
           </Typography>
           <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.2rem', fontWeight: 700, color: GREEN, lineHeight: 1.1 }}>
-            Ensemble Combiner
+            {T.ensembleCombiner}
           </Typography>
         </Box>
         <Button
@@ -400,32 +507,31 @@ function EnsemblePanel({ ensemble, onRetrain, busy }) {
             '&:disabled': { opacity: 0.4, borderColor: MUTED, color: MUTED },
           }}
         >
-          {busy ? '⟳ TRAINING…' : '▶ RETRAIN ENSEMBLE'}
+          {busy ? T.training : T.retrainEnsemble}
         </Button>
       </Box>
 
-      {/* Explanation block — always visible */}
       <Box sx={{ background: 'rgba(43,255,136,0.04)', border: `1px solid ${GREEN}33`, p: '12px 14px', mb: 2 }}>
         <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, lineHeight: 1.6 }}>
-          The ensemble is a calibrated <strong style={{ color: GREEN }}>LogisticRegression</strong> that combines three sources of
-          home-win probability — the <strong style={{ color: AMBER }}>Oracle</strong> (Claude/Grok),
-          the <strong style={{ color: ACCENT }}>Legacy</strong> deterministic validator, and the trained
-          <strong style={{ color: CYAN }}> Python XGBoost</strong> — into a single calibrated number.
-          Each source enters in logit space; the model learns per-source weights against resolved games.
-          A saved artifact only beats the best individual source on out-of-sample Brier (or you use <code>--force</code>).
+          {T.ensembleDesc(
+            <strong style={{ color: GREEN }}>LogisticRegression</strong>,
+            <strong style={{ color: AMBER }}>Oracle</strong>,
+            <strong style={{ color: ACCENT }}>Legacy</strong>,
+            <strong style={{ color: CYAN }}> Python XGBoost</strong>,
+          )}
         </Typography>
       </Box>
 
       {!enabled && (
-        <EmptyChart text="Ensemble disabled. Set ENSEMBLE_ENABLED=true on the server to enable." />
+        <EmptyChart text={T.ensembleDisabled} />
       )}
       {enabled && !m && (
-        <EmptyChart text="Ensemble enabled but not yet trained — click RETRAIN ENSEMBLE once ≥50 resolved picks have all 3 sources." />
+        <EmptyChart text={T.ensembleNotTrained} />
       )}
       {enabled && m && (
         <>
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '2px', mb: 1 }}>
-            BRIER SCORES (lower is better)
+            {T.brierScores}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 2 }}>
             <BrierBadge label="Oracle"   value={m.brier_oracle} color={AMBER} />
@@ -435,7 +541,7 @@ function EnsemblePanel({ ensemble, onRetrain, busy }) {
           </Box>
 
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '2px', mb: 1 }}>
-            LEARNED WEIGHTS (logit-space coefficients)
+            {T.learnedWeights}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
             <WeightBadge label="Oracle"    value={m.coef_oracle} />
@@ -481,15 +587,14 @@ function WeightBadge({ label, value }) {
 }
 
 // ── Chat-sourced picks section ───────────────────────────────────────────────
-
-function ChatPicksSection({ stats }) {
+function ChatPicksSection({ stats, T }) {
   const s = stats?.summary;
   if (!s) {
     return (
       <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '16px 18px', mt: 3, overflow: 'hidden' }}>
         <CornerBrackets color={ACCENT} />
         <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED, letterSpacing: '2px' }}>
-          Loading chat-sourced picks…
+          {T.chatLoading}
         </Typography>
       </Box>
     );
@@ -512,26 +617,27 @@ function ChatPicksSection({ stats }) {
             ORACLE CHAT // TRAINING BUCKET
           </Typography>
           <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.15rem', fontWeight: 700, color: ACCENT, lineHeight: 1.1 }}>
-            Chat-sourced Picks
+            {T.chatTitle}
           </Typography>
         </Box>
       </Box>
 
       <Box sx={{ background: 'rgba(255,122,26,0.05)', border: `1px solid ${ACCENT}33`, p: '10px 12px', mb: 2 }}>
         <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, lineHeight: 1.6 }}>
-          Picks extracted from Oracle chat sessions, stored with <code>source='oracle_chat'</code>.
-          By default these are <strong>excluded</strong> from training (the Python sidecar filters on
-          <code> source = 'live'</code>) to avoid biasing the model with hypothetical questions. They
-          remain available for opt-in retraining or for tracking the Oracle's casual judgement quality.
+          {T.chatExcluded(
+            <code>source='oracle_chat'</code>,
+            <strong>excluidos / excluded</strong>,
+            <code>source = 'live'</code>,
+          )}
         </Typography>
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1.5 }}>
-        <Metric label="TOTAL"      value={total} color={CYAN} />
-        <Metric label="WINS"       value={wins} color={GREEN} />
-        <Metric label="LOSSES"     value={losses} color={RED} />
-        <Metric label="PENDING"    value={pending} color={AMBER} />
-        <Metric label="WIN RATE"   value={winRate ? `${winRate}%` : '—'} color={winRate && Number(winRate) >= 50 ? GREEN : MUTED} />
+        <Metric label="TOTAL"    value={total} color={CYAN} />
+        <Metric label="WINS"     value={wins} color={GREEN} />
+        <Metric label="LOSSES"   value={losses} color={RED} />
+        <Metric label="PENDING"  value={pending} color={AMBER} />
+        <Metric label="WIN RATE" value={winRate ? `${winRate}%` : '—'} color={winRate && Number(winRate) >= 50 ? GREEN : MUTED} />
       </Box>
 
       <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 2 }}>
@@ -558,8 +664,9 @@ function ChatPicksSection({ stats }) {
 }
 
 // ── Retrain audit log ────────────────────────────────────────────────────────
-function RetrainLog({ rows }) {
-  if (!rows?.length) return <EmptyChart text="No retrains logged yet. Click RETRAIN above to fire the first one." />;
+function RetrainLog({ rows, T }) {
+  if (!rows?.length) return <EmptyChart text={T.noRetrains} />;
+  const [w, m, st, b, n, d, by] = T.logCols;
   return (
     <Box sx={{ border: `1px solid ${BORDER}`, background: SURFACE, maxHeight: 360, overflowY: 'auto' }}>
       <Box sx={{
@@ -568,7 +675,7 @@ function RetrainLog({ rows }) {
         px: '12px', py: '8px',
         fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '2px', textTransform: 'uppercase',
       }}>
-        <span>When</span><span>Market</span><span>Status</span><span>Brier</span><span>N_train</span><span>Duration</span><span>By</span>
+        <span>{w}</span><span>{m}</span><span>{st}</span><span>{b}</span><span>{n}</span><span>{d}</span><span>{by}</span>
       </Box>
       {rows.map((r) => (
         <Box key={r.id} sx={{
@@ -618,7 +725,9 @@ function Toast({ toast, onClose }) {
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export default function AdminMLControlCenter({ token, onBack }) {
+export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
+  const T = STRINGS[lang] ?? STRINGS.es;
+
   const [status, setStatus]         = useState(null);
   const [calibration, setCalibration] = useState(null);
   const [ensemble, setEnsemble]     = useState(null);
@@ -626,7 +735,7 @@ export default function AdminMLControlCenter({ token, onBack }) {
   const [chatStats, setChatStats]   = useState(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [busyMarket, setBusyMarket] = useState(null);   // string | 'ensemble' | 'all'
+  const [busyMarket, setBusyMarket] = useState(null);
   const [activeMarket, setActiveMarket] = useState('moneyline');
   const [toast, setToast]           = useState(null);
   const pollRef = useRef(null);
@@ -719,17 +828,17 @@ export default function AdminMLControlCenter({ token, onBack }) {
       if (!r.ok) throw new Error(j?.error ?? `http ${r.status}`);
       const m = j?.metrics ?? {};
       setToast({
-        kind: 'ok', title: `RETRAIN OK · ${market}`,
+        kind: 'ok', title: T.toastOk(market),
         message: `Brier ${fmtBrier(m.brier)} · n_train=${m.nTrain ?? '?'} · ${(j.duration_ms / 1000).toFixed(1)}s`,
       });
       await Promise.all([fetchCalibration(), fetchLog(), fetchStatus()]);
     } catch (err) {
-      setToast({ kind: 'error', title: `RETRAIN FAILED · ${market}`, message: err.message });
+      setToast({ kind: 'error', title: T.toastFail(market), message: err.message });
       await fetchLog();
     } finally {
       setBusyMarket(null);
     }
-  }, [headers, fetchCalibration, fetchLog, fetchStatus]);
+  }, [headers, fetchCalibration, fetchLog, fetchStatus, T]);
 
   const handleRetrainEnsemble = useCallback(async () => {
     setBusyMarket('ensemble');
@@ -740,17 +849,17 @@ export default function AdminMLControlCenter({ token, onBack }) {
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error ?? `http ${r.status}`);
       setToast({
-        kind: 'ok', title: 'ENSEMBLE RETRAINED',
+        kind: 'ok', title: T.ensembleOk,
         message: `Brier ${fmtBrier(j?.metrics?.brier)} · ${(j.duration_ms / 1000).toFixed(1)}s`,
       });
       await Promise.all([fetchEnsemble(), fetchLog(), fetchStatus()]);
     } catch (err) {
-      setToast({ kind: 'error', title: 'ENSEMBLE RETRAIN FAILED', message: err.message });
+      setToast({ kind: 'error', title: T.ensembleFail, message: err.message });
       await fetchLog();
     } finally {
       setBusyMarket(null);
     }
-  }, [headers, fetchEnsemble, fetchLog, fetchStatus]);
+  }, [headers, fetchEnsemble, fetchLog, fetchStatus, T]);
 
   const handleRetrainAll = useCallback(async () => {
     setBusyMarket('all');
@@ -761,17 +870,17 @@ export default function AdminMLControlCenter({ token, onBack }) {
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error ?? `http ${r.status}`);
       setToast({
-        kind: 'ok', title: 'RETRAIN ALL OK',
-        message: `Completed in ${(j.duration_ms / 1000).toFixed(1)}s — see retrain log for per-market metrics.`,
+        kind: 'ok', title: T.allOk,
+        message: T.allOkMsg((j.duration_ms / 1000).toFixed(1)),
       });
       await Promise.all([fetchCalibration(), fetchLog(), fetchStatus()]);
     } catch (err) {
-      setToast({ kind: 'error', title: 'RETRAIN ALL FAILED', message: err.message });
+      setToast({ kind: 'error', title: T.allFail, message: err.message });
       await fetchLog();
     } finally {
       setBusyMarket(null);
     }
-  }, [headers, fetchCalibration, fetchLog, fetchStatus]);
+  }, [headers, fetchCalibration, fetchLog, fetchStatus, T]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const manifest = calibration?.calibration?.manifest ?? null;
@@ -798,7 +907,7 @@ export default function AdminMLControlCenter({ token, onBack }) {
           onClick={onBack}
           sx={{ color: CYAN, fontFamily: MONO, fontSize: '10px', letterSpacing: '2px', border: `1px solid ${BORDER}`, px: 2, py: '6px' }}
         >
-          ← BACK
+          {T.back}
         </Button>
         <Button
           onClick={handleRetrainAll}
@@ -810,14 +919,14 @@ export default function AdminMLControlCenter({ token, onBack }) {
             '&:disabled': { opacity: 0.4, borderColor: MUTED, color: MUTED },
           }}
         >
-          {busyMarket === 'all' ? '⟳ TRAINING ALL MARKETS…' : '▶▶ RETRAIN ALL MARKETS'}
+          {busyMarket === 'all' ? T.trainingAll : T.retrainAll}
         </Button>
       </Box>
 
-      <HUDStatusBar status={status} loading={refreshing} onRefresh={refreshAll} />
+      <HUDStatusBar status={status} loading={refreshing} onRefresh={refreshAll} T={T} />
 
       {/* Per-market cards */}
-      <SectionTitle>Per-Market Models</SectionTitle>
+      <SectionTitle>{T.perMarketModels}</SectionTitle>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
         {MARKETS.map((m, i) => (
           <MarketCard
@@ -827,6 +936,7 @@ export default function AdminMLControlCenter({ token, onBack }) {
             onRetrain={handleRetrain}
             busy={busyMarket === m || busyMarket === 'all'}
             index={i}
+            T={T}
           />
         ))}
       </Box>
@@ -836,7 +946,7 @@ export default function AdminMLControlCenter({ token, onBack }) {
         <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '16px 14px' }}>
           <CornerBrackets color={CYAN} />
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
-            <SectionTitle inline>Reliability Diagram</SectionTitle>
+            <SectionTitle inline>{T.reliabilityDiagram}</SectionTitle>
             <ToggleButtonGroup
               value={activeMarket}
               exclusive
@@ -855,18 +965,18 @@ export default function AdminMLControlCenter({ token, onBack }) {
               ))}
             </ToggleButtonGroup>
           </Box>
-          <ReliabilityPanel manifest={manifest} market={activeMarket} />
+          <ReliabilityPanel manifest={manifest} market={activeMarket} T={T} />
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 1 }}>
-            Bars at the dashed 45° line = perfect calibration. Bars below = over-confident. Bars above = under-confident.
+            {T.reliabilityNote}
           </Typography>
         </Box>
 
         <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '16px 14px' }}>
           <CornerBrackets color={AMBER} />
-          <SectionTitle>Rolling 30d — Legacy vs Python</SectionTitle>
-          <Rolling30dChart rolling={rolling} />
+          <SectionTitle>{T.rolling30d}</SectionTitle>
+          <Rolling30dChart rolling={rolling} T={T} />
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 1 }}>
-            Daily moneyline hit-rate from <code>shadow_model_runs</code>. 50% baseline = random.
+            {T.rollingNote}
           </Typography>
         </Box>
       </Box>
@@ -876,16 +986,17 @@ export default function AdminMLControlCenter({ token, onBack }) {
         ensemble={ensembleManifest}
         onRetrain={handleRetrainEnsemble}
         busy={busyMarket === 'ensemble' || busyMarket === 'all'}
+        T={T}
       />
 
       {/* Chat-sourced picks bucket */}
-      <ChatPicksSection stats={chatStats} />
+      <ChatPicksSection stats={chatStats} T={T} />
 
       {/* Retrain audit log */}
-      <SectionTitle>Retrain Audit Log</SectionTitle>
-      <RetrainLog rows={logRows} />
+      <SectionTitle>{T.retrainLog}</SectionTitle>
+      <RetrainLog rows={logRows} T={T} />
 
-      {/* Player Props banner — Sprint 5 placeholder */}
+      {/* Player Props banner */}
       <Box sx={{
         mt: 3, position: 'relative',
         background: `linear-gradient(135deg, ${SURFACE} 0%, ${SURFACE2} 100%)`,
@@ -896,12 +1007,10 @@ export default function AdminMLControlCenter({ token, onBack }) {
           SPRINT 5 // PLAYER PROPS
         </Typography>
         <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.05rem', fontWeight: 700, color: ACCENT, mt: '4px' }}>
-          Hits, Total Bases, Strikeouts — coming soon
+          {T.comingSoon}
         </Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, mt: 1, maxWidth: 720 }}>
-          Player-prop training requires per-batter features (xBA, xSLG, splits vs handedness, recent form 7d/14d) that are
-          not yet in the pipeline. A dedicated sprint will extend <code>savant-fetcher</code> with batter leaderboards and
-          add per-<code>prop_kind</code> models alongside the existing game-level ones.
+          {T.propsDesc}
         </Typography>
       </Box>
 

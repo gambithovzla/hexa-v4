@@ -405,7 +405,7 @@ export default function App() {
   }
   if (window.location.pathname === '/admin/ml-control') {
     const token = localStorage.getItem('hexa_token');
-    return <AdminMLControlCenter token={token} onBack={() => { window.location.href = '/'; }} />;
+    return <AdminMLControlCenter token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
 
 
