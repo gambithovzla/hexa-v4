@@ -61,7 +61,14 @@ import {
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
 import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations } from './migrate.js';
-import { getCalibration as getMlCalibration, getCircuitState as getMlCircuitState, isEnabled as isMlSidecarEnabled } from './services/mlModelClient.js';
+import {
+  getCalibration as getMlCalibration,
+  getCircuitState as getMlCircuitState,
+  isEnabled as isMlSidecarEnabled,
+  isEnsembleEnabled as isMlEnsembleEnabled,
+  getEnsembleCalibration as getMlEnsembleCalibration,
+  predictEnsemble as predictMlEnsemble,
+} from './services/mlModelClient.js';
 
 dotenv.config();
 
@@ -3413,6 +3420,10 @@ app.get('/api/admin/ml-calibration', verifyToken, isAdmin, async (req, res) => {
       ORDER BY 1 DESC
     `);
 
+    // Sprint 4 — pull ensemble manifest in parallel (may be null if not trained)
+    const ensembleEnabled = isMlEnsembleEnabled();
+    const ensembleManifest = ensembleEnabled ? await getMlEnsembleCalibration() : null;
+
     return res.json({
       success: true,
       enabled: true,
@@ -3420,6 +3431,130 @@ app.get('/api/admin/ml-calibration', verifyToken, isAdmin, async (req, res) => {
       calibration: calibration ?? null,
       shadow_comparison: comparisonRes.rows[0] ?? null,
       rolling_30d: rolling30dRes.rows,
+      ensemble: {
+        enabled: ensembleEnabled,
+        manifest: ensembleManifest,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Sprint 4 — Ensemble meta-learner endpoints
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/analyze/game-ensemble
+ *
+ * Returns the meta-learner's combined home-win probability for one game.
+ * Reads the latest shadow_model_runs row for the requested game_pk to get
+ * the 3 source probabilities (oracle / legacy / python), then asks the
+ * Python sidecar to apply the trained weights.
+ *
+ * NEVER mutates picks. NEVER changes the Oracle behavior. This is purely
+ * annotation — the legacy Oracle path is untouched.
+ *
+ * Body: { game_pk: number, market?: 'moneyline' }
+ * Response: { success, enabled, probability?, sources?, weights?, model_version?, reason? }
+ *
+ * Feature flag: ENSEMBLE_ENABLED=false by default.
+ */
+app.post('/api/analyze/game-ensemble', verifyToken, async (req, res) => {
+  try {
+    if (!isMlEnsembleEnabled()) {
+      return res.json({
+        success: true,
+        enabled: false,
+        reason: 'ENSEMBLE_ENABLED=false (set to true and train the ensemble first).',
+      });
+    }
+
+    const gamePk = Number(req.body?.game_pk);
+    const market = String(req.body?.market ?? 'moneyline');
+    if (!Number.isFinite(gamePk)) {
+      return res.status(400).json({ success: false, error: 'game_pk is required' });
+    }
+    if (market !== 'moneyline') {
+      return res.status(400).json({ success: false, error: 'Only moneyline ensembles are trained today.' });
+    }
+
+    // Pull the most recent shadow_model_runs row with all 3 sources populated.
+    const sourceRow = await pool.query(
+      `SELECT
+         oracle_home_win_prob,
+         shadow_home_win_prob,
+         python_model_score,
+         python_model_status,
+         home_team_abbr,
+         away_team_abbr,
+         created_at
+       FROM shadow_model_runs
+       WHERE game_pk = $1
+         AND oracle_home_win_prob IS NOT NULL
+         AND shadow_home_win_prob IS NOT NULL
+         AND python_model_score IS NOT NULL
+         AND python_model_status = 'ok'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [gamePk]
+    );
+
+    if (!sourceRow.rows.length) {
+      return res.json({
+        success: true,
+        enabled: true,
+        probability: null,
+        reason: 'No shadow_model_runs row has all 3 sources populated for this game yet.',
+      });
+    }
+
+    const r = sourceRow.rows[0];
+    const ensemble = await predictMlEnsemble({
+      market,
+      oracle_prob: Number(r.oracle_home_win_prob),
+      legacy_prob: Number(r.shadow_home_win_prob),
+      python_prob: Number(r.python_model_score),
+    });
+
+    if (!ensemble) {
+      return res.json({
+        success: true,
+        enabled: true,
+        probability: null,
+        reason: 'Sidecar returned no result (ensemble not trained or sidecar down).',
+      });
+    }
+
+    return res.json({
+      success: true,
+      enabled: true,
+      game_pk: gamePk,
+      matchup: `${r.away_team_abbr} @ ${r.home_team_abbr}`,
+      probability: ensemble.probability,
+      confidence: ensemble.confidence,
+      sources: ensemble.sources,
+      weights: ensemble.weights,
+      model_version: ensemble.model_version,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+/**
+ * GET /api/admin/ml-ensemble-calibration — proxy the sidecar's ensemble manifest.
+ * Admin only. Used by the MLCalibrationDashboard to render the 4th series.
+ */
+app.get('/api/admin/ml-ensemble-calibration', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const enabled = isMlEnsembleEnabled();
+    const manifest = enabled ? await getMlEnsembleCalibration() : null;
+    return res.json({
+      success: true,
+      enabled,
+      manifest,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });

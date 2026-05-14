@@ -19,8 +19,11 @@ from .config import get_settings
 from .features import build_X
 from .models import MARKET_MODELS
 from .models.base import MarketModelBase
+from .models.ensemble import EnsembleMetaLearner
 
 logger = logging.getLogger("hexa_ml.predict")
+
+ENSEMBLE_MARKETS = ("moneyline",)
 
 
 @dataclass
@@ -34,6 +37,18 @@ class Prediction:
     model_version: str | None = None
 
 
+@dataclass
+class EnsemblePrediction:
+    """Combined prediction from the meta-learner."""
+
+    market: str
+    probability: float
+    confidence: float
+    sources: dict[str, float]
+    weights: dict[str, float]
+    model_version: str | None = None
+
+
 class ModelNotAvailable(RuntimeError):
     """Raised when a market hasn't been trained yet (cold start)."""
 
@@ -44,7 +59,9 @@ class ModelRegistry:
     def __init__(self, artifacts_dir: Path | None = None) -> None:
         self._dir = artifacts_dir or get_settings().artifacts_dir
         self._models: dict[str, MarketModelBase] = {}
+        self._ensembles: dict[str, EnsembleMetaLearner] = {}
         self._manifest: dict | None = None
+        self._ensemble_manifest: dict | None = None
         self._lock = threading.Lock()
 
     # ── State ─────────────────────────────────────────────────────────────
@@ -77,7 +94,9 @@ class ModelRegistry:
         """Drop cached models and reload from disk. Returns market → success."""
         with self._lock:
             self._models = {}
+            self._ensembles = {}
             self._manifest = None
+            self._ensemble_manifest = None
             results: dict[str, bool] = {}
             for market in MARKET_MODELS:
                 try:
@@ -86,8 +105,60 @@ class ModelRegistry:
                 except Exception as exc:
                     logger.warning("Reload failed for %s: %s", market, exc)
                     results[market] = False
+            for market in ENSEMBLE_MARKETS:
+                try:
+                    self._load_ensemble(market)
+                    results[f"ensemble_{market}"] = True
+                except Exception as exc:
+                    logger.info("Ensemble reload skipped for %s: %s", market, exc)
+                    results[f"ensemble_{market}"] = False
             self._load_manifest()
+            self._load_ensemble_manifest()
         return results
+
+    # ── Ensemble accessors ────────────────────────────────────────────────
+    def has_ensemble_artifact(self, market: str) -> bool:
+        return (self._dir / f"ensemble_{market}.pkl").exists()
+
+    def loaded_ensembles(self) -> list[str]:
+        return sorted(self._ensembles)
+
+    @property
+    def ensemble_manifest(self) -> dict:
+        if self._ensemble_manifest is None:
+            self._load_ensemble_manifest()
+        return self._ensemble_manifest or {}
+
+    def get_ensemble(self, market: str) -> EnsembleMetaLearner:
+        if market not in ENSEMBLE_MARKETS:
+            raise ValueError(f"Unknown ensemble market: {market}")
+        with self._lock:
+            if market not in self._ensembles:
+                self._load_ensemble(market)
+        return self._ensembles[market]
+
+    def _load_ensemble(self, market: str) -> None:
+        path = self._dir / f"ensemble_{market}.pkl"
+        if not path.exists():
+            raise ModelNotAvailable(
+                f"No trained ensemble for {market}. "
+                "Run `python -m hexa_ml.train_ensemble`."
+            )
+        self._ensembles[market] = EnsembleMetaLearner.load(path)
+        logger.info("Loaded ensemble %s from %s", market, path)
+
+    def _load_ensemble_manifest(self) -> None:
+        manifest_path = self._dir / "ensemble_manifest.json"
+        if manifest_path.exists():
+            try:
+                self._ensemble_manifest = json.loads(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+            except Exception as exc:
+                logger.warning("Could not parse ensemble_manifest.json: %s", exc)
+                self._ensemble_manifest = {}
+        else:
+            self._ensemble_manifest = {}
 
     def _load_market(self, market: str) -> None:
         path = self._dir / f"{market}.pkl"
@@ -132,6 +203,34 @@ class ModelRegistry:
             probability=round(prob, 4),
             confidence=confidence,
             top_features=top,
+            model_version=version,
+        )
+
+    def predict_ensemble(
+        self,
+        market: str,
+        oracle_prob: float,
+        legacy_prob: float,
+        python_prob: float,
+    ) -> EnsemblePrediction:
+        """Combine the 3 source probabilities through the meta-learner."""
+        ensemble = self.get_ensemble(market)
+        prob = ensemble.predict_one(oracle_prob, legacy_prob, python_prob)
+        confidence = round(abs(prob - 0.5) * 200, 2)
+        weights = ensemble.weights()
+        version = (
+            (self.ensemble_manifest.get("markets", {}) or {}).get(market) or {}
+        ).get("trained_at")
+        return EnsemblePrediction(
+            market=market,
+            probability=round(prob, 4),
+            confidence=confidence,
+            sources={
+                "oracle": float(oracle_prob),
+                "legacy": float(legacy_prob),
+                "python": float(python_prob),
+            },
+            weights=weights,
             model_version=version,
         )
 
