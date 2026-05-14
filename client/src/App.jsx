@@ -38,6 +38,7 @@ import DatasetDashboard  from './components/DatasetDashboardV2';
 import ShadowModeDashboard    from './components/ShadowModeDashboard';
 import SynergyRunsDashboard  from './components/SynergyRunsDashboard';
 import MLCalibrationDashboard from './pages/MLCalibrationDashboard';
+import AdminMLControlCenter   from './pages/AdminMLControlCenter';
 import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
@@ -401,6 +402,10 @@ export default function App() {
   if (window.location.pathname === '/admin/ml-calibration') {
     const token = localStorage.getItem('hexa_token');
     return <MLCalibrationDashboard token={token} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/ml-control') {
+    const token = localStorage.getItem('hexa_token');
+    return <AdminMLControlCenter token={token} onBack={() => { window.location.href = '/'; }} />;
   }
 
 
