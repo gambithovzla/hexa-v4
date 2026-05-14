@@ -60,7 +60,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations } from './migrate.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -3809,6 +3809,7 @@ runMigrations()
   .then(() => runParlaySynergyMigrations())
   .then(() => runSprint1Migrations())
   .then(() => runSprint3Migrations())
+  .then(() => runAdminMLControlCenterMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
