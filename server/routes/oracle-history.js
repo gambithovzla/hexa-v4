@@ -17,16 +17,19 @@ const router = express.Router();
  */
 export async function upsertOracleSession({ userId, sessionKey, dateEt, mode, gameIds, matchups, messages }) {
   try {
-    await pool.query(
+    const { rows } = await pool.query(
       `INSERT INTO oracle_sessions (user_id, session_key, date_et, mode, game_ids, matchups, messages, updated_at)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, NOW())
        ON CONFLICT (session_key) DO UPDATE SET
          messages   = EXCLUDED.messages,
-         updated_at = NOW()`,
+         updated_at = NOW()
+       RETURNING id`,
       [userId, sessionKey, dateEt, mode, JSON.stringify(gameIds || []), matchups || '', JSON.stringify(messages || [])]
     );
+    return rows[0]?.id ?? null;
   } catch (err) {
     console.warn('[oracle-history] session save failed (non-critical):', err.message);
+    return null;
   }
 }
 
