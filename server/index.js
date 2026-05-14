@@ -3408,7 +3408,51 @@ app.get('/api/admin/ml-calibration', verifyToken, isAdmin, async (req, res) => {
     }
 
     // Fetch calibration from Python sidecar (may return null if circuit is open or sidecar is down)
-    const calibration = await getMlCalibration();
+    let calibration = await getMlCalibration();
+
+    // Railway uses an ephemeral filesystem — model artifacts are lost on redeploy/restart.
+    // When the sidecar manifest is empty, fall back to the last known metrics stored in
+    // ml_retrain_log so the dashboard always shows the last successfully trained state.
+    const liveMarkets = calibration?.manifest?.markets ?? {};
+    const hasLiveData = Object.keys(liveMarkets).some(
+      (m) => liveMarkets[m] && !liveMarkets[m].skipped && !liveMarkets[m].error && liveMarkets[m].brier_test != null
+    );
+    if (!hasLiveData) {
+      try {
+        const logRes = await pool.query(`
+          SELECT DISTINCT ON (market)
+            market, brier AS brier_test, n_train, n_test, finished_at AS trained_at, response
+          FROM ml_retrain_log
+          WHERE status = 'success'
+            AND market NOT IN ('all', 'ensemble')
+            AND brier IS NOT NULL
+          ORDER BY market, finished_at DESC
+        `);
+        if (logRes.rows.length > 0) {
+          const markets = {};
+          for (const row of logRes.rows) {
+            // Try to pull richer metrics from the saved retrain response JSON
+            let extra = {};
+            try {
+              const parsed = row.response ? JSON.parse(row.response) : null;
+              const mBlock = parsed?.summary?.[row.market] ?? parsed?.[row.market] ?? null;
+              if (mBlock) extra = mBlock;
+            } catch { /* ignore parse errors */ }
+            markets[row.market] = {
+              brier_test: Number(row.brier_test),
+              n_train: row.n_train,
+              n_test: row.n_test,
+              trained_at: row.trained_at,
+              _from_log: true,
+              ...extra,
+            };
+          }
+          calibration = { manifest: { markets, _from_log: true } };
+        }
+      } catch (logErr) {
+        console.warn('[ml-calibration] log fallback failed:', logErr.message);
+      }
+    }
 
     // Pull comparison data from shadow_model_runs: legacy vs python model accuracy
     const comparisonRes = await pool.query(`
