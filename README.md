@@ -171,8 +171,8 @@ Listado exhaustivo: [docs/architecture.md sección 6](docs/architecture.md#6-end
 ### Oracle multi-motor
 [server/oracle.js](server/oracle.js) soporta tres motores seleccionables por request: `sonnet` (Claude Sonnet 4.6), `grok` (xAI), `dual` (ambos en paralelo con detección de divergencia). Modelos: Opus 4.7 (premium), Sonnet 4.6 (deep), Haiku 4.5 (content drafts). Detalle: [docs/ml-pipeline.md sección 2](docs/ml-pipeline.md#2-oracle--motor-llm-dual).
 
-### Shadow validator (en migración a XGBoost real)
-[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre un validador tabular determinístico en paralelo al LLM para observabilidad. **Hoy son pesos hardcodeados** — Sprint 2 lo reemplaza con un microservicio Python XGBoost real entrenado con los >500 picks históricos. Detalle: [docs/ml-pipeline.md sección 10](docs/ml-pipeline.md#10-plan-modelo-python-entrenado-propio).
+### Shadow validator + ML sidecar Python
+[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre un validador tabular determinístico (pesos hardcodeados) para observabilidad. En paralelo, [server/services/mlModelClient.js](server/services/mlModelClient.js) consulta al sidecar Python (`ml/`) que corre XGBoost real entrenado con los picks históricos. El sidecar es fire-and-forget: si falla, el circuito se abre y el pick se crea igual. Detalle: [docs/ml-pipeline.md](docs/ml-pipeline.md).
 
 ### Closing Line Value (CLV)
 Captura líneas iniciales y de cierre por pick. Stats en `/api/picks/clv-stats`.
@@ -214,14 +214,16 @@ Detalle de deploy + rollback: [docs/admin-and-ops.md sección 10](docs/admin-and
 
 ## Estado del proyecto y próximos pasos
 
-**Foco actual** (Q2 2026): entrenar modelo propio Python con los >500 picks resueltos. Esto desbloquea ensemble real (Claude + Grok + modelo entrenado), probabilidades calibradas, SHAP feature importance, y auto-retraining semanal.
+**Pipeline ML propio completado** (Q2 2026): XGBoost entrenado con picks históricos + ensemble meta-learner que combina Claude + validador + Python. Probabilidades calibradas (Platt), auto-retraining semanal vía GitHub Actions, dashboard de calibración en `/admin/ml-calibration`.
 
-Sprints planificados:
+Estado:
 - ✅ **Sprint 0**: Documentación viva (este README + `/docs/` + CLAUDE.md).
-- 🔄 **Sprint 1**: Cerrar gaps del dataset (scores reales, pick estructurado, backfill, export Parquet).
-- ⏳ **Sprint 2**: Sidecar Python FastAPI + XGBoost real, deploy en Railway.
-- ⏳ **Sprint 3**: Integración Node↔Python + calibration dashboard.
-- ⏳ **Sprint 4** (opcional): Ensemble meta-learner.
+- ✅ **Sprint 1**: Dataset completo — 22 columnas nuevas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js.
+- ✅ **Sprint 2**: Sidecar Python FastAPI + XGBoost real en `ml/`. Pendiente de deploy en Railway.
+- ✅ **Sprint 3**: Integración Node↔Python (circuit breaker, mlModelClient), dashboard `/admin/ml-calibration`.
+- ✅ **Sprint 4**: Ensemble meta-learner (LogReg oracle+legacy+python), `/admin/ml-ensemble-calibration`.
+
+**Para activar**: crear servicio Railway apuntando a `ml/`, setear `ML_SIDECAR_ENABLED=true` + `HEXA_ML_API_URL` + `HEXA_ML_INTERNAL_TOKEN` en el server Node, correr `POST /retrain`.
 
 Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
 
