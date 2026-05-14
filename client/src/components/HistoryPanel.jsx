@@ -17,6 +17,7 @@ import en from '../i18n/en.json';
 import es from '../i18n/es.json';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import InsightsSemana from './InsightsSemana';
+import AdminEnsembleBadge from './AdminEnsembleBadge';
 
 const TRANSLATIONS = { en, es };
 
@@ -172,7 +173,7 @@ function ModeBadge({ mode }) {
   );
 }
 
-function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin, t, lang }) {
+function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin, token, t, lang }) {
   const normalizedResult = normalizePickResult(entry.result);
   const borderColor = resultBorderColor(entry.result);
   const badgeSx = resultBadgeSx(entry.result);
@@ -549,6 +550,10 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
             )}
           </Box>
         )}
+
+        {isAdmin && entry.id && token && (
+          <AdminEnsembleBadge pickId={entry.id} token={token} />
+        )}
       </Box>
     </Box>
   );
@@ -579,7 +584,7 @@ function groupPicksByDay(picks) {
   return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
-function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDelete, onRequestPostmortem, isAdmin, t }) {
+function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDelete, onRequestPostmortem, isAdmin, token, t }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const isEs = lang === 'es';
 
@@ -690,6 +695,7 @@ function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDele
               onDelete={onDelete}
               onRequestPostmortem={onRequestPostmortem}
               isAdmin={isAdmin}
+              token={token}
               t={t}
               lang={lang}
             />
@@ -804,6 +810,7 @@ function AnalisisTab({ lang }) {
               onDelete={deletePick}
               onRequestPostmortem={requestPostmortem}
               isAdmin={isAdmin}
+              token={token}
               t={t}
             />
           ))}

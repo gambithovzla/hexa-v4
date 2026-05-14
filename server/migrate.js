@@ -607,3 +607,51 @@ export async function runSprint3Migrations() {
     client.release();
   }
 }
+
+// Admin ML Control Center — audit log for manual retrains, plus picks
+// provenance columns (source + chat_session_id) for chat-sourced picks.
+export async function runAdminMLControlCenterMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Audit log of manual retrains triggered from the admin UI.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ml_retrain_log (
+        id           SERIAL       PRIMARY KEY,
+        user_id      TEXT         REFERENCES users(id) ON DELETE SET NULL,
+        market       VARCHAR(32)  NOT NULL,
+        scope        VARCHAR(32)  NOT NULL DEFAULT 'market',
+        status       VARCHAR(20)  NOT NULL DEFAULT 'pending',
+        brier        DECIMAL(8,5),
+        logloss      DECIMAL(8,5),
+        n_train      INTEGER,
+        n_test       INTEGER,
+        duration_ms  INTEGER,
+        error        TEXT,
+        response     JSONB,
+        created_at   TIMESTAMP    DEFAULT NOW(),
+        finished_at  TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ml_retrain_log_created ON ml_retrain_log(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ml_retrain_log_user ON ml_retrain_log(user_id, created_at DESC)`);
+
+    // Pick provenance — distinguishes formal picks from chat-extracted ones.
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS source VARCHAR(16) DEFAULT 'formal'`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS chat_session_id INTEGER REFERENCES oracle_sessions(id) ON DELETE SET NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_picks_source ON picks(source)`);
+
+    // Backfill existing rows so the new column is meaningful for queries.
+    await client.query(`UPDATE picks SET source = 'formal' WHERE source IS NULL`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] admin-ml-control-center tables ready (ml_retrain_log + picks.source/chat_session_id)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] admin-ml-control-center migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

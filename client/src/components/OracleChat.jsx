@@ -7,6 +7,38 @@ function genSessionKey() {
   return `oracle_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+// ─── PickSavedBadge ──────────────────────────────────────────────────────────
+// Shown under an assistant message when the server-side extractor (JSON tail
+// or Haiku fallback) successfully persisted a structured pick into picks +
+// pick_features. Source stage tells admins whether the Oracle emitted the
+// tail block ("tail") or whether Haiku had to parse the prose ("haiku").
+
+function PickSavedBadge({ picked, lang }) {
+  const stageLabel = picked?.source_stage === 'haiku'
+    ? (lang === 'es' ? 'parseado por Haiku' : 'parsed by Haiku')
+    : (lang === 'es' ? 'extraído directo' : 'inline JSON');
+  const conf = picked?.confidence != null ? `${picked.confidence}%` : '—';
+  return (
+    <div style={{
+      marginTop: '10px', display: 'inline-flex', alignItems: 'center', gap: '8px',
+      padding: '6px 10px',
+      background: C.greenDim, border: `1px solid ${C.greenLine}`,
+      fontFamily: MONO, fontSize: '9px', color: C.green, letterSpacing: '1.5px',
+      textTransform: 'uppercase',
+    }}>
+      <span style={{ fontSize: '12px', lineHeight: 1 }}>📊</span>
+      <span>
+        {lang === 'es' ? 'PICK GUARDADO · ' : 'PICK SAVED · '}
+        <span style={{ color: C.textPrimary }}>{picked.raw_pick_text || picked.team_or_player || '—'}</span>
+        {' · '}
+        <span style={{ color: C.amber }}>{conf}</span>
+        {' · '}
+        <span style={{ color: C.textDim, textTransform: 'none' }}>{stageLabel}</span>
+      </span>
+    </div>
+  );
+}
+
 function getEasternDate() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
@@ -228,6 +260,10 @@ export default function OracleChat({ lang = 'en', onBack }) {
   const [conversation, setConversation] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sessionKey] = useState(genSessionKey);
+  // When true, the server-side JSON-tail extraction is skipped — useful for
+  // exploratory questions where you don't want the LLM's casual suggestion
+  // ending up in the training bucket.
+  const [skipExtract, setSkipExtract] = useState(false);
   const chatEndRef = useRef(null);
 
   const [isListening, setIsListening] = useState(false);
@@ -311,9 +347,14 @@ export default function OracleChat({ lang = 'en', onBack }) {
 
     try {
       const token = localStorage.getItem('hexa_token');
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      if (skipExtract) headers['X-HEXA-Skip-Pick-Extract'] = '1';
       const res = await fetch(`${API_URL}/api/analyze/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({
           gameId: selectedGame.gamePk || selectedGame.id,
           question: q,
@@ -325,7 +366,10 @@ export default function OracleChat({ lang = 'en', onBack }) {
       });
       const data = await res.json();
       if (data.success && data.answer) {
-        setConversation(prev => [...prev, { role: 'assistant', text: data.answer }]);
+        setConversation(prev => [
+          ...prev,
+          { role: 'assistant', text: data.answer, picked: data.picked ?? null },
+        ]);
       } else {
         setConversation(prev => [...prev, { role: 'assistant', text: data.error || 'Error getting response.' }]);
       }
@@ -693,6 +737,9 @@ export default function OracleChat({ lang = 'en', onBack }) {
                   }}>
                     {msg.text}
                   </div>
+                  {msg.picked && msg.picked.pick_id && (
+                    <PickSavedBadge picked={msg.picked} lang={lang} />
+                  )}
                 </div>
               ))}
               {loading && (
@@ -775,6 +822,31 @@ export default function OracleChat({ lang = 'en', onBack }) {
                   {loading ? '...' : 'ASK'}
                 </button>
               </div>
+              {/* Admin: opt-out of pick extraction for exploratory chats */}
+              {mode === 'partido' && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px',
+                  fontFamily: MONO, fontSize: '10px', color: C.textDim, letterSpacing: '1px',
+                  cursor: 'pointer', userSelect: 'none',
+                }} onClick={() => setSkipExtract(v => !v)}>
+                  <div style={{
+                    width: '12px', height: '12px',
+                    border: `1px solid ${skipExtract ? C.amber : C.border}`,
+                    background: skipExtract ? C.amberDim : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {skipExtract && (
+                      <span style={{ color: C.amber, fontSize: '9px', lineHeight: 1 }}>✓</span>
+                    )}
+                  </div>
+                  <span title={lang === 'es'
+                    ? 'No extraer ni guardar picks de esta conversación. Útil para exploración hipotética.'
+                    : 'Do not extract or save picks from this conversation. Useful for hypothetical exploration.'
+                  }>
+                    {lang === 'es' ? 'NO GUARDAR PARA ENTRENAMIENTO' : 'DO NOT SAVE FOR TRAINING'}
+                  </span>
+                </div>
+              )}
               {conversation.length > 0 && (
                 <button onClick={() => setConversation([])} style={{
                   background: 'transparent', border: 'none', color: C.textDim,

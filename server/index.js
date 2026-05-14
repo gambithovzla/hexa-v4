@@ -44,6 +44,8 @@ import {
 import { buildHexaBoard } from './services/hexaBoardService.js';
 import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
+import adminMlRouter from './routes/admin-ml.js';
+import { augmentChatQuestion, processChatAnswer } from './services/chatPickExtractor.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { mountAdminDbExplorer } from './admin-db-explorer.js';
@@ -60,7 +62,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations } from './migrate.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -501,6 +503,7 @@ app.use('/api/picks',        picksRouter);
 app.use('/api/oracle',       oracleHistoryRouter);
 app.use('/api/insights',     insightsRouter);
 app.use('/api/admin/content', contentAdminRouter);
+app.use('/api/admin', adminMlRouter);
 app.post('/api/nowpayments/webhook', handleNowPaymentsWebhook);
 
 // ── Content API — read-only, API-key auth (external consumer) ─────────────────
@@ -2030,20 +2033,53 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
     const contextBuildResult3 = await buildContext(gameData, matchedOdds);
     const contextString = contextBuildResult3.context ?? contextBuildResult3;
 
-    const answer = await analyzeChat({
+    // Inject the JSON-tail extraction instruction into the user turn so the
+    // Oracle's structured pick (if any) lands in a parseable trailing block.
+    // The instruction is opt-out via X-HEXA-Skip-Pick-Extract=1 header for
+    // pure-exploration chats where saving could mislead training.
+    const skipExtract = String(req.headers['x-hexa-skip-pick-extract'] ?? '') === '1';
+    const augmentedQuestion = skipExtract
+      ? question.trim()
+      : augmentChatQuestion(question.trim(), lang);
+
+    const rawAnswer = await analyzeChat({
       contextString,
-      question: question.trim(),
+      question: augmentedQuestion,
       conversationHistory,
       lang,
     });
 
+    // Strip the JSON tail (if any) before showing the answer to the user, and
+    // persist the extracted pick to picks + pick_features with source='oracle_chat'.
+    let cleanAnswer = rawAnswer;
+    let picked = null;
+    if (!skipExtract) {
+      try {
+        const processed = await processChatAnswer({
+          rawAnswer,
+          question: question.trim(),
+          userId: req.user.id,
+          gameData,
+          chatSessionId: null,    // filled below once we have the session id
+          lang,
+        });
+        cleanAnswer = processed.answer;
+        picked = processed.picked;
+      } catch (err) {
+        console.warn('[Oracle Chat] pick extraction failed (non-critical):', err.message);
+      }
+    }
+
     res.json({
       success: true,
-      answer,
+      answer: cleanAnswer,
       mode: 'chat',
+      picked,  // null | { pick_id, source_stage, market_type, side, line, ... }
     });
 
-    // Persist conversation asynchronously — never blocks the response
+    // Persist conversation asynchronously — never blocks the response.
+    // If we extracted a pick AND we now learn the session id, backfill
+    // picks.chat_session_id so the bookkeeping links both ways.
     if (sessionKey) {
       const fullMessages = [
         ...conversationHistory.flatMap(t => [
@@ -2051,7 +2087,7 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
           { role: 'assistant', text: t.answer },
         ]),
         { role: 'user', text: question.trim() },
-        { role: 'assistant', text: answer },
+        { role: 'assistant', text: cleanAnswer },
       ];
       upsertOracleSession({
         userId: req.user.id,
@@ -2061,6 +2097,13 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
         gameIds: [gameId],
         matchups: matchups || String(gameId),
         messages: fullMessages,
+      }).then((sessionId) => {
+        if (sessionId && picked?.pick_id) {
+          pool.query(
+            'UPDATE picks SET chat_session_id = $1 WHERE id = $2 AND chat_session_id IS NULL',
+            [sessionId, picked.pick_id]
+          ).catch((err) => console.warn(`[Oracle Chat] backfill chat_session_id failed: ${err.message}`));
+        }
       });
     }
   } catch (err) {
@@ -3809,6 +3852,7 @@ runMigrations()
   .then(() => runParlaySynergyMigrations())
   .then(() => runSprint1Migrations())
   .then(() => runSprint3Migrations())
+  .then(() => runAdminMLControlCenterMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {

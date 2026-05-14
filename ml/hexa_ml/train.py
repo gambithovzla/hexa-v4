@@ -34,6 +34,23 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def min_train_size_for_market(market: str, override: int | None = None) -> int:
+    """Resolve the effective `min_train_size` for a market.
+
+    Priority: explicit `override` argument > per-market env override (e.g.
+    `runline_min_train_size`) > global `min_train_size`. Runline ships with
+    a lower default (25) because resolved -1.5 picks are rare; the model
+    compensates with stronger L2 regularization.
+    """
+    if override is not None and override >= 15:
+        return int(override)
+    settings = get_settings()
+    per_market = getattr(settings, f"{market}_min_train_size", None)
+    if per_market is not None:
+        return int(per_market)
+    return int(settings.min_train_size)
+
+
 def train_one_market(
     df: pd.DataFrame,
     market: str,
@@ -56,11 +73,14 @@ def train_one_market(
         return None
 
     train_df, test_df = temporal_split(sub, test_days=test_days)
-    min_split_train = max(20, min_train_size // 3)
-    if len(train_df) < min_split_train or len(test_df) < 10:
+    # Floors scale with the configured minimum so low-volume markets like
+    # runline (min=25) can still train when the temporal split is tight.
+    min_split_train = max(10, min_train_size // 3)
+    min_split_test = max(5, min_train_size // 5)
+    if len(train_df) < min_split_train or len(test_df) < min_split_test:
         logger.warning(
-            "Skipping %s — split too small (train=%d test=%d, need train>=%d test>=10)",
-            market, len(train_df), len(test_df), min_split_train,
+            "Skipping %s — split too small (train=%d test=%d, need train>=%d test>=%d)",
+            market, len(train_df), len(test_df), min_split_train, min_split_test,
         )
         return None
 
@@ -113,11 +133,16 @@ def train_all(
     csv_path: str | None = None,
     out_dir: str | None = None,
     markets: tuple[str, ...] = MARKETS,
+    min_train_size_override: int | None = None,
 ) -> dict:
     """Train every requested market and write a manifest JSON.
 
     The manifest is what the FastAPI /health and /calibration endpoints
     read at boot to report current model state.
+
+    `min_train_size_override` overrides the global and per-market floors
+    when set — useful for admin-triggered retrains that want to force a
+    training run even with very few samples (e.g. probing a new market).
     """
     settings = get_settings()
     out_path = Path(out_dir or settings.artifacts_dir)
@@ -129,13 +154,14 @@ def train_all(
 
     summary: dict[str, dict | None] = {}
     for market in markets:
+        effective_min = min_train_size_for_market(market, override=min_train_size_override)
         try:
             metrics = train_one_market(
                 df,
                 market,
                 out_path,
                 test_days=settings.test_days,
-                min_train_size=settings.min_train_size,
+                min_train_size=effective_min,
             )
             summary[market] = (
                 {
@@ -145,13 +171,14 @@ def train_all(
                     "logloss_test": metrics.logloss_test,
                     "roi_kelly25_test": metrics.roi_kelly25_test,
                     "trained_at": metrics.trained_at,
+                    "min_train_size_used": effective_min,
                 }
                 if metrics
-                else None
+                else {"skipped": True, "min_train_size_used": effective_min}
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Training failed for %s", market)
-            summary[market] = None
+            summary[market] = {"error": str(exc), "min_train_size_used": effective_min}
 
     manifest_path = out_path / "manifest.json"
     manifest_path.write_text(
@@ -176,6 +203,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--csv", default=None, help="Optional CSV dataset path")
     parser.add_argument("--out-dir", default=None, help="Artifacts output directory")
     parser.add_argument(
+        "--min-train-size",
+        type=int,
+        default=None,
+        help="Override the per-market min_train_size floor (>=15)",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         help="Python log level (DEBUG / INFO / WARNING)",
@@ -190,7 +223,12 @@ def main() -> None:
         format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
     )
     markets = MARKETS if args.market == "all" else (args.market,)
-    train_all(csv_path=args.csv, out_dir=args.out_dir, markets=markets)
+    train_all(
+        csv_path=args.csv,
+        out_dir=args.out_dir,
+        markets=markets,
+        min_train_size_override=args.min_train_size,
+    )
 
 
 if __name__ == "__main__":
