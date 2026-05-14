@@ -149,6 +149,10 @@ class HealthResponse(BaseModel):
 class RetrainRequest(BaseModel):
     market: str = Field(default="all", pattern="^(moneyline|overunder|runline|all)$")
     csv: str | None = None
+    # Optional admin override — bypasses the per-market `min_train_size` floor.
+    # Useful for probing a new market with very few samples. None = use the
+    # configured per-market default (e.g. 25 for runline, 60 for the rest).
+    min_train_size_override: int | None = Field(default=None, ge=15, le=10_000)
 
 
 class RetrainResponse(BaseModel):
@@ -367,7 +371,11 @@ async def retrain(payload: RetrainRequest) -> RetrainResponse:
     markets = MARKETS if payload.market == "all" else (payload.market,)
 
     def _run() -> dict:
-        return train_all(csv_path=payload.csv, markets=markets)
+        return train_all(
+            csv_path=payload.csv,
+            markets=markets,
+            min_train_size_override=payload.min_train_size_override,
+        )
 
     summary = await asyncio.to_thread(_run)
     get_registry().reload()

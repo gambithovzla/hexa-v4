@@ -31,8 +31,15 @@ class Settings(BaseSettings):
     # ── Training hyperparameters ──────────────────────────────────────────
     # Temporal split: test set = last N days of resolved picks
     test_days: int = Field(default=30, ge=7, le=180)
-    # Minimum resolved picks required to train a market
-    min_train_size: int = Field(default=100, ge=20)
+    # Minimum resolved picks required to train a market (global floor).
+    # Lowered from 100 to 60 on 2026-05-14 to unblock runline training.
+    min_train_size: int = Field(default=60, ge=15)
+    # Per-market overrides — when set, replace `min_train_size` for that
+    # market only. Used for low-volume markets like runline that are
+    # historically rarer but worth training with stronger regularization.
+    runline_min_train_size: int | None = Field(default=25, ge=15)
+    overunder_min_train_size: int | None = Field(default=None, ge=15)
+    moneyline_min_train_size: int | None = Field(default=None, ge=15)
     # Acceptance threshold (Brier score) — moneyline floor for production
     moneyline_brier_ceiling: float = Field(default=0.24)
 
