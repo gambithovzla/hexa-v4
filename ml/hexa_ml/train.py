@@ -56,10 +56,11 @@ def train_one_market(
         return None
 
     train_df, test_df = temporal_split(sub, test_days=test_days)
-    if len(train_df) < 50 or len(test_df) < 10:
+    min_split_train = max(20, min_train_size // 3)
+    if len(train_df) < min_split_train or len(test_df) < 10:
         logger.warning(
-            "Skipping %s — split too small (train=%d test=%d)",
-            market, len(train_df), len(test_df),
+            "Skipping %s — split too small (train=%d test=%d, need train>=%d)",
+            market, len(train_df), len(test_df), min_split_train,
         )
         return None
 
