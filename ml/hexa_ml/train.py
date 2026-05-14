@@ -49,17 +49,20 @@ def train_one_market(
     """
     sub = filter_for_market(df, market)
     if len(sub) < min_train_size:
-        raise ValueError(
-            f"only {len(sub)} resolved picks for {market} (need >= {min_train_size})"
+        logger.warning(
+            "Skipping %s — only %d resolved picks (need >= %d)",
+            market, len(sub), min_train_size,
         )
+        return None
 
     train_df, test_df = temporal_split(sub, test_days=test_days)
     min_split_train = max(20, min_train_size // 3)
     if len(train_df) < min_split_train or len(test_df) < 10:
-        raise ValueError(
-            f"split too small for {market}: train={len(train_df)} test={len(test_df)} "
-            f"(need train>={min_split_train} test>=10)"
+        logger.warning(
+            "Skipping %s — split too small (train=%d test=%d, need train>=%d test>=10)",
+            market, len(train_df), len(test_df), min_split_train,
         )
+        return None
 
     y_train = make_target(train_df, market).to_numpy()
     y_test = make_target(test_df, market).to_numpy()
@@ -146,9 +149,9 @@ def train_all(
                 if metrics
                 else None
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Training failed for %s", market)
-            summary[market] = {"error": type(exc).__name__, "detail": str(exc)}
+            summary[market] = None
 
     manifest_path = out_path / "manifest.json"
     manifest_path.write_text(
