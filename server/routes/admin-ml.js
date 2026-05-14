@@ -103,7 +103,7 @@ function _extractMetrics(payload, market) {
 
 // ── GET /api/admin/ml/status ─────────────────────────────────────────────────
 
-router.get('/status', async (_req, res) => {
+router.get('/ml/status', async (_req, res) => {
   const enabled = isMlSidecarEnabled();
   const ensembleEnabled = isMlEnsembleEnabled();
   const circuit = getMlCircuitState();
@@ -152,7 +152,7 @@ router.get('/status', async (_req, res) => {
 
 // ── GET /api/admin/ml/ensemble ───────────────────────────────────────────────
 
-router.get('/ensemble', async (_req, res) => {
+router.get('/ml/ensemble', async (_req, res) => {
   const enabled = isMlEnsembleEnabled();
   const manifest = enabled ? await getMlEnsembleCalibration() : null;
   res.json({ success: true, enabled, manifest });
@@ -160,7 +160,7 @@ router.get('/ensemble', async (_req, res) => {
 
 // ── GET /api/admin/ml/retrain-log ────────────────────────────────────────────
 
-router.get('/retrain-log', async (req, res) => {
+router.get('/ml/retrain-log', async (req, res) => {
   const limit = Math.min(Number(req.query.limit ?? 50) || 50, 200);
   try {
     const { rows } = await pool.query(
@@ -182,7 +182,7 @@ router.get('/retrain-log', async (req, res) => {
 
 // ── POST /api/admin/ml/retrain ───────────────────────────────────────────────
 
-router.post('/retrain', async (req, res) => {
+router.post('/ml/retrain', async (req, res) => {
   if (!isMlSidecarEnabled() || !ML_API_URL) {
     return res.status(400).json({
       success: false,
@@ -269,7 +269,7 @@ router.post('/retrain', async (req, res) => {
 
 // ── POST /api/admin/ml/retrain/ensemble ──────────────────────────────────────
 
-router.post('/retrain/ensemble', async (req, res) => {
+router.post('/ml/retrain/ensemble', async (req, res) => {
   if (!isMlEnsembleEnabled()) {
     return res.status(400).json({
       success: false,
@@ -347,7 +347,7 @@ router.post('/retrain/ensemble', async (req, res) => {
 
 // ── GET /api/admin/ml/chat-picks-stats ───────────────────────────────────────
 
-router.get('/chat-picks-stats', async (_req, res) => {
+router.get('/ml/chat-picks-stats', async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
