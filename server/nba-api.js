@@ -116,6 +116,7 @@ export async function getNbaGamesForDate(dateStr) {
       game_id: g.GAME_ID,
       game_date: dateStr,
       status: g.GAME_STATUS_TEXT,
+      game_status_id: g.GAME_STATUS_ID ?? null,
       home_team_id: g.HOME_TEAM_ID,
       home_team_abbr: home?.TEAM_ABBREVIATION ?? null,
       home_team_name: home?.TEAM_CITY_NAME

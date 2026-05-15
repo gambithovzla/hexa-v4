@@ -517,19 +517,61 @@ function AnalyzeButton({ canAnalyze, analyzing, onClick, t }) {
  *   nba.home/away_abbr   → teams.home/away.abbreviation
  *   nba.home/away_score  → linescore.teams.home/away.runs (NBA pts ≡ runs slot)
  */
+// Converts "7:30 pm ET" (from NBA API) to Lima local time string.
+// Uses Intl to determine EDT vs EST automatically for the given date.
+function etTimeToLima(timeStr, gameDate) {
+  const m = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+  if (!m || !gameDate) return timeStr;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (m[3].toLowerCase() === 'pm' && h < 12) h += 12;
+  if (m[3].toLowerCase() === 'am' && h === 12) h = 0;
+  try {
+    const [yr, mo, dy] = gameDate.split('-').map(Number);
+    const probe = new Date(Date.UTC(yr, mo - 1, dy, 12));
+    const etHour = parseInt(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', hour: 'numeric', hour12: false,
+      }).format(probe),
+      10,
+    );
+    const etOffsetHours = 12 - etHour; // 4=EDT, 5=EST
+    const utcMs = Date.UTC(yr, mo - 1, dy, h + etOffsetHours, min);
+    return new Date(utcMs).toLocaleTimeString('es-PE', {
+      timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+  } catch {
+    return timeStr;
+  }
+}
+
 function normalizeNbaGame(g) {
+  // Use numeric GAME_STATUS_ID (1=scheduled, 2=live, 3=final) — reliable.
+  // Fall back to text matching only if the field is absent (older cached responses).
   let simplified = 'scheduled';
-  const s = String(g.status ?? '').toLowerCase();
-  if (/final/i.test(s)) simplified = 'final';
-  else if (/in progress|halftime|qtr|quarter|ot|overtime|pm et|live/i.test(s)) simplified = 'live';
+  const sid = g.game_status_id;
+  if (sid != null) {
+    if (sid === 3) simplified = 'final';
+    else if (sid === 2) simplified = 'live';
+  } else {
+    const s = String(g.status ?? '').toLowerCase();
+    if (/final/i.test(s)) simplified = 'final';
+    else if (/in progress|halftime|qtr|quarter|ot|overtime|live/i.test(s)) simplified = 'live';
+  }
 
   const homeScore = g.home_score ?? null;
   const awayScore = g.away_score ?? null;
 
+  // For scheduled games convert "7:30 pm ET" → Lima time; otherwise keep status text.
+  let displayTime = g.status ?? '';
+  if (simplified === 'scheduled' && /\d{1,2}:\d{2}\s*(am|pm)/i.test(displayTime)) {
+    displayTime = etTimeToLima(displayTime, g.game_date);
+  }
+
   return {
     gamePk:   String(g.game_id),
     gameDate: g.game_date ? `${g.game_date}T00:00:00Z` : null,
-    _displayTime: g.status ?? '',
+    _displayTime: displayTime,
     status: { simplified },
     teams: {
       away: {
