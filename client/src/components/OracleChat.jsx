@@ -244,7 +244,19 @@ function OracleHistoryView({ lang }) {
 
 // ─── Main OracleChat ──────────────────────────────────────────────────────────
 
-export default function OracleChat({ lang = 'en', onBack }) {
+function getEasternDateString(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}
+
+export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
+  const isNba = sport === 'nba';
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
   const [view, setView] = useState('chat'); // 'chat' | 'history'
@@ -270,22 +282,31 @@ export default function OracleChat({ lang = 'en', onBack }) {
   const [voiceSupported, setVoiceSupported] = useState(false);
   const recognitionRef = useRef(null);
 
-  // Fetch today's games (use local date, not UTC — MLB games are scheduled
-  // in ET/PT, and using toISOString() would skip to tomorrow after ~8pm ET)
   useEffect(() => {
     const token = localStorage.getItem('hexa_token');
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    fetch(`${API_URL}/api/games?date=${date}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const date = getEasternDateString();
+    const url = isNba
+      ? `${API_URL}/api/nba/games?date=${date}`
+      : `${API_URL}/api/games?date=${date}`;
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
-        const gameList = data.data || data.games || data || [];
+        let gameList = data.data || data.games || data || [];
+        if (isNba && Array.isArray(gameList)) {
+          gameList = gameList.map((g) => ({
+            gamePk: String(g.game_id),
+            game_id: g.game_id,
+            gameTime: g.status,
+            teams: {
+              away: { abbreviation: g.away_team_abbr, name: g.away_team_name },
+              home: { abbreviation: g.home_team_abbr, name: g.home_team_name },
+            },
+          }));
+        }
         setGames(Array.isArray(gameList) ? gameList : []);
       })
       .catch(() => {});
-  }, []);
+  }, [isNba]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -352,24 +373,36 @@ export default function OracleChat({ lang = 'en', onBack }) {
         Authorization: `Bearer ${token}`,
       };
       if (skipExtract) headers['X-HEXA-Skip-Pick-Extract'] = '1';
-      const res = await fetch(`${API_URL}/api/analyze/chat`, {
+      const chatUrl = isNba
+        ? `${API_URL}/api/nba/analyze/chat`
+        : `${API_URL}/api/analyze/chat`;
+      const res = await fetch(chatUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          gameId: selectedGame.gamePk || selectedGame.id,
+          gameId: selectedGame.gamePk || selectedGame.id || selectedGame.game_id,
           question: q,
           conversationHistory: buildHistory(),
           lang,
           sessionKey,
           matchups: getMatchup(selectedGame),
+          date: getEasternDateString(),
         }),
       });
       const data = await res.json();
-      if (data.success && data.answer) {
+      const answerText = data.answer ?? data.text;
+      if (data.success && answerText) {
         setConversation(prev => [
           ...prev,
-          { role: 'assistant', text: data.answer, picked: data.picked ?? null },
+          { role: 'assistant', text: answerText, picked: data.picked ?? null },
         ]);
+      } else if (res.status === 503 && isNba) {
+        setConversation(prev => [...prev, {
+          role: 'assistant',
+          text: lang === 'es'
+            ? 'Oracle Chat NBA requiere NBA_ANALYSIS_ENABLED=true en el servidor.'
+            : 'NBA Oracle Chat requires NBA_ANALYSIS_ENABLED=true on the server.',
+        }]);
       } else {
         setConversation(prev => [...prev, { role: 'assistant', text: data.error || 'Error getting response.' }]);
       }
@@ -521,7 +554,7 @@ export default function OracleChat({ lang = 'en', onBack }) {
         {/* MODE TOGGLE — only show when not in an active chat */}
         {!inChat && (
           <div style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
-            {['partido', 'jornada'].map(m => (
+            {(isNba ? ['partido'] : ['partido', 'jornada']).map(m => (
               <button
                 key={m}
                 onClick={() => switchMode(m)}

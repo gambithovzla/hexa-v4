@@ -34,6 +34,7 @@ import { buildNbaPickLiveProgressEntry } from './pick-tracker-nba.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
+import { buildPostmortemGameSummary, buildPostmortemFeatureSnapshot } from './services/postmortemContext.js';
 import { calculateParallelScore } from './services/xgboostValidator.js';
 import { buildDeterministicSafePayload, buildValueBreakdown } from './market-intelligence.js';
 import { filterCandidatesByMarketFocus, normalizeMarketFocus } from './market-focus.js';
@@ -2941,7 +2942,18 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
          pf.signal_coherence_score,
          pf.odds_ml_home,
          pf.odds_ml_away,
-         pf.odds_ou_total
+         pf.odds_ou_total,
+         pf.home_net_rating,
+         pf.away_net_rating,
+         pf.home_off_rating,
+         pf.away_off_rating,
+         pf.home_def_rating,
+         pf.away_def_rating,
+         pf.home_pace,
+         pf.away_pace,
+         pf.home_days_rest,
+         pf.away_days_rest,
+         pf.context_completeness
        FROM picks p
        LEFT JOIN LATERAL (
          SELECT *
@@ -2993,85 +3005,13 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
       });
     }
 
-    const gamePk = pickRow.game_pk ?? pickRow.feature_game_pk ?? null;
-    const gameDate =
-      normalizeDateInput(pickRow.game_date) ??
-      normalizeDateInput(pickRow.feature_game_date) ??
-      getEasternDateString(pickRow.created_at);
-
-    let liveData = null;
-    let playByPlay = null;
-    if (gamePk) {
-      try {
-        liveData = await getLiveGameData(gamePk);
-      } catch {
-        liveData = null;
-      }
-
-      try {
-        playByPlay = await getGamePlayByPlay(gamePk);
-      } catch {
-        playByPlay = null;
-      }
-    }
-
-    const parsedPick = parseLivePick(pickRow.pick);
-    const progress = liveData ? calculatePickProgress(parsedPick, liveData) : null;
-    const pickOutcomeContext = (liveData && playByPlay)
-      ? buildPickOutcomeContext(parsedPick, liveData, playByPlay)
-      : null;
-
-    const gameSummary = liveData ? {
-      gamePk: liveData.gamePk,
-      status: liveData.status,
-      away: {
-        name: liveData.away?.name ?? null,
-        abbreviation: liveData.away?.abbreviation ?? null,
-        score: liveData.away?.score ?? null,
-      },
-      home: {
-        name: liveData.home?.name ?? null,
-        abbreviation: liveData.home?.abbreviation ?? null,
-        score: liveData.home?.score ?? null,
-      },
-      pickProgress: progress,
-      pickOutcomeContext,
-      recentPlays: Array.isArray(liveData.recentPlays) ? liveData.recentPlays.slice(0, 5) : [],
-    } : {
-      gamePk,
-      gameDate,
-      pickProgress: null,
-      pickOutcomeContext: null,
-    };
-
-    const featureSnapshot = {
-      gamePk,
-      gameDate,
-      home_pitcher_xwoba: pickRow.home_pitcher_xwoba,
-      away_pitcher_xwoba: pickRow.away_pitcher_xwoba,
-      home_pitcher_whiff: pickRow.home_pitcher_whiff,
-      away_pitcher_whiff: pickRow.away_pitcher_whiff,
-      home_pitcher_k_pct: pickRow.home_pitcher_k_pct,
-      away_pitcher_k_pct: pickRow.away_pitcher_k_pct,
-      home_pitcher_era: pickRow.home_pitcher_era,
-      away_pitcher_era: pickRow.away_pitcher_era,
-      home_team_ops: pickRow.home_team_ops,
-      away_team_ops: pickRow.away_team_ops,
-      home_lineup_avg_xwoba: pickRow.home_lineup_avg_xwoba,
-      away_lineup_avg_xwoba: pickRow.away_lineup_avg_xwoba,
-      park_factor_overall: pickRow.park_factor_overall,
-      park_factor_hr: pickRow.park_factor_hr,
-      temperature: pickRow.temperature,
-      wind_speed: pickRow.wind_speed,
-      data_quality_score: pickRow.data_quality_score,
-      signal_coherence_score: pickRow.signal_coherence_score,
-      odds_ml_home: pickRow.odds_ml_home,
-      odds_ml_away: pickRow.odds_ml_away,
-      odds_ou_total: pickRow.odds_ou_total,
-    };
+    const pickSport = String(pickRow.sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+    const gameSummary = await buildPostmortemGameSummary(pickRow, pickSport);
+    const featureSnapshot = buildPostmortemFeatureSnapshot(pickRow, pickSport);
 
     const postmortem = await generatePickPostmortem({
       lang: effectiveLang,
+      sport: pickSport,
       pick: {
         id: pickRow.id,
         matchup: pickRow.matchup,

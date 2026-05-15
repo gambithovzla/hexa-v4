@@ -571,7 +571,7 @@ export default function App() {
           {/* Pizarra H.E.X.A. — landing tab */}
           {activeTab === 'pizarra' && (
             boardCapability.enabled
-              ? <HexaBoard lang={lang} />
+              ? <HexaBoard lang={lang} sport={sport} />
               : <SportComingSoon
                 lang={lang}
                 title={lang === 'es' ? `Pizarra ${sportLabel}` : `${sportLabel} Board`}
@@ -638,12 +638,14 @@ export default function App() {
               <Box sx={TAB_LAYOUT}>
                 <GameSelector
                   mode="parlay"
+                  sport={sport}
                   onSelectMultiple={setParlayGames}
                   onDateChange={setSelectedDate}
                   language={lang}
                 />
                 <AnalysisPanel
                   mode="parlay"
+                  sport={sport}
                   selectedGames={parlayGames}
                   selectedDate={selectedDate}
                   lang={lang}

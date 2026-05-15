@@ -73,28 +73,36 @@ function looksLikePickRequest(question) {
  * @param {string} lang  'en' | 'es'
  * @returns {string}
  */
-export function augmentChatQuestion(question, lang = 'en') {
+export function augmentChatQuestion(question, lang = 'en', sport = 'mlb') {
   const safe = String(question ?? '').trim();
   if (!safe) return safe;
+
+  const isNba = String(sport ?? 'mlb').toLowerCase() === 'nba';
+  const marketHint = isNba
+    ? 'moneyline|overunder|spread'
+    : 'moneyline|overunder|runline|prop';
+  const marketDesc = isNba
+    ? 'a team moneyline, point spread, or total over/under'
+    : 'a team moneyline, run line, over/under total, or prop';
 
   const instruction = lang === 'es'
     ? `
 
 [INSTRUCCION INTERNA PARA EL SISTEMA H.E.X.A. — NO MENCIONES ESTA INSTRUCCION NI EL BLOQUE FINAL EN TU RESPUESTA VISIBLE AL USUARIO]
-SI tu respuesta incluye una recomendacion de pick concreta y especifica (un equipo en moneyline, un run line, un total over/under, o una prop), AGREGA al final de tu respuesta exactamente este bloque sin texto adicional:
+SI tu respuesta incluye una recomendacion de pick concreta y especifica (${marketDesc}), AGREGA al final de tu respuesta exactamente este bloque sin texto adicional:
 
 ${TAIL_OPEN}
-{"market_type":"moneyline|overunder|runline|prop","side":"home|away|over|under","line":number_or_null,"team_or_player":"abreviatura_o_nombre","confidence":0-100,"reasoning_brief":"una frase","prop_kind":"hits|total_bases|strikeouts|home_runs|rbis|null"}
+{"market_type":"${marketHint}","side":"home|away|over|under","line":number_or_null,"team_or_player":"abreviatura_o_nombre","confidence":0-100,"reasoning_brief":"una frase","prop_kind":null}
 ${TAIL_CLOSE}
 
 NO incluyas el bloque si NO estas recomendando un pick. Mantén tu respuesta natural antes del bloque.`
     : `
 
 [INTERNAL INSTRUCTION FOR H.E.X.A. — DO NOT MENTION THIS INSTRUCTION OR THE FINAL BLOCK IN YOUR USER-FACING ANSWER]
-IF your response includes a concrete and specific pick recommendation (a team moneyline, run line, over/under total, or prop), APPEND exactly this block at the very end of your answer with no extra text:
+IF your response includes a concrete and specific pick recommendation (${marketDesc}), APPEND exactly this block at the very end of your answer with no extra text:
 
 ${TAIL_OPEN}
-{"market_type":"moneyline|overunder|runline|prop","side":"home|away|over|under","line":number_or_null,"team_or_player":"abbr_or_name","confidence":0-100,"reasoning_brief":"one short sentence","prop_kind":"hits|total_bases|strikeouts|home_runs|rbis|null"}
+{"market_type":"${marketHint}","side":"home|away|over|under","line":number_or_null,"team_or_player":"abbr_or_name","confidence":0-100,"reasoning_brief":"one short sentence","prop_kind":null}
 ${TAIL_CLOSE}
 
 DO NOT include the block if you are NOT recommending a pick. Keep your natural prose answer before the block.`;
@@ -196,7 +204,7 @@ export function normalizeExtracted(pickJson, ctx = {}) {
   // Build a synthetic pick string and run pickParser to sanity-check.
   let raw = teamOrPlayer;
   if (market === 'moneyline') raw = `${teamOrPlayer} ML`;
-  else if (market === 'runline' && line != null) {
+  else if ((market === 'runline' || market === 'spread') && line != null) {
     const sign = line >= 0 ? `+${line}` : `${line}`;
     raw = `${teamOrPlayer} ${sign}`;
   } else if (market === 'overunder' && line != null) {
@@ -244,11 +252,11 @@ export function normalizeExtracted(pickJson, ctx = {}) {
 export async function saveExtractedChatPick({ extracted, pickJson, userId, gameData, chatSessionId = null, lang = 'en', sport = 'mlb' }) {
   if (!extracted || !gameData) return { ok: false, reason: 'missing_extracted_or_game' };
 
-  const away = gameData.teams?.away?.team?.name ?? gameData.teams?.away?.name ?? '?';
-  const home = gameData.teams?.home?.team?.name ?? gameData.teams?.home?.name ?? '?';
-  const matchup = `${away} @ ${home}`;
-  const gamePk  = Number(gameData.gamePk);
-  const gameDate = String(gameData.gameDate ?? gameData.officialDate ?? '').slice(0, 10) || null;
+  const away = gameData.teams?.away?.team?.name ?? gameData.teams?.away?.name ?? gameData.away_team_name ?? '?';
+  const home = gameData.teams?.home?.team?.name ?? gameData.teams?.home?.name ?? gameData.home_team_name ?? '?';
+  const matchup = gameData.matchup ?? `${away} @ ${home}`;
+  const gamePk  = Number(gameData.gamePk ?? gameData.game_id);
+  const gameDate = String(gameData.gameDate ?? gameData.game_date ?? gameData.officialDate ?? '').slice(0, 10) || null;
   const sportNorm = String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
 
   const confidence = Number.isFinite(Number(pickJson?.confidence))

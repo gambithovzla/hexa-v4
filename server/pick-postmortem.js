@@ -21,7 +21,7 @@ const SHADOW_LOG_ENABLED = process.env.POSTMORTEM_SHADOW_LOG === '1';
 const SHADOW_LOG_MAX = Number.parseInt(process.env.POSTMORTEM_SHADOW_MAX ?? '20', 10) || 20;
 let shadowLogCount = 0;
 
-const SYSTEM_PROMPT = `You are H.E.X.A. Postmortem, an MLB betting review engine.
+const MLB_SYSTEM_PROMPT = `You are H.E.X.A. Postmortem, an MLB betting review engine.
 
 Your job is to explain why a pick won, lost, or pushed after the game ended, and to extract adjustment signals that can help future model tuning.
 
@@ -50,6 +50,39 @@ Rules:
 - "adjustment_signals" must be useful for future system learning, not user advice.
 - Keep every string single-line and plain text.
 - When lang=es, all values must be in Spanish. Keys stay in English.`;
+
+const NBA_SYSTEM_PROMPT = `You are H.E.X.A. Postmortem, an NBA betting review engine.
+
+Your job is to explain why a pick won, lost, or pushed after the game ended, and to extract adjustment signals that can help future model tuning.
+
+Respond ONLY with valid JSON. No markdown. No backticks. No preamble.
+
+Required JSON shape:
+{
+  "summary": "single paragraph under 320 chars",
+  "key_factors": ["1-4 short bullets as plain strings"],
+  "what_hexa_got_right": ["0-3 short strings"],
+  "what_hexa_missed": ["0-3 short strings"],
+  "adjustment_signals": ["1-4 concrete model tuning signals"],
+  "training_takeaway": "single sentence under 220 chars"
+}
+
+Rules:
+- Base everything on the provided pick, stored reasoning, final score, and NBA feature snapshot (Net/Off/Def ratings, pace, rest, injuries flags).
+- Markets: moneyline, point spread, total over/under only — no player props.
+- Be specific about rest, pace, and Net Rating gaps when relevant.
+- If the pick WON, explain why the logic held. If LOST, what invalidated the thesis. If PUSHED, why the edge neutralized.
+- "adjustment_signals" must be useful for future system learning, not user advice.
+- Keep every string single-line and plain text.
+- When lang=es, all values must be in Spanish. Keys stay in English.`;
+
+function resolvePostmortemSport(sport) {
+  return String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+}
+
+function getSystemPrompt(sport) {
+  return resolvePostmortemSport(sport) === 'nba' ? NBA_SYSTEM_PROMPT : MLB_SYSTEM_PROMPT;
+}
 
 function normalizeLanguage(lang) {
   return String(lang ?? '').toLowerCase().startsWith('es') ? 'es' : 'en';
@@ -119,19 +152,19 @@ function normalizePostmortemPayload(payload) {
   };
 }
 
-async function callModel({ model, userMessage }) {
+async function callModel({ model, userMessage, sport = 'mlb' }) {
   const response = await anthropic.messages.create({
     model,
     max_tokens: MAX_TOKENS,
     temperature: TEMPERATURE,
-    system: SYSTEM_PROMPT,
+    system: getSystemPrompt(sport),
     messages: [{ role: 'user', content: userMessage }],
   });
   return extractRawText(response);
 }
 
-async function generateWithModel({ model, userMessage }) {
-  const raw = await callModel({ model, userMessage });
+async function generateWithModel({ model, userMessage, sport = 'mlb' }) {
+  const raw = await callModel({ model, userMessage, sport });
   const parsed = tryParseJson(raw);
   if (!parsed) {
     const err = new Error(`postmortem: invalid JSON from ${model}`);
@@ -189,11 +222,14 @@ export async function generatePickPostmortem({
   pick,
   featureSnapshot = null,
   gameSummary = null,
+  sport = 'mlb',
 }) {
   const resolvedLang = normalizeLanguage(lang);
+  const resolvedSport = resolvePostmortemSport(sport);
   const userMessage = JSON.stringify(
     {
       lang: resolvedLang,
+      sport: resolvedSport,
       output_language: resolvedLang === 'es' ? 'Spanish' : 'English',
       pick,
       featureSnapshot,
@@ -206,10 +242,10 @@ export async function generatePickPostmortem({
   let parsed;
   let modelUsed = PRIMARY_MODEL;
   try {
-    parsed = await generateWithModel({ model: PRIMARY_MODEL, userMessage });
+    parsed = await generateWithModel({ model: PRIMARY_MODEL, userMessage, sport: resolvedSport });
   } catch (primaryErr) {
     console.log('[postmortem] haiku failed, falling back to sonnet:', primaryErr?.message);
-    parsed = await generateWithModel({ model: FALLBACK_MODEL, userMessage });
+    parsed = await generateWithModel({ model: FALLBACK_MODEL, userMessage, sport: resolvedSport });
     modelUsed = FALLBACK_MODEL;
   }
 

@@ -8,7 +8,7 @@ const DEFAULT_LOCKED_MSG = {
 const CAPABILITY_MAP = {
   board: {
     mlb: { enabled: true },
-    nba: { enabled: false, message: { es: 'La pizarra NBA estara disponible pronto.', en: 'NBA board will be available soon.' } },
+    nba: { enabled: true },
   },
   history: {
     mlb: { enabled: true },
@@ -32,15 +32,22 @@ const CAPABILITY_MAP = {
   },
   oracleChat: {
     mlb: { enabled: true, requiresAdmin: true },
-    nba: { enabled: false, requiresAdmin: true, message: { es: 'Oracle Chat NBA queda para la siguiente fase (actualmente MLB-only).', en: 'NBA Oracle Chat is scheduled for the next phase (currently MLB-only).' } },
+    nba: { enabled: true, requiresAdmin: true },
   },
   parlayBuilder: {
     mlb: { enabled: true, requiresAdmin: true },
-    nba: { enabled: false, requiresAdmin: true, message: { es: 'Parlay en NBA aun no esta habilitado.', en: 'NBA parlay is not enabled yet.' } },
+    nba: {
+      enabled: false,
+      requiresAdmin: true,
+      message: {
+        es: 'Parlay Synergy usa el pool MLB. Para NBA usa Analisis de juego o Oracle Chat.',
+        en: 'Parlay Synergy uses the MLB candidate pool. For NBA use Game Analysis or Oracle Chat.',
+      },
+    },
   },
   parlayArchitect: {
     mlb: { enabled: true, requiresAdmin: true },
-    nba: { enabled: false, requiresAdmin: true, message: { es: 'Parlay Architect para NBA se habilitara despues del hardening.', en: 'NBA Parlay Architect will be enabled after hardening.' } },
+    nba: { enabled: true, requiresAdmin: true },
   },
   batchScan: {
     mlb: { enabled: true, requiresAdmin: true },
