@@ -44,14 +44,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY --from=builder /root/.local /home/hexa/.local
-COPY --chown=hexa:hexa hexa_ml /app/hexa_ml
-COPY --chown=hexa:hexa pyproject.toml /app/
+COPY hexa_ml /app/hexa_ml
+COPY pyproject.toml /app/
 
-# Create writable dirs for trained models and exported data
-RUN mkdir -p /app/artifacts /app/data && chown -R hexa:hexa /app
+# Create default artifacts/data dirs (used when no Railway Volume is mounted)
+RUN mkdir -p /app/artifacts /app/data
 
-USER hexa
-
+# Intentionally run as root so Railway Volume mounts (owned by root) are
+# writable at startup. This service is internal-only (HEXA_ML_INTERNAL_TOKEN).
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
