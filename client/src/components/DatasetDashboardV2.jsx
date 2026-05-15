@@ -153,13 +153,21 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
   const [backfillMessage, setBackfillMessage] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedDay, setSelectedDay] = useState('');
+  const [sport, setSport] = useState(() => localStorage.getItem('hexa_admin_dataset_sport') || 'mlb');
+
+  useEffect(() => {
+    localStorage.setItem('hexa_admin_dataset_sport', sport);
+  }, [sport]);
 
   async function fetchDashboard(monthOverride = '') {
     if (!token) return;
 
     setLoading(true);
     try {
-      const search = monthOverride ? `?month=${encodeURIComponent(monthOverride)}` : '';
+      const params = new URLSearchParams();
+      if (monthOverride) params.set('month', monthOverride);
+      params.set('sport', sport);
+      const search = `?${params.toString()}`;
       const res = await fetch(`${API_URL}/api/admin/feature-store${search}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -187,7 +195,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
 
   useEffect(() => {
     fetchDashboard();
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token, sport]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runBackfill() {
     setBackfilling(true);
@@ -195,7 +203,11 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
     try {
       const res = await fetch(`${API_URL}/api/admin/feature-store/backfill`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sport }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Backfill failed');
@@ -222,6 +234,33 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
   const monthOptions = data?.monthOptions ?? [];
   const dailySummaries = data?.dailySummaries ?? [];
   const records = data?.records ?? [];
+  const isNba = (data?.sport ?? sport) === 'nba';
+  const canRunBackfill = !isNba;
+  const coverageItems = isNba
+    ? [
+      { label: 'Home Net Rating', key: 'has_home_net' },
+      { label: 'Away Net Rating', key: 'has_away_net' },
+      { label: 'Home Pace', key: 'has_home_pace' },
+      { label: 'Away Pace', key: 'has_away_pace' },
+      { label: 'Home Rest Days', key: 'has_home_rest' },
+      { label: 'Away Rest Days', key: 'has_away_rest' },
+      { label: 'Odds', key: 'has_odds' },
+      { label: 'Context Completeness', key: 'has_completeness' },
+    ]
+    : [
+      { label: 'Home P xwOBA', key: 'has_home_xwoba' },
+      { label: 'Away P xwOBA', key: 'has_away_xwoba' },
+      { label: 'Home P Whiff%', key: 'has_home_whiff' },
+      { label: 'Away P Whiff%', key: 'has_away_whiff' },
+      { label: 'Home Lineup xwOBA', key: 'has_home_lineup' },
+      { label: 'Away Lineup xwOBA', key: 'has_away_lineup' },
+      { label: 'Temperature', key: 'has_temperature' },
+      { label: 'Odds', key: 'has_odds' },
+      { label: 'Park Factor', key: 'has_park' },
+    ];
+  const tableHeaders = isNba
+    ? ['DATE', 'HORA LIMA', 'USUARIO', 'PARTIDO', 'PICK', 'RESULT', 'H.NET', 'A.NET', 'REST(H/A)', 'INJ(H/A)', 'CTX', 'ML.H', 'O/U']
+    : ['DATE', 'HORA LIMA', 'USUARIO', 'PARTIDO', 'PICK', 'RESULT', 'H.xwOBA', 'A.xwOBA', 'H.Whiff', 'TEMP', 'DQ', 'ML.H', 'O/U'];
   const selectedDayRecords = selectedDay
     ? records.filter((row) => normalizeDayKey(row.game_date) === selectedDay)
     : [];
@@ -242,6 +281,31 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
         FEATURE STORE & DATASET
       </Typography>
 
+      <Box sx={{ display: 'inline-flex', border: `1px solid ${C.cyanLine}`, mb: 3, overflow: 'hidden' }}>
+        {['mlb', 'nba'].map((s) => (
+          <Box
+            key={s}
+            component="button"
+            onClick={() => setSport(s)}
+            sx={{
+              px: '14px',
+              py: '5px',
+              bgcolor: sport === s ? C.cyan : 'transparent',
+              color: sport === s ? '#0a0d14' : C.textMuted,
+              border: 'none',
+              fontFamily: MONO,
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              letterSpacing: '0.14em',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            {s.toUpperCase()}
+          </Box>
+        ))}
+      </Box>
+
       {loading && <Typography sx={{ fontFamily: MONO, color: C.textMuted }}>Loading...</Typography>}
 
       {data && (
@@ -255,31 +319,40 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
             <StatCard label="Date Range" value={`${s?.earliest_date?.split('T')[0] ?? '—'} → ${s?.latest_date?.split('T')[0] ?? '—'}`} />
           </Box>
 
-          <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.accent, letterSpacing: '0.1em', mb: 1 }}>
-            STATCAST CACHE STATUS (live system)
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 3 }}>
-            <StatCard label="Years Loaded" value={(sc?.yearsLoaded ?? []).join(', ') || '—'} color={C.green} />
-            <StatCard label="Pitcher xStats" value={sc?.recordCounts?.xStatsPitcher ?? 0} color={C.green} />
-            <StatCard label="Batter xStats" value={sc?.recordCounts?.xStatsBatter ?? 0} color={C.green} />
-            <StatCard label="Pitch Arsenal" value={sc?.recordCounts?.pitchArsenal ?? 0} color={C.green} />
-            <StatCard label="Rolling Pitcher" value={sc?.recordCounts?.rollingPitcher ?? 0} color={C.green} />
-            <StatCard label="Rolling Batter" value={sc?.recordCounts?.rollingBatter ?? 0} color={C.green} />
-          </Box>
+          {!isNba && (
+            <>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.accent, letterSpacing: '0.1em', mb: 1 }}>
+                STATCAST CACHE STATUS (live system)
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 3 }}>
+                <StatCard label="Years Loaded" value={(sc?.yearsLoaded ?? []).join(', ') || '—'} color={C.green} />
+                <StatCard label="Pitcher xStats" value={sc?.recordCounts?.xStatsPitcher ?? 0} color={C.green} />
+                <StatCard label="Batter xStats" value={sc?.recordCounts?.xStatsBatter ?? 0} color={C.green} />
+                <StatCard label="Pitch Arsenal" value={sc?.recordCounts?.pitchArsenal ?? 0} color={C.green} />
+                <StatCard label="Rolling Pitcher" value={sc?.recordCounts?.rollingPitcher ?? 0} color={C.green} />
+                <StatCard label="Rolling Batter" value={sc?.recordCounts?.rollingBatter ?? 0} color={C.green} />
+              </Box>
+            </>
+          )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 3 }}>
-            <Box component="button" onClick={runBackfill} disabled={backfilling} sx={{
+            <Box component="button" onClick={runBackfill} disabled={backfilling || !canRunBackfill} sx={{
               background: 'transparent',
-              border: `1px solid ${backfilling ? C.border : C.accent}`,
-              color: backfilling ? C.textMuted : C.accent,
+              border: `1px solid ${backfilling || !canRunBackfill ? C.border : C.accent}`,
+              color: backfilling || !canRunBackfill ? C.textMuted : C.accent,
               fontFamily: MONO,
               fontSize: '0.6rem',
               letterSpacing: '0.12em',
               padding: '8px 12px',
-              cursor: backfilling ? 'default' : 'pointer',
+              cursor: backfilling || !canRunBackfill ? 'default' : 'pointer',
             }}>
-              {backfilling ? 'RUNNING...' : 'RUN BACKFILL'}
+              {backfilling ? 'RUNNING...' : (canRunBackfill ? 'RUN BACKFILL' : 'BACKFILL MLB ONLY')}
             </Box>
+            {!canRunBackfill && (
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>
+                NBA rows are generated from live NBA analysis flow; MLB backfill is disabled in this view.
+              </Typography>
+            )}
             {backfillMessage && (
               <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>
                 {backfillMessage}
@@ -291,15 +364,14 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
             FEATURE COVERAGE (saved ML dataset only)
           </Typography>
           <Box sx={{ border: `1px solid ${C.border}`, p: 2, mb: 3 }}>
-            <CoverageBar label="Home P xwOBA" count={parseInt(fc?.has_home_xwoba ?? 0)} total={total} />
-            <CoverageBar label="Away P xwOBA" count={parseInt(fc?.has_away_xwoba ?? 0)} total={total} />
-            <CoverageBar label="Home P Whiff%" count={parseInt(fc?.has_home_whiff ?? 0)} total={total} />
-            <CoverageBar label="Away P Whiff%" count={parseInt(fc?.has_away_whiff ?? 0)} total={total} />
-            <CoverageBar label="Home Lineup xwOBA" count={parseInt(fc?.has_home_lineup ?? 0)} total={total} />
-            <CoverageBar label="Away Lineup xwOBA" count={parseInt(fc?.has_away_lineup ?? 0)} total={total} />
-            <CoverageBar label="Temperature" count={parseInt(fc?.has_temperature ?? 0)} total={total} />
-            <CoverageBar label="Odds" count={parseInt(fc?.has_odds ?? 0)} total={total} />
-            <CoverageBar label="Park Factor" count={parseInt(fc?.has_park ?? 0)} total={total} />
+            {coverageItems.map((item) => (
+              <CoverageBar
+                key={item.key}
+                label={item.label}
+                count={parseInt(fc?.[item.key] ?? 0)}
+                total={total}
+              />
+            ))}
             <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: 1 }}>
               These bars measure what was saved into pick_features for ML training, not whether the live Statcast cache is loaded.
             </Typography>
@@ -314,7 +386,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
           {(data.winRateByTemperature ?? []).length > 0 && (
             <>
               <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.accent, letterSpacing: '0.1em', mb: 1 }}>
-                WIN RATE BY TEMPERATURE
+                {isNba ? 'WIN RATE BY REST PROFILE' : 'WIN RATE BY TEMPERATURE'}
               </Typography>
               <Box sx={{ border: `1px solid ${C.border}`, mb: 3 }}>
                 {data.winRateByTemperature.map((row, i) => {
@@ -322,7 +394,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
                   const hitRate = bucketTotal > 0 ? ((parseInt(row.wins) / bucketTotal) * 100).toFixed(1) : '—';
                   return (
                     <Box key={i} sx={{ display: 'flex', p: '6px 12px', gap: 2, borderBottom: `1px solid ${C.border}` }}>
-                      <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, flex: 1 }}>{row.temp_bucket}</Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textPrimary, flex: 1 }}>{isNba ? row.bucket : row.temp_bucket}</Typography>
                       <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textSecondary }}>{row.wins}W / {row.total} total</Typography>
                       <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: parseFloat(hitRate) >= 55 ? C.green : C.red }}>{hitRate}%</Typography>
                     </Box>
@@ -366,7 +438,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
           <Box sx={{ border: `1px solid ${C.border}`, overflowX: 'auto' }}>
             <Box sx={{ minWidth: '1150px' }}>
               <Box sx={{ display: 'flex', p: '6px 10px', borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-                {['DATE', 'HORA LIMA', 'USUARIO', 'PARTIDO', 'PICK', 'RESULT', 'H.xwOBA', 'A.xwOBA', 'H.Whiff', 'TEMP', 'DQ', 'ML.H', 'O/U'].map((header) => (
+                {tableHeaders.map((header) => (
                   <Typography
                     key={header}
                     sx={{
@@ -397,16 +469,40 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
                       : '—'}
                   </Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, flex: 2, minWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.user_email ?? '—'}</Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.matchup ?? '—'}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.matchup ?? `${row.away_team_abbr ?? '—'} @ ${row.home_team_abbr ?? '—'}`}
+                  </Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.cyan, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.pick}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', flex: 1, minWidth: '50px', fontWeight: 700, color: row.result === 'win' ? C.green : row.result === 'loss' ? C.red : C.textMuted }}>
                     {row.result?.toUpperCase() ?? '—'}
                   </Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.home_pitcher_xwoba ?? '—'}</Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.away_pitcher_xwoba ?? '—'}</Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.home_pitcher_whiff ? `${parseFloat(row.home_pitcher_whiff).toFixed(1)}%` : '—'}</Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.temperature ? `${parseFloat(row.temperature).toFixed(0)}F` : '—'}</Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.data_quality_score ?? '—'}</Typography>
+                  {isNba ? (
+                    <>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>
+                        {row.home_net_rating ?? '—'}
+                      </Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>
+                        {row.away_net_rating ?? '—'}
+                      </Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>
+                        {row.home_rest_days ?? '—'}/{row.away_rest_days ?? '—'}
+                      </Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>
+                        {row.home_injuries_severe ?? '—'}/{row.away_injuries_severe ?? '—'}
+                      </Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>
+                        {row.context_completeness ?? '—'}
+                      </Typography>
+                    </>
+                  ) : (
+                    <>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.home_pitcher_xwoba ?? '—'}</Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.away_pitcher_xwoba ?? '—'}</Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.home_pitcher_whiff ? `${parseFloat(row.home_pitcher_whiff).toFixed(1)}%` : '—'}</Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.temperature ? `${parseFloat(row.temperature).toFixed(0)}F` : '—'}</Typography>
+                      <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.data_quality_score ?? '—'}</Typography>
+                    </>
+                  )}
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.odds_ml_home ?? '—'}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.odds_ou_total ?? '—'}</Typography>
                 </Box>
@@ -416,7 +512,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
 
           <Box sx={{ mt: 4, textAlign: 'center' }}>
             <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>
-              GAMBITHO LABS · ML FEATURE STORE · {s?.total_records ?? 0} records · Target: 1,000+
+              GAMBITHO LABS · {isNba ? 'NBA' : 'MLB'} FEATURE STORE · {s?.total_records ?? 0} records · Target: 1,000+
             </Typography>
           </Box>
         </>
