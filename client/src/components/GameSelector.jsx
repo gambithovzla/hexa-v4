@@ -675,33 +675,29 @@ export default function GameSelector({
   return (
     <Box sx={{ bgcolor: C.bg, p: 2, minHeight: '100%' }}>
 
-      {/* ── Header: title + sport switcher + date picker ── */}
+      {/* ── Header: title + date picker ── */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          mb: 2,
+          mb: onSportChange && mode === 'single' ? '8px' : 2,
           gap: 2,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-          <Typography
-            sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '1.1rem',
-              fontWeight:    800,
-              color:         C.textPrimary,
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-            }}
-          >
-            {t.title}
-          </Typography>
-          {onSportChange && mode === 'single' && (
-            <SportSwitcher sport={sport} onChange={onSportChange} />
-          )}
-        </Box>
+        <Typography
+          sx={{
+            fontFamily:    BARLOW,
+            fontSize:      '1.1rem',
+            fontWeight:    800,
+            color:         C.textPrimary,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            flexShrink:    0,
+          }}
+        >
+          {t.title}
+        </Typography>
 
         <input
           type="date"
@@ -721,6 +717,13 @@ export default function GameSelector({
           }}
         />
       </Box>
+
+      {/* ── Sport switcher (single mode only) ── */}
+      {onSportChange && mode === 'single' && (
+        <Box sx={{ mb: '14px' }}>
+          <SportSwitcher sport={sport} onChange={onSportChange} />
+        </Box>
+      )}
 
       {/* ── fullDay controls ── */}
       {mode === 'fullDay' && !loading && games.length > 0 && (
