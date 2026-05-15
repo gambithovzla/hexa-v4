@@ -30,6 +30,7 @@ import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
+import { buildNbaPickLiveProgressEntry } from './pick-tracker-nba.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
@@ -2334,6 +2335,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
          p.oracle_confidence,
          p.type,
          p.created_at,
+         COALESCE(p.sport, 'mlb') AS sport,
          COALESCE(p.game_pk, pf.game_pk) AS game_pk,
          COALESCE(p.game_date::text, pf.game_date::text) AS game_date
        FROM picks p
@@ -2347,7 +2349,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
        WHERE p.user_id = $1
          AND p.result = 'pending'
          AND p.deleted_at IS NULL
-         AND COALESCE(p.sport, 'mlb') = 'mlb'
+         AND COALESCE(p.sport, 'mlb') IN ('mlb', 'nba')
        ORDER BY created_at DESC
        LIMIT 20`,
       [userId]
@@ -2358,9 +2360,19 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
     }
 
     const results = [];
+    const nbaGamesByDate = new Map();
 
     for (const pick of pendingPicks) {
       try {
+        if (pick.sport === 'nba') {
+          const nbaPick = {
+            ...pick,
+            game_date: normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at),
+          };
+          results.push(await buildNbaPickLiveProgressEntry(nbaPick, nbaGamesByDate));
+          continue;
+        }
+
         let resolvedGamePk = pick.game_pk;
 
         // Fallback for older picks that predate game_pk persistence.
@@ -2384,6 +2396,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
             pickId: pick.id,
             pick: pick.pick,
             matchup: pick.matchup,
+            sport: 'mlb',
             progress: null,
             status: 'no_game_found',
           });
@@ -2397,6 +2410,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
             pickId: pick.id,
             pick: pick.pick,
             matchup: pick.matchup,
+            sport: 'mlb',
             gamePk: resolvedGamePk,
             progress: null,
             status: 'not_started',
@@ -2411,6 +2425,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
           pickId: pick.id,
           pick: pick.pick,
           matchup: pick.matchup,
+          sport: 'mlb',
           gamePk: resolvedGamePk,
           confidence: pick.oracle_confidence,
           ...progress,
@@ -2420,6 +2435,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
           pickId: pick.id,
           pick: pick.pick,
           matchup: pick.matchup,
+          sport: pick.sport === 'nba' ? 'nba' : 'mlb',
           gamePk: pick.game_pk ?? null,
           progress: null,
           status: 'fetch_error',
