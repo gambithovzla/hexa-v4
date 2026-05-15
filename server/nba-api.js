@@ -57,6 +57,12 @@ const TTL = {
 // We fetch all postseason scoreboard events and aggregate series records.
 
 const ESPN_SCOREBOARD_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
+const ESPN_STANDINGS_BASE  = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings';
+
+function seasonStartYear(season) {
+  const n = Number.parseInt(String(season).split('-')[0], 10);
+  return Number.isFinite(n) ? n : new Date().getFullYear();
+}
 
 function parsePlayoffNote(headline) {
   if (!headline) return { conference: null, round: null };
@@ -89,6 +95,107 @@ async function fetchEspnPlayoffEvents(season) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchEspnScoreboardByDate(dateStr, { seasonType } = {}) {
+  const dateCompact = String(dateStr).replaceAll('-', '');
+  const params = new URLSearchParams({ dates: dateCompact });
+  if (seasonType) params.set('seasontype', String(seasonType));
+  const url = `${ESPN_SCOREBOARD_BASE}?${params.toString()}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.events ?? [];
+  } catch (err) {
+    const msg = err.name === 'AbortError' ? 'timeout after 8s' : err.message;
+    throw new Error(`[nba-api] espn scoreboard ${dateStr} → ${msg}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function mapEspnStatusType(type = {}) {
+  const state = String(type.state ?? '').toLowerCase();
+  const name = String(type.name ?? '').toLowerCase();
+  const detail = String(type.detail ?? type.shortDetail ?? '').toLowerCase();
+  if (state === 'post' || name.includes('final') || detail.includes('final')) {
+    return { game_status_id: 3, status: type.shortDetail ?? type.detail ?? type.description ?? 'Final' };
+  }
+  if (
+    state === 'in' ||
+    name.includes('in progress') ||
+    detail.includes('qtr') ||
+    detail.includes('quarter') ||
+    detail.includes('halftime') ||
+    detail.includes('ot')
+  ) {
+    return { game_status_id: 2, status: type.shortDetail ?? type.detail ?? type.description ?? 'In Progress' };
+  }
+  return { game_status_id: 1, status: type.shortDetail ?? type.detail ?? type.description ?? 'Scheduled' };
+}
+
+function normalizeEspnScoreboardEvent(event, dateStr) {
+  const comp = event.competitions?.[0];
+  if (!comp) return null;
+  const home = comp.competitors?.find(c => c.homeAway === 'home');
+  const away = comp.competitors?.find(c => c.homeAway === 'away');
+  if (!home?.team || !away?.team) return null;
+  const mappedStatus = mapEspnStatusType(event.status?.type ?? {});
+  const parseScore = value => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const homeScore = parseScore(home.score);
+  const awayScore = parseScore(away.score);
+  const nationalTv = comp.broadcasts?.[0]?.names?.[0] ?? comp.geoBroadcasts?.[0]?.media?.shortName ?? null;
+  const safeDate = event.date ? String(event.date).slice(0, 10) : dateStr;
+  return {
+    game_id: event.id ?? comp.id,
+    game_date: safeDate,
+    status: mappedStatus.status,
+    game_status_id: mappedStatus.game_status_id,
+    live_period: event.status?.period ?? null,
+    live_clock: event.status?.displayClock ?? null,
+    home_team_id: Number(home.team.id),
+    home_team_abbr: home.team.abbreviation ?? null,
+    home_team_name: home.team.displayName ?? null,
+    home_score: homeScore,
+    home_qtrs: [],
+    home_fg_pct: null,
+    home_ft_pct: null,
+    home_fg3_pct: null,
+    home_ast: null,
+    home_reb: null,
+    home_tov: null,
+    away_team_id: Number(away.team.id),
+    away_team_abbr: away.team.abbreviation ?? null,
+    away_team_name: away.team.displayName ?? null,
+    away_score: awayScore,
+    away_qtrs: [],
+    away_fg_pct: null,
+    away_ft_pct: null,
+    away_fg3_pct: null,
+    away_ast: null,
+    away_reb: null,
+    away_tov: null,
+    arena: comp.venue?.fullName ?? null,
+    national_tv: nationalTv,
+    season: CURRENT_SEASON,
+  };
+}
+
+async function fetchEspnGamesForDate(dateStr) {
+  const [postseasonEvents, regularEvents] = await Promise.all([
+    fetchEspnScoreboardByDate(dateStr, { seasonType: 3 }),
+    fetchEspnScoreboardByDate(dateStr).catch(() => []),
+  ]);
+  const events = postseasonEvents.length > 0 ? postseasonEvents : regularEvents;
+  return events
+    .map(ev => normalizeEspnScoreboardEvent(ev, dateStr))
+    .filter(Boolean);
 }
 
 function buildLiveBracketFromEvents(events, season) {
@@ -295,16 +402,32 @@ export async function getNbaGamesForDate(dateStr) {
       console.warn(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — serving stale cache`);
       return stale;
     }
-    console.error(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — returning empty`);
-    return [];
+    try {
+      const espnGames = await fetchEspnGamesForDate(dateStr);
+      const anyLive = espnGames.some(r => r.game_status_id === 2);
+      cacheSet(cacheKey, espnGames, anyLive ? TTL.DAILY_GAMES_LIVE : TTL.DAILY_GAMES);
+      console.warn(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — using ESPN fallback (${espnGames.length} games)`);
+      return espnGames;
+    } catch (espnErr) {
+      console.error(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}); ESPN fallback failed (${espnErr.message}) — returning empty`);
+      return [];
+    }
   }
 
   const gameHeader = data.resultSets?.find(rs => rs.name === 'GameHeader');
   const lineScore = data.resultSets?.find(rs => rs.name === 'LineScore');
 
   if (!gameHeader) {
-    console.warn(`[nba-api] No GameHeader resultSet for ${dateStr}`);
-    return [];
+    try {
+      const espnGames = await fetchEspnGamesForDate(dateStr);
+      const anyLive = espnGames.some(r => r.game_status_id === 2);
+      cacheSet(cacheKey, espnGames, anyLive ? TTL.DAILY_GAMES_LIVE : TTL.DAILY_GAMES);
+      console.warn(`[nba-api] No GameHeader resultSet for ${dateStr} — using ESPN fallback (${espnGames.length} games)`);
+      return espnGames;
+    } catch (espnErr) {
+      console.error(`[nba-api] No GameHeader resultSet for ${dateStr}; ESPN fallback failed (${espnErr.message})`);
+      return [];
+    }
   }
 
   const games = parseResultSet(gameHeader);
@@ -638,6 +761,134 @@ function normaliseStandingsRow(r) {
   };
 }
 
+const ESPN_DIVISION_BY_ABBR = {
+  BOS: 'Atlantic', BKN: 'Atlantic', NY: 'Atlantic', PHI: 'Atlantic', TOR: 'Atlantic',
+  CHI: 'Central', CLE: 'Central', DET: 'Central', IND: 'Central', MIL: 'Central',
+  ATL: 'Southeast', CHA: 'Southeast', MIA: 'Southeast', ORL: 'Southeast', WSH: 'Southeast',
+  DEN: 'Northwest', MIN: 'Northwest', OKC: 'Northwest', POR: 'Northwest', UTAH: 'Northwest',
+  GS: 'Pacific', LAC: 'Pacific', LAL: 'Pacific', PHX: 'Pacific', SAC: 'Pacific',
+  DAL: 'Southwest', HOU: 'Southwest', MEM: 'Southwest', NO: 'Southwest', SA: 'Southwest',
+};
+
+function getEspnEntryStat(entry, name) {
+  const needle = String(name).toLowerCase();
+  return entry?.stats?.find(s => String(s?.name ?? '').toLowerCase() === needle) ?? null;
+}
+
+function getEspnNumeric(entry, name) {
+  const value = getEspnEntryStat(entry, name)?.value;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getEspnDisplay(entry, name) {
+  const stat = getEspnEntryStat(entry, name);
+  return stat?.displayValue ?? null;
+}
+
+function normaliseEspnStandingsEntry(entry, conference) {
+  const team = entry?.team ?? {};
+  const wins = getEspnNumeric(entry, 'wins') ?? 0;
+  const losses = getEspnNumeric(entry, 'losses') ?? 0;
+  const conferenceRank = getEspnNumeric(entry, 'playoffSeed');
+  const division = ESPN_DIVISION_BY_ABBR[team.abbreviation] ?? null;
+  const winPctRaw = getEspnNumeric(entry, 'winPercent');
+  const fallbackPct = wins + losses > 0 ? wins / (wins + losses) : 0;
+  const pctRaw = winPctRaw != null ? winPctRaw : fallbackPct;
+  const pctDisplay = getEspnDisplay(entry, 'winPercent') ?? pctRaw.toFixed(3).replace(/^0/, '');
+  return {
+    teamId: Number(team.id),
+    abbreviation: team.abbreviation ?? null,
+    name: team.name ?? null,
+    fullName: team.displayName ?? null,
+    conference,
+    division,
+    wins,
+    losses,
+    pct: pctDisplay,
+    pctRaw,
+    gamesBack: getEspnNumeric(entry, 'gamesBehind'),
+    divisionGamesBack: null,
+    home: getEspnDisplay(entry, 'Home'),
+    road: getEspnDisplay(entry, 'Road'),
+    last10: getEspnDisplay(entry, 'Last Ten Games'),
+    streak: getEspnDisplay(entry, 'streak'),
+    pointsPg: getEspnNumeric(entry, 'avgPointsFor'),
+    oppPointsPg: getEspnNumeric(entry, 'avgPointsAgainst'),
+    diff: getEspnNumeric(entry, 'differential'),
+    confRecord: getEspnDisplay(entry, 'vs. Conf.'),
+    divRecord: getEspnDisplay(entry, 'vs. Div.'),
+    conferenceRank,
+    divisionRank: null,
+    playoffStatus: conferenceRank == null ? 'unknown' : conferenceRank <= 6 ? 'playoff' : conferenceRank <= 10 ? 'playIn' : 'out',
+    flags: {
+      clinchedPlayoff: false,
+      clinchedPlayIn: false,
+      clinchedConferenceTitle: false,
+      clinchedDivisionTitle: false,
+      eliminated: false,
+    },
+  };
+}
+
+async function fetchEspnStandings(season = CURRENT_SEASON) {
+  const year = seasonStartYear(season);
+  const url = `${ESPN_STANDINGS_BASE}?season=${year}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const conferencesRaw = Array.isArray(data.children) ? data.children : [];
+    const byConf = { East: [], West: [] };
+    for (const conf of conferencesRaw) {
+      const key = String(conf.id) === '5'
+        ? 'East'
+        : String(conf.id) === '6'
+          ? 'West'
+          : null;
+      if (!key) continue;
+      const entries = Array.isArray(conf.standings?.entries) ? conf.standings.entries : [];
+      byConf[key] = entries.map(entry => normaliseEspnStandingsEntry(entry, key));
+      byConf[key].sort((a, b) => {
+        if (a.conferenceRank != null && b.conferenceRank != null) return a.conferenceRank - b.conferenceRank;
+        return (b.pctRaw - a.pctRaw) || (b.wins - a.wins);
+      });
+      const divRankByDivision = {};
+      for (const team of byConf[key]) {
+        if (!team.division) continue;
+        if (!divRankByDivision[team.division]) divRankByDivision[team.division] = 0;
+        divRankByDivision[team.division] += 1;
+        team.divisionRank = divRankByDivision[team.division];
+      }
+    }
+    return {
+      season,
+      updatedAt: new Date().toISOString(),
+      conferences: ['East', 'West'].map(confKey => {
+        const teams = byConf[confKey] ?? [];
+        const divisions = DIVISION_ORDER[confKey].map(divKey => ({
+          key: divKey,
+          name: DIVISION_LABEL[divKey],
+          teams: teams.filter(t => t.division === divKey),
+        }));
+        return {
+          key: confKey,
+          name: CONFERENCE_LABEL[confKey],
+          teams,
+          divisions,
+        };
+      }),
+    };
+  } catch (err) {
+    const msg = err.name === 'AbortError' ? 'timeout after 8s' : err.message;
+    throw new Error(`[nba-api] espn standings ${season} → ${msg}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function getNbaStandings(season = CURRENT_SEASON) {
   const cacheKey = `standings:${season}`;
   const cached = cacheGet(cacheKey);
@@ -656,14 +907,28 @@ export async function getNbaStandings(season = CURRENT_SEASON) {
       console.warn(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — serving stale cache`);
       return stale;
     }
-    console.error(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — returning empty`);
-    return { season, updatedAt: new Date().toISOString(), conferences: [] };
+    try {
+      const espnStandings = await fetchEspnStandings(season);
+      cacheSet(cacheKey, espnStandings, TTL.STANDINGS);
+      console.warn(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — using ESPN fallback`);
+      return espnStandings;
+    } catch (espnErr) {
+      console.error(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}); ESPN fallback failed (${espnErr.message}) — returning empty`);
+      return { season, updatedAt: new Date().toISOString(), conferences: [] };
+    }
   }
 
   const rs = data.resultSets?.find(r => r.name === 'Standings');
   if (!rs) {
-    console.warn('[nba-api] No Standings resultSet');
-    return { season, updatedAt: new Date().toISOString(), conferences: [] };
+    try {
+      const espnStandings = await fetchEspnStandings(season);
+      cacheSet(cacheKey, espnStandings, TTL.STANDINGS);
+      console.warn('[nba-api] No Standings resultSet — using ESPN fallback');
+      return espnStandings;
+    } catch (espnErr) {
+      console.error(`[nba-api] No Standings resultSet; ESPN fallback failed (${espnErr.message})`);
+      return { season, updatedAt: new Date().toISOString(), conferences: [] };
+    }
   }
 
   const rows = parseResultSet(rs).map(normaliseStandingsRow);

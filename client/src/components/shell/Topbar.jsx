@@ -317,37 +317,6 @@ export default function Topbar({ lang = 'es', onLangToggle, activeTab, onMobileM
         </Typography>
       </Box>
 
-      {/* Search hint (visual only — wire later) */}
-      <Box
-        sx={{
-          display:      { xs: 'none', lg: 'inline-flex' },
-          alignItems:   'center',
-          gap:          '8px',
-          px:           '12px',
-          py:           '6px',
-          minWidth:     '200px',
-          border:       `1px solid ${C.line}`,
-          bgcolor:      C.bg1,
-          borderRadius: '6px',
-          color:        C.ink3,
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             strokeWidth="2" strokeLinecap="round" aria-hidden>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        <Box component="span" sx={{ fontFamily: MONO, fontSize: '0.7rem', flex: 1 }}>
-          {lang === 'es' ? 'Buscar…' : 'Search…'}
-        </Box>
-        <Box component="span" sx={{
-          fontFamily: MONO, fontSize: '0.6rem',
-          px: '6px', py: '1px', border: `1px solid ${C.line}`, borderRadius: '3px',
-        }}>
-          ⌘K
-        </Box>
-      </Box>
-
       <Box sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
         <StatcastPill lang={lang} C={C} />
       </Box>
