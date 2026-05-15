@@ -211,6 +211,16 @@ const TABLES = {
     searchable: ['user_email', 'synergy_type'],
     defaultOrder: 'created_at',
   },
+  ml_retrain_log: {
+    columns: [
+      'id', 'user_id', 'market', 'scope', 'status',
+      'brier', 'logloss', 'n_train', 'n_test',
+      'duration_ms', 'error', 'created_at', 'finished_at',
+    ],
+    filterable: ['id', 'user_id', 'market', 'scope', 'status'],
+    searchable: ['market', 'status', 'error'],
+    defaultOrder: 'created_at',
+  },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
