@@ -18,6 +18,7 @@ import es from '../i18n/es.json';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import InsightsSemana from './InsightsSemana';
 import AdminEnsembleBadge from './AdminEnsembleBadge';
+import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 
 const TRANSLATIONS = { en, es };
 
@@ -68,12 +69,27 @@ function parseMatchupTeams(matchup) {
   return { away: parts[0].trim(), home: parts[1].trim() };
 }
 
-function MatchupWithLogos({ matchup }) {
+function MatchupWithLogos({ matchup, sport = 'mlb' }) {
   if (!matchup) return matchup;
   const parts = matchup.split(/\s+(?:vs\.?|@|VS)\s+/i);
   if (parts.length < 2) return <span>{matchup}</span>;
   const away = parts[0].trim();
   const home = parts[1].trim();
+
+  if (sport === 'nba') {
+    const awaySrc = getNbaLogoUrl(null, away);
+    const homeSrc = getNbaLogoUrl(null, home);
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        {awaySrc && <img src={awaySrc} width={18} height={18} alt="" style={{ flexShrink: 0, verticalAlign: 'middle', objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />}
+        <span>{away}</span>
+        <span style={{ opacity: 0.4, fontSize: '0.7em' }}>vs</span>
+        {homeSrc && <img src={homeSrc} width={18} height={18} alt="" style={{ flexShrink: 0, verticalAlign: 'middle', objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />}
+        <span>{home}</span>
+      </span>
+    );
+  }
+
   const awayId = getTeamId(away);
   const homeId = getTeamId(home);
   return (
@@ -297,7 +313,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
       </Box>
 
       <Typography component="div" sx={{ fontFamily: BARLOW, fontSize: '1rem', color: C.textPrimary, letterSpacing: '1px', lineHeight: 1.3 }}>
-        <MatchupWithLogos matchup={entry.matchup} />
+        <MatchupWithLogos matchup={entry.matchup} sport={entry.sport} />
       </Typography>
 
       {entry.pick && (

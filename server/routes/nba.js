@@ -133,6 +133,13 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
       console.warn(`[nba-route] parse error for game ${gameId} — raw text returned`);
     }
 
+    if (String(result.data?.best_pick?.type ?? '').toLowerCase() === 'playerprop') {
+      return res.status(422).json({
+        success: false,
+        error: 'NBA player props are temporarily disabled until the dedicated data pipeline is ready.',
+      });
+    }
+
     const savedPick = await persistNbaPick({
       userId:    req.user.id,
       userEmail: req.user.email ?? null,

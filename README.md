@@ -261,6 +261,28 @@ Sprint 7 completado en su mayor parte:
 - **Sprint 6a — Equity curve + Sharpe + drawdown dashboard**: curva de equity por usuario, drawdown, Sharpe rolling 30d. Datos ya existen en `picks` + `bankroll`. Sin esto Hexa no demuestra valor como sistema de bankroll, solo como generador de picks sueltos.
 - **Sprint 6b — Persistencia de modelos ML vía Railway Volumes**: `ml/hexa_ml/config.py` usa `artifacts/` relativo → efímero en Railway. Cada redeploy borra los `.pkl`. Apuntar a `/data` (volume montado) cierra esa ventana.
 
+### Matriz de calidad por deporte (operativa)
+
+Escala de referencia: 0-10 por criterio. Para apertura publica de un deporte: score global >= 8.5 y ningun criterio critico < 8.
+
+| Criterio | MLB (actual) | NBA (actual) | Gate minimo |
+|---|---:|---:|---:|
+| Data depth pregame (features contextuales) | 9.5 | 6.5 | 8.0 |
+| Data quality live (latencia + disponibilidad) | 8.5 | 7.0 | 8.0 |
+| Lineup/Injury verification estructurada | 9.0 | 5.5 | 8.0 |
+| Market coverage soportada por data real | 9.0 | 6.0 | 8.0 |
+| Guardrails LLM (schema + fallbacks + policy) | 8.5 | 7.0 | 8.0 |
+| Pick lifecycle (tracking -> resolver -> postmortem) | 9.0 | 7.5 | 8.0 |
+| Calibration/ROI observables por mercado | 8.5 | 6.0 | 8.0 |
+| Isolation por deporte (sin contaminacion cruzada) | 8.5 | 6.5 | 8.5 |
+
+#### Criterios de go-live NBA
+
+- SAFE PICK NBA aislado de endpoints MLB.
+- Player Props NBA deshabilitado hasta tener dataset y resolver dedicados.
+- Historial/jobs/resolver/UX aislados por `sport` para evitar contaminacion cruzada.
+- Contexto NBA con injuries/status + odds server-side + metadata de completitud.
+
 Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
 
 ---
