@@ -45,6 +45,7 @@ import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
 import LearningCenter      from './components/LearningCenter';
 import MLBStandingsPanel   from './components/MLBStandingsPanel';
+import NBAStandingsPanel   from './components/NBAStandingsPanel';
 import SportSwitcher       from './components/SportSwitcher';
 import WhatsAppSupport     from './components/WhatsAppSupport';
 import useHistory           from './hooks/useHistory';
@@ -297,6 +298,42 @@ function AppFooter({ lang }) {
   );
 }
 
+function SportComingSoon({ lang, title, subtitle }) {
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+        p: { xs: 4, sm: 5 },
+        border: `1px solid ${C.cyanLine}`,
+        background: 'linear-gradient(180deg, rgba(7,9,14,0.98), rgba(2,4,8,0.96))',
+        boxShadow: 'inset 0 0 32px rgba(0,0,0,0.75)',
+        overflow: 'hidden',
+        textAlign: 'center',
+        '&::before': {
+          content: '""', position: 'absolute', top: 0, left: 0,
+          width: 18, height: 18,
+          borderTop: `2px solid ${C.cyan}`, borderLeft: `2px solid ${C.cyan}`,
+        },
+        '&::after': {
+          content: '""', position: 'absolute', right: 0, bottom: 0,
+          width: 18, height: 18,
+          borderRight: `2px solid ${C.accent}`, borderBottom: `2px solid ${C.accent}`,
+        },
+      }}
+    >
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.cyan, letterSpacing: '0.22em', textTransform: 'uppercase', mb: 1 }}>
+        {lang === 'es' ? 'Próximamente' : 'Coming soon'}
+      </Typography>
+      <Typography sx={{ fontFamily: BARLOW, fontSize: { xs: '1.4rem', sm: '1.7rem' }, fontWeight: 800, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.08em', mb: 1 }}>
+        {title}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.78rem', color: C.textMuted, maxWidth: 540, mx: 'auto', lineHeight: 1.7 }}>
+        {subtitle}
+      </Typography>
+    </Box>
+  );
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -469,7 +506,14 @@ export default function App() {
           )}
 
           {activeTab === 'standings' && (
-            <MLBStandingsPanel lang={lang} />
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <SportSwitcher sport={sport} onChange={setSport} />
+              </Box>
+              {sport === 'nba'
+                ? <NBAStandingsPanel lang={lang} />
+                : <MLBStandingsPanel lang={lang} />}
+            </Box>
           )}
 
           {/* Single game */}
@@ -560,12 +604,26 @@ export default function App() {
 
           {/* Live Tracker */}
           {activeTab === 'live' && (
-            <LiveTracker lang={lang} />
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <SportSwitcher sport={sport} onChange={setSport} />
+              </Box>
+              {sport === 'nba'
+                ? <SportComingSoon lang={lang} title={lang === 'es' ? 'En Vivo NBA' : 'NBA Live'} subtitle={lang === 'es' ? 'El tracker NBA en tiempo real llega en el próximo sprint.' : 'Real-time NBA tracker shipping in the next sprint.'} />
+                : <LiveTracker lang={lang} />}
+            </Box>
           )}
 
           {/* Gameday play-by-play detail */}
           {activeTab === 'gameday' && (
-            <GameDayDetail lang={lang} />
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <SportSwitcher sport={sport} onChange={setSport} />
+              </Box>
+              {sport === 'nba'
+                ? <SportComingSoon lang={lang} title={lang === 'es' ? 'Detalles NBA' : 'NBA Details'} subtitle={lang === 'es' ? 'Box score y play-by-play NBA llegan en el próximo sprint.' : 'NBA box score and play-by-play shipping in the next sprint.'} />
+                : <GameDayDetail lang={lang} />}
+            </Box>
           )}
 
           {/* Guía H.E.X.A. — learning center */}

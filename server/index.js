@@ -65,7 +65,7 @@ import {
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
 import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations } from './migrate.js';
-import { getNbaGamesForDate, getNbaLeagueTeamStats } from './nba-api.js';
+import { getNbaGamesForDate, getNbaLeagueTeamStats, getNbaStandings } from './nba-api.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -802,6 +802,20 @@ app.get('/api/nba/teams', async (req, res) => {
     }
     const teams = await getNbaLeagueTeamStats(season);
     res.json({ success: true, season, count: teams.length, data: teams });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nba/standings?season=2025-26
+app.get('/api/nba/standings', async (req, res) => {
+  try {
+    const season = req.query.season || '2025-26';
+    if (!/^\d{4}-\d{2}$/.test(season)) {
+      return res.status(400).json({ success: false, error: 'season must be YYYY-YY (e.g. 2025-26)' });
+    }
+    const data = await getNbaStandings(season);
+    res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
