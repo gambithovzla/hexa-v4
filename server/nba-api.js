@@ -29,11 +29,14 @@ const _cache = new Map();
 function cacheGet(key) {
   const entry = _cache.get(key);
   if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    _cache.delete(key);
-    return null;
-  }
+  if (Date.now() > entry.expiresAt) return null;
   return entry.data;
+}
+
+// Returns whatever was last cached for `key`, even if its TTL expired.
+// Used as a graceful fallback when stats.nba.com is unreachable.
+function cacheGetStale(key) {
+  return _cache.get(key)?.data ?? null;
 }
 
 function cacheSet(key, data, ttlMs) {
@@ -71,17 +74,36 @@ function parseResultSet(resultSet) {
   );
 }
 
-async function nbaFetch(endpoint, params = {}) {
+const NBA_FETCH_TIMEOUT_MS = 8000;
+
+async function nbaFetch(endpoint, params = {}, { timeoutMs = NBA_FETCH_TIMEOUT_MS } = {}) {
   const url = new URL(`${NBA_BASE}/${endpoint}`);
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), { headers: NBA_HEADERS });
-  if (!res.ok) {
-    throw new Error(`[nba-api] ${endpoint} → HTTP ${res.status}`);
+  // stats.nba.com regularly rate-limits or hangs requests from datacenter IPs.
+  // An AbortController prevents the entire route from waiting forever.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url.toString(), {
+      headers: NBA_HEADERS,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    const msg = err.name === 'AbortError'
+      ? `timeout after ${timeoutMs}ms`
+      : err.message;
+    throw new Error(`[nba-api] ${endpoint} → ${msg}`);
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json();
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -96,11 +118,22 @@ export async function getNbaGamesForDate(dateStr) {
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
-  const data = await nbaFetch('scoreboardv2', {
-    GameDate: dateStr,
-    LeagueID: '00',
-    DayOffset: '0',
-  });
+  let data;
+  try {
+    data = await nbaFetch('scoreboardv2', {
+      GameDate: dateStr,
+      LeagueID: '00',
+      DayOffset: '0',
+    });
+  } catch (err) {
+    const stale = cacheGetStale(cacheKey);
+    if (stale) {
+      console.warn(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — serving stale cache`);
+      return stale;
+    }
+    console.error(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — returning empty`);
+    return [];
+  }
 
   const gameHeader = data.resultSets?.find(rs => rs.name === 'GameHeader');
   const lineScore = data.resultSets?.find(rs => rs.name === 'LineScore');
@@ -182,7 +215,9 @@ export async function getNbaLeagueTeamStats(season = CURRENT_SEASON) {
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
-  const data = await nbaFetch('leaguedashteamstats', {
+  let data;
+  try {
+    data = await nbaFetch('leaguedashteamstats', {
     Season: season,
     SeasonType: 'Regular Season',
     PerMode: 'PerGame',
@@ -216,7 +251,16 @@ export async function getNbaLeagueTeamStats(season = CURRENT_SEASON) {
     GameSegment: '',
     Period: '0',
     ShotClockRange: '',
-  });
+    });
+  } catch (err) {
+    const stale = cacheGetStale(cacheKey);
+    if (stale) {
+      console.warn(`[nba-api] leaguedashteamstats ${season} failed (${err.message}) — serving stale cache`);
+      return stale;
+    }
+    console.error(`[nba-api] leaguedashteamstats ${season} failed (${err.message}) — returning empty`);
+    return [];
+  }
 
   const rs = data.resultSets?.find(r => r.name === 'LeagueDashTeamStats');
   if (!rs) {
@@ -435,11 +479,22 @@ export async function getNbaStandings(season = CURRENT_SEASON) {
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
-  const data = await nbaFetch('leaguestandingsv3', {
-    LeagueID:   '00',
-    Season:     season,
-    SeasonType: 'Regular Season',
-  });
+  let data;
+  try {
+    data = await nbaFetch('leaguestandingsv3', {
+      LeagueID:   '00',
+      Season:     season,
+      SeasonType: 'Regular Season',
+    });
+  } catch (err) {
+    const stale = cacheGetStale(cacheKey);
+    if (stale) {
+      console.warn(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — serving stale cache`);
+      return stale;
+    }
+    console.error(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — returning empty`);
+    return { season, updatedAt: new Date().toISOString(), conferences: [] };
+  }
 
   const rs = data.resultSets?.find(r => r.name === 'Standings');
   if (!rs) {
