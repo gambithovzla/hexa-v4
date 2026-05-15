@@ -1,0 +1,65 @@
+name: MLB Release Smoke
+
+on:
+  pull_request:
+    paths:
+      - "server/**"
+      - "scripts/smoke/**"
+      - "package.json"
+      - ".github/workflows/mlb-smoke.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "scripts/smoke/**"
+      - "package.json"
+      - ".github/workflows/mlb-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Run MLB smoke checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start API server
+        run: |
+          npm start > server.log 2>&1 &
+          echo $! > server.pid
+
+      - name: Run MLB smoke script
+        env:
+          SMOKE_BASE_URL: http://127.0.0.1:3001
+          SMOKE_WAIT_FOR_SERVER: "1"
+          SMOKE_TIMEOUT_MS: "15000"
+          SMOKE_RETRIES: "3"
+          SMOKE_RETRY_DELAY_MS: "1500"
+        run: npm run smoke:mlb
+
+      - name: Print server logs on failure
+        if: failure()
+        run: |
+          echo "----- server.log -----"
+          cat server.log
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill "$(cat server.pid)" || true
+          fi
+

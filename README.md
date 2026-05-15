@@ -115,6 +115,7 @@ Desde la raíz ([package.json](package.json)):
 | `npm run client` | Dev server de Vite (`client/`) |
 | `npm run dev:all` | API + cliente en paralelo (`concurrently`) |
 | `npm run audit` | Diagnóstico del sistema ([scripts/system-audit.js](scripts/system-audit.js)) |
+| `npm run smoke:mlb` | Smoke test de release MLB (endpoints críticos `/api/games`, `/api/teams`, `/api/hexa/board`) |
 | `npm run test:parlay` | Tests del Parlay Synergy Engine |
 
 Desde `client/`:
@@ -126,6 +127,26 @@ Desde `client/`:
 | `npm run preview` | Preview del build |
 
 ---
+
+## Gate de release MLB (smoke)
+
+Antes de dar luz verde a producción, ejecutar desde la raíz:
+
+```bash
+npm run smoke:mlb
+```
+
+Configurable por env vars:
+
+- `SMOKE_BASE_URL` (default `http://127.0.0.1:3001`)
+- `SMOKE_WAIT_FOR_SERVER` (`1` por default, usa espera activa antes de probar)
+- `SMOKE_TIMEOUT_MS` (default `20000`)
+- `SMOKE_RETRIES` (default `3`)
+- `SMOKE_RETRY_DELAY_MS` (default `1000`)
+
+CI/CD:
+- Workflow automático: `.github/workflows/mlb-smoke.yml`
+- Corre en PRs y pushes a `main` cuando cambian archivos de `server/`, `scripts/smoke/` o `package.json`
 
 ## Estructura del repo
 
