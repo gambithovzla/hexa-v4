@@ -240,7 +240,27 @@ Estado:
 - ✅ **Sprint 5 UI**: Admin ML Control Center en `/admin/ml-control` — HUD live, retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Oracle Chat → Training pipeline (JSON tail + Haiku fallback, bucket `source='oracle_chat'`).
 - ⏳ **Sprint 5 Player Props** (pendiente): training para hits / total_bases / strikeouts — requiere features per-batter en `savant-fetcher.js`. Banner "coming soon" en el Control Center.
 
-Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
+### Próximas fases — hardening + expansión NBA
+
+**Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)** — dos heridas abiertas que rompen la propuesta de valor antes de duplicar superficie con NBA:
+
+- **Sprint 6a — Equity curve + Sharpe + drawdown dashboard** (~2 semanas). Curva de equity por usuario, drawdown peak-to-trough, Sharpe rolling 30d, ROI por mes. Datos ya existen en `picks` + `bankroll`. Sin esto, Hexa parece un juguete de picks sueltos en vez de un sistema de bankroll.
+- **Sprint 6b — Persistencia de modelos ML vía Railway Volumes** (~1-2 semanas). Hoy `ml/hexa_ml/config.py` apunta a `artifacts/` (relativo) y Railway tiene filesystem efímero: cada redeploy del sidecar wipea los `.pkl`. Resultado: hasta el siguiente retrain, los picks caen al fallback legacy. Apuntar `artifacts_dir` a `/data` (volume montado) cierra esa ventana.
+
+**Sprint 7 — Expansión NBA (Q4 2026 → Q1 2027, ~10-14 semanas)** — segundo deporte, no más MLB. Target: MVP listo para el **All-Star Break del 15-17 feb 2027**.
+
+Justificación: MLB tiene ~6 meses muertos (nov–mar). NBA es oct–abr ⇒ cobertura year-round. La arquitectura ya es deporte-agnóstica (oracle.js, pick lifecycle, sidecar Python, Parlay Synergy). Lo MLB-específico vive en 4 archivos reemplazables: `mlb-api.js`, `savant-fetcher.js`, `context-builder.js`, `pick-resolver.js`.
+
+Sub-sprints:
+- **7a** scaffolding datos (`nba-api.js`, `nba-context-builder.js`, tabla `nba_games`, columna `sport` en `picks`/`pick_features`).
+- **7b** Oracle NBA + prompts adaptados (adapter `oracleNba.js`, **sin tocar oracle.js**).
+- **7c** pick lifecycle NBA (resolver, tracker, postmortem adaptado).
+- **7d** UI con sport switcher (bottom nav MLB/NBA, reutilizar `HexaBoard` / `AnalysisPanel` / `PickCard`).
+- **7e** NBA ML sidecar (condicional, post ~500 picks NBA resueltos).
+
+**Sprints 6 y 7 corren en paralelo**, no en serie — Sprint 7a no toca código MLB. Si esperamos a cerrar Sprint 6 antes de empezar NBA, perdemos la ventana de feb 2027.
+
+Backlog priorizado completo + sub-sprint detalle: [docs/roadmap.md](docs/roadmap.md).
 
 ---
 
