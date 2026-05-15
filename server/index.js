@@ -64,7 +64,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations } from './migrate.js';
 import {
   getNbaGamesForDate,
   getNbaLeagueTeamStats,
@@ -387,9 +387,9 @@ async function persistAnalysisPick({
        oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
        model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
        game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method,
-       user_email, pick_time_lima
+       user_email, sport, pick_time_lima
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,'mlb',(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
      RETURNING *`,
     [
       userId,
@@ -2000,8 +2000,8 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
             `INSERT INTO picks (user_id, type, matchup, pick, oracle_confidence, bet_value,
              model_risk, oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
              model, language, odds_at_pick, implied_prob_at_pick, odds_details, value_breakdown,
-             safe_candidates, safe_scope, selection_method, user_email, pick_time_lima)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
+             safe_candidates, safe_scope, selection_method, user_email, sport, pick_time_lima)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'mlb',(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
              RETURNING id`,
             [
               req.user.id,
@@ -3496,8 +3496,15 @@ app.get('/api/admin/shadow-model', verifyToken, async (req, res) => {
 
   try {
     const limit = Number(req.query.limit ?? 50);
-    await refreshPendingShadowModelRuns(Math.min(limit, 50));
-    const data = await getShadowModeDashboard(limit);
+    const rawSport = String(req.query.sport ?? 'mlb').toLowerCase();
+    const sport = rawSport === 'nba' ? 'nba' : 'mlb';
+    // Only MLB shadow runs go through the live-game refresher (NBA resolver
+    // doesn't expose getLiveGameData yet — runs stay pending until the NBA
+    // pick resolver back-fills them).
+    if (sport === 'mlb') {
+      await refreshPendingShadowModelRuns(Math.min(limit, 50));
+    }
+    const data = await getShadowModeDashboard(limit, sport);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -3770,23 +3777,47 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
     if (requestedMonth && !/^\d{4}-\d{2}$/.test(requestedMonth)) {
       return res.status(400).json({ success: false, error: 'Invalid month format. Use YYYY-MM.' });
     }
+    const rawSport = String(req.query.sport ?? 'mlb').toLowerCase();
+    const sport = rawSport === 'nba' ? 'nba' : 'mlb';
+    const sportFilter = `COALESCE(sport,'mlb') = '${sport}'`;
+    const sportFilterPf = `COALESCE(pf.sport,'mlb') = '${sport}'`;
 
-    const summary = await pool.query(`
-      SELECT
-        COUNT(*) as total_records,
-        COUNT(*) FILTER (WHERE result = 'win') as wins,
-        COUNT(*) FILTER (WHERE result = 'loss') as losses,
-        COUNT(*) FILTER (WHERE result IS NULL) as pending,
-        COUNT(*) FILTER (WHERE pick_id IS NOT NULL) as from_real_picks,
-        COUNT(*) FILTER (WHERE backtest_id IS NOT NULL) as from_backtests,
-        ROUND(AVG(home_pitcher_xwoba)::numeric, 3) as avg_home_p_xwoba,
-        ROUND(AVG(away_pitcher_xwoba)::numeric, 3) as avg_away_p_xwoba,
-        ROUND(AVG(temperature)::numeric, 1) as avg_temperature,
-        ROUND(AVG(data_quality_score)::numeric, 0) as avg_data_quality,
-        MIN(game_date) as earliest_date,
-        MAX(game_date) as latest_date
-      FROM pick_features
-    `);
+    const summarySql = sport === 'nba'
+      ? `
+        SELECT
+          COUNT(*) as total_records,
+          COUNT(*) FILTER (WHERE result = 'win') as wins,
+          COUNT(*) FILTER (WHERE result = 'loss') as losses,
+          COUNT(*) FILTER (WHERE result IS NULL) as pending,
+          COUNT(*) FILTER (WHERE pick_id IS NOT NULL) as from_real_picks,
+          COUNT(*) FILTER (WHERE backtest_id IS NOT NULL) as from_backtests,
+          ROUND(AVG(home_net_rating)::numeric, 2) as avg_home_net_rating,
+          ROUND(AVG(away_net_rating)::numeric, 2) as avg_away_net_rating,
+          ROUND(AVG(home_pace)::numeric, 1) as avg_home_pace,
+          ROUND(AVG(context_completeness)::numeric, 2) as avg_completeness,
+          MIN(game_date) as earliest_date,
+          MAX(game_date) as latest_date
+        FROM pick_features
+        WHERE ${sportFilter}
+      `
+      : `
+        SELECT
+          COUNT(*) as total_records,
+          COUNT(*) FILTER (WHERE result = 'win') as wins,
+          COUNT(*) FILTER (WHERE result = 'loss') as losses,
+          COUNT(*) FILTER (WHERE result IS NULL) as pending,
+          COUNT(*) FILTER (WHERE pick_id IS NOT NULL) as from_real_picks,
+          COUNT(*) FILTER (WHERE backtest_id IS NOT NULL) as from_backtests,
+          ROUND(AVG(home_pitcher_xwoba)::numeric, 3) as avg_home_p_xwoba,
+          ROUND(AVG(away_pitcher_xwoba)::numeric, 3) as avg_away_p_xwoba,
+          ROUND(AVG(temperature)::numeric, 1) as avg_temperature,
+          ROUND(AVG(data_quality_score)::numeric, 0) as avg_data_quality,
+          MIN(game_date) as earliest_date,
+          MAX(game_date) as latest_date
+        FROM pick_features
+        WHERE ${sportFilter}
+      `;
+    const summary = await pool.query(summarySql);
 
     const monthOptions = await pool.query(`
       SELECT
@@ -3797,7 +3828,7 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
         COUNT(*) FILTER (WHERE result = 'loss') as losses,
         COUNT(*) FILTER (WHERE result IS NULL) as pending
       FROM pick_features
-      WHERE game_date IS NOT NULL
+      WHERE game_date IS NOT NULL AND ${sportFilter}
       GROUP BY 1
       ORDER BY month_key DESC
     `);
@@ -3813,60 +3844,119 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
             COUNT(*) FILTER (WHERE result = 'loss') as losses,
             COUNT(*) FILTER (WHERE result IS NULL) as pending
           FROM pick_features
-          WHERE TO_CHAR(game_date::date, 'YYYY-MM') = $1
+          WHERE TO_CHAR(game_date::date, 'YYYY-MM') = $1 AND ${sportFilter}
           GROUP BY 1
           ORDER BY day_key DESC
         `, [selectedMonth])
       : { rows: [] };
 
     const monthRecords = selectedMonth
-      ? await pool.query(`
-          SELECT pf.game_date, pf.game_pk, pf.pick, pf.result,
-            p.matchup,
-            pf.user_email, pf.pick_time_lima,
-            pf.home_pitcher_xwoba, pf.away_pitcher_xwoba,
-            pf.home_pitcher_whiff, pf.away_pitcher_whiff,
-            pf.home_lineup_avg_xwoba, pf.away_lineup_avg_xwoba,
-            pf.park_factor_overall, pf.temperature, pf.wind_speed,
-            pf.data_quality_score, pf.signal_coherence_score,
-            pf.odds_ml_home, pf.odds_ml_away, pf.odds_ou_total
-          FROM pick_features pf
-          LEFT JOIN picks p ON pf.pick_id = p.id
-          WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1
-          ORDER BY pf.game_date DESC, pf.created_at DESC
-          LIMIT 750
-        `, [selectedMonth])
+      ? (sport === 'nba'
+          ? await pool.query(`
+              SELECT pf.game_date, pf.game_pk, pf.pick, pf.result,
+                p.matchup,
+                pf.user_email, pf.pick_time_lima,
+                pf.home_team_abbr, pf.away_team_abbr,
+                pf.home_net_rating, pf.away_net_rating,
+                pf.home_off_rating, pf.away_off_rating,
+                pf.home_def_rating, pf.away_def_rating,
+                pf.home_pace, pf.away_pace,
+                pf.home_ts_pct, pf.away_ts_pct,
+                pf.home_rest_days, pf.away_rest_days,
+                pf.home_is_b2b, pf.away_is_b2b,
+                pf.home_injuries_severe, pf.away_injuries_severe,
+                pf.home_last10_wins, pf.away_last10_wins,
+                pf.context_completeness,
+                pf.odds_ml_home, pf.odds_ml_away, pf.odds_ou_total
+              FROM pick_features pf
+              LEFT JOIN picks p ON pf.pick_id = p.id
+              WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1 AND ${sportFilterPf}
+              ORDER BY pf.game_date DESC, pf.created_at DESC
+              LIMIT 750
+            `, [selectedMonth])
+          : await pool.query(`
+              SELECT pf.game_date, pf.game_pk, pf.pick, pf.result,
+                p.matchup,
+                pf.user_email, pf.pick_time_lima,
+                pf.home_pitcher_xwoba, pf.away_pitcher_xwoba,
+                pf.home_pitcher_whiff, pf.away_pitcher_whiff,
+                pf.home_lineup_avg_xwoba, pf.away_lineup_avg_xwoba,
+                pf.park_factor_overall, pf.temperature, pf.wind_speed,
+                pf.data_quality_score, pf.signal_coherence_score,
+                pf.odds_ml_home, pf.odds_ml_away, pf.odds_ou_total
+              FROM pick_features pf
+              LEFT JOIN picks p ON pf.pick_id = p.id
+              WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1 AND ${sportFilterPf}
+              ORDER BY pf.game_date DESC, pf.created_at DESC
+              LIMIT 750
+            `, [selectedMonth]))
       : { rows: [] };
 
-    const featureCoverage = await pool.query(`
-      SELECT
-        COUNT(*) as total,
-        COUNT(home_pitcher_xwoba) as has_home_xwoba,
-        COUNT(away_pitcher_xwoba) as has_away_xwoba,
-        COUNT(home_pitcher_whiff) as has_home_whiff,
-        COUNT(away_pitcher_whiff) as has_away_whiff,
-        COUNT(home_lineup_avg_xwoba) as has_home_lineup,
-        COUNT(away_lineup_avg_xwoba) as has_away_lineup,
-        COUNT(temperature) as has_temperature,
-        COUNT(odds_ml_home) as has_odds,
-        COUNT(park_factor_overall) as has_park
-      FROM pick_features
-    `);
+    const featureCoverageSql = sport === 'nba'
+      ? `
+        SELECT
+          COUNT(*) as total,
+          COUNT(home_net_rating) as has_home_net,
+          COUNT(away_net_rating) as has_away_net,
+          COUNT(home_pace)       as has_home_pace,
+          COUNT(away_pace)       as has_away_pace,
+          COUNT(home_rest_days)  as has_home_rest,
+          COUNT(away_rest_days)  as has_away_rest,
+          COUNT(odds_ml_home)    as has_odds,
+          COUNT(context_completeness) as has_completeness
+        FROM pick_features
+        WHERE ${sportFilter}
+      `
+      : `
+        SELECT
+          COUNT(*) as total,
+          COUNT(home_pitcher_xwoba) as has_home_xwoba,
+          COUNT(away_pitcher_xwoba) as has_away_xwoba,
+          COUNT(home_pitcher_whiff) as has_home_whiff,
+          COUNT(away_pitcher_whiff) as has_away_whiff,
+          COUNT(home_lineup_avg_xwoba) as has_home_lineup,
+          COUNT(away_lineup_avg_xwoba) as has_away_lineup,
+          COUNT(temperature) as has_temperature,
+          COUNT(odds_ml_home) as has_odds,
+          COUNT(park_factor_overall) as has_park
+        FROM pick_features
+        WHERE ${sportFilter}
+      `;
+    const featureCoverage = await pool.query(featureCoverageSql);
 
-    const winRateByFeature = await pool.query(`
-      SELECT
-        CASE WHEN temperature < 50 THEN 'COLD (<50F)' WHEN temperature < 70 THEN 'MILD (50-70F)' ELSE 'WARM (70F+)' END as temp_bucket,
-        COUNT(*) FILTER (WHERE result = 'win') as wins,
-        COUNT(*) FILTER (WHERE result IN ('win','loss')) as total
-      FROM pick_features
-      WHERE temperature IS NOT NULL AND result IN ('win','loss')
-      GROUP BY temp_bucket
-      ORDER BY temp_bucket
-    `);
+    // winRateByTemperature only makes sense for MLB; NBA gets a rest-day bucket instead.
+    const winRateByFeature = sport === 'nba'
+      ? await pool.query(`
+          SELECT
+            CASE
+              WHEN home_rest_days = 0 OR away_rest_days = 0 THEN 'B2B PRESENT'
+              WHEN home_rest_days >= 3 OR away_rest_days >= 3 THEN '3+ REST DAYS'
+              ELSE '1-2 REST DAYS'
+            END as bucket,
+            COUNT(*) FILTER (WHERE result = 'win') as wins,
+            COUNT(*) FILTER (WHERE result IN ('win','loss')) as total
+          FROM pick_features
+          WHERE ${sportFilter}
+            AND result IN ('win','loss')
+            AND (home_rest_days IS NOT NULL OR away_rest_days IS NOT NULL)
+          GROUP BY bucket
+          ORDER BY bucket
+        `)
+      : await pool.query(`
+          SELECT
+            CASE WHEN temperature < 50 THEN 'COLD (<50F)' WHEN temperature < 70 THEN 'MILD (50-70F)' ELSE 'WARM (70F+)' END as temp_bucket,
+            COUNT(*) FILTER (WHERE result = 'win') as wins,
+            COUNT(*) FILTER (WHERE result IN ('win','loss')) as total
+          FROM pick_features
+          WHERE temperature IS NOT NULL AND result IN ('win','loss') AND ${sportFilter}
+          GROUP BY temp_bucket
+          ORDER BY temp_bucket
+        `);
 
     res.json({
       success: true,
       data: {
+        sport,
         summary: summary.rows[0],
         selectedMonth,
         monthOptions: monthOptions.rows,
@@ -3874,7 +3964,7 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
         records: monthRecords.rows,
         featureCoverage: featureCoverage.rows[0],
         winRateByTemperature: winRateByFeature.rows,
-        statcastCache: getCacheStatus(),
+        statcastCache: sport === 'mlb' ? getCacheStatus() : null,
       },
     });
   } catch (err) {
@@ -4012,6 +4102,7 @@ runMigrations()
   .then(() => runSprint3Migrations())
   .then(() => runAdminMLControlCenterMigrations())
   .then(() => runNbaScaffoldingMigrations())
+  .then(() => runNbaDatasetMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {

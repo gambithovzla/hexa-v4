@@ -239,8 +239,9 @@ export function normalizeExtracted(pickJson, ctx = {}) {
  * @param {object} args.gameData     — from getTodayGames(); used for matchup + game_pk
  * @param {string|null} args.chatSessionId  — oracle_sessions.id (linked back)
  * @param {string} args.lang         — 'en' | 'es'
+ * @param {'mlb'|'nba'} args.sport   — defaults to 'mlb' for backwards compat
  */
-export async function saveExtractedChatPick({ extracted, pickJson, userId, gameData, chatSessionId = null, lang = 'en' }) {
+export async function saveExtractedChatPick({ extracted, pickJson, userId, gameData, chatSessionId = null, lang = 'en', sport = 'mlb' }) {
   if (!extracted || !gameData) return { ok: false, reason: 'missing_extracted_or_game' };
 
   const away = gameData.teams?.away?.team?.name ?? gameData.teams?.away?.name ?? '?';
@@ -248,6 +249,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
   const matchup = `${away} @ ${home}`;
   const gamePk  = Number(gameData.gamePk);
   const gameDate = String(gameData.gameDate ?? gameData.officialDate ?? '').slice(0, 10) || null;
+  const sportNorm = String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
 
   const confidence = Number.isFinite(Number(pickJson?.confidence))
     ? Math.max(0, Math.min(100, Math.round(Number(pickJson.confidence))))
@@ -257,8 +259,8 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
     const pickRes = await pool.query(
       `INSERT INTO picks
          (user_id, type, matchup, pick, oracle_confidence, oracle_report,
-          model, language, result, source, chat_session_id, game_pk, game_date)
-       VALUES ($1,'chat',$2,$3,$4,$5,$6,$7,'pending','oracle_chat',$8,$9,$10)
+          model, language, result, source, chat_session_id, game_pk, game_date, sport)
+       VALUES ($1,'chat',$2,$3,$4,$5,$6,$7,'pending','oracle_chat',$8,$9,$10,$11)
        RETURNING id`,
       [
         userId,
@@ -271,6 +273,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
         chatSessionId,
         Number.isFinite(gamePk) ? gamePk : null,
         gameDate,
+        sportNorm,
       ]
     );
     const pickId = pickRes.rows[0]?.id ?? null;
@@ -280,8 +283,8 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
     await pool.query(
       `INSERT INTO pick_features
          (pick_id, game_pk, game_date, pick, market_type, side, line,
-          prop_kind, prop_player_id, oracle_confidence, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'oracle_chat')`,
+          prop_kind, prop_player_id, oracle_confidence, source, sport)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'oracle_chat',$11)`,
       [
         pickId,
         Number.isFinite(gamePk) ? gamePk : null,
@@ -293,6 +296,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
         extracted.prop_kind,
         null,
         confidence,
+        sportNorm,
       ]
     );
 
@@ -319,7 +323,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
  * @param {string} args.lang
  * @returns {Promise<{ answer: string, picked: object|null }>}
  */
-export async function processChatAnswer({ rawAnswer, question, userId, gameData, chatSessionId, lang = 'en' }) {
+export async function processChatAnswer({ rawAnswer, question, userId, gameData, chatSessionId, lang = 'en', sport = 'mlb' }) {
   // Step 1 — JSON tail
   const { cleanAnswer, pickJson: tailJson } = extractJsonTail(rawAnswer);
   let pickJson = tailJson;
@@ -343,7 +347,7 @@ export async function processChatAnswer({ rawAnswer, question, userId, gameData,
   }
 
   const saveResult = await saveExtractedChatPick({
-    extracted, pickJson, userId, gameData, chatSessionId, lang,
+    extracted, pickJson, userId, gameData, chatSessionId, lang, sport,
   });
 
   return {

@@ -20,6 +20,7 @@
 import pool from './db.js';
 import { getNbaGamesForDate } from './nba-api.js';
 import { resolvePickFromFinalState, tokenMatchesTeam } from './pick-resolver.js';
+import { updateShadowModelRunsForGame } from './shadow-model.js';
 
 // ── NBA game → resolver-compatible game object ────────────────────────────────
 
@@ -174,6 +175,22 @@ export async function resolveNbaPendingPicks() {
         if (result === 'win')  summary.wins++;
         if (result === 'loss') summary.losses++;
         if (result === 'push') summary.pushes++;
+
+        // Back-fill any pending NBA shadow_model_runs row for this game so
+        // the admin shadow dashboard shows oracle vs shadow vs actual.
+        try {
+          await updateShadowModelRunsForGame({
+            gamePk:     parseInt(String(nbaGame.game_id), 10),
+            homeTeamId: nbaGame.home_team_id ?? null,
+            awayTeamId: nbaGame.away_team_id ?? null,
+            homeAbbr:   nbaGame.home_team_abbr ?? null,
+            awayAbbr:   nbaGame.away_team_abbr ?? null,
+            homeScore:  nbaGame.home_score,
+            awayScore:  nbaGame.away_score,
+          });
+        } catch (err) {
+          console.warn(`[pick-resolver-nba] shadow_model back-fill failed for game ${nbaGame.game_id}: ${err.message}`);
+        }
 
         console.log(
           `[pick-resolver-nba] Pick #${pick.id} "${pick.pick}" → ${result.toUpperCase()} ` +

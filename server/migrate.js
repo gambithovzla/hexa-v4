@@ -724,3 +724,65 @@ export async function runNbaScaffoldingMigrations() {
     client.release();
   }
 }
+
+/**
+ * Sprint 7.1 — NBA dataset + shadow_model isolation.
+ *
+ * Adds `sport` discriminator to `shadow_model_runs` so we can keep MLB and
+ * NBA validator runs cleanly separated, and tacks NBA-specific feature
+ * columns onto `pick_features` so a single feature store works for both
+ * sports without losing the per-pitch MLB schema.
+ *
+ * All changes are nullable + idempotent (`IF NOT EXISTS`). MLB-only rows
+ * keep their NBA columns NULL and vice versa.
+ */
+export async function runNbaDatasetMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── shadow_model_runs: sport discriminator ──────────────────────────────
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS sport VARCHAR(10) DEFAULT 'mlb'`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shadow_model_runs_sport ON shadow_model_runs(sport)`);
+
+    // ── pick_features: NBA team identity (already in shadow_model_runs) ─────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_team_id INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_team_id INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_team_abbr VARCHAR(8)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_team_abbr VARCHAR(8)`);
+
+    // ── pick_features: NBA advanced team stats ──────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_off_rating DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_off_rating DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_def_rating DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_def_rating DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_net_rating DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_net_rating DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_pace DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_pace DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_ts_pct DECIMAL(6,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_ts_pct DECIMAL(6,4)`);
+
+    // ── pick_features: NBA context (rest, B2B, injuries, form) ──────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_rest_days INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_rest_days INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_is_b2b BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_is_b2b BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_injuries_severe INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_injuries_severe INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_last10_wins INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_last10_wins INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS context_completeness DECIMAL(5,4)`);
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pick_features_sport ON pick_features(sport)`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] sprint-7.1 ready (shadow_model_runs.sport + pick_features NBA columns)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] sprint-7.1 migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

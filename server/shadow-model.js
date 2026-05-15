@@ -475,8 +475,12 @@ export async function refreshPendingShadowModelRuns(limit = 25) {
   return refreshed;
 }
 
-export async function getShadowModeDashboard(limit = 50) {
+export async function getShadowModeDashboard(limit = 50, sport = 'mlb') {
   const safeLimit = Math.max(10, Math.min(200, toNumber(limit) ?? 50));
+  const sportNorm = String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+  // Inline literal — sportNorm comes from a normalized whitelist (mlb|nba),
+  // safe to interpolate (no user input ever reaches here unescaped).
+  const sportClause = `COALESCE(sport,'mlb') = '${sportNorm}'`;
 
   const [summaryRes, sourceRes, recentRes] = await Promise.all([
     pool.query(`
@@ -492,6 +496,7 @@ export async function getShadowModeDashboard(limit = 50) {
         COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL AND oracle_predicted_winner_id = actual_winner_id AND shadow_predicted_winner_id <> actual_winner_id) AS oracle_only_correct,
         COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL AND shadow_predicted_winner_id = actual_winner_id AND oracle_predicted_winner_id <> actual_winner_id) AS shadow_only_correct
       FROM shadow_model_runs
+      WHERE ${sportClause}
     `),
     pool.query(`
       SELECT
@@ -500,6 +505,7 @@ export async function getShadowModeDashboard(limit = 50) {
         COUNT(*) FILTER (WHERE actual_status <> 'pending') AS resolved,
         COUNT(*) FILTER (WHERE agree_with_oracle IS FALSE) AS disagreements
       FROM shadow_model_runs
+      WHERE ${sportClause}
       GROUP BY source_type
       ORDER BY total DESC
     `),
@@ -512,6 +518,7 @@ export async function getShadowModeDashboard(limit = 50) {
          actual_winner_abbr, actual_home_score, actual_away_score, actual_status,
          user_email, pick_time_lima
        FROM shadow_model_runs
+       WHERE ${sportClause}
        ORDER BY created_at DESC
        LIMIT $1`,
       [safeLimit]
@@ -519,7 +526,7 @@ export async function getShadowModeDashboard(limit = 50) {
   ]);
 
   return {
-    config: getShadowModeConfig(),
+    config: { ...getShadowModeConfig(), sport: sportNorm },
     summary: summaryRes.rows[0] ?? {},
     bySource: sourceRes.rows,
     recent: recentRes.rows,
