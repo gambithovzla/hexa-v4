@@ -80,6 +80,7 @@ import {
   predictEnsemble as predictMlEnsemble,
 } from './services/mlModelClient.js';
 import { normalizePickSport, validatePickSavePayload } from './services/picksPayloadGuardrails.js';
+import { KNOWN_SPORTS, normalizeSportFilter as normalizeKnownSportFilter } from './sports.js';
 
 dotenv.config();
 
@@ -2790,13 +2791,17 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
 // GET /api/picks — obtiene el historial del usuario
 app.get('/api/picks', verifyToken, async (req, res) => {
   try {
-    const sport = String(req.query?.sport ?? '').toLowerCase();
-    if (sport && sport !== 'mlb' && sport !== 'nba') {
-      return res.status(400).json({ success: false, error: 'sport must be mlb or nba when provided' });
+    const sport = normalizeKnownSportFilter(req.query?.sport, { allowAll: false, fallback: '' });
+    const rawSport = String(req.query?.sport ?? '').toLowerCase();
+    if (rawSport && !sport) {
+      return res.status(400).json({
+        success: false,
+        error: `sport must be one of: ${KNOWN_SPORTS.join(', ')}`,
+      });
     }
-    const hasSportFilter = sport === 'mlb' || sport === 'nba';
+    const hasSportFilter = Boolean(sport);
     const historyQuery = hasSportFilter
-      ? 'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL AND sport = $2 ORDER BY created_at DESC LIMIT 100'
+      ? 'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL AND COALESCE(sport, \'mlb\') = $2 ORDER BY created_at DESC LIMIT 100'
       : 'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100';
     const historyParams = hasSportFilter ? [req.user.id, sport] : [req.user.id];
     const summaryQuery = hasSportFilter
@@ -2807,7 +2812,7 @@ app.get('/api/picks', verifyToken, async (req, res) => {
            COUNT(*) FILTER (WHERE result = 'push') AS pushes,
            COUNT(*) FILTER (WHERE result = 'pending' OR result IS NULL) AS pending
          FROM picks
-         WHERE user_id = $1 AND deleted_at IS NULL AND sport = $2`
+        WHERE user_id = $1 AND deleted_at IS NULL AND COALESCE(sport, 'mlb') = $2`
       : `SELECT
            COUNT(*) AS total_picks,
            COUNT(*) FILTER (WHERE result = 'win') AS wins,

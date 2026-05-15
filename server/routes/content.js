@@ -261,16 +261,16 @@ router.get('/insights', async (req, res) => {
   }
 });
 
-// ── GET /api/content/v1/performance/summary?period=7|30|season ───────────────
+// ── GET /api/content/v1/performance/summary?period=7|30|season&sport=... ─────
 // Public ROI / win-rate summary. Always available (no performance_public flag
 // needed — this route is protected by API key instead).
 router.get('/performance/summary', async (req, res) => {
   try {
-    const stats = await computePublicStats(req.query.period ?? '30');
+    const stats = await computePublicStats(req.query.period ?? '30', req.query.sport ?? 'all');
     logRequest(req, 200);
     return res.json({ success: true, data: toPerformanceDTO(stats) });
   } catch (err) {
-    if (err.code === 'INVALID_PERIOD') {
+    if (err.code === 'INVALID_PERIOD' || err.code === 'INVALID_SPORT') {
       return res.status(400).json({ success: false, error: err.message });
     }
     logRequest(req, 500);

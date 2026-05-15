@@ -6,6 +6,7 @@
  *
  * Query params:
  *   period: 7 | 30 | 'season' (default 30)
+ *   sport: all | mlb | nba | nfl | soccer | nhl | tennis (default all)
  */
 
 import { Router } from 'express';
@@ -56,10 +57,10 @@ async function gatePublicStats(req, res, next) {
 
 router.get('/public-stats', gatePublicStats, async (req, res) => {
   try {
-    const data = await computePublicStats(req.query.period ?? '30');
+    const data = await computePublicStats(req.query.period ?? '30', req.query.sport ?? 'all');
     return res.json({ success: true, data });
   } catch (err) {
-    if (err.code === 'INVALID_PERIOD') {
+    if (err.code === 'INVALID_PERIOD' || err.code === 'INVALID_SPORT') {
       return res.status(400).json({ success: false, error: err.message });
     }
     const msg = process.env.NODE_ENV === 'production'

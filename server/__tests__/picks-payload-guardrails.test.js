@@ -17,12 +17,14 @@ test('validatePickSavePayload accepts a complete payload', () => {
   assert.equal(err, null);
 });
 
-test('normalizePickSport defaults to mlb and allows nba', () => {
+test('normalizePickSport defaults to mlb and allows known sports', () => {
   assert.equal(normalizePickSport(undefined), 'mlb');
   assert.equal(normalizePickSport(''), 'mlb');
   assert.equal(normalizePickSport('mlb'), 'mlb');
   assert.equal(normalizePickSport('nba'), 'nba');
   assert.equal(normalizePickSport('NBA'), 'nba');
-  assert.equal(normalizePickSport('soccer'), 'mlb');
+  assert.equal(normalizePickSport('soccer'), 'soccer');
+  assert.equal(normalizePickSport('nfl'), 'nfl');
+  assert.equal(normalizePickSport('unknown-sport'), 'mlb');
 });
 

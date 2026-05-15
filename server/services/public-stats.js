@@ -7,6 +7,7 @@
  */
 
 import pool from '../db.js';
+import { KNOWN_SPORTS, normalizeSportFilter } from '../sports.js';
 
 function parseJsonMaybe(value) {
   if (!value || typeof value !== 'string') return value;
@@ -67,12 +68,14 @@ function buildSummary(statsMap) {
 }
 
 /**
- * computePublicStats(period)
+ * computePublicStats(period, sport)
  *   period: '7' | '30' | '90' | 'ytd' | 'season'
+ *   sport:  '' | 'all' | known sport key
  * Throws { code: 'INVALID_PERIOD' } on bad input so the caller can map to 400.
  */
-export async function computePublicStats(period) {
+export async function computePublicStats(period, sport = '') {
   const p = String(period ?? '30');
+  const sportFilter = resolvePublicStatsSportFilter(sport);
 
   let dateFilter;
   if (p === 'season') {
@@ -91,14 +94,20 @@ export async function computePublicStats(period) {
     dateFilter = `created_at >= NOW() - INTERVAL '${days} days'`;
   }
 
+  const whereSport = sportFilter && sportFilter !== 'all'
+    ? `AND COALESCE(sport, 'mlb') = $1`
+    : '';
+  const params = sportFilter && sportFilter !== 'all' ? [sportFilter] : [];
+
   const { rows } = await pool.query(`
-    SELECT id, pick, best_pick, model, result, odds_at_pick, created_at
+    SELECT id, pick, best_pick, model, result, odds_at_pick, created_at, sport
     FROM   picks
     WHERE  LOWER(result) IN ('won', 'lost', 'push', 'win', 'loss')
       AND  deleted_at IS NULL
       AND  ${dateFilter}
+      ${whereSport}
     ORDER  BY created_at ASC
-  `);
+  `, params);
 
   let wins = 0, losses = 0, pushes = 0;
   let roiUnits = 0, totalPicksForROI = 0;
@@ -203,6 +212,7 @@ export async function computePublicStats(period) {
     : totalWinUnits > 0 ? 99.99 : 1.0;
 
   return {
+    sport: sportFilter && sportFilter !== 'all' ? sportFilter : 'all',
     totalPicks,
     wins,
     losses,
@@ -221,4 +231,15 @@ export async function computePublicStats(period) {
     roiCurve,
     equityCurve,
   };
+}
+
+export function resolvePublicStatsSportFilter(sport) {
+  const rawSport = String(sport ?? '').toLowerCase();
+  const sportFilter = normalizeSportFilter(rawSport, { allowAll: true, fallback: '' });
+  if (rawSport && !sportFilter) {
+    const err = new Error(`sport must be one of: ${KNOWN_SPORTS.join(', ')}, or all`);
+    err.code = 'INVALID_SPORT';
+    throw err;
+  }
+  return sportFilter;
 }

@@ -51,6 +51,9 @@ import SportSwitcher       from './components/SportSwitcher';
 import WhatsAppSupport     from './components/WhatsAppSupport';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
+import { useSport } from './context/SportContext';
+import { getActiveSportOptions, SPORT_META } from './config/sports';
+import { getSportCapability } from './config/sportCapabilities';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -335,12 +338,41 @@ function SportComingSoon({ lang, title, subtitle }) {
   );
 }
 
+function LockedModuleView({ lang, onBack, title, subtitle }) {
+  return (
+    <Box sx={{ minHeight: '100vh', bgcolor: C.bg, color: C.textPrimary }}>
+      <Box sx={{ p: 2 }}>
+        <Box
+          component="button"
+          onClick={onBack}
+          sx={{
+            background: 'transparent',
+            border: `1px solid ${C.cyanLine}`,
+            color: C.textMuted,
+            fontFamily: MONO,
+            fontSize: '0.65rem',
+            letterSpacing: '2px',
+            padding: '6px 14px',
+            cursor: 'pointer',
+            '&:hover': { color: C.cyan },
+          }}
+        >
+          ← BACK
+        </Box>
+      </Box>
+      <Box sx={{ maxWidth: 980, mx: 'auto', px: 3 }}>
+        <SportComingSoon lang={lang} title={title} subtitle={subtitle} />
+      </Box>
+    </Box>
+  );
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const { sport, setSport } = useSport();
   const [lang,              setLang]              = useState(() => localStorage.getItem('hexa_lang') || 'es');
   const [activeTab,         setActiveTab]         = useState('pizarra');
-  const [sport,             setSport]             = useState('mlb');
   const [singleGame,        setSingleGame]        = useState(null);
   const [parlayGames,       setParlayGames]       = useState([]);
   const [batchGames,        setBatchGames]        = useState([]);
@@ -353,6 +385,7 @@ export default function App() {
   const [performancePublic, setPerformancePublic] = useState(false);
   const { isMobileExperience } = useShellMode();
   const adminOnlyTabs = ['parlay', 'tools', 'batch', 'synergy'];
+  const sportOptions = getActiveSportOptions();
 
   // Check admin status on mount
   useEffect(() => {
@@ -380,6 +413,12 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
+    setSingleGame(null);
+    setParlayGames([]);
+    setBatchGames([]);
+  }, [sport]);
+
+  useEffect(() => {
     if (!isAdmin && adminOnlyTabs.includes(activeTab)) {
       setActiveTab('pizarra');
     }
@@ -390,6 +429,15 @@ export default function App() {
   const { addPick } = useHistory();
   const selectedMatchupLabel = getMatchupLabel(singleGame);
   const showMobileAnalysisFull = isMobileExperience && activeTab === 'game' && Boolean(singleGame);
+  const sportAwareTabs = new Set(['pizarra', 'standings', 'game', 'parlay', 'history', 'live', 'gameday', 'synergy', 'batch']);
+
+  const boardCapability = getSportCapability('board', sport, lang);
+  const oracleChatCapability = getSportCapability('oracleChat', sport, lang);
+  const parlayCapability = getSportCapability('parlayBuilder', sport, lang);
+  const parlayArchitectCapability = getSportCapability('parlayArchitect', sport, lang);
+  const batchCapability = getSportCapability('batchScan', sport, lang);
+  const gameDetailCapability = getSportCapability('gameDetail', sport, lang);
+  const sportLabel = SPORT_META[sport]?.shortLabel ?? sport.toUpperCase();
 
   // When mobile switches into analysis view (game selected), jump to top so the
   // MobileBackBar is the first thing the user sees instead of mid-panel scroll.
@@ -456,7 +504,17 @@ export default function App() {
 
   // Render Oracle Chat as a full-page takeover (admin only)
   if (showOracleChat) {
-    return <OracleChat lang={lang} onBack={() => setShowOracleChat(false)} />;
+    if (!oracleChatCapability.enabled) {
+      return (
+        <LockedModuleView
+          lang={lang}
+          onBack={() => setShowOracleChat(false)}
+          title={lang === 'es' ? `Oracle Chat ${sportLabel}` : `${sportLabel} Oracle Chat`}
+          subtitle={oracleChatCapability.message}
+        />
+      );
+    }
+    return <OracleChat lang={lang} sport={sport} onBack={() => setShowOracleChat(false)} />;
   }
 
   // Render Performance Dashboard as a full-page takeover (admin always;
@@ -501,16 +559,28 @@ export default function App() {
             width:     '100%',
           }}
         >
+          {sportAwareTabs.has(activeTab) && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.16em' }}>
+                {lang === 'es' ? 'DEPORTE ACTIVO' : 'ACTIVE SPORT'} · {sportLabel}
+              </Box>
+              <SportSwitcher sport={sport} onChange={setSport} options={sportOptions} />
+            </Box>
+          )}
+
           {/* Pizarra H.E.X.A. — landing tab */}
           {activeTab === 'pizarra' && (
-            <HexaBoard lang={lang} />
+            boardCapability.enabled
+              ? <HexaBoard lang={lang} />
+              : <SportComingSoon
+                lang={lang}
+                title={lang === 'es' ? `Pizarra ${sportLabel}` : `${sportLabel} Board`}
+                subtitle={boardCapability.message}
+              />
           )}
 
           {activeTab === 'standings' && (
             <Box sx={{ display: 'grid', gap: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <SportSwitcher sport={sport} onChange={setSport} />
-              </Box>
               {sport === 'nba'
                 ? <NBAStandingsPanel lang={lang} />
                 : <MLBStandingsPanel lang={lang} />}
@@ -564,22 +634,30 @@ export default function App() {
 
           {/* Parlay */}
           {activeTab === 'parlay' && (
-            <Box sx={TAB_LAYOUT}>
-              <GameSelector
-                mode="parlay"
-                onSelectMultiple={setParlayGames}
-                onDateChange={setSelectedDate}
-                language={lang}
-              />
-              <AnalysisPanel
-                mode="parlay"
-                selectedGames={parlayGames}
-                selectedDate={selectedDate}
+            parlayCapability.enabled ? (
+              <Box sx={TAB_LAYOUT}>
+                <GameSelector
+                  mode="parlay"
+                  onSelectMultiple={setParlayGames}
+                  onDateChange={setSelectedDate}
+                  language={lang}
+                />
+                <AnalysisPanel
+                  mode="parlay"
+                  selectedGames={parlayGames}
+                  selectedDate={selectedDate}
+                  lang={lang}
+                  onSave={addPick}
+                  setIsAnalyzing={setIsAnalyzing}
+                />
+              </Box>
+            ) : (
+              <SportComingSoon
                 lang={lang}
-                onSave={addPick}
-                setIsAnalyzing={setIsAnalyzing}
+                title={lang === 'es' ? `Parlay ${sportLabel}` : `${sportLabel} Parlay`}
+                subtitle={parlayCapability.message}
               />
-            </Box>
+            )
           )}
 
           {/* Semana — public weekly showcase (no auth required) */}
@@ -606,9 +684,6 @@ export default function App() {
           {/* Live Tracker */}
           {activeTab === 'live' && (
             <Box sx={{ display: 'grid', gap: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <SportSwitcher sport={sport} onChange={setSport} />
-              </Box>
               {sport === 'nba'
                 ? <NBALiveTracker lang={lang} />
                 : <LiveTracker lang={lang} />}
@@ -618,12 +693,13 @@ export default function App() {
           {/* Gameday play-by-play detail */}
           {activeTab === 'gameday' && (
             <Box sx={{ display: 'grid', gap: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <SportSwitcher sport={sport} onChange={setSport} />
-              </Box>
-              {sport === 'nba'
-                ? <SportComingSoon lang={lang} title={lang === 'es' ? 'Detalles NBA' : 'NBA Details'} subtitle={lang === 'es' ? 'Box score y play-by-play NBA llegan en el próximo sprint.' : 'NBA box score and play-by-play shipping in the next sprint.'} />
-                : <GameDayDetail lang={lang} />}
+              {gameDetailCapability.enabled
+                ? <GameDayDetail lang={lang} />
+                : <SportComingSoon
+                  lang={lang}
+                  title={lang === 'es' ? `Detalles ${sportLabel}` : `${sportLabel} Details`}
+                  subtitle={gameDetailCapability.message}
+                />}
             </Box>
           )}
 
@@ -634,23 +710,37 @@ export default function App() {
 
           {/* Parlay Architect — Synergy Engine (admin only) */}
           {activeTab === 'synergy' && isAdmin && (
-            <ParlayArchitect lang={lang} />
+            parlayArchitectCapability.enabled
+              ? <ParlayArchitect lang={lang} sport={sport} />
+              : <SportComingSoon
+                lang={lang}
+                title={lang === 'es' ? `Arquitecto ${sportLabel}` : `${sportLabel} Architect`}
+                subtitle={parlayArchitectCapability.message}
+              />
           )}
 
           {/* Batch Scan (admin only) */}
           {activeTab === 'batch' && isAdmin && (
-            <Box sx={TAB_LAYOUT}>
-              <GameSelector
-                mode="fullDay"
-                onSelectMultiple={setBatchGames}
-                language={lang}
-              />
-              <BatchScanPanel
-                selectedGames={batchGames}
+            batchCapability.enabled ? (
+              <Box sx={TAB_LAYOUT}>
+                <GameSelector
+                  mode="fullDay"
+                  onSelectMultiple={setBatchGames}
+                  language={lang}
+                />
+                <BatchScanPanel
+                  selectedGames={batchGames}
+                  lang={lang}
+                  setIsAnalyzing={setIsAnalyzing}
+                />
+              </Box>
+            ) : (
+              <SportComingSoon
                 lang={lang}
-                setIsAnalyzing={setIsAnalyzing}
+                title={lang === 'es' ? `Batch ${sportLabel}` : `${sportLabel} Batch`}
+                subtitle={batchCapability.message}
               />
-            </Box>
+            )
           )}
         </Box>
 
