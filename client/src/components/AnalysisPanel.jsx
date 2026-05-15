@@ -13,6 +13,7 @@ import { useState, useEffect } from 'react';
 import { Box, Typography, Switch, Slider } from '@mui/material';
 import ResultCard from './ResultCard';
 import AuthModal from './AuthModal';
+import NbaContextMetaBadge from './NbaContextMetaBadge';
 import { useAuth } from '../store/authStore';
 import { C, BARLOW, MONO, SANS } from '../theme';
 
@@ -1601,7 +1602,16 @@ export default function AnalysisPanel({
 
       {/* ── Result ── */}
       {!loading && !error && hexaData && (
-        <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} />
+        <>
+          {isAdmin && sport === 'nba' && result?.meta?.context_meta && (
+            <NbaContextMetaBadge
+              contextMeta={result.meta.context_meta}
+              oddsSource={result.meta.oddsSource ?? null}
+              lang={lang}
+            />
+          )}
+          <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} />
+        </>
       )}
 
       {/* ── Empty state ── */}

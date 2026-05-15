@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-15 — Sprints 0-5 cerrados; Sprint 6a/6b en cierre operativo; NBA hardening (7.0) activo.
+**Última actualización**: 2026-05-15 — Sprints 0-5 cerrados; Sprint 6a/6b en cierre operativo; NBA hardening (7.0) cerrado en código (injuries + odds server-side + context_meta).
 
 ---
 
@@ -130,7 +130,7 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 #### Sprint 7.0 — NBA hardening gate (hotfix obligatorio antes de abrir) (~1-2 semanas)
 
-Estado: 🔄 en progreso (2026-05-15).
+Estado: ✅ cerrado en código (2026-05-15). Falta solo validación end-to-end con tráfico real antes del flip público.
 
 Objetivo: eliminar contaminación MLB↔NBA en flujo de picks y cerrar errores de modo SAFE en NBA antes de crecer features.
 
@@ -148,12 +148,16 @@ Entregables:
   - ✅ inserts NBA persisten `sport='nba'` explícitamente.
   - ✅ listados/filtros base aislados por `sport` en historial/lifecycle.
   - ✅ resolver/tracking MLB ignora picks NBA pendientes.
+- Calidad de contexto NBA:
+  - ✅ Injuries/status estructurados desde ESPN league-feed ([server/nba-api.js](../server/nba-api.js): `getNbaLeagueInjuries`, `findTeamInjuries`) integrados en `buildNbaGameContext` y render en bloque por equipo.
+  - ✅ Market odds server-side vía The Odds API `basketball_nba` ([server/nba-odds.js](../server/nba-odds.js)). Routes resuelven odds si el cliente no las envía; persistencia y prompt usan la misma fuente.
+  - ✅ `context_meta` expuesto en `meta` de `/api/nba/analyze/game` y `/analyze/chat`: `sources`, `completeness`, `overallCompleteness`, `staleFlags`. Lookup `team_id ↔ team_abbr` con fallback para evitar bloques "data unavailable" cuando la fuente es ESPN.
 
 Criterio de éxito:
 - ✅ Un análisis NBA guardado aparece como NBA en historial, breakdown y cards.
 - ✅ Cero errores tipo "Game not found" por cruce de SAFE MLB en flujo NBA.
 - ✅ Ninguna regresión detectada en suite MLB crítica.
-- ⏳ Pendiente para cerrar 7.0: injuries/status + odds server-side + `context_meta`.
+- ✅ Contexto NBA incluye injuries y odds server-side; `context_meta` permite a la UI admin filtrar/anotar picks con `staleFlags`.
 
 #### Sprint 7a — Scaffolding de datos NBA (~3 semanas)
 

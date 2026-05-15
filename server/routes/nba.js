@@ -16,6 +16,7 @@ import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
 import { getNbaGamesForDate } from '../nba-api.js';
 import { buildNbaGameContext } from '../nba-context-builder.js';
 import { analyzeNbaGame, analyzeNbaChat } from '../services/oracleNba.js';
+import { getNbaGameOdds, matchNbaOddsToGame, buildMarketOddsForGame } from '../nba-odds.js';
 
 const router = Router();
 
@@ -28,6 +29,29 @@ function nbaEnabled(req, res, next) {
 
 function safeErr(err) {
   return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
+}
+
+/**
+ * If the client didn't pass marketOdds, try fetching server-side from The Odds API.
+ * Returns { marketOdds, source } where source ∈ 'client' | 'server' | null.
+ * Never throws — failures just mean the LLM analyses without market context.
+ */
+async function resolveMarketOdds({ clientMarketOdds, date, game }) {
+  if (clientMarketOdds) {
+    return { marketOdds: { ...clientMarketOdds, provided: 'client' }, source: 'client' };
+  }
+  try {
+    const events = await getNbaGameOdds({ date });
+    if (!events.length) return { marketOdds: null, source: null };
+    const match = matchNbaOddsToGame(events, game.home_team_name, game.away_team_name);
+    if (!match) return { marketOdds: null, source: null };
+    const odds = buildMarketOddsForGame(match);
+    if (!odds) return { marketOdds: null, source: null };
+    return { marketOdds: { ...odds, provided: 'server' }, source: 'server' };
+  } catch (err) {
+    console.warn(`[nba-route] server-side odds lookup failed: ${err.message}`);
+    return { marketOdds: null, source: null };
+  }
 }
 
 // ── Pick persistence ───────────────────────────────────────────────────────────
@@ -112,11 +136,20 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
 
     const matchup = `${game.away_team_abbr ?? game.away_team_name ?? 'AWAY'} @ ${game.home_team_abbr ?? game.home_team_name ?? 'HOME'}`;
 
+    const { marketOdds: resolvedOdds, source: oddsSource } = await resolveMarketOdds({
+      clientMarketOdds: marketOdds,
+      date,
+      game,
+    });
+
     const context = await buildNbaGameContext({
       homeTeamId: game.home_team_id,
       awayTeamId: game.away_team_id,
+      homeTeamAbbr: game.home_team_abbr ?? null,
+      awayTeamAbbr: game.away_team_abbr ?? null,
       gameDate: date,
       season: game.season,
+      marketOdds: resolvedOdds,
     });
 
     const result = await analyzeNbaGame({
@@ -125,7 +158,7 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
       lang,
       riskProfile,
       userBankroll: bankroll != null ? Number(bankroll) : undefined,
-      marketOdds,
+      marketOdds: resolvedOdds,
       engine,
     });
 
@@ -149,10 +182,10 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
       language: lang,
       gameId,
       gameDate: date,
-      marketOdds,
+      marketOdds: resolvedOdds,
     });
 
-    console.log(`[nba-route] pick saved id=${savedPick?.id} game=${gameId} conf=${result.data?.master_prediction?.oracle_confidence}`);
+    console.log(`[nba-route] pick saved id=${savedPick?.id} game=${gameId} conf=${result.data?.master_prediction?.oracle_confidence} odds=${oddsSource ?? 'none'} flags=${context.context_meta?.staleFlags?.length ?? 0}`);
 
     return res.json({
       success: true,
@@ -178,12 +211,14 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
         sport:             savedPick.sport,
       } : null,
       meta: {
-        model:      result.model,
-        stopReason: result.stopReason,
-        usage:      result.usage,
+        model:        result.model,
+        stopReason:   result.stopReason,
+        usage:        result.usage,
         matchup,
-        gameDate:   date,
-        pickId:     savedPick?.id ?? null,
+        gameDate:     date,
+        pickId:       savedPick?.id ?? null,
+        oddsSource,
+        context_meta: context.context_meta ?? null,
       },
     });
   } catch (err) {
@@ -215,11 +250,20 @@ router.post('/analyze/chat', nbaEnabled, verifyToken, requireAdmin, async (req, 
 
     const matchup = `${game.away_team_abbr ?? 'AWAY'} @ ${game.home_team_abbr ?? 'HOME'}`;
 
+    const { marketOdds: resolvedOdds, source: oddsSource } = await resolveMarketOdds({
+      clientMarketOdds: marketOdds,
+      date,
+      game,
+    });
+
     const context = await buildNbaGameContext({
       homeTeamId: game.home_team_id,
       awayTeamId: game.away_team_id,
+      homeTeamAbbr: game.home_team_abbr ?? null,
+      awayTeamAbbr: game.away_team_abbr ?? null,
       gameDate: date,
       season: game.season,
+      marketOdds: resolvedOdds,
     });
 
     const result = await analyzeNbaChat({
@@ -227,17 +271,19 @@ router.post('/analyze/chat', nbaEnabled, verifyToken, requireAdmin, async (req, 
       gameDescription: `${matchup} — ${date}`,
       question,
       lang,
-      marketOdds,
+      marketOdds: resolvedOdds,
     });
 
     return res.json({
       success: true,
       text: result.text,
       meta: {
-        model:    result.model,
-        usage:    result.usage,
+        model:        result.model,
+        usage:        result.usage,
         matchup,
-        gameDate: date,
+        gameDate:     date,
+        oddsSource,
+        context_meta: context.context_meta ?? null,
       },
     });
   } catch (err) {
