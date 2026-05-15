@@ -116,6 +116,7 @@ Desde la raíz ([package.json](package.json)):
 | `npm run dev:all` | API + cliente en paralelo (`concurrently`) |
 | `npm run audit` | Diagnóstico del sistema ([scripts/system-audit.js](scripts/system-audit.js)) |
 | `npm run smoke:mlb` | Smoke test de release MLB (endpoints críticos `/api/games`, `/api/teams`, `/api/hexa/board`) |
+| `npm run smoke:nba` | Smoke test de release NBA (`/api/nba/games`, `/api/nba/teams`; con `SMOKE_ADMIN_TOKEN`+`SMOKE_NBA_GAME_ID` valida también `/api/nba/analyze/game` con `context_meta`) |
 | `npm run test:mlb:critical` | Suite anti-regresión MLB (resolver, closing-line, guardrails `/api/picks`, admin equity) |
 | `npm run verify:ml:persistence` | Post-deploy: valida `/health` del sidecar ML (volume + modelos cargados) |
 | `npm run test:parlay` | Tests del Parlay Synergy Engine |
@@ -284,6 +285,14 @@ Sprint 7 completado en su mayor parte:
   - `HistoryPanel` + `useHistory` filtrados por deporte
   - resolver/tracking MLB ignora picks NBA pendientes
 - ✅ **7.0 hotfix (SAFE/props)** — SAFE bloqueado en NBA y Player Props NBA rechazado server-side.
+- ✅ **Sprint 7.0 hardening** — injuries/status + odds server-side + context_meta:
+  - `nba-api.js`: `getNbaLeagueInjuries()` vía ESPN con stale-cache fallback
+  - `nba-odds.js`: módulo NBA aislado (nunca toca frozen `odds-api.js`), dual-key fallback, fuzzy team matching
+  - `nba-context-builder.js`: bloque de injuries por equipo, `context_meta` (completeness, staleFlags, sources)
+  - `oracleNba.js`: `describeInjuriesBlock` en el contexto serializado, `DATA QUALITY` footer
+  - `routes/nba.js`: `resolveMarketOdds` client→server fallback, `meta.oddsSource` + `meta.context_meta` en respuesta
+  - `NbaContextMetaBadge.jsx`: panel admin-only (completeness%, oddsSource, injuries, stale flags)
+  - `scripts/smoke/nba-release-smoke.js` + `npm run smoke:nba`
 - ⏳ **7e** — NBA ML sidecar: condicional, post ~500 picks NBA resueltos.
 
 ### Próximas fases — hardening
@@ -301,9 +310,9 @@ Escala de referencia: 0-10 por criterio. Para apertura publica de un deporte: sc
 |---|---:|---:|---:|
 | Data depth pregame (features contextuales) | 9.5 | 6.5 | 8.0 |
 | Data quality live (latencia + disponibilidad) | 8.5 | 7.0 | 8.0 |
-| Lineup/Injury verification estructurada | 9.0 | 5.5 | 8.0 |
+| Lineup/Injury verification estructurada | 9.0 | 7.0 | 8.0 |
 | Market coverage soportada por data real | 9.0 | 6.0 | 8.0 |
-| Guardrails LLM (schema + fallbacks + policy) | 8.5 | 7.0 | 8.0 |
+| Guardrails LLM (schema + fallbacks + policy) | 8.5 | 7.5 | 8.0 |
 | Pick lifecycle (tracking -> resolver -> postmortem) | 9.0 | 7.5 | 8.0 |
 | Calibration/ROI observables por mercado | 8.5 | 6.0 | 8.0 |
 | Isolation por deporte (sin contaminacion cruzada) | 8.5 | 6.5 | 8.5 |
@@ -313,7 +322,7 @@ Escala de referencia: 0-10 por criterio. Para apertura publica de un deporte: sc
 - SAFE PICK NBA aislado de endpoints MLB. ✅
 - Player Props NBA deshabilitado hasta tener dataset y resolver dedicados. ✅
 - Historial/jobs/resolver/UX aislados por `sport` para evitar contaminacion cruzada. ✅ en código
-- Contexto NBA con injuries/status + odds server-side + metadata de completitud.
+- Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
 Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
 
