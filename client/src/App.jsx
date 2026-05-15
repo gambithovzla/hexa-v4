@@ -589,7 +589,7 @@ export default function App() {
 
           {/* History — remounts on each visit so it re-reads localStorage */}
           {activeTab === 'history' && (
-            <HistoryPanel lang={lang} />
+            <HistoryPanel lang={lang} sport={sport} />
           )}
 
           {activeTab === 'bankroll' && (

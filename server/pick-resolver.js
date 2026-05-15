@@ -525,7 +525,9 @@ async function resolvePendingPicksLegacy() {
        ORDER BY created_at DESC
        LIMIT 1
      ) pf ON TRUE
-     WHERE p.result = 'pending' AND p.deleted_at IS NULL`
+     WHERE p.result = 'pending'
+       AND p.deleted_at IS NULL
+       AND COALESCE(p.sport, 'mlb') = 'mlb'`
   );
 
   if (picks.length === 0) {
@@ -723,7 +725,9 @@ export async function resolvePendingPicks() {
        ORDER BY created_at DESC
        LIMIT 1
      ) pf ON TRUE
-     WHERE p.result = 'pending' AND p.deleted_at IS NULL`
+     WHERE p.result = 'pending'
+       AND p.deleted_at IS NULL
+       AND COALESCE(p.sport, 'mlb') = 'mlb'`
   );
 
   if (picks.length === 0) {

@@ -25,6 +25,12 @@ const MAX_ENTRIES = 200;
 const REMOTE_HISTORY_LIMIT = 100;
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+function normalizeSportFilter(sport) {
+  const value = String(sport ?? 'all').toLowerCase();
+  if (value === 'mlb' || value === 'nba') return value;
+  return 'all';
+}
+
 function normalizePickResult(result) {
   const value = String(result ?? 'pending').toLowerCase();
   if (value === 'won') return 'win';
@@ -211,8 +217,9 @@ function normalizeRemoteStats(summary, shownCount) {
   };
 }
 
-export default function useHistory() {
+export default function useHistory({ sport = 'all' } = {}) {
   const { token, isAuthenticated } = useAuth();
+  const sportFilter = normalizeSportFilter(sport);
   const [history, setHistory] = useState([]);
   const [stats, setStats] = useState(() => buildStatsFromEntries([]));
 
@@ -220,12 +227,19 @@ export default function useHistory() {
   const loadHistory = useCallback(() => {
     if (!isAuthenticated || !token) {
       const entries = load().map(normalizeEntry);
-      setHistory(entries);
-      setStats(buildStatsFromEntries(entries));
+      const filteredEntries = sportFilter === 'all'
+        ? entries
+        : entries.filter((entry) => normalizeSportFilter(entry?.sport ?? 'mlb') === sportFilter);
+      setHistory(filteredEntries);
+      setStats(buildStatsFromEntries(filteredEntries));
       return;
     }
 
-    fetch(`${API_URL}/api/picks`, {
+    const params = new URLSearchParams();
+    if (sportFilter !== 'all') params.set('sport', sportFilter);
+    const url = params.toString() ? `${API_URL}/api/picks?${params.toString()}` : `${API_URL}/api/picks`;
+
+    fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
@@ -237,7 +251,7 @@ export default function useHistory() {
         }
       })
       .catch(() => {});
-  }, [token, isAuthenticated]);
+  }, [token, isAuthenticated, sportFilter]);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
