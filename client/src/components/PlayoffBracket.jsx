@@ -15,7 +15,11 @@ import { Box, Typography } from '@mui/material';
 import { C, BARLOW, MONO } from '../theme';
 
 const TEAM_LOGO_URL = {
-  nba: id => `https://cdn.nba.com/logos/nba/${id}/primary/L/logo.svg`,
+  // espn:-prefixed IDs come from the live bracket (ESPN API); use ESPN CDN.
+  // Plain numeric IDs are NBA official team IDs; use NBA CDN.
+  nba: id => id?.startsWith?.('espn:')
+    ? `https://a.espncdn.com/i/teamlogos/nba/500/${id.slice(5)}.png`
+    : `https://cdn.nba.com/logos/nba/${id}/primary/L/logo.svg`,
   mlb: id => `https://www.mlbstatic.com/team-logos/${id}.svg`,
 };
 
@@ -25,6 +29,8 @@ const COPY = {
     projectedTitle: 'PROJECTED BRACKET',
     projectedBody:  'Matchups derived from current standings. They will keep shifting as the season unfolds — this is not the official bracket.',
     seasonProgress: 'Season progress',
+    liveTitle:      'NBA PLAYOFFS — LIVE',
+    liveBody:       'Real bracket updated from official results. Series records reflect the latest completed game.',
     playIn:         'Play-In Tournament',
     seedShort:      '#',
     bestOf:         'Best of',
@@ -32,13 +38,16 @@ const COPY = {
     tbd:            'TBD',
     divWinner:      'Div Winner',
     champion:       'Champion',
-    playInWinner:  'Play-In Winner',
+    playInWinner:   'Play-In Winner',
+    seriesWins:     'W',
   },
   es: {
     eyebrow:        'Cuadro de playoffs',
     projectedTitle: 'CUADRO PROYECTADO',
     projectedBody:  'Enfrentamientos derivados de las posiciones actuales. Cambiarán a medida que avance la temporada — no es el cuadro oficial.',
     seasonProgress: 'Avance de temporada',
+    liveTitle:      'PLAYOFFS NBA — EN VIVO',
+    liveBody:       'Cuadro real actualizado con resultados oficiales. Los marcadores de series reflejan el último partido disputado.',
     playIn:         'Torneo Play-In',
     seedShort:      '#',
     bestOf:         'Al mejor de',
@@ -46,7 +55,8 @@ const COPY = {
     tbd:            'POR DEFINIR',
     divWinner:      'Líder Div',
     champion:       'Campeón',
-    playInWinner:  'Ganador Play-In',
+    playInWinner:   'Ganador Play-In',
+    seriesWins:     'W',
   },
 };
 
@@ -103,7 +113,7 @@ function SeedBadge({ seed, isWinner }) {
   );
 }
 
-function TeamLine({ team, sport, copy, tbdLabel }) {
+function TeamLine({ team, sport, copy, tbdLabel, isWinner }) {
   if (!team) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.55, py: 0.5 }}>
@@ -115,21 +125,40 @@ function TeamLine({ team, sport, copy, tbdLabel }) {
       </Box>
     );
   }
+  const recordText = team.seriesWins != null
+    ? `${team.seriesWins}${copy.seriesWins ?? 'W'}`
+    : (team.wins != null && team.losses != null ? `${team.wins}-${team.losses}` : null);
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.45 }}>
-      <SeedBadge seed={team.seed} />
+    <Box
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1, py: 0.45, px: isWinner ? 0.5 : 0,
+        background: isWinner ? 'rgba(0,217,255,0.07)' : 'transparent',
+        borderLeft: isWinner ? `2px solid ${C.cyan}` : '2px solid transparent',
+        mx: isWinner ? '-0.5px' : 0,
+      }}
+    >
+      <SeedBadge seed={team.seed} isWinner={isWinner} />
       <TeamLogo teamId={team.teamId} sport={sport} abbr={team.abbreviation} size={22} />
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Typography
           noWrap
-          sx={{ fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: 800, color: C.textPrimary, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.05 }}
+          sx={{
+            fontFamily: BARLOW, fontSize: '0.78rem', fontWeight: 800,
+            color: isWinner ? C.cyan : C.textPrimary,
+            letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.05,
+          }}
         >
           {team.abbreviation || team.name}
+          {isWinner && (
+            <Box component="span" sx={{ ml: 0.6, fontSize: '0.55rem', color: C.cyan, verticalAlign: 'middle' }}>✓</Box>
+          )}
         </Typography>
       </Box>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, letterSpacing: '0.04em', flexShrink: 0 }}>
-        {team.wins != null && team.losses != null ? `${team.wins}-${team.losses}` : '—'}
-      </Typography>
+      {recordText && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: isWinner ? C.cyan : C.textMuted, letterSpacing: '0.04em', flexShrink: 0 }}>
+          {recordText}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -183,15 +212,18 @@ function MatchupCard({ matchup, sport, copy, accent = C.cyan }) {
         )}
       </Box>
 
-      <TeamLine team={matchup.top}    sport={sport} copy={copy} />
+      <TeamLine team={matchup.top}    sport={sport} copy={copy} isWinner={matchup.winner === 'top'} />
       <Box sx={{ height: 1, background: C.border }} />
-      <TeamLine team={matchup.bottom} sport={sport} copy={copy} />
+      <TeamLine team={matchup.bottom} sport={sport} copy={copy} isWinner={matchup.winner === 'bottom'} />
 
-      {matchup.series && (
+      {(matchup.summary || matchup.series) && (
         <Typography
-          sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.cyan, letterSpacing: '0.08em', mt: 0.5 }}
+          sx={{
+            fontFamily: MONO, fontSize: '0.56rem', mt: 0.5, letterSpacing: '0.06em',
+            color: matchup.completed ? C.cyan : C.amber,
+          }}
         >
-          {matchup.series}
+          {matchup.summary || matchup.series}
         </Typography>
       )}
     </Box>
@@ -423,7 +455,10 @@ export default function PlayoffBracket({ data, lang = 'es' }) {
   const groups = sport === 'nba' ? data.conferences : data.leagues;
   if (!groups || groups.length === 0) return null;
 
-  const progress = computeSeasonProgress(groups, sport);
+  const isLive      = data.source === 'live';
+  const isProjected = !isLive;
+
+  const progress    = isProjected ? computeSeasonProgress(groups, sport) : null;
   const progressPct = progress != null ? Math.round(progress * 100) : null;
 
   return (
@@ -436,20 +471,48 @@ export default function PlayoffBracket({ data, lang = 'es' }) {
         </Typography>
       </Box>
 
-      {/* Projection banner — explicit, amber-tinted, with season progress bar */}
-      <Box
-        sx={{
-          p: { xs: 1.4, sm: 1.8 },
-          border: `1px solid ${C.amber}66`,
-          borderLeft: `3px solid ${C.amber}`,
-          background: 'linear-gradient(180deg, rgba(255,170,0,0.10), rgba(2,4,8,0.6))',
-          display: 'grid', gap: 0.8,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {/* Live bracket banner — green, shown when bracket comes from ESPN real results */}
+      {isLive && (
+        <Box
+          sx={{
+            p: { xs: 1.4, sm: 1.8 },
+            border: `1px solid ${C.green}55`,
+            borderLeft: `3px solid ${C.green}`,
+            background: 'linear-gradient(180deg, rgba(0,200,100,0.08), rgba(2,4,8,0.6))',
+            display: 'grid', gap: 0.6,
+          }}
+        >
           <Box
             sx={{
-              px: '8px', py: '2px',
+              px: '8px', py: '2px', display: 'inline-flex', alignSelf: 'start',
+              border: `1px solid ${C.green}`,
+              background: 'rgba(0,200,100,0.15)',
+              fontFamily: MONO, fontSize: '0.6rem', fontWeight: 800,
+              color: C.green, letterSpacing: '0.18em', textTransform: 'uppercase',
+            }}
+          >
+            ● {copy.liveTitle}
+          </Box>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.66rem', color: C.textSecondary, lineHeight: 1.5 }}>
+            {copy.liveBody}
+          </Typography>
+        </Box>
+      )}
+
+      {/* Projected bracket banner — amber, shown during regular season */}
+      {isProjected && (
+        <Box
+          sx={{
+            p: { xs: 1.4, sm: 1.8 },
+            border: `1px solid ${C.amber}66`,
+            borderLeft: `3px solid ${C.amber}`,
+            background: 'linear-gradient(180deg, rgba(255,170,0,0.10), rgba(2,4,8,0.6))',
+            display: 'grid', gap: 0.8,
+          }}
+        >
+          <Box
+            sx={{
+              px: '8px', py: '2px', display: 'inline-flex', alignSelf: 'start',
               border: `1px solid ${C.amber}`,
               background: 'rgba(255,170,0,0.18)',
               fontFamily: MONO, fontSize: '0.6rem', fontWeight: 800,
@@ -458,46 +521,39 @@ export default function PlayoffBracket({ data, lang = 'es' }) {
           >
             ⚠ {copy.projectedTitle}
           </Box>
-        </Box>
-        <Typography
-          sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.textSecondary, lineHeight: 1.5 }}
-        >
-          {copy.projectedBody}
-        </Typography>
-        {progressPct != null && (
-          <Box sx={{ display: 'grid', gap: 0.5, mt: 0.4 }}>
-            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-              <Typography
-                sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase' }}
-              >
-                {copy.seasonProgress}
-              </Typography>
-              <Typography
-                sx={{ fontFamily: MONO, fontSize: '0.66rem', color: C.amber, fontWeight: 700 }}
-              >
-                {progressPct}%
-              </Typography>
-            </Box>
-            <Box
-              sx={{
-                height: 4, width: '100%',
-                background: 'rgba(255,255,255,0.05)',
-                border: `1px solid ${C.border}`,
-                position: 'relative', overflow: 'hidden',
-              }}
-            >
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.textSecondary, lineHeight: 1.5 }}>
+            {copy.projectedBody}
+          </Typography>
+          {progressPct != null && (
+            <Box sx={{ display: 'grid', gap: 0.5, mt: 0.4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                  {copy.seasonProgress}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.66rem', color: C.amber, fontWeight: 700 }}>
+                  {progressPct}%
+                </Typography>
+              </Box>
               <Box
                 sx={{
-                  height: '100%',
-                  width: `${progressPct}%`,
-                  background: progressPct < 50 ? C.red : progressPct < 80 ? C.amber : C.green,
-                  transition: 'width 0.3s ease',
+                  height: 4, width: '100%',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${C.border}`,
+                  position: 'relative', overflow: 'hidden',
                 }}
-              />
+              >
+                <Box
+                  sx={{
+                    height: '100%', width: `${progressPct}%`,
+                    background: progressPct < 50 ? C.red : progressPct < 80 ? C.amber : C.green,
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </Box>
             </Box>
-          </Box>
-        )}
-      </Box>
+          )}
+        </Box>
+      )}
 
       {groups.map((group, i) => {
         const accent = i === 0 ? C.cyan : C.accent;
