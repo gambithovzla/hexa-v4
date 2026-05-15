@@ -117,6 +117,7 @@ Desde la raíz ([package.json](package.json)):
 | `npm run audit` | Diagnóstico del sistema ([scripts/system-audit.js](scripts/system-audit.js)) |
 | `npm run smoke:mlb` | Smoke test de release MLB (endpoints críticos `/api/games`, `/api/teams`, `/api/hexa/board`) |
 | `npm run test:mlb:critical` | Suite anti-regresión MLB (resolver, closing-line, guardrails `/api/picks`, admin equity) |
+| `npm run verify:ml:persistence` | Post-deploy: valida `/health` del sidecar ML (volume + modelos cargados) |
 | `npm run test:parlay` | Tests del Parlay Synergy Engine |
 
 Desde `client/`:

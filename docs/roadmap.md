@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-14 — Sprints 0-5 cerrados (pipeline ML en producción). Próxima fase: hardening + expansión NBA.
+**Última actualización**: 2026-05-15 — Sprints 0-5 cerrados; Sprint 6a/6b en cierre operativo; NBA hardening (7.0) activo.
 
 ---
 
@@ -65,11 +65,13 @@ Solución: **scaffolding NBA en paralelo con equity + persistencia**, no en seri
 
 ### 🔄 Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)
 
-**Status**: próximo. Bloqueante implícito para Sprint 7 — pero corre en paralelo.
+**Status**: en cierre. Bloqueante implícito para abrir NBA al público — corre en paralelo con Sprint 7.0.
 
 Justificación: dos heridas abiertas que rompen la propuesta de valor antes de duplicar superficie de producto con NBA.
 
 #### Sprint 6a — Equity curve + Sharpe + drawdown dashboard (~2 semanas)
+
+**Status**: ✅ **cerrado en código** (2026-05-15). Pendiente menor: comparativa "tú vs Hexa baseline" y endpoint dedicado por usuario si se quiere bankroll USD.
 
 Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
@@ -90,7 +92,9 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 #### Sprint 6b — Persistencia de modelos ML (~1-2 semanas)
 
-**Problema actual**: el sidecar Python guarda los `.pkl` en `artifacts/` ([ml/hexa_ml/config.py](../ml/hexa_ml/config.py) — `artifacts_dir: Path = Field(default=Path("artifacts"))`). Railway tiene filesystem efímero: cada redeploy/restart wipea esa carpeta. Resultado: cada deploy borra los modelos entrenados y todos los picks nuevos caen al validator legacy hasta que alguien dispare un retrain manual.
+**Status**: ✅ **código listo** — `HEXA_ML_ARTIFACTS_DIR`, `/health` con `artifacts_persistent`, HUD en Control Center. ⏳ **ops en Railway**: montar Volume + checklist post-redeploy ([docs/admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b), `npm run verify:ml:persistence`).
+
+**Problema que resuelve**: el sidecar Python guardaba los `.pkl` en `artifacts/` efímero. Cada redeploy wipeaba modelos y los picks nuevos caían al validator legacy hasta retrain manual.
 
 **Opciones evaluadas**:
 
@@ -318,8 +322,8 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 
 ```
 2026 Q2  Sprints 0-5   — Pipeline ML completo            ████████████████████████ ✅
-2026 Q3  Sprint 6a     — Equity curve dashboard          ░░░░░░░░░░░░░░░░░░░░░░░░ 🔄
-2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ░░░░░░░░░░░░░░░░░░░░░░░░ 🔄
+2026 Q3  Sprint 6a     — Equity curve dashboard          ████████████████████████ ✅
+2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ████████████████░░░░░░░░ 🔄 ops
 2026 Q3-4 Sprint 7.0   — NBA hardening gate              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q3-4 Sprint 7a    — Scaffolding NBA (datos)         ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q4  Sprint 7b     — Oracle NBA + prompts            ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
