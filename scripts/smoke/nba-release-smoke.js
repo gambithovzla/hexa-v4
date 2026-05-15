@@ -11,7 +11,7 @@
  * Env:
  *   SMOKE_BASE_URL          (default http://127.0.0.1:3001)
  *   SMOKE_ADMIN_TOKEN       admin JWT; enables /api/nba/analyze/game probe
- *   SMOKE_NBA_GAME_ID       required when ADMIN_TOKEN is set
+ *   SMOKE_NBA_GAME_ID       optional; first game of the day is used when omitted
  *   SMOKE_NBA_DATE          YYYY-MM-DD, default today
  *   SMOKE_TIMEOUT_MS        default 30000 (LLM call can be slow)
  *   SMOKE_RETRIES           default 3
@@ -113,14 +113,23 @@ async function run() {
     },
   ];
 
-  if (ADMIN_TOKEN && NBA_GAME_ID) {
+  if (ADMIN_TOKEN) {
     checks.push({
       name: 'nba-analyze-game',
       run: async () => {
+        let gameId = NBA_GAME_ID;
+        if (!gameId) {
+          const gamesRes = await fetchJson(`${BASE_URL}/api/nba/games?date=${NBA_DATE}`);
+          assert(gamesRes.ok, `games list failed: ${gamesRes.status}`);
+          const first = gamesRes.data?.data?.[0];
+          gameId = first?.game_id != null ? String(first.game_id) : '';
+          assert(gameId, 'no games on scoreboard — set SMOKE_NBA_DATE or SMOKE_NBA_GAME_ID');
+          console.log(`[nba-smoke] auto-selected game_id=${gameId} (${first?.away_team_abbr} @ ${first?.home_team_abbr})`);
+        }
         const res = await fetchJson(`${BASE_URL}/api/nba/analyze/game`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
-          body: { gameId: NBA_GAME_ID, date: NBA_DATE, lang: 'en', engine: 'haiku', riskProfile: 'balanced' },
+          body: { gameId, date: NBA_DATE, lang: 'en', engine: 'haiku', riskProfile: 'balanced' },
           timeoutMs: 60000,
         });
         if (res.status === 503) {
@@ -145,7 +154,7 @@ async function run() {
       },
     });
   } else {
-    console.log('[nba-smoke] skipping nba-analyze-game (SMOKE_ADMIN_TOKEN and/or SMOKE_NBA_GAME_ID not set)');
+    console.log('[nba-smoke] skipping nba-analyze-game (set SMOKE_ADMIN_TOKEN to enable)');
   }
 
   for (const check of checks) {

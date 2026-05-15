@@ -10,9 +10,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, LinearProgress } from '@mui/material';
 import { C, BARLOW, MONO } from '../theme';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
+import { useAuth } from '../store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL = 30_000;
@@ -38,6 +39,8 @@ const T = {
     tov:        'TOV',
     total:      'TOT',
     ot:         'OT',
+    yourPicks:  'YOUR NBA PICKS',
+    noPicks:    'No pending NBA picks',
   },
   es: {
     title:      'NBA EN VIVO',
@@ -59,8 +62,64 @@ const T = {
     tov:        'PER',
     total:      'TOT',
     ot:         'TS',
+    yourPicks:  'TUS PICKS NBA',
+    noPicks:    'Sin picks NBA pendientes',
   },
 };
+
+function NbaPickProgressPanel({ picks, lang }) {
+  const t = T[lang] || T.en;
+  const nbaPicks = picks ?? [];
+  if (!nbaPicks.length) return null;
+
+  return (
+    <Box sx={{ border: `1px solid ${C.border}`, p: 2, bgcolor: 'rgba(0,0,0,0.35)' }}>
+      <Typography sx={{ fontFamily: BARLOW, fontSize: '0.62rem', color: C.textMuted, letterSpacing: '0.14em', mb: 1.2 }}>
+        {t.yourPicks}
+      </Typography>
+      <Box sx={{ display: 'grid', gap: 1 }}>
+        {nbaPicks.map((pick) => {
+          const pct = pick.progress != null ? Math.min(100, pick.progress) : 0;
+          const color =
+            pick.status === 'won' || pick.status === 'winning' || pick.status === 'covering' || pick.status === 'hitting'
+              ? C.green
+              : pick.status === 'lost' || pick.status === 'losing' || pick.status === 'not_covering'
+                ? C.red
+                : C.cyan;
+          return (
+            <Box key={pick.pickId}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.4 }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: C.textPrimary }}>
+                  {pick.label || pick.pick}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted }}>
+                  {pick.status ?? '—'}
+                </Typography>
+              </Box>
+              {pick.details && (
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, mb: 0.6 }}>
+                  {pick.details}
+                </Typography>
+              )}
+              {pick.progress != null && (
+                <LinearProgress
+                  variant="determinate"
+                  value={pct}
+                  sx={{
+                    height: 4,
+                    borderRadius: 0,
+                    bgcolor: 'rgba(255,255,255,0.06)',
+                    '& .MuiLinearProgress-bar': { bgcolor: color },
+                  }}
+                />
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+}
 
 function getEasternDateString(value = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -380,7 +439,9 @@ function GameCard({ game, lang }) {
 
 export default function NBALiveTracker({ lang = 'es' }) {
   const t = T[lang] || T.en;
+  const { token } = useAuth();
   const [games, setGames]     = useState([]);
+  const [pickProgress, setPickProgress] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -397,13 +458,32 @@ export default function NBALiveTracker({ lang = 'es' }) {
       setGames(live);
       setLastUpdate(new Date());
       setError('');
+
+      if (token) {
+        try {
+          const progressRes = await fetch(`${API_URL}/api/picks/live-progress`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          const progressJson = await progressRes.json();
+          if (progressJson.success) {
+            const rows = progressJson.data ?? [];
+            setPickProgress(rows.filter(p => p.sport === 'nba'));
+          }
+        } catch {
+          // optional
+        }
+      }
     } catch (err) {
       setError(err.message || 'fetch failed');
     } finally {
       setLoading(false);
       setPolling(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     fetchGames();
@@ -442,6 +522,10 @@ export default function NBALiveTracker({ lang = 'es' }) {
           {t.lastUpdate}: {lastUpdateLabel}
         </Typography>
       </Box>
+
+      {pickProgress.length > 0 && (
+        <NbaPickProgressPanel picks={pickProgress} lang={lang} />
+      )}
 
       {/* Error */}
       {error && (
