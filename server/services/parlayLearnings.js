@@ -8,6 +8,7 @@
  */
 
 import pool from '../db.js';
+import { deriveParlayOutcome } from './parlayRunOutcome.js';
 
 const UNKNOWN = '__unknown__';
 
@@ -271,7 +272,7 @@ export async function loadLearningsForUser(userId) {
       synergy_type:          row.synergy_type ?? null,
       combined_decimal_odds: row.combined_dec_odds ?? null,
       legs:                  actualLegs,
-      result:                row.resolved ? (row.hit ? 'win' : 'loss') : 'pending',
+      result:                deriveParlayOutcome(row),
       legs_hit:              row.legs_hit ?? null,
       leg_results:           row.leg_results ?? null,
     };

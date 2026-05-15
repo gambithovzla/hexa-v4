@@ -20,6 +20,8 @@ const NBA_HEADERS = {
   'Accept': 'application/json, text/plain, */*',
 };
 
+import { enrichGameTeamIds } from './nba-team-map.js';
+
 const CURRENT_SEASON = '2025-26';
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
@@ -153,7 +155,7 @@ function normalizeEspnScoreboardEvent(event, dateStr) {
   const awayScore = parseScore(away.score);
   const nationalTv = comp.broadcasts?.[0]?.names?.[0] ?? comp.geoBroadcasts?.[0]?.media?.shortName ?? null;
   const safeDate = event.date ? String(event.date).slice(0, 10) : dateStr;
-  return {
+  return enrichGameTeamIds({
     game_id: event.id ?? comp.id,
     game_date: safeDate,
     status: mappedStatus.status,
@@ -185,7 +187,7 @@ function normalizeEspnScoreboardEvent(event, dateStr) {
     arena: comp.venue?.fullName ?? null,
     national_tv: nationalTv,
     season: CURRENT_SEASON,
-  };
+  });
 }
 
 async function fetchEspnGamesForDate(dateStr) {

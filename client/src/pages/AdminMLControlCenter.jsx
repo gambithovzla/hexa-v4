@@ -100,6 +100,19 @@ const STRINGS = {
     allOkMsg:         (s) => `Completed in ${s}s — see retrain log for per-market metrics.`,
     comingSoon:       'Hits, Total Bases, Strikeouts — coming soon',
     propsDesc:        'Player-prop training requires per-batter features (xBA, xSLG, splits vs handedness, recent form 7d/14d) that are not yet in the pipeline. A dedicated sprint will extend savant-fetcher with batter leaderboards and add per-prop_kind models alongside the existing game-level ones.',
+    inferencePanel:   'Live inference status',
+    modelsHud:        (loaded, avail) => `MODELS ${loaded}/${avail}`,
+    ensembleHudLive:  'ENSEMBLE LIVE',
+    ensembleHudLazy:  'ENSEMBLE READY',
+    ensembleHudOff:   'ENSEMBLE OFF',
+    ensembleHudNone:  'ENSEMBLE N/T',
+    artifactYes:      'ARTIFACT',
+    artifactNo:       'NO ARTIFACT',
+    inMemoryYes:      'IN RAM',
+    inMemoryNo:       'NOT LOADED',
+    runlineGate:      'Runline gate',
+    runlineSkippedNote: (min) => `Training skipped — need ≥${min} resolved runline picks`,
+    runlineEarlyNote: (n) => `Early model — n_train=${n} (standard floor is 60)`,
   },
   es: {
     dashboard:        'Panel de Operaciones ML',
@@ -151,8 +164,38 @@ const STRINGS = {
     allOkMsg:         (s) => `Completado en ${s}s — ver historial para métricas por mercado.`,
     comingSoon:       'Hits, Total Bases, Ponches — próximamente',
     propsDesc:        'El entrenamiento de props por jugador requiere features individuales (xBA, xSLG, splits por lateralidad, forma reciente 7d/14d) que aún no están en el pipeline. Un sprint dedicado extenderá savant-fetcher con leaderboards de bateadores y añadirá modelos por prop_kind junto a los modelos de nivel de juego existentes.',
+    inferencePanel:   'Estado de inferencia en vivo',
+    modelsHud:        (loaded, avail) => `MODELOS ${loaded}/${avail}`,
+    ensembleHudLive:  'ENSEMBLE LIVE',
+    ensembleHudLazy:  'ENSEMBLE LISTO',
+    ensembleHudOff:   'ENSEMBLE OFF',
+    ensembleHudNone:  'ENSEMBLE S/T',
+    artifactYes:      'ARTEFACTO',
+    artifactNo:       'SIN ARTEFACTO',
+    inMemoryYes:      'EN RAM',
+    inMemoryNo:       'NO CARGADO',
+    runlineGate:      'Umbral runline',
+    runlineSkippedNote: (min) => `Entrenamiento omitido — se necesitan ≥${min} picks runline resueltos`,
+    runlineEarlyNote: (n) => `Modelo inicial — n_train=${n} (umbral estándar: 60)`,
   },
 };
+
+const INFERENCE_META = {
+  live:              { label: { en: 'LIVE', es: 'LIVE' }, color: GREEN },
+  lazy_load:         { label: { en: 'READY', es: 'LISTO' }, color: CYAN },
+  no_artifact:       { label: { en: 'NO MODEL', es: 'SIN MODELO' }, color: AMBER },
+  circuit_open:      { label: { en: 'CIRCUIT', es: 'CIRCUITO' }, color: RED },
+  sidecar_unhealthy: { label: { en: 'DOWN', es: 'CAÍDO' }, color: RED },
+  disabled:          { label: { en: 'OFF', es: 'OFF' }, color: MUTED },
+  flag_off:          { label: { en: 'FLAG OFF', es: 'FLAG OFF' }, color: MUTED },
+  sidecar_off:       { label: { en: 'SIDECAR OFF', es: 'SIDECAR OFF' }, color: MUTED },
+  not_trained:       { label: { en: 'NOT TRAINED', es: 'SIN ENTRENAR' }, color: AMBER },
+};
+
+function inferenceMeta(state, lang) {
+  const row = INFERENCE_META[state] ?? { label: { en: String(state ?? '—').toUpperCase(), es: String(state ?? '—').toUpperCase() }, color: MUTED };
+  return { label: row.label[lang] ?? row.label.en, color: row.color };
+}
 
 // ── CSS animations (mounted once) ────────────────────────────────────────────
 const CSS = `
@@ -234,10 +277,37 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
   const lastRetrain        = status?.last_retrain;
   const artifactsDir       = status?.health?.artifacts_dir ?? null;
   const artifactsPersistent = status?.health?.artifacts_persistent ?? false;
+  const obs                = status?.observability ?? null;
+  const modelsLoaded       = obs?.models_loaded?.length ?? 0;
+  const modelsAvailable    = obs?.models_available?.length ?? 0;
+  const ensInf             = obs?.ensemble?.inference ?? null;
+  const ensHudLabel = !ensembleEnabled
+    ? T.ensembleHudOff
+    : ensInf === 'live'
+      ? T.ensembleHudLive
+      : ensInf === 'lazy_load'
+        ? T.ensembleHudLazy
+        : ensInf === 'not_trained'
+          ? T.ensembleHudNone
+          : inferenceMeta(ensInf, T.lang).label;
+  const ensHudColor = !ensembleEnabled
+    ? MUTED
+    : ensInf === 'live'
+      ? GREEN
+      : ensInf === 'lazy_load'
+        ? CYAN
+        : ensInf === 'not_trained'
+          ? AMBER
+          : inferenceMeta(ensInf, T.lang).color;
 
   const circuitColor = circuit === 'closed' ? GREEN : circuit === 'half-open' ? AMBER : circuit === 'open' ? RED : MUTED;
   const sidecarColor = enabled && healthOk ? GREEN : enabled ? AMBER : RED;
   const sidecarLabel = enabled ? (healthOk ? T.online : T.degraded) : T.offline;
+  const modelsColor = modelsAvailable > 0 && modelsLoaded === modelsAvailable
+    ? GREEN
+    : modelsAvailable > 0
+      ? CYAN
+      : MUTED;
 
   return (
     <Box sx={{
@@ -269,7 +339,8 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <StatusPill label="Sidecar"  value={sidecarLabel} color={sidecarColor} pulse={!healthOk && enabled} />
           <StatusPill label="Circuit"  value={String(circuit).toUpperCase()} color={circuitColor} pulse={circuit === 'half-open'} />
-          <StatusPill label="Ensemble" value={ensembleEnabled ? T.enabled : T.disabled} color={ensembleEnabled ? GREEN : MUTED} />
+          <StatusPill label="Models"   value={T.modelsHud(modelsLoaded, modelsAvailable)} color={modelsColor} />
+          <StatusPill label="Ensemble" value={ensHudLabel} color={ensHudColor} />
           <StatusPill label="Latency"  value={fmtMs(latency)} color={latency != null && latency < 800 ? GREEN : latency != null ? AMBER : MUTED} />
         </Box>
 
@@ -309,6 +380,107 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
   );
 }
 
+function MlInferencePanel({ observability, T }) {
+  if (!observability?.markets?.length) return null;
+
+  return (
+    <Box sx={{
+      position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`,
+      p: '14px 16px', mb: 2, overflow: 'hidden',
+    }}>
+      <CornerBrackets color={CYAN} size={10} />
+      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px', mb: 1.5 }}>
+        {T.inferencePanel.toUpperCase()}
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {observability.markets.map((row) => {
+          const inf = inferenceMeta(row.inference, T.lang);
+          const tint = MARKET_TINTS[row.market] ?? CYAN;
+          return (
+            <Box
+              key={row.market}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: '120px 1fr auto' },
+                gap: 1, alignItems: 'center',
+                borderBottom: `1px solid ${BORDER}`, pb: 1,
+                '&:last-child': { borderBottom: 0, pb: 0 },
+              }}
+            >
+              <Typography sx={{ fontFamily: DISPLAY, fontSize: '0.95rem', fontWeight: 700, color: tint }}>
+                {MARKET_LABELS[row.market] ?? row.market}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', fontFamily: MONO, fontSize: '9px' }}>
+                <InferenceChip label={T.artifactYes} active={row.artifact} />
+                <InferenceChip label={T.inMemoryYes} active={row.loaded} />
+                {row.market === 'runline' && row.runlineNote?.kind === 'skipped' && (
+                  <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: AMBER, alignSelf: 'center' }}>
+                    {T.runlineSkippedNote(row.runlineNote.minTrainSize)}
+                  </Typography>
+                )}
+                {row.market === 'runline' && row.runlineNote?.kind === 'early' && (
+                  <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: AMBER, alignSelf: 'center' }}>
+                    {T.runlineEarlyNote(row.runlineNote.nTrain)}
+                  </Typography>
+                )}
+              </Box>
+              <Box sx={{
+                justifySelf: { sm: 'end' },
+                px: '8px', py: '3px', border: `1px solid ${inf.color}`,
+                background: `${inf.color}14`,
+              }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: inf.color, fontWeight: 700, letterSpacing: '1.5px' }}>
+                  {inf.label}
+                </Typography>
+              </Box>
+            </Box>
+          );
+        })}
+        <Box sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: '120px 1fr auto' },
+          gap: 1, alignItems: 'center', pt: 0.5,
+        }}>
+          <Typography sx={{ fontFamily: DISPLAY, fontSize: '0.95rem', fontWeight: 700, color: GREEN }}>
+            Ensemble
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <InferenceChip label={T.artifactYes} active={observability.ensemble?.artifact} />
+            <InferenceChip label={T.inMemoryYes} active={observability.ensemble?.loaded} />
+            {!observability.ensemble?.flag_enabled && (
+              <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>ENSEMBLE_ENABLED=false</Typography>
+            )}
+          </Box>
+          {(() => {
+            const inf = inferenceMeta(observability.ensemble?.inference, T.lang);
+            return (
+              <Box sx={{ justifySelf: { sm: 'end' }, px: '8px', py: '3px', border: `1px solid ${inf.color}`, background: `${inf.color}14` }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: inf.color, fontWeight: 700, letterSpacing: '1.5px' }}>
+                  {inf.label}
+                </Typography>
+              </Box>
+            );
+          })()}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function InferenceChip({ label, active }) {
+  const c = active ? GREEN : MUTED;
+  return (
+    <Box sx={{
+      px: '6px', py: '2px', border: `1px solid ${c}`,
+      opacity: active ? 1 : 0.45,
+    }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: c, letterSpacing: '1px' }}>
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
 function StatusPill({ label, value, color, pulse = false }) {
   return (
     <Box sx={{
@@ -325,7 +497,7 @@ function StatusPill({ label, value, color, pulse = false }) {
 }
 
 // ── Per-market card with retrain action ──────────────────────────────────────
-function MarketCard({ market, manifest, onRetrain, busy, index = 0, T }) {
+function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T }) {
   const tint = MARKET_TINTS[market];
   const data = manifest?.markets?.[market] ?? null;
   const trained = data && !data.skipped && !data.error;
@@ -334,6 +506,8 @@ function MarketCard({ market, manifest, onRetrain, busy, index = 0, T }) {
   const roi    = data?.roi_kelly25_test ?? null;
   const trainedAt = data?.trained_at ?? null;
   const early   = nTrain != null && nTrain < 60;
+  const infMeta = marketObs ? inferenceMeta(marketObs.inference, T.lang) : null;
+  const runlineGate = market === 'runline' && marketObs?.runlineNote;
 
   return (
     <Box sx={{
@@ -355,16 +529,35 @@ function MarketCard({ market, manifest, onRetrain, busy, index = 0, T }) {
             {MARKET_LABELS[market]}
           </Typography>
         </Box>
-        {early && (
-          <Tooltip title={T.earlyModelTip}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
+          {infMeta && (
             <Chip
-              label={T.earlyModel}
+              label={infMeta.label}
               size="small"
-              sx={{ fontFamily: MONO, fontSize: '8px', color: AMBER, border: `1px solid ${AMBER}`, background: 'transparent', height: 18, letterSpacing: '1.5px' }}
+              sx={{
+                fontFamily: MONO, fontSize: '8px', color: infMeta.color,
+                border: `1px solid ${infMeta.color}`, background: `${infMeta.color}14`,
+                height: 18, letterSpacing: '1.5px',
+              }}
             />
-          </Tooltip>
-        )}
+          )}
+          {early && (
+            <Tooltip title={T.earlyModelTip}>
+              <Chip
+                label={T.earlyModel}
+                size="small"
+                sx={{ fontFamily: MONO, fontSize: '8px', color: AMBER, border: `1px solid ${AMBER}`, background: 'transparent', height: 18, letterSpacing: '1.5px' }}
+              />
+            </Tooltip>
+          )}
+        </Box>
       </Box>
+
+      {runlineGate?.kind === 'skipped' && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: AMBER, mt: 1 }}>
+          {T.runlineGate}: {T.runlineSkippedNote(runlineGate.minTrainSize)}
+        </Typography>
+      )}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mt: 2 }}>
         <Metric label="BRIER" value={fmtBrier(brier)} color={brier != null && brier < 0.22 ? GREEN : brier != null ? AMBER : MUTED} />
@@ -485,11 +678,12 @@ function Rolling30dChart({ rolling, T }) {
 }
 
 // ── Ensemble panel ───────────────────────────────────────────────────────────
-function EnsemblePanel({ ensemble, onRetrain, busy, T }) {
+function EnsemblePanel({ ensemble, ensembleObs, onRetrain, busy, T }) {
   const enabled = ensemble?.enabled;
   const m = ensemble?.manifest?.manifest?.markets?.moneyline
         ?? ensemble?.manifest?.markets?.moneyline
         ?? null;
+  const ensInf = ensembleObs ? inferenceMeta(ensembleObs.inference, T.lang) : null;
 
   return (
     <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '20px 18px', mt: 3, overflow: 'hidden' }}>
@@ -504,6 +698,21 @@ function EnsemblePanel({ ensemble, onRetrain, busy, T }) {
           <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.2rem', fontWeight: 700, color: GREEN, lineHeight: 1.1 }}>
             {T.ensembleCombiner}
           </Typography>
+          {ensInf && (
+            <Box sx={{ display: 'flex', gap: 1, mt: 0.75, flexWrap: 'wrap' }}>
+              <Chip
+                label={ensInf.label}
+                size="small"
+                sx={{
+                  fontFamily: MONO, fontSize: '8px', color: ensInf.color,
+                  border: `1px solid ${ensInf.color}`, background: `${ensInf.color}14`,
+                  height: 18, letterSpacing: '1.5px',
+                }}
+              />
+              <InferenceChip label={T.artifactYes} active={ensembleObs?.artifact} />
+              <InferenceChip label={T.inMemoryYes} active={ensembleObs?.loaded} />
+            </Box>
+          )}
         </Box>
         <Button
           onClick={onRetrain}
@@ -948,6 +1157,8 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
 
       <HUDStatusBar status={status} loading={refreshing} onRefresh={refreshAll} T={T} />
 
+      <MlInferencePanel observability={status?.observability} T={T} />
+
       {/* Per-market cards */}
       <SectionTitle>{T.perMarketModels}</SectionTitle>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
@@ -956,6 +1167,7 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
             key={m}
             market={m}
             manifest={manifest}
+            marketObs={status?.observability?.markets?.find((row) => row.market === m)}
             onRetrain={handleRetrain}
             busy={busyMarket === m || busyMarket === 'all'}
             index={i}
@@ -1007,6 +1219,7 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
       {/* Ensemble */}
       <EnsemblePanel
         ensemble={ensembleManifest}
+        ensembleObs={status?.observability?.ensemble}
         onRetrain={handleRetrainEnsemble}
         busy={busyMarket === 'ensemble' || busyMarket === 'all'}
         T={T}

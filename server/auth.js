@@ -24,6 +24,7 @@ import { randomUUID } from 'crypto';
 import pool from './db.js';
 import { verifyToken } from './middleware/auth-middleware.js';
 import { generateCode, isEmailConfigured, sendVerificationEmail, sendPasswordResetEmail } from './email.js';
+import { buildUserVsHexaComparison } from './services/userEquityCompare.js';
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
 
@@ -60,6 +61,20 @@ function normalizeEmail(email) {
 
 function validEmail(email) {
   return EMAIL_RE.test(email);
+}
+
+function resolvePeriodStart(period) {
+  const p = String(period ?? '90').toLowerCase();
+  if (p === 'all') return null;
+  if (p === 'ytd') {
+    const year = new Date().getFullYear();
+    return `${year}-01-01`;
+  }
+  const days = Number.parseInt(p, 10);
+  if (![7, 30, 90, 180, 365].includes(days)) return null;
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 function forgotPasswordResponse(res) {
@@ -830,5 +845,66 @@ bankrollRouter.get('/stats', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('Stats error:', err);
     res.status(500).json({ error: 'Error obteniendo estadísticas' });
+  }
+});
+
+// GET /api/bankroll/equity-stats?period=90|30|7|ytd|all&sport=all|mlb|nba
+bankrollRouter.get('/equity-stats', verifyToken, async (req, res) => {
+  const period = String(req.query?.period ?? '90').toLowerCase();
+  const sport = String(req.query?.sport ?? 'all').toLowerCase();
+  const startDate = resolvePeriodStart(period);
+
+  if (!['all', 'mlb', 'nba'].includes(sport)) {
+    return res.status(400).json({ success: false, error: 'sport must be all, mlb or nba' });
+  }
+  if (!['all', 'ytd', '7', '30', '90', '180', '365'].includes(period)) {
+    return res.status(400).json({ success: false, error: 'period must be all, ytd, 7, 30, 90, 180 or 365' });
+  }
+
+  try {
+    const params = [req.user.id];
+    const where = [
+      `b.user_id = $1`,
+      `LOWER(b.result) IN ('won', 'lost', 'push', 'win', 'loss')`,
+    ];
+    if (startDate) {
+      params.push(startDate);
+      where.push(`b.created_at >= $${params.length}::date`);
+    }
+    if (sport !== 'all') {
+      params.push(sport);
+      where.push(`p.id IS NOT NULL`);
+      where.push(`COALESCE(p.sport, 'mlb') = $${params.length}`);
+    }
+
+    const { rows } = await pool.query(
+      `SELECT
+         b.created_at,
+         b.source,
+         b.result,
+         b.odds,
+         b.stake,
+         p.id AS pick_id,
+         COALESCE(p.sport, 'mlb') AS sport
+       FROM bets b
+       LEFT JOIN picks p ON p.id = b.pick_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY b.created_at ASC`,
+      params
+    );
+
+    const comparison = buildUserVsHexaComparison(rows);
+    return res.json({
+      success: true,
+      data: {
+        period,
+        sport,
+        start_date: startDate,
+        comparison,
+      },
+    });
+  } catch (err) {
+    console.error('[bankroll] equity-stats error:', err.message);
+    return res.status(500).json({ success: false, error: 'Server error' });
   }
 });

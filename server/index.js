@@ -26,6 +26,7 @@ import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePla
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
+import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
 import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
@@ -590,7 +591,7 @@ async function persistParlayRun({
   betType, marketFocus,
 }) {
   try {
-    await pool.query(
+    const { rows } = await pool.query(
       `INSERT INTO parlay_synergy_runs (
         user_id, user_email, game_date,
         requested_legs, mode, game_pks, language, engine, model,
@@ -603,7 +604,8 @@ async function persistParlayRun({
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
         $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
         $21,$22
-      )`,
+      )
+      RETURNING id`,
       [
         String(userId),
         userEmail ?? null,
@@ -649,8 +651,10 @@ async function persistParlayRun({
         marketFocus ?? null,
       ]
     );
+    return rows[0]?.id ?? null;
   } catch (err) {
     console.error('[parlay-synergy] persist failed (non-fatal):', err.message);
+    return null;
   }
 }
 
@@ -1370,9 +1374,20 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       gameScript:       l.gameScript,
     }));
 
+    const persistedRunId = await persistParlayRun({
+      userId: updatedUser.id, userEmail: updatedUser.email,
+      gameIds, mode, requestedLegs,
+      resolvedDate, resolvedLang, model, resolvedEngine,
+      isAdminRun: updatedUser.is_admin, cost: PARLAY_SYNERGY_COST,
+      enriched, composedParlays, architectDecision,
+      finalLegs, composerMs, llmMs, totalMs,
+      betType, marketFocus: resolvedMarketFocus,
+    });
+
     res.json({
       success: true,
       data: {
+        run_id: persistedRunId,
         chosen_parlay: {
           legs:                  legSummary(finalLegs),
           actual_legs:           actualBuiltLegs,
@@ -1433,17 +1448,6 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
       },
       credits: updatedUser.credits,
       engine:  resolvedEngine,
-    });
-
-    // ── Fase 7: Fire-and-forget persistence ──────────────────────────────
-    persistParlayRun({
-      userId: updatedUser.id, userEmail: updatedUser.email,
-      gameIds, mode, requestedLegs,
-      resolvedDate, resolvedLang, model, resolvedEngine,
-      isAdminRun: updatedUser.is_admin, cost: PARLAY_SYNERGY_COST,
-      enriched, composedParlays, architectDecision,
-      finalLegs, composerMs, llmMs, totalMs,
-      betType, marketFocus: resolvedMarketFocus,
     });
 
     // ── Fase 7: Shadow mode — async compare with legacy analyzeParlay ─────
@@ -1524,7 +1528,7 @@ app.get('/api/parlay-architect/history', verifyToken, async (req, res) => {
         combined_edge_score:   null,
         legs:                  actualLegs,
         warnings:              row.warnings ?? [],
-        result:                row.resolved ? (row.hit ? 'win' : 'loss') : 'pending',
+        result:                deriveParlayOutcome(row),
         legs_hit:              row.legs_hit ?? null,
         leg_results:           row.leg_results ?? null,
         _fallback:             architectOutput._fallback ?? false,

@@ -333,7 +333,9 @@ Estado del pipeline ML:
 - ✅ Sprint 2 — sidecar Python FastAPI + XGBoost real en `ml/`, desplegado en Railway como servicio separado.
 - ✅ Sprint 3 — integración Node↔Python (mlModelClient.js, circuit breaker), shadow_model_runs enriquecido, dashboard `/admin/ml-calibration`.
 - ✅ Sprint 4 — ensemble meta-learner (LogReg oracle+legacy+python), `/predict/ensemble`, `/admin/ml-ensemble-calibration`.
-- ✅ Sprint 5 UI — Admin ML Control Center (`/admin/ml-control`): HUD live, retrain on-demand por mercado + ensemble + RETRAIN ALL, per-pick ensemble breakdown badge en HistoryPanel, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Chat→Training pipeline con `source='oracle_chat'` aislado del training default. Sprint 5 Player Props pendiente (banner "coming soon" visible).
+- ✅ Sprint 5 UI — Admin ML Control Center (`/admin/ml-control`): HUD live, retrain on-demand por mercado + ensemble + RETRAIN ALL, per-pick ensemble breakdown badge en HistoryPanel, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Chat→Training pipeline con `source='oracle_chat'` aislado del training default. Observability runline/ensemble en HUD (`mlModelHealth.js`). ⏸️ Sprint 5 Player Props MLB **diferido** (banner "coming soon").
+- ✅ Sprint 6 — equity/Sharpe/drawdown + comparativa bankroll (`userEquityCompare.js`, `GET /api/bankroll/equity-stats`); persistencia ML prod (6b).
+- ✅ Post-6 — parlay resolve/AUTO (`parlayResolver.js`, `parlayRunOutcome.js`); NBA team-map + output guard (`nba-team-map.js`, `nbaOutputGuard.js`).
 
 **Estado en producción (2026-05-14)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
@@ -395,9 +397,9 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 - Estado: **cerrado en código**.
 
 3) **Fuente de datos y consistencia de IDs**
-- Priorizar ESPN para disponibilidad (Railway) y mantener fallback controlado.
-- Introducir mapping estable `espnTeamId <-> nbaStatsTeamId` para evitar contextos vacíos/inconsistentes en stats avanzadas.
-- Criterio de salida: contexto NBA sin bloques `data unavailable` por mismatch de IDs.
+- ✅ Priorizar ESPN para disponibilidad (Railway) y mantener fallback controlado.
+- ✅ Mapping estable `espnTeamId <-> nbaStatsTeamId` en [server/nba-team-map.js](server/nba-team-map.js); `context_meta.teamIds` en context builder.
+- Criterio de salida: contexto NBA sin bloques `data unavailable` por mismatch de IDs — validar en prod con `smoke:nba`.
 
 4) **Calidad de contexto NBA (paridad de profesionalismo)**
 - Añadir bloque estructurado de injuries/status (fuente confiable) al contexto NBA.
@@ -405,9 +407,8 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 - Exponer `context_meta` (freshness, completeness, stale flags) para observabilidad admin.
 
 5) **Guardrails de salida LLM NBA**
-- Validar schema de respuesta NBA server-side y aplicar fallback seguro cuando falten campos críticos.
-- Restringir picks a mercados soportados por la data disponible; evitar props sin sustento.
-- Criterio de salida: no persistir picks NBA ambiguos o con parse defectuoso sin marca explícita.
+- ✅ [server/services/nbaOutputGuard.js](server/services/nbaOutputGuard.js) — valida antes de persistir; rechaza parse/props/ABSTAIN; degrada con `alert_flags` si faltan campos secundarios.
+- Criterio de salida: no persistir picks NBA ambiguos — validar en prod.
 
 6) **Resolución y tracking NBA**
 - Endurecer resolver/tracker NBA por mercado soportado (moneyline/spread/total primero).
@@ -441,14 +442,13 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 - Historial, logos, resolver, jobs, dataset admin y shadow runs aislados por `sport`. ✅
 - Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
-**Próximo prioritario post-7.1**
-- Validación E2E en producción tras merge/deploy del PR de aislamiento.
-- Mapping estable `espnTeamId <-> nbaStatsTeamId` (contexto sin huecos).
-- Guardrails de salida NBA: schema validation estricta + fallback seguro.
-- Performance público: filtrar `public-stats` por `sport` (hoy puede mezclar).
+**Rama activa: `feat/nba-go-live-gate`**
+- Validación E2E NBA en producción (analyze → historial → resolver).
+- Equity en bottom nav (6a menor).
+- Smoke Parlay AUTO post-deploy.
 
-**Pendiente del bloque ML**:
-- Sprint 5 Player Props MLB (training para hits / total_bases / strikeouts) — requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en `savant-fetcher.js`.
+**Pendiente del bloque ML (diferido, no en curso)**:
+- Sprint 5 Player Props MLB — Savant per-batter + training sidecar por `prop_kind`.
 
 ---
 

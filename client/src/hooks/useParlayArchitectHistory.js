@@ -79,14 +79,15 @@ export default function useParlayArchitectHistory(token) {
       });
   }, [token]);
 
-  const addRun = useCallback(({ date, mode, requestedLegs, gameIds, result, architect_meta }) => {
+  const addRun = useCallback(({ date, mode, requestedLegs, gameIds, result, architect_meta, dbId = null }) => {
     const chosen = result?.chosen_parlay ?? {};
     const actualLegs = Number(chosen.actual_legs)
       || (Array.isArray(chosen.legs) ? chosen.legs.length : 0)
       || Number(result?.composer_meta?.built_legs)
       || requestedLegs;
     const entry = {
-      id:                    Date.now(),
+      id:                    dbId ? `db_${dbId}` : Date.now(),
+      db_id:                 dbId ?? null,
       created_at:            new Date().toISOString(),
       date:                  date ?? new Date().toISOString().slice(0, 10),
       mode,
@@ -103,7 +104,7 @@ export default function useParlayArchitectHistory(token) {
       result:                'pending',
       legs_hit:              null,
       _fallback:             architect_meta?._fallback ?? false,
-      _source:               'local',
+      _source:               dbId ? 'server' : 'local',
     };
     setHistory(prev => {
       const next = [entry, ...prev].slice(0, MAX_ENTRIES);
