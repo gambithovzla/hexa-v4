@@ -12,7 +12,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
 import {
-  LineChart, Line, XAxis, YAxis, ReferenceLine,
+  LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, ReferenceLine,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { C, MONO, DISPLAY } from '../theme';
@@ -242,11 +243,160 @@ function ChartTooltip({ active, payload }) {
   );
 }
 
+/** Tooltip for equity and drawdown charts */
+function EquityTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const isEquity = d.cumulativeUnits !== undefined;
+  const val = isEquity ? d.cumulativeUnits : d.drawdownUnits;
+  const color = isEquity ? (val >= 0 ? GREEN : RED) : RED;
+  const dateStr = d.date ? new Date(d.date).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  }) : '';
+  return (
+    <Box sx={{ background: '#0a0e1a', border: `1px solid ${BORDER}`, p: '8px 12px' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED, mb: '2px' }}>
+        PICK #{d.pickNumber} · {dateStr}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '13px', color }}>
+        {val >= 0 ? '+' : ''}{val?.toFixed(2)}u
+      </Typography>
+      {d.result && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: DIM, mt: '2px' }}>
+          {d.result?.toUpperCase()}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+/** Equity curve chart — cumulative units over time */
+function EquityChart({ data }) {
+  const lastVal = data?.at(-1)?.cumulativeUnits ?? 0;
+  const lineColor = lastVal >= 0 ? GREEN : RED;
+  const tickFmt = (ts) => ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  return (
+    <Box sx={{
+      background: SURFACE, border: `1px solid ${BORDER}`, p: '16px', mb: 2,
+      position: 'relative',
+      '&::before': { content: '""', position: 'absolute', top: 0, left: 0, width: 10, height: 10, borderTop: `2px solid ${CYAN}`, borderLeft: `2px solid ${CYAN}` },
+      '&::after':  { content: '""', position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderBottom: `2px solid ${C.accent}`, borderRight: `2px solid ${C.accent}` },
+    }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mb: 2 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '8px', letterSpacing: '3px', color: MUTED, textTransform: 'uppercase' }}>
+          EQUITY CURVE
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: DIM }}>
+          cumulative unit P&L · flat 1-unit stake
+        </Typography>
+      </Box>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+          <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+          <XAxis
+            dataKey="date"
+            tickFormatter={tickFmt}
+            tick={{ fontFamily: MONO, fontSize: 9, fill: DIM }}
+            axisLine={{ stroke: DIM }}
+            tickLine={false}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            tick={{ fontFamily: MONO, fontSize: 9, fill: DIM }}
+            axisLine={{ stroke: DIM }}
+            tickLine={false}
+            tickFormatter={v => `${v >= 0 ? '+' : ''}${v}u`}
+            width={52}
+          />
+          <Tooltip content={<EquityTooltip />} />
+          <Line
+            type="monotone"
+            dataKey="cumulativeUnits"
+            stroke={lineColor}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, fill: lineColor, stroke: BG, strokeWidth: 2 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      <Box sx={{ mt: 1, display: 'flex', gap: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Box sx={{ width: 12, height: 2, background: lineColor, boxShadow: `0 0 4px ${lineColor}` }} />
+          <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: DIM }}>UNIT P&L</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Box sx={{ width: 12, height: 2, background: 'rgba(255,255,255,0.12)', borderTop: '1px dashed rgba(255,255,255,0.12)' }} />
+          <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: DIM }}>BREAKEVEN</Typography>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+/** Drawdown chart — depth below equity peak */
+function DrawdownChart({ data }) {
+  const tickFmt = (ts) => ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  return (
+    <Box sx={{
+      background: SURFACE, border: `1px solid ${BORDER}`, p: '16px', mb: 2,
+      position: 'relative',
+      '&::before': { content: '""', position: 'absolute', top: 0, left: 0, width: 10, height: 10, borderTop: `2px solid ${C.accent}`, borderLeft: `2px solid ${C.accent}` },
+    }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mb: 2 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '8px', letterSpacing: '3px', color: MUTED, textTransform: 'uppercase' }}>
+          DRAWDOWN
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: DIM }}>
+          units below equity peak
+        </Typography>
+      </Box>
+      <ResponsiveContainer width="100%" height={120}>
+        <AreaChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id="ddGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={RED} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={RED} stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+          <XAxis
+            dataKey="date"
+            tickFormatter={tickFmt}
+            tick={{ fontFamily: MONO, fontSize: 9, fill: DIM }}
+            axisLine={{ stroke: DIM }}
+            tickLine={false}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            tick={{ fontFamily: MONO, fontSize: 9, fill: DIM }}
+            axisLine={{ stroke: DIM }}
+            tickLine={false}
+            tickFormatter={v => `${v}u`}
+            width={52}
+          />
+          <Tooltip content={<EquityTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="drawdownUnits"
+            stroke={RED}
+            strokeWidth={1.5}
+            fill="url(#ddGradient)"
+            dot={false}
+            activeDot={{ r: 4, fill: RED, stroke: BG, strokeWidth: 2 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const PERIODS = [
   { label: '7D',           value: '7'      },
   { label: '30D',          value: '30'     },
+  { label: '90D',          value: '90'     },
+  { label: 'YTD',          value: 'ytd'    },
   { label: '2026 SEASON',  value: 'season' },
 ];
 
@@ -495,7 +645,7 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
       {/* ── LOADING SKELETON ─────────────────────────────────────────────────── */}
       {loading && (
         <Box>
-          {/* Stat cards skeleton */}
+          {/* Stat cards row 1 */}
           <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
             {[...Array(4)].map((_, i) => (
               <Box key={i} sx={{ flex: 1, minWidth: '140px', border: `1px solid ${BORDER}`, p: '20px 16px', background: SURFACE }}>
@@ -504,6 +654,26 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
                 <Skeleton width="60%" height={10} />
               </Box>
             ))}
+          </Box>
+          {/* Stat cards row 2 */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+            {[...Array(3)].map((_, i) => (
+              <Box key={i} sx={{ flex: 1, minWidth: '140px', border: `1px solid ${BORDER}`, p: '20px 16px', background: SURFACE }}>
+                <Skeleton height={10} mb={12} />
+                <Skeleton height={36} mb={8} />
+                <Skeleton width="60%" height={10} />
+              </Box>
+            ))}
+          </Box>
+          {/* Equity chart skeleton */}
+          <Box sx={{ border: `1px solid ${BORDER}`, p: '16px', background: SURFACE, height: 240, mb: 2 }}>
+            <Skeleton height={10} mb={16} />
+            <Skeleton height={180} />
+          </Box>
+          {/* Drawdown chart skeleton */}
+          <Box sx={{ border: `1px solid ${BORDER}`, p: '16px', background: SURFACE, height: 150, mb: 2 }}>
+            <Skeleton height={10} mb={16} />
+            <Skeleton height={100} />
           </Box>
           {/* Tables skeleton */}
           <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
@@ -514,7 +684,7 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
               </Box>
             ))}
           </Box>
-          {/* Chart skeleton */}
+          {/* ROI curve skeleton */}
           <Box sx={{ border: `1px solid ${BORDER}`, p: '16px', background: SURFACE, height: 220 }}>
             <Skeleton height={10} mb={16} />
             <Skeleton height={160} />
@@ -594,6 +764,40 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
               sub={`over ${data.totalPicks} picks`}
             />
           </Box>
+
+          {/* ── STATS GRID ROW 2: risk metrics ───────────────────────────────── */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+            <StatCard
+              label="SHARPE RATIO"
+              value={data.sharpe != null ? data.sharpe.toFixed(2) : '—'}
+              color={data.sharpe > 0 ? GREEN : data.sharpe < 0 ? RED : MUTED}
+              sub="mean / σ per pick"
+            />
+            <StatCard
+              label="MAX DRAWDOWN"
+              value={data.maxDrawdown != null ? `${data.maxDrawdown.toFixed(2)}u` : '—'}
+              color={data.maxDrawdown < 0 ? RED : MUTED}
+              sub="worst peak→trough"
+            />
+            <StatCard
+              label="PROFIT FACTOR"
+              value={data.profitFactor != null
+                ? data.profitFactor >= 99 ? '∞' : data.profitFactor.toFixed(2)
+                : '—'}
+              color={data.profitFactor > 1 ? GREEN : data.profitFactor < 1 ? RED : MUTED}
+              sub="gross win / gross loss"
+            />
+          </Box>
+
+          {/* ── EQUITY CURVE ─────────────────────────────────────────────────── */}
+          {data.equityCurve?.length >= 2 && (
+            <EquityChart data={data.equityCurve} />
+          )}
+
+          {/* ── DRAWDOWN ─────────────────────────────────────────────────────── */}
+          {data.equityCurve?.length >= 2 && (
+            <DrawdownChart data={data.equityCurve} />
+          )}
 
           {/* ── BREAKDOWN TABLES ─────────────────────────────────────────────── */}
           <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>

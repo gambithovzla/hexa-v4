@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-12 — Sprint 0 (documentación) cerrando.
+**Última actualización**: 2026-05-14 — Sprints 0-5 cerrados (pipeline ML en producción). Próxima fase: hardening + expansión NBA.
 
 ---
 
@@ -18,104 +18,180 @@ Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen item
 
 ## 1. Foco actual
 
-**Q2 2026** — Entrenar modelo propio Python con los >500 picks resueltos.
+**Q3 2026 → Q1 2027** — Hardening de MLB + scaffolding NBA en paralelo, con objetivo de MVP NBA listo para el All-Star Break de febrero 2027.
 
-Justificación:
-- Es el bloqueador #1 para el ensemble real (Claude + Grok + modelo entrenado).
-- El "XGBoost validator" actual no es ML real; reemplazarlo desbloquea probabilidades calibradas, SHAP feature importance, y auto-retraining.
-- Una vez en producción, todo el resto del roadmap (NBA, Hexa Live, RAG, FanGraphs) se beneficia de la infra ML.
+### Por qué este foco
+
+MLB tiene ~6 meses muertos (nov–mar). Sin un segundo deporte, la base de usuarios se vacía cada off-season y vuelve cada abril. NBA es oct–abr: cobertura **year-round** sin pelearse por la misma noche.
+
+La arquitectura ya está hecha para ser deporte-agnóstica:
+- `oracle.js` recibe payload genérico; los prompts varían, no la estructura.
+- El pick lifecycle (creation → tracking → resolution → postmortem) es deporte-agnóstico.
+- El sidecar Python entrena por mercado; los mercados NBA (puntos, rebotes, asistencias, spread, total) entran como mercados nuevos sin reescribir nada.
+- El Parlay Synergy Engine no asume MLB.
+
+Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js), [server/savant-fetcher.js](../server/savant-fetcher.js), [server/context-builder.js](../server/context-builder.js), [server/pick-resolver.js](../server/pick-resolver.js). Eso es **reemplazable, no reescritura total**.
+
+### Por qué cerrar 2 cosas antes de tocar NBA
+
+1. **Equity curve + Sharpe + drawdown dashboard** (Tier S1 del backlog). Los datos ya están en `picks` y `bankroll`. Sin esto, Hexa parece un juguete de picks sueltos en vez de un sistema de bankroll — y un usuario serio mira eso antes de pagar.
+2. **Persistencia de modelos ML** (Railway Volumes o snapshot a Postgres). Hoy cada redeploy de Railway borra los `.pkl` y el ensemble vuelve a "OFFLINE" hasta el siguiente retrain. Es deuda silenciosa que rompe la propuesta de valor del Python XGBoost — los picks nuevos caen al validator legacy hasta que alguien dispare retrain manual.
+
+### El trade-off explícito
+
+Si se queda solo en MLB y se profundiza (player props, equity, mobile), crece LTV por usuario pero no resuelve la estacionalidad — y un competidor cross-sport come el flanco. Si se salta a NBA sin la equity dashboard, los usuarios nuevos no van a entender por qué Hexa es distinto a 50 servicios de picks de NBA.
+
+Solución: **scaffolding NBA en paralelo con equity + persistencia**, no en serie.
 
 ---
 
 ## 2. Sprints en ejecución
 
-### ✅ Sprint 0 — Documentación viva (semana 1)
+### ✅ Sprints 0-5 — Cerrados (Q2 2026)
 
-**Status**: cerrando.
+| Sprint | Entregable | Estado |
+|---|---|---|
+| Sprint 0 | Documentación viva (CLAUDE.md + docs/) | ✅ |
+| Sprint 1 | Gaps del dataset cerrados — 22 columnas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js | ✅ |
+| Sprint 2 | Sidecar Python FastAPI + XGBoost en `ml/`, deploy Railway (`hexa-ml-production.up.railway.app`). Moneyline (Brier 0.205, ROI +18.3%), overunder (Brier 0.138, ROI +8.5%) | ✅ |
+| Sprint 3 | Integración Node↔Python con circuit breaker. Dashboard `/admin/ml-calibration` | ✅ |
+| Sprint 4 | Ensemble meta-learner (LogReg sobre oracle+legacy+python en logit space). `/predict/ensemble`, `/calibration/ensemble` | ✅ |
+| Sprint 5 UI | Admin ML Control Center (`/admin/ml-control`) — HUD live, retrain on-demand, audit log, chat-picks dashboard, AdminEnsembleBadge per-pick. Oracle Chat → Training pipeline con bucket `source='oracle_chat'` aislado | ✅ |
 
-**Entregables**:
-- ✅ `CLAUDE.md` en raíz.
-- ✅ `docs/architecture.md`, `ml-pipeline.md`, `integrations.md`, `content-pipeline.md`, `admin-and-ops.md`, `data-schema.md`, `roadmap.md`.
-- ✅ `README.md` slim down con índice a `/docs/`.
-
-**Criterio de éxito**: un dev nuevo puede levantar entorno local y entender dónde inyectar cambios en <15 min.
+**Pendiente del bloque ML**:
+- ⏳ **Sprint 5 Player Props** — training para hits / total_bases / strikeouts. Requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en [savant-fetcher.js](../server/savant-fetcher.js). Banner "coming soon" visible en el Control Center.
 
 ---
 
-### 🔄 Sprint 1 — Cerrar gaps del dataset (semanas 2-3)
+### 🔄 Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)
 
-**Status**: pendiente, próximo.
+**Status**: próximo. Bloqueante implícito para Sprint 7 — pero corre en paralelo.
+
+Justificación: dos heridas abiertas que rompen la propuesta de valor antes de duplicar superficie de producto con NBA.
+
+#### Sprint 6a — Equity curve + Sharpe + drawdown dashboard (~2 semanas)
+
+Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 **Entregables**:
-- Migración nueva en [server/migrate.js](../server/migrate.js): añade ~20 columnas a `pick_features` (scores reales, pick estructurado, features temporales, versionado).
-- `server/services/pickPostgameEnricher.js`: hook al pick-resolver para rellenar scores.
-- `server/parsers/pickParser.js`: parsea texto del pick a `{market_type, side, line, prop_kind, prop_player_id}`. Tests con 30+ casos.
-- `scripts/training/backfill-pick-features.js`: rellena histórico.
-- `scripts/training/export-dataset.js`: exporta Parquet listo para Python.
-- Documentar: añadir columnas en [docs/data-schema.md](data-schema.md).
+- `client/src/pages/PerformanceDashboard.jsx` ampliado (o nueva página `EquityDashboard.jsx`): curva de equity por usuario (USD acumulados o unidades), drawdown (peak-to-trough), Sharpe ratio rolling 30d, win rate por mercado, ROI por mes.
+- Endpoint nuevo `GET /api/users/:id/equity-stats` (o ampliar `/api/picks/clv-stats`): agrega desde `picks` + `bankroll_transactions`.
+- Comparativa "tú vs. Hexa baseline" si el usuario siguió otros picks vs. solo Hexa.
+- Configurable: ventanas de 7d / 30d / 90d / YTD / all-time.
 
 **Criterio de éxito**:
-- `SELECT COUNT(*) FROM pick_features WHERE result IS NOT NULL AND home_score IS NULL` = 0.
-- `node scripts/training/export-dataset.js --from 2025-01-01` genera Parquet leíble desde Python.
+- Un usuario nuevo entiende su P&L y volatilidad en <10s viendo la página.
+- Datos vienen de las tablas que ya existen — sin migraciones de schema.
+- Página accesible desde el bottom nav del frontend.
 
-**Riesgo**: muy bajo. Migraciones idempotentes, backfill solo toca rows sin score, parser tiene tests.
+**Riesgo**: bajo. Sin LLM, sin backend nuevo crítico — son agregaciones SQL + Recharts.
 
 ---
 
-### ⏳ Sprint 2 — Sidecar Python FastAPI (semanas 3-4)
+#### Sprint 6b — Persistencia de modelos ML (~1-2 semanas)
 
-**Status**: planificado.
+**Problema actual**: el sidecar Python guarda los `.pkl` en `artifacts/` ([ml/hexa_ml/config.py](../ml/hexa_ml/config.py) — `artifacts_dir: Path = Field(default=Path("artifacts"))`). Railway tiene filesystem efímero: cada redeploy/restart wipea esa carpeta. Resultado: cada deploy borra los modelos entrenados y todos los picks nuevos caen al validator legacy hasta que alguien dispare un retrain manual.
 
-**Entregables**:
-- Carpeta `ml/` nueva con FastAPI + XGBoost + scikit-learn.
-- Endpoints: `/health`, `/predict/{moneyline,overunder,runline,batch}`, `/calibration`, `/retrain`.
-- Training pipeline con split temporal, calibración Platt, evaluación Brier + ROI Kelly-25.
-- Deploy en Railway como servicio separado.
-- GitHub Actions `retrain-weekly.yml` para retrain automatic cada domingo 06:00 UTC.
+**Opciones evaluadas**:
+
+| Opción | Pro | Contra | Recomendación |
+|---|---|---|---|
+| **Railway Volumes** (persistent disk) | Cambio mínimo: solo apuntar `artifacts_dir` a `/data`. Sigue siendo un filesystem normal. | Vendor lock-in suave a Railway. Requiere configurar el volume en el dashboard del sidecar. | ✅ **Esta**. |
+| Guardar `.pkl` en Postgres como `BYTEA` | Portable, sobrevive a cambio de hosting. | Reescribe `ModelRegistry`. Latencia de carga (~50ms extra). Limita tamaño de modelo (Postgres prefiere <1MB blobs). | No, salvo que se cambie de Railway. |
+| Object storage externo (R2 / S3) | Más limpio que Postgres BYTEA. | Añade dependencia + IAM + costo (mínimo pero existe). | Considerar si se rompe el lock-in a Railway. |
+
+**Entregables (opción Railway Volumes)**:
+- Volume montado en `/data` en el servicio `hexa-ml` de Railway.
+- Env var `HEXA_ML_ARTIFACTS_DIR=/data/artifacts` (override del default).
+- [ml/hexa_ml/config.py](../ml/hexa_ml/config.py): leer `artifacts_dir` desde env si está definido.
+- Migración del primer retrain post-volume: forzar retrain manual de todos los mercados desde `/admin/ml-control` para poblar el volume.
+- Documentar en [docs/admin-and-ops.md](admin-and-ops.md) que el volume es crítico y no debe borrarse.
 
 **Criterio de éxito**:
-- `curl $HEXA_ML_API_URL/health` → 200.
-- Latencia `/predict/batch` con 10 juegos < 500ms.
-- Brier score moneyline < 0.24 en test set.
-- ROI Kelly-25 positivo en test.
+- Trigger un redeploy manual del sidecar en Railway.
+- `GET /api/admin/ml/status` sigue mostrando Brier/n_train/trained_at sin necesidad de retrain.
+- Un pick nuevo creado post-redeploy llega al Python sidecar (no cae al fallback legacy).
 
-**Riesgo**: bajo en lo técnico, medio en performance. Si <500 picks resueltos resultan insuficientes para alguno de los mercados, se ajusta scope (ej. entrenar solo moneyline en v1, OU/RL cuando haya más data).
+**Riesgo**: bajo. Cambio aislado al sidecar. Si falla el volume, el fallback del `/api/admin/ml-calibration` (PR #286 — lee de `ml_retrain_log`) sigue protegiendo la UI.
+
+**Nota**: el fallback del calibration endpoint mitiga el problema en la UI pero no en las **predicciones** — sigue habiendo una ventana post-redeploy donde los picks no tienen Python score hasta el siguiente retrain. Sprint 6b cierra esa ventana.
 
 ---
 
-### ⏳ Sprint 3 — Integración Node ↔ Python (semana 5)
+### ⏳ Sprint 7 — Expansión NBA, scaffolding + MVP (Q4 2026 → Q1 2027, ~10-14 semanas)
 
-**Status**: planificado.
+**Status**: planificado. Arranca en paralelo con Sprint 6 — Sprint 7a no toca código MLB, así que no compite con Sprint 6.
+
+**Target**: MVP NBA listo para el **All-Star Break (15-17 feb 2027)** o antes. Es la ventana donde MLB está dormido y NBA está en pico de interés (playoffs approach).
+
+#### Sprint 7a — Scaffolding de datos NBA (~3 semanas)
 
 **Entregables**:
-- `server/services/mlModelClient.js`: HTTP client con timeout 500ms, retry, circuit breaker.
-- `server/services/shadow-model.js` ampliado: guarda **ambos** scores (legacy validator + python model) en `shadow_model_runs`.
-- Migración: `ADD COLUMN python_model_score, python_model_version` a `shadow_model_runs`.
-- Endpoint admin `GET /api/admin/ml-calibration`.
-- Dashboard frontend `client/src/pages/MLCalibrationDashboard.jsx`.
+- `server/nba-api.js`: wrapper de NBA Stats API (gratis, [stats.nba.com](https://stats.nba.com)) + fallback a [nba_api Python lib](https://github.com/swar/nba_api) si necesitamos features no expuestas.
+- `server/nba-context-builder.js`: arma payload por partido — rosters, splits jugador-vs-defensa, pace, lineup confirmation, rest days, B2B status, injury status.
+- `server/nba-savant-equivalent.js`: scraper / API de basketball-reference + cleaningtheglass (off-rating, def-rating ajustados por pace).
+- Migración: tabla `nba_games`, `nba_player_stats`, `nba_team_stats` (separadas de las MLB para evitar contaminación).
+- Migración a `picks`: añadir `sport ENUM('mlb', 'nba')` con default `'mlb'` para retrocompatibilidad.
+- Migración a `pick_features`: misma columna `sport` + nuevas columnas NBA-específicas (`player_id`, `opponent_def_rating`, etc.).
 
 **Criterio de éxito**:
-- Cada pick guarda 3 scores en `shadow_model_runs`.
-- Si sidecar caído, picks se siguen creando (fallback transparente).
-- Dashboard renderiza curva de calibración Recharts.
-
-**Guardrails**: feature flag `ML_SIDECAR_ENABLED=false` por default. El Oracle nunca depende del sidecar.
+- `node scripts/test-nba-context.js --game=<id>` imprime payload completo en <2s.
+- Tabla `nba_games` se llena con games del día via cron job.
 
 ---
 
-### ⏳ Sprint 4 — Ensemble (semana 6, opcional)
-
-**Status**: condicional al éxito de Sprint 3.
-
-Solo se construye si Brier de calibración indica que el modelo Python aporta señal independiente.
+#### Sprint 7b — Oracle NBA + prompts adaptados (~3 semanas)
 
 **Entregables**:
-- `ml/hexa_ml/models/ensemble.py`: meta-learner LogReg sobre `shadow_model_runs`.
-- Endpoint Python `/predict/ensemble`.
-- Endpoint Node `/api/analyze/game-ensemble` (no toca `oracle.js`).
-- Feature flag `ENSEMBLE_ENABLED=false`.
+- `server/prompts/oracle-nba-prompts.js`: nuevos prompts (no tocar oracle.js). Mismos motores (Claude / Grok / Dual) — solo cambia el prompt y el payload.
+- Adapter `server/services/oracleNba.js` que orquesta sin tocar [oracle.js](../server/oracle.js). Patrón ya usado en `parlayEngine/llmClient.js`.
+- Endpoints: `/api/analyze/nba/game`, `/api/analyze/nba/parlay`, `/api/analyze/nba/player-props`.
+- Mercados v1: moneyline, spread, total, player points (más altos volumen NBA).
+- Mercados v2 (post-MVP): rebounds, assists, threes, double-double.
 
-**Criterio de éxito**: Brier ensemble < Brier de cualquier fuente individual.
+**Criterio de éxito**:
+- Análisis NBA real corre en producción, admin-only feature flag (`NBA_ANALYSIS_ENABLED`).
+- 50+ picks NBA creados en periodo de testing antes de abrir a usuarios.
+
+---
+
+#### Sprint 7c — NBA pick lifecycle (~2 semanas)
+
+**Entregables**:
+- `server/pick-resolver-nba.js`: resuelve picks NBA post-game (score, player stats, market-specific resolution para props).
+- `server/pick-tracker-nba.js`: tracking en vivo durante el game (quarter-by-quarter, player progress).
+- Reutilizar [server/pick-postmortem.js](../server/pick-postmortem.js) con prompt NBA-adapted.
+- Cron job para auto-resolver picks NBA con games del día.
+
+**Criterio de éxito**:
+- Pick NBA creado → tracked en vivo → resuelto automáticamente post-game → postmortem generado. Zero intervención manual.
+
+---
+
+#### Sprint 7d — UI NBA + integración con frontend (~2 semanas)
+
+**Entregables**:
+- Sport switcher en bottom nav (MLB / NBA).
+- Reutilizar [HexaBoard](../client/src/components/HexaBoard.jsx), [AnalysisPanel](../client/src/components/AnalysisPanel.jsx), [PickCard](../client/src/components/PickCard.jsx) con prop `sport`.
+- Vistas NBA-específicas: matchup card con def-rating, pace, B2B indicator.
+- ML Calibration y Control Center: tabs separados MLB / NBA o columnas con badge `sport`.
+
+**Criterio de éxito**:
+- Usuario puede cambiar entre MLB y NBA con un toggle, sin perder estado de su pick history.
+- No hay regresión en flows MLB existentes.
+
+---
+
+#### Sprint 7e — NBA ML sidecar (~3 semanas, condicional)
+
+Solo se construye **después** de acumular ~500 picks NBA resueltos. Probablemente Q1 2027.
+
+**Entregables**:
+- Modelo XGBoost NBA por mercado (moneyline, spread, total, player_points).
+- Reusa la infra del sidecar Python actual — solo añade nuevos endpoints `/predict/nba/*` y configs por sport.
+- Ensemble meta-learner NBA (oracle_nba + python_nba; legacy validator NBA opcional).
+
+**Criterio de éxito**: Brier moneyline NBA < 0.22 en test set.
 
 ---
 
@@ -127,12 +203,13 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
-| S1 | **Equity curve + Sharpe + drawdown dashboard** | 2 días | Usa datos que ya existen en `picks` + `bankroll`. Sin backend nuevo. Reusar componentes Recharts. |
+| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ⬆️ Promovido a **Sprint 6a**. Ver [sección 2](#-sprint-6--pre-nba-hardening-q3-2026-6-semanas). |
 | S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | Trivial, alto valor para auditoría. Sprint 1 ya incluye los campos en pick_features. Falta llenarlos desde oracle.js. |
 | S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | Health check para detectar features faltantes / fecha vieja. Útil pre-training. |
 | S4 | **Telegram channel publisher** | 3 días | Reusa `contentDraftService`, añade adapter `telegramPublisher.js`. Mayor engagement por canal. |
 | S5 | **Newsletter weekly recap via Resend** | 3 días | Reusa email.js + `weekly_recap` content type que ya existe. Tabla `newsletter_subscribers`. |
 | S6 | **Postmortem dashboard cuantitativo** | 2 días | Agregaciones de `picks.postmortem.alert_flags` por hit/miss. Detecta patrones para refinar prompts. |
+| S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ⬆️ Promovido a **Sprint 6b**. Ver [sección 2](#sprint-6b--persistencia-de-modelos-ml-1-2-semanas). |
 
 ### Tier A — Alta señal, esfuerzo medio
 
@@ -152,7 +229,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
-| B1 | **Expansión NBA** | 2-3 semanas | Nuevo `context-builder-nba.js`, NBA Stats API (gratis), prompts adaptados, splits por matchup defensivo. **Pre-requisito**: modelo Python en producción para MLB primero. |
+| B1 | **Expansión NBA** | 10-14 semanas | ⬆️ Promovido a **Sprint 7** (a-e). Ver [sección 2](#-sprint-7--expansión-nba-scaffolding--mvp-q4-2026--q1-2027-10-14-semanas). Pre-requisito MLB ML ya está en producción. |
 | B2 | **Hexa Live (in-play WP + momentum alerts)** | 2-3 semanas | Infra de WebSocket (cliente al server), polling agresivo MLB Stats, WP model, momentum detection (bullpen fatigue + consecutive hard contacts). Alertas push web. |
 | B3 | **Discord bot** | 1-2 semanas | discord.js, comandos slash `/today`, `/pick {gameId}`, webhook para auto-post. Server propio HEXA. |
 | B4 | **Threads (Meta) publisher** | 1-2 semanas | Depende del Meta API stability. Adapter similar a `xPublisher.js`. |
@@ -171,7 +248,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | C1 | **Reinforcement Learning para staking** | Requiere >5k picks resueltos para converger. Hoy 500. Volver a evaluar cuando se acumule. |
 | C2 | **Chain-of-Thought validation con 3er modelo** | 3x cost para ganancia marginal sobre el ensemble. Evaluar tras Sprint 4. |
 | C3 | **Migración a TypeScript** | El repo está estable. Mover ahora interrumpe velocity sin beneficio inmediato. Revisitar si el equipo crece a >3 devs. |
-| C4 | **Expansión Soccer / NHL / Tennis** | Cada deporte requiere context-builder propio. Priorizar NBA primero, evaluar el siguiente después. |
+| C4 | **Expansión Soccer / NHL / Tennis** | Cada deporte requiere context-builder propio. NBA va primero (Sprint 7). Después de NBA, revisitar — NHL tiene timing similar a NBA (oct-jun) y podría ser el siguiente. Soccer es mercado masivo pero fragmentado (50+ ligas, cada una con su data API). |
 
 ### Tier D — Rechazado o no recomendado
 
@@ -212,17 +289,23 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 
 ---
 
-## Resumen visual del próximo trimestre
+## Resumen visual del próximo año
 
 ```
-W1     Sprint 0 — Docs                ████████████████████████████ ✅
-W2-3   Sprint 1 — Dataset gaps        ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 🔄
-W3-4   Sprint 2 — Sidecar Python      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
-W5     Sprint 3 — Integración         ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
-W6     Sprint 4 — Ensemble (opcional) ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
-
-W7+    Tier S items (1-2 semanas)
-W9+    Tier A items según pipeline
+2026 Q2  Sprints 0-5   — Pipeline ML completo            ████████████████████████ ✅
+2026 Q3  Sprint 6a     — Equity curve dashboard          ░░░░░░░░░░░░░░░░░░░░░░░░ 🔄
+2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ░░░░░░░░░░░░░░░░░░░░░░░░ 🔄
+2026 Q3-4 Sprint 7a    — Scaffolding NBA (datos)         ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2026 Q4  Sprint 7b     — Oracle NBA + prompts            ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2026 Q4  Sprint 7c     — NBA pick lifecycle              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2027 Q1  Sprint 7d     — UI NBA + frontend               ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2027 Feb  🎯 MVP NBA listo para All-Star Break
+2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)    ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 ```
+
+**Después del MVP NBA**:
+- Sprint 5 Player Props MLB (si no se cerró antes).
+- Tier A items: F5 market, FanGraphs ZiPS scraper, pgvector + RAG, Player Props UI.
+- Re-evaluar NHL como siguiente deporte (timing similar a NBA, oct-jun).
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).

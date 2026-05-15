@@ -346,9 +346,30 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 
 **Picks desde Oracle Chat**: cuando el Oracle recomienda un pick durante una sesión de chat, el extractor (JSON tail + Haiku fallback) lo persiste en `picks` con `source='oracle_chat'` y `chat_session_id` apuntando a `oracle_sessions`. Estos picks **no entran al training default** (el sidecar Python filtra por `source = 'live'`). Para inspeccionarlos: panel "Chat-sourced picks" en `/admin/ml-control`. Para suprimir extracción en un chat exploratorio: header `X-HEXA-Skip-Pick-Extract: 1` (o el checkbox "NO GUARDAR PARA ENTRENAMIENTO" en OracleChat).
 
-Próximos pasos:
-- Sprint 5 Player Props (training para hits / total_bases / strikeouts) — requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en savant-fetcher.
-- Equity curve + Sharpe + drawdown dashboard usando datos que ya existen en `picks` (Tier S del backlog).
+Próximos pasos (planificados, ver [docs/roadmap.md](docs/roadmap.md) para detalle ejecutable):
+
+**Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)**
+- **Sprint 6a — Equity curve + Sharpe + drawdown dashboard** (~2 semanas). Usa datos que ya existen en `picks` + `bankroll`. Sin esto, el usuario serio no entiende qué hace Hexa.
+- **Sprint 6b — Persistencia de modelos ML vía Railway Volumes** (~1-2 semanas). Hoy cada redeploy del sidecar borra los `.pkl` (`ml/hexa_ml/config.py` usa `artifacts_dir: Path("artifacts")`, relativo y efímero en Railway) y los picks nuevos caen al fallback legacy hasta el próximo retrain. Apuntar `artifacts_dir` a `/data` (volume montado) cierra esa ventana.
+
+**Sprint 7 — Expansión NBA, scaffolding → MVP (Q4 2026 → Q1 2027, ~10-14 semanas)**
+- **Por qué NBA**: MLB tiene 6 meses muertos (nov–mar). NBA es oct–abr ⇒ cobertura year-round sin pelearse por la misma noche. Arquitectura ya es deporte-agnóstica; lo MLB-específico vive en 4 archivos: `mlb-api.js`, `savant-fetcher.js`, `context-builder.js`, `pick-resolver.js`.
+- **Target**: MVP NBA listo para **All-Star Break feb 2027** (ventana donde MLB está dormido y NBA está en pico).
+- Sub-sprints:
+  - **7a scaffolding datos**: `nba-api.js`, `nba-context-builder.js`, `nba-savant-equivalent.js`, tablas `nba_games`/`nba_player_stats`/`nba_team_stats`, columna `sport ENUM('mlb','nba')` en `picks` y `pick_features`.
+  - **7b Oracle NBA**: `server/prompts/oracle-nba-prompts.js` + adapter `server/services/oracleNba.js`. **No tocar `oracle.js`** — patrón ya usado en `parlayEngine/llmClient.js`.
+  - **7c pick lifecycle NBA**: `pick-resolver-nba.js`, `pick-tracker-nba.js`. Reutilizar `pick-postmortem.js` con prompt adaptado.
+  - **7d UI**: sport switcher en bottom nav, reutilizar `HexaBoard` / `AnalysisPanel` / `PickCard` con prop `sport`.
+  - **7e NBA ML sidecar** (condicional, post ~500 picks NBA resueltos, probablemente Q1-Q2 2027).
+- **Guardrails críticos**:
+  - No tocar archivos MLB existentes. Crear archivos paralelos `*-nba.js` y orquestar.
+  - Feature flag `NBA_ANALYSIS_ENABLED=false` por default hasta MVP.
+  - Columna `sport` default `'mlb'` para retrocompatibilidad de queries existentes.
+
+**Pendiente del bloque ML actual**:
+- Sprint 5 Player Props MLB (training para hits / total_bases / strikeouts) — requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en `savant-fetcher.js`.
+
+**Trade-off explícito** del roadmap: NBA y hardening (equity + persistencia) corren en **paralelo**, no en serie. Sprint 7a no toca código MLB, así que no compite con Sprint 6. La razón: si esperamos a cerrar Sprint 6 antes de empezar NBA, perdemos la ventana de All-Star Break feb 2027.
 
 ---
 

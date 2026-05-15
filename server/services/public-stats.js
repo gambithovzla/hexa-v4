@@ -4,8 +4,6 @@
  * Extracted from routes/picks.js so both the original /api/picks/public-stats
  * route and the Content API (/api/content/v1/performance/summary) can reuse
  * the same aggregation without duplicating logic.
- *
- * Behavior is identical to the previous inline implementation.
  */
 
 import pool from '../db.js';
@@ -15,10 +13,6 @@ function parseJsonMaybe(value) {
   try { return JSON.parse(value); } catch { return value; }
 }
 
-/**
- * Detect pick type from the saved payload first, then fall back to the pick text.
- * This avoids misclassifying player props like "Under 0.5 Hits" as plain "under".
- */
 function detectPickType(pick, bestPickRaw) {
   const bestPick = parseJsonMaybe(bestPickRaw);
   const bestType = String(bestPick?.type ?? '').toLowerCase().replace(/[\s_-]/g, '');
@@ -74,9 +68,8 @@ function buildSummary(statsMap) {
 
 /**
  * computePublicStats(period)
- *   period: '7' | '30' | 'season' (numbers also accepted)
+ *   period: '7' | '30' | '90' | 'ytd' | 'season'
  * Throws { code: 'INVALID_PERIOD' } on bad input so the caller can map to 400.
- * Returns the same `data` object shape the /public-stats route has always returned.
  */
 export async function computePublicStats(period) {
   const p = String(period ?? '30');
@@ -84,14 +77,17 @@ export async function computePublicStats(period) {
   let dateFilter;
   if (p === 'season') {
     dateFilter = `created_at >= '2026-03-01'`;
+  } else if (p === 'ytd') {
+    const year = new Date().getFullYear();
+    dateFilter = `created_at >= '${year}-01-01'`;
   } else {
     const days = parseInt(p, 10);
-    if (![7, 30].includes(days)) {
-      const err = new Error("period must be 7, 30, or 'season'");
+    if (![7, 30, 90].includes(days)) {
+      const err = new Error("period must be 7, 30, 90, 'ytd', or 'season'");
       err.code = 'INVALID_PERIOD';
       throw err;
     }
-    // days is validated to be exactly 7 or 30 — safe to interpolate
+    // days is validated to be exactly 7, 30 or 90 — safe to interpolate
     dateFilter = `created_at >= NOW() - INTERVAL '${days} days'`;
   }
 
@@ -109,8 +105,16 @@ export async function computePublicStats(period) {
   const modelStats = {};
   const typeStats  = {};
   const roiCurve   = [];
-  let runningUnits = 0;
+  const equityCurve = [];
+  let runningUnits  = 0;
   let roiPickNumber = 0;
+
+  // Equity tracking
+  const perPickReturns = [];
+  let peakUnits        = 0;
+  let maxDrawdownUnits = 0;
+  let totalWinUnits    = 0;
+  let totalLossUnits   = 0;
 
   for (const row of rows) {
     const result = String(row.result ?? '').toLowerCase();
@@ -145,12 +149,31 @@ export async function computePublicStats(period) {
 
       runningUnits += units;
       roiPickNumber++;
+
+      // ROI curve (existing shape — unchanged for content API compat)
       const cumulativeRoi = Math.round((runningUnits / roiPickNumber) * 10000) / 100;
       roiCurve.push({
         pickNumber:    roiPickNumber,
         cumulativeRoi,
         date:          row.created_at,
         result:        isWon ? 'won' : isLost ? 'lost' : 'push',
+      });
+
+      // Equity & drawdown tracking
+      if (runningUnits > peakUnits) peakUnits = runningUnits;
+      const drawdownUnits = runningUnits - peakUnits; // 0 or negative
+      if (drawdownUnits < maxDrawdownUnits) maxDrawdownUnits = drawdownUnits;
+
+      perPickReturns.push(units);
+      if (units > 0) totalWinUnits  += units;
+      else if (units < 0) totalLossUnits += units;
+
+      equityCurve.push({
+        pickNumber:      roiPickNumber,
+        date:            row.created_at,
+        cumulativeUnits: Math.round(runningUnits * 100) / 100,
+        drawdownUnits:   Math.round(drawdownUnits * 100) / 100,
+        result:          isWon ? 'won' : isLost ? 'lost' : 'push',
       });
     }
   }
@@ -164,6 +187,21 @@ export async function computePublicStats(period) {
     ? Math.round((roiUnits / totalPicksForROI) * 10000) / 100
     : 0;
 
+  // Sharpe ratio — per-pick signal-to-noise (mean/stddev of unit returns)
+  let sharpe = 0;
+  const n = perPickReturns.length;
+  if (n >= 2) {
+    const mean     = perPickReturns.reduce((a, b) => a + b, 0) / n;
+    const variance = perPickReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1);
+    const stddev   = Math.sqrt(variance);
+    sharpe = stddev > 0 ? Math.round((mean / stddev) * 100) / 100 : 0;
+  }
+
+  // Profit factor — gross wins / gross losses in units
+  const profitFactor = totalLossUnits < 0
+    ? Math.round((totalWinUnits / Math.abs(totalLossUnits)) * 100) / 100
+    : totalWinUnits > 0 ? 99.99 : 1.0;
+
   return {
     totalPicks,
     wins,
@@ -173,10 +211,14 @@ export async function computePublicStats(period) {
     roi,
     unitProfit,
     roiSampleSize: totalPicksForROI,
+    sharpe,
+    maxDrawdown:   Math.round(maxDrawdownUnits * 100) / 100,
+    profitFactor,
     breakdown: {
       byModel: buildSummary(modelStats),
       byType:  buildSummary(typeStats),
     },
     roiCurve,
+    equityCurve,
   };
 }
