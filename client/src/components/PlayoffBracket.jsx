@@ -21,30 +21,37 @@ const TEAM_LOGO_URL = {
 
 const COPY = {
   en: {
-    eyebrow:       'Playoff bracket',
-    projected:     'Projected — based on current standings',
-    playIn:        'Play-In Tournament',
-    seedShort:     '#',
-    bestOf:        'Best of',
-    bye:           'BYE',
-    tbd:           'TBD',
-    divWinner:     'Div Winner',
-    champion:      'Champion',
-    playInWinner: 'Play-In Winner',
+    eyebrow:        'Playoff bracket',
+    projectedTitle: 'PROJECTED BRACKET',
+    projectedBody:  'Matchups derived from current standings. They will keep shifting as the season unfolds — this is not the official bracket.',
+    seasonProgress: 'Season progress',
+    playIn:         'Play-In Tournament',
+    seedShort:      '#',
+    bestOf:         'Best of',
+    bye:            'BYE',
+    tbd:            'TBD',
+    divWinner:      'Div Winner',
+    champion:       'Champion',
+    playInWinner:  'Play-In Winner',
   },
   es: {
-    eyebrow:       'Cuadro de playoffs',
-    projected:     'Proyectado — basado en posiciones actuales',
-    playIn:        'Torneo Play-In',
-    seedShort:     '#',
-    bestOf:        'Al mejor de',
-    bye:           'BYE',
-    tbd:           'POR DEFINIR',
-    divWinner:     'Líder Div',
-    champion:      'Campeón',
-    playInWinner: 'Ganador Play-In',
+    eyebrow:        'Cuadro de playoffs',
+    projectedTitle: 'CUADRO PROYECTADO',
+    projectedBody:  'Enfrentamientos derivados de las posiciones actuales. Cambiarán a medida que avance la temporada — no es el cuadro oficial.',
+    seasonProgress: 'Avance de temporada',
+    playIn:         'Torneo Play-In',
+    seedShort:      '#',
+    bestOf:         'Al mejor de',
+    bye:            'BYE',
+    tbd:            'POR DEFINIR',
+    divWinner:      'Líder Div',
+    champion:       'Campeón',
+    playInWinner:  'Ganador Play-In',
   },
 };
+
+// Total games in a regular season — used to estimate season progress.
+const REG_SEASON_GAMES = { nba: 82, mlb: 162 };
 
 function TeamLogo({ teamId, sport, abbr, size = 22 }) {
   const [failed, setFailed] = useState(false);
@@ -385,6 +392,29 @@ function FinalCard({ matchup, name, sport, copy, lang }) {
   );
 }
 
+function pickAnyTeam(groups, sport) {
+  for (const g of groups) {
+    if (sport === 'nba') {
+      const t = g.teams?.find(Boolean);
+      if (t) return t;
+    } else {
+      const t = g.seeds?.find(Boolean);
+      if (t) return t;
+    }
+  }
+  return null;
+}
+
+function computeSeasonProgress(groups, sport) {
+  const sample = pickAnyTeam(groups, sport);
+  if (!sample) return null;
+  const games = (Number(sample.wins) || 0) + (Number(sample.losses) || 0);
+  if (games <= 0) return null;
+  const total = REG_SEASON_GAMES[sport] ?? 0;
+  if (!total) return null;
+  return Math.max(0, Math.min(1, games / total));
+}
+
 export default function PlayoffBracket({ data, lang = 'es' }) {
   const copy = COPY[lang] ?? COPY.es;
   if (!data) return null;
@@ -392,6 +422,9 @@ export default function PlayoffBracket({ data, lang = 'es' }) {
   const sport = data.sport === 'mlb' ? 'mlb' : 'nba';
   const groups = sport === 'nba' ? data.conferences : data.leagues;
   if (!groups || groups.length === 0) return null;
+
+  const progress = computeSeasonProgress(groups, sport);
+  const progressPct = progress != null ? Math.round(progress * 100) : null;
 
   return (
     <Box sx={{ display: 'grid', gap: 2.5 }}>
@@ -401,11 +434,69 @@ export default function PlayoffBracket({ data, lang = 'es' }) {
         >
           {copy.eyebrow}
         </Typography>
+      </Box>
+
+      {/* Projection banner — explicit, amber-tinted, with season progress bar */}
+      <Box
+        sx={{
+          p: { xs: 1.4, sm: 1.8 },
+          border: `1px solid ${C.amber}66`,
+          borderLeft: `3px solid ${C.amber}`,
+          background: 'linear-gradient(180deg, rgba(255,170,0,0.10), rgba(2,4,8,0.6))',
+          display: 'grid', gap: 0.8,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box
+            sx={{
+              px: '8px', py: '2px',
+              border: `1px solid ${C.amber}`,
+              background: 'rgba(255,170,0,0.18)',
+              fontFamily: MONO, fontSize: '0.6rem', fontWeight: 800,
+              color: C.amber, letterSpacing: '0.18em', textTransform: 'uppercase',
+            }}
+          >
+            ⚠ {copy.projectedTitle}
+          </Box>
+        </Box>
         <Typography
-          sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, mt: 0.4 }}
+          sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.textSecondary, lineHeight: 1.5 }}
         >
-          {copy.projected}
+          {copy.projectedBody}
         </Typography>
+        {progressPct != null && (
+          <Box sx={{ display: 'grid', gap: 0.5, mt: 0.4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <Typography
+                sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.14em', textTransform: 'uppercase' }}
+              >
+                {copy.seasonProgress}
+              </Typography>
+              <Typography
+                sx={{ fontFamily: MONO, fontSize: '0.66rem', color: C.amber, fontWeight: 700 }}
+              >
+                {progressPct}%
+              </Typography>
+            </Box>
+            <Box
+              sx={{
+                height: 4, width: '100%',
+                background: 'rgba(255,255,255,0.05)',
+                border: `1px solid ${C.border}`,
+                position: 'relative', overflow: 'hidden',
+              }}
+            >
+              <Box
+                sx={{
+                  height: '100%',
+                  width: `${progressPct}%`,
+                  background: progressPct < 50 ? C.red : progressPct < 80 ? C.amber : C.green,
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </Box>
+          </Box>
+        )}
       </Box>
 
       {groups.map((group, i) => {
