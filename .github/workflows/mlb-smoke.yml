@@ -18,10 +18,32 @@ on:
   workflow_dispatch:
 
 jobs:
+  critical-tests:
+    name: Run MLB critical unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run critical MLB tests
+        run: npm run test:mlb:critical
+
   smoke:
     name: Run MLB smoke checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: critical-tests
 
     steps:
       - name: Checkout

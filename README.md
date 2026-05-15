@@ -116,6 +116,7 @@ Desde la raíz ([package.json](package.json)):
 | `npm run dev:all` | API + cliente en paralelo (`concurrently`) |
 | `npm run audit` | Diagnóstico del sistema ([scripts/system-audit.js](scripts/system-audit.js)) |
 | `npm run smoke:mlb` | Smoke test de release MLB (endpoints críticos `/api/games`, `/api/teams`, `/api/hexa/board`) |
+| `npm run test:mlb:critical` | Suite anti-regresión MLB (resolver, closing-line, guardrails `/api/picks`, admin equity) |
 | `npm run test:parlay` | Tests del Parlay Synergy Engine |
 
 Desde `client/`:
@@ -148,6 +149,7 @@ Configurable por env vars:
 CI/CD:
 - Workflow automático: `.github/workflows/mlb-smoke.yml`
 - Corre en PRs y pushes a `main` cuando cambian archivos de `server/`, `scripts/smoke/` o `package.json`
+- Pipeline en dos fases: primero `npm run test:mlb:critical`, luego smoke HTTP de release
 
 ## Estructura del repo
 
