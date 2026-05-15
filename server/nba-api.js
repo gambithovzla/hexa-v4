@@ -213,47 +213,85 @@ export async function getNbaLeagueTeamStats(season = CURRENT_SEASON) {
   return result;
 }
 
-/**
- * getNbaTeamRecentGames(teamId, season, lastN)
- *   Returns the last N games for a team in the given season.
- */
-export async function getNbaTeamRecentGames(teamId, season = CURRENT_SEASON, lastN = 10) {
-  const cacheKey = `recent:${teamId}:${season}:${lastN}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return cached;
+let _gameLogHeadersLogged = false;
 
-  const data = await nbaFetch('teamgamelog', {
-    TeamID: String(teamId),
-    Season: season,
-    SeasonType: 'Regular Season',
-    LeagueID: '00',
-  });
-
-  const rs = data.resultSets?.find(r => r.name === 'TeamGameLog');
-  if (!rs) {
-    console.warn(`[nba-api] No TeamGameLog for team ${teamId}`);
+async function fetchTeamGameLog(teamId, season, seasonType) {
+  try {
+    const data = await nbaFetch('teamgamelog', {
+      TeamID: String(teamId),
+      Season: season,
+      SeasonType: seasonType,
+      LeagueID: '00',
+    });
+    const rs = data.resultSets?.find(r => r.name === 'TeamGameLog');
+    if (!rs) return [];
+    if (!_gameLogHeadersLogged) {
+      console.log(`[nba-api] teamgamelog headers: ${rs.headers.join(', ')}`);
+      _gameLogHeadersLogged = true;
+    }
+    return parseResultSet(rs);
+  } catch (err) {
+    // SeasonType not yet active (e.g. Playoffs in October) returns 4xx — silent.
+    console.warn(`[nba-api] teamgamelog ${seasonType} for ${teamId}: ${err.message}`);
     return [];
   }
+}
 
-  const rows = parseResultSet(rs).slice(0, lastN);
-  const result = rows.map(r => ({
+/**
+ * Normalise one teamgamelog row.
+ *
+ * NBA's teamgamelog uses `PLUS_MINUS` in most versions and `+/-` in some.
+ * Falls back to a key scan so new response shapes don't silently zero out.
+ */
+function normalisePlusMinus(r) {
+  if (r.PLUS_MINUS != null) return r.PLUS_MINUS;
+  if (r['+/-'] != null) return r['+/-'];
+  const key = Object.keys(r).find(k => /plus.?minus/i.test(k) || k === '+/-');
+  return key != null ? (r[key] ?? null) : null;
+}
+
+function normaliseTeamGameLogRow(r) {
+  const plusMinus = normalisePlusMinus(r);
+  return {
     game_id: r.Game_ID,
     game_date: r.GAME_DATE,
     matchup: r.MATCHUP,
     wl: r.WL,
     pts: r.PTS ?? null,
-    opp_pts: r.PLUS_MINUS != null && r.PTS != null
-      ? r.PTS - r.PLUS_MINUS
-      : null,
+    opp_pts: plusMinus != null && r.PTS != null ? r.PTS - plusMinus : null,
     fg_pct: r.FG_PCT ?? null,
     ft_pct: r.FT_PCT ?? null,
     fg3_pct: r.FG3_PCT ?? null,
     ast: r.AST ?? null,
     reb: r.REB ?? null,
     tov: r.TOV ?? null,
-    plus_minus: r.PLUS_MINUS ?? null,
-  }));
+    plus_minus: plusMinus,
+  };
+}
 
-  cacheSet(cacheKey, result, TTL.RECENT_GAMES);
-  return result;
+/**
+ * getNbaTeamRecentGames(teamId, season, lastN)
+ *   Returns the last N games for a team in the given season.
+ *
+ * Pulls both 'Regular Season' and 'Playoffs' logs and merges them sorted
+ * by date descending — during May/June playoffs, the most recent games
+ * are postseason and the regular-season-only fetch is stale.
+ */
+export async function getNbaTeamRecentGames(teamId, season = CURRENT_SEASON, lastN = 10) {
+  const cacheKey = `recent:${teamId}:${season}:${lastN}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const [regular, playoffs] = await Promise.all([
+    fetchTeamGameLog(teamId, season, 'Regular Season'),
+    fetchTeamGameLog(teamId, season, 'Playoffs'),
+  ]);
+
+  const merged = [...playoffs, ...regular]
+    .map(normaliseTeamGameLogRow)
+    .sort((a, b) => new Date(b.game_date) - new Date(a.game_date))
+    .slice(0, lastN);
+
+  cacheSet(cacheKey, merged, TTL.RECENT_GAMES);
+  return merged;
 }

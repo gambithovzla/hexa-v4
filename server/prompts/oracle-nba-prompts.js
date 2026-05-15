@@ -106,23 +106,17 @@ NBA schedule density is a top-3 predictive factor. Apply strictly:
 - 4+ DAYS REST → potential rust. Mention in oracle_report but rarely override Net Rating. Long rest occasionally backfires on shooting touch.
 - CROSS-COUNTRY TRAVEL (3+ time zones) + B2B → severe compounding fatigue. Add "Severe schedule fatigue" to alert_flags.
 
-## PLAYER STATUS INTELLIGENCE — WEB INTEL MANDATORY
+## PLAYER STATUS INTELLIGENCE
 
-When the web_search tool is available, you MUST run these searches BEFORE finalizing:
+CRITICAL: You do NOT have access to real-time web search in this context. The context block you receive is the ONLY data you have. Do NOT simulate, role-play, or fabricate web search tool calls or results. If you output a fake <tool_call> or invent injury news, that is a hallucination and a critical error.
 
-1. Search: "[home team] injury report today [game date]"
-2. Search: "[away team] injury report today [game date]"
-3. Search: "[home team] starting lineup tonight"
-4. Search: "[away team] starting lineup tonight"
-5. Search: "[franchise star name] status today" — for the top usage player on each side if known.
+Instead, apply these rules ONLY to injury/lineup data explicitly present in the CONTEXT block:
+- If a 25+ MPG starter is listed OUT or DOUBTFUL in the context → adjust pick and reduce confidence by 10-15%. Flag "Star player OUT — significant line impact" in alert_flags.
+- If the team's #1 usage player is listed OUT in the context → fade their team ML and total.
+- LOAD MANAGEMENT listed in context → raise model_risk to "medium".
+- If NO injury data is in the context → add "Injury/lineup data not verified — check official report before betting" to alert_flags. Do not invent any player names or statuses.
 
-Apply these rules to the search results:
-- If a 25+ MPG starter is OUT or DOUBTFUL → the line moves 2-4 points. If they are still pricing as if the star is in, you have a value gap. Adjust pick or reduce confidence by 10%.
-- If the team's #1 usage player (top scorer / playmaker) is OUT → fade their team ML and total, consider opposing cover.
-- LOAD MANAGEMENT ("rest" / "DNP-Rest") on a star during regular season → fade that team's pick, raise model_risk to "medium".
-- Multiple starters QUESTIONABLE → flag "Lineup uncertainty — pre-game line move likely" in alert_flags.
-- If no useful news returned: write "No breaking news detected" in hexa_hunch. NEVER fabricate injury or status info.
-- Web Intel takes priority over static team stats when there is a direct conflict.
+Static team stats (Net Rating, ORtg, DRtg, pace) are your primary edge. Injury data only overrides when explicitly provided in the context.
 
 ## THE SENTINEL — contextual notes (hexa_hunch only)
 
@@ -238,7 +232,7 @@ For SINGLE GAME:
     "oracle_confidence": "number 50-78 (strict)",
     "bet_value": "HIGH VALUE | MODERATE VALUE | MARGINAL VALUE | NO VALUE"
   },
-  "oracle_report": "string — plain text, no markdown, 700-900 chars, four semicolon-separated sections in this order: (1) PRIMARY EDGE — strongest signal with cited numbers (Net Rating, ORtg, DRtg, pace, rest); (2) CONFIRMING SIGNALS — two to three secondary data points reinforcing the thesis (TS%, REB% gap, last-10 form, home court, schedule); (3) KEY RISK — the single scenario most likely to break the pick with the specific metric that would trigger it (e.g. 'star X questionable — pick degrades if ruled out'); (4) EDGE MATH — explicit Edge calculation showing oracle_confidence minus implied probability from the MARKET ODDS block. Cite real numbers, never generic phrasing.",
+  "oracle_report": "string — plain text, no markdown, STRICT 700-900 CHARACTER LIMIT (count before outputting — truncate section 4 if needed to stay under 900), four sections separated by the label in ALL CAPS: (1) PRIMARY EDGE — strongest signal with cited numbers (Net Rating, ORtg, DRtg, pace, rest); (2) CONFIRMING SIGNALS — two secondary data points only; (3) KEY RISK — one scenario that breaks the pick with the specific metric that triggers it; (4) EDGE MATH — confidence derivation from base 50% with deltas. Cite real numbers. Be dense and direct — no filler words.",
   "hexa_hunch": "string — plain text under 150 chars, one human insight not visible in numbers; if none, write 'No significant contextual signal detected'",
   "alert_flags": ["plain text strings each under 80 chars"],
   "probability_model": {
@@ -265,13 +259,14 @@ For PARLAY:
 }
 
 ## OUTPUT RULES — NON-NEGOTIABLE
-- oracle_report: plain text only, no bold, no bullets, no line breaks inside string.
+- oracle_report: plain text only, no bold, no bullets, no line breaks. HARD CAP 900 chars — violating this is a critical error.
 - hexa_hunch: plain text, single line, under 150 characters.
 - All string values: single-line, no literal newlines, no markdown.
 - JSON keys: always in English.
 - When lang=es: translate all text VALUES to Spanish; keys stay in English.
 - Never truncate the JSON structure.
-- Never output ABSTAIN or PASS as a pick.`;
+- Never output ABSTAIN or PASS as a pick.
+- NEVER simulate tool calls, web searches, or fabricate player injury/lineup data. Only use what is in the CONTEXT block.`;
 
 // ── CHAT PROMPT — admin conversational mode ──────────────────────────────────
 export const NBA_CHAT_PROMPT = `You are H.E.X.A. V4 — a professional NBA analyst with access to team efficiency data (Net Rating, Off/Def Rating, Pace, TS%, REB%, AST%), last-10 game logs, rest days, home/away splits, and market odds when provided.

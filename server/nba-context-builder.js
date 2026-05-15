@@ -34,13 +34,19 @@ function recentFormSummary(games) {
   if (!games.length) return null;
   const wins   = games.filter(g => g.wl === 'W').length;
   const avgPts = games.reduce((s, g) => s + (g.pts ?? 0), 0) / games.length;
-  const avgOpp = games.reduce((s, g) => s + (g.opp_pts ?? 0), 0) / games.length;
-  const avgPm  = games.reduce((s, g) => s + (g.plus_minus ?? 0), 0) / games.length;
+  const oppGames = games.filter(g => g.opp_pts != null);
+  const avgOpp = oppGames.length
+    ? oppGames.reduce((s, g) => s + g.opp_pts, 0) / oppGames.length
+    : null;
+  const pmGames = games.filter(g => g.plus_minus != null);
+  const avgPm = pmGames.length
+    ? pmGames.reduce((s, g) => s + g.plus_minus, 0) / pmGames.length
+    : null;
   return {
     record: `${wins}-${games.length - wins}`,
     avgPts: Math.round(avgPts * 10) / 10,
-    avgOppPts: Math.round(avgOpp * 10) / 10,
-    avgPlusMinus: Math.round(avgPm * 10) / 10,
+    avgOppPts: avgOpp != null ? Math.round(avgOpp * 10) / 10 : null,
+    avgPlusMinus: avgPm != null ? Math.round(avgPm * 10) / 10 : null,
     games: games.map(g => ({
       date: g.game_date,
       matchup: g.matchup,
