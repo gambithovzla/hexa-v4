@@ -24,6 +24,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  client-build:
+    name: Build client app
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build client
+        run: npm run build
+        working-directory: client
+
   critical-tests:
     name: Run MLB critical unit tests
     runs-on: ubuntu-latest
@@ -49,7 +78,9 @@ jobs:
     name: Run MLB smoke checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: critical-tests
+    needs:
+      - client-build
+      - critical-tests
 
     steps:
       - name: Checkout
