@@ -39,9 +39,9 @@ Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js)
 
 ### Foco inmediato (rama `feat/nba-go-live-gate`)
 
-1. **Validación E2E NBA en producción** — analyze → persist → historial → resolver post-game con tráfico real.
-2. **6a menor** — equity / performance en navegación principal (no solo admin bankroll).
-3. **Parlay Architect** — smoke post-deploy de AUTO (`db_*`) y `leg_results` en historial.
+1. **Validación E2E NBA en producción** — analyze → persist → historial → resolver post-game con tráfico real (`npm run smoke:nba` + token admin).
+2. ~~**6a menor** — equity en bankroll + performance~~ ✅ panel reutilizable `EquityComparePanel` en tab Bankroll (dashboard) y Oracle Performance (logueado).
+3. **Parlay Architect** — smoke post-deploy de AUTO (`db_*`) y `leg_results` (`npm run smoke:parlay`).
 4. **NBA live tracker** (opcional en esta rama) — `pick-tracker-nba.js` quarter-by-quarter.
 
 **Explícitamente fuera de esta fase**: Sprint 5 **Player Props ML** (hits / total_bases / strikeouts) — requiere pipeline Savant per-batter + training sidecar; ver [backlog](#3-backlog-priorizado).

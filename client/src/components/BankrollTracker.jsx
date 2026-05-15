@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import useBankroll from "../hooks/useBankroll";
 import { useAuth } from "../store/authStore";
 import { C, BARLOW, MONO } from "../theme";
+import EquityComparePanel from "./EquityComparePanel";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 function getToken() {
   return localStorage.getItem("hexa_token");
@@ -449,6 +450,13 @@ export default function BankrollTracker({ lang = "es" }) {
       {/* ── DASHBOARD ── */}
       {activeView === "dashboard" && (
         <div>
+          <EquityComparePanel
+            comparison={equityCompare}
+            loading={statsLoading}
+            lang={lang}
+            periodLabel="90D"
+            variant="compact"
+          />
           {/* Oracle ROI Panel — arriba del todo */}
           <OracleROIPanel bets={bets} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 }}>
