@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { getMlbStandings, getTeams, getTodayGames } from './mlb-api.js';
+import { getMlbStandings, getMlbPlayoffBracket, getTeams, getTodayGames } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat, summarizeGameBrief, analyzeChatJornada } from './oracle.js';
 import { getGameOdds, matchOddsToGame, calculateImpliedProbability, getOddsApiStatus } from './odds-api.js';
@@ -65,7 +65,12 @@ import {
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
 import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations } from './migrate.js';
-import { getNbaGamesForDate, getNbaLeagueTeamStats, getNbaStandings } from './nba-api.js';
+import {
+  getNbaGamesForDate,
+  getNbaLeagueTeamStats,
+  getNbaStandings,
+  getNbaPlayoffBracket,
+} from './nba-api.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -778,6 +783,17 @@ app.get('/api/mlb/standings', async (req, res) => {
   }
 });
 
+// GET /api/mlb/playoffs
+app.get('/api/mlb/playoffs', async (req, res) => {
+  try {
+    const season = Number.parseInt(req.query.season, 10) || new Date().getFullYear();
+    const bracket = await getMlbPlayoffBracket(season);
+    res.json({ success: true, data: bracket });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // ── NBA endpoints ─────────────────────────────────────────────────────────────
 // GET /api/nba/games?date=YYYY-MM-DD
 app.get('/api/nba/games', async (req, res) => {
@@ -815,6 +831,20 @@ app.get('/api/nba/standings', async (req, res) => {
       return res.status(400).json({ success: false, error: 'season must be YYYY-YY (e.g. 2025-26)' });
     }
     const data = await getNbaStandings(season);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nba/playoffs?season=2025-26
+app.get('/api/nba/playoffs', async (req, res) => {
+  try {
+    const season = req.query.season || '2025-26';
+    if (!/^\d{4}-\d{2}$/.test(season)) {
+      return res.status(400).json({ success: false, error: 'season must be YYYY-YY (e.g. 2025-26)' });
+    }
+    const data = await getNbaPlayoffBracket(season);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
