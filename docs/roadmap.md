@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-15 — Sprints 0-5 cerrados; Sprint 6a/6b en cierre operativo; NBA hardening (7.0) cerrado en código (injuries + odds server-side + context_meta).
+**Última actualización**: 2026-05-15 — Sprints 0-5 cerrados; Sprint 6a/6b en cierre operativo; NBA 7.0–7.1 cerrados en código (contexto + aislamiento dataset/shadow por `sport`).
 
 ---
 
@@ -124,7 +124,7 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 ### ⏳ Sprint 7 — Expansión NBA, scaffolding + MVP (Q4 2026 → Q1 2027, ~10-14 semanas)
 
-**Status**: 🔄 en ejecución. 7a-7d entregados + hardening 7.0 parcial.
+**Status**: 🔄 en ejecución. 7a–7d + hardening 7.0–7.1 entregados en código. Pendiente: go-live público y 7e (ML NBA).
 
 **Target**: MVP NBA listo para el **All-Star Break (15-17 feb 2027)** o antes. Es la ventana donde MLB está dormido y NBA está en pico de interés (playoffs approach).
 
@@ -159,15 +159,45 @@ Criterio de éxito:
 - ✅ Ninguna regresión detectada en suite MLB crítica.
 - ✅ Contexto NBA incluye injuries y odds server-side; `context_meta` permite a la UI admin filtrar/anotar picks con `staleFlags`.
 
+#### Sprint 7.1 — Dataset + shadow model aislados por deporte (~3-5 días)
+
+Estado: ✅ **cerrado en código** (2026-05-15). PR de implementación mergeado o en review; docs en rama `docs/sprint7-1-nba-isolation`.
+
+Objetivo: que picks NBA no contaminen métricas MLB ni entrenamiento XGBoost default, y que admin pueda inspeccionar dataset/shadow por deporte.
+
+Entregables:
+- **Admin APIs con `?sport=mlb|nba`**:
+  - `GET /api/admin/feature-store` — summary, coverage, calendario y registros filtrados por `COALESCE(sport,'mlb')`. NBA usa columnas de ratings/pace/rest/injuries; MLB conserva Statcast/temperature.
+  - `GET /api/admin/shadow-model` — dashboard de runs filtrado por `sport` ([server/shadow-model.js](../server/shadow-model.js)).
+- **NBA shadow validator** (módulo aparte, sin tocar frozen MLB):
+  - [server/services/nbaShadowValidator.js](../server/services/nbaShadowValidator.js) — scoring determinístico NBA (net/off/def, pace, rest, injuries, form).
+  - [server/services/nbaShadowPersistence.js](../server/services/nbaShadowPersistence.js) — persiste `pick_features` + `shadow_model_runs` con `sport='nba'` en analyze NBA.
+  - Wire en [server/routes/nba.js](../server/routes/nba.js); resolución de shadow runs en [server/pick-resolver-nba.js](../server/pick-resolver-nba.js).
+- **Migración Sprint 7.1** ([server/migrate.js](../server/migrate.js) `runNbaDatasetMigrations`):
+  - `shadow_model_runs.sport` + índice.
+  - Columnas NBA en `pick_features` (team ids/abbrs, ratings, pace, TS%, rest, B2B, injuries, last10, `context_completeness`).
+- **Training Python aislado**: [ml/hexa_ml/data.py](../ml/hexa_ml/data.py) — `load_from_postgres(..., sport='mlb')` por default; filtra `source='live'` y `COALESCE(sport,'mlb')`.
+- **Chat picks**: [server/services/chatPickExtractor.js](../server/services/chatPickExtractor.js) acepta `sport` en `saveExtractedChatPick` / `processChatAnswer`.
+- **Admin UI**:
+  - [client/src/components/ShadowModeDashboard.jsx](../client/src/components/ShadowModeDashboard.jsx) — toggle MLB/NBA.
+  - [client/src/components/DatasetDashboardV2.jsx](../client/src/components/DatasetDashboardV2.jsx) — toggle MLB/NBA, coverage/tabla NBA, backfill MLB-only deshabilitado en vista NBA.
+
+Criterio de éxito:
+- Admin puede ver dataset y shadow runs de NBA sin mezclar filas MLB.
+- Cada analyze NBA genera fila en `pick_features` y run en `shadow_model_runs` con `sport='nba'`.
+- Retrain XGBoost default sigue usando solo MLB salvo override explícito de `sport`.
+
 #### Sprint 7a — Scaffolding de datos NBA (~3 semanas)
 
+**Status**: ✅ **parcial** — core entregado; tablas dedicadas `nba_games` / scrapers avanzados siguen en backlog.
+
 **Entregables**:
-- `server/nba-api.js`: wrapper de NBA Stats API (gratis, [stats.nba.com](https://stats.nba.com)) + fallback a [nba_api Python lib](https://github.com/swar/nba_api) si necesitamos features no expuestas.
-- `server/nba-context-builder.js`: arma payload por partido — rosters, splits jugador-vs-defensa, pace, lineup confirmation, rest days, B2B status, injury status.
-- `server/nba-savant-equivalent.js`: scraper / API de basketball-reference + cleaningtheglass (off-rating, def-rating ajustados por pace).
-- Migración: tabla `nba_games`, `nba_player_stats`, `nba_team_stats` (separadas de las MLB para evitar contaminación).
-- Migración a `picks`: añadir `sport ENUM('mlb', 'nba')` con default `'mlb'` para retrocompatibilidad.
-- Migración a `pick_features`: misma columna `sport` + nuevas columnas NBA-específicas (`player_id`, `opponent_def_rating`, etc.).
+- ✅ `server/nba-api.js`: wrapper NBA Stats + ESPN fallback (injuries).
+- ✅ `server/nba-context-builder.js`: ratings, pace, rest, form, injuries, `context_meta`.
+- ⏳ `server/nba-savant-equivalent.js`: scraper basketball-reference / cleaningtheglass.
+- ⏳ Tablas dedicadas `nba_games`, `nba_player_stats`, `nba_team_stats` (hoy se usa `pick_features` compartida con `sport` + columnas NBA — ver Sprint 7.1).
+- ✅ `picks.sport` y `pick_features.sport` (`VARCHAR`, default `'mlb'`).
+- ✅ Columnas NBA en `pick_features` (ratings, pace, rest, injuries, etc.) — Sprint 7.1.
 
 **Criterio de éxito**:
 - `node scripts/test-nba-context.js --game=<id>` imprime payload completo en <2s.
@@ -177,10 +207,12 @@ Criterio de éxito:
 
 #### Sprint 7b — Oracle NBA + prompts adaptados (~3 semanas)
 
+**Status**: ✅ **cerrado** (Anthropic-only; sin Grok dual en NBA).
+
 **Entregables**:
-- `server/prompts/oracle-nba-prompts.js`: nuevos prompts (no tocar oracle.js). Mismos motores (Claude / Grok / Dual) — solo cambia el prompt y el payload.
-- Adapter `server/services/oracleNba.js` que orquesta sin tocar [oracle.js](../server/oracle.js). Patrón ya usado en `parlayEngine/llmClient.js`.
-- Endpoints: `/api/analyze/nba/game`, `/api/analyze/nba/parlay`, `/api/analyze/nba/player-props`.
+- ✅ `server/prompts/oracle-nba-prompts.js` + `server/services/oracleNba.js` (no toca [oracle.js](../server/oracle.js)).
+- ✅ Endpoints: `POST /api/nba/analyze/game`, `POST /api/nba/analyze/chat` (admin, `NBA_ANALYSIS_ENABLED`).
+- ⏳ Parlay / player-props NBA — fuera de MVP.
 - Mercados v1: moneyline, spread, total, player points (más altos volumen NBA).
 - Mercados v2 (post-MVP): rebounds, assists, threes, double-double.
 
@@ -192,9 +224,11 @@ Criterio de éxito:
 
 #### Sprint 7c — NBA pick lifecycle (~2 semanas)
 
+**Status**: ✅ **resolver**; ⏳ live tracker NBA dedicado.
+
 **Entregables**:
-- `server/pick-resolver-nba.js`: resuelve picks NBA post-game (score, player stats, market-specific resolution para props).
-- `server/pick-tracker-nba.js`: tracking en vivo durante el game (quarter-by-quarter, player progress).
+- ✅ `server/pick-resolver-nba.js`: moneyline/spread/total; job cada 30 min; actualiza shadow runs NBA.
+- ⏳ `server/pick-tracker-nba.js`: tracking en vivo quarter-by-quarter.
 - Reutilizar [server/pick-postmortem.js](../server/pick-postmortem.js) con prompt NBA-adapted.
 - Cron job para auto-resolver picks NBA con games del día.
 
@@ -205,8 +239,10 @@ Criterio de éxito:
 
 #### Sprint 7d — UI NBA + integración con frontend (~2 semanas)
 
+**Status**: ✅ **cerrado** en tab de juego; admin dataset/shadow con toggle en 7.1.
+
 **Entregables**:
-- Sport switcher en bottom nav (MLB / NBA).
+- ✅ Sport switcher en tab de juego (`SportSwitcher.jsx`).
 - Reutilizar [HexaBoard](../client/src/components/HexaBoard.jsx), [AnalysisPanel](../client/src/components/AnalysisPanel.jsx), [PickCard](../client/src/components/PickCard.jsx) con prop `sport`.
 - Vistas NBA-específicas: matchup card con def-rating, pace, B2B indicator.
 - ML Calibration y Control Center: tabs separados MLB / NBA o columnas con badge `sport`.

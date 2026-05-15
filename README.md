@@ -164,7 +164,8 @@ hexa-v4/
 │   ├── index.js            entrypoint (rutas, jobs, rate limits)
 │   ├── oracle.js           motor LLM dual (Claude + Grok)
 │   ├── context-builder.js  arma payload por partido
-│   ├── feature-store.js    persistencia de features para training
+│   ├── feature-store.js    persistencia de features MLB para training
+│   ├── services/nbaShadow*.js  feature store + shadow NBA (sport='nba')
 │   ├── migrate.js          migraciones SQL embebidas
 │   ├── services/           xPublisher, contentDraftService, parlayEngine, etc.
 │   ├── routes/             picks, content, insights, oracle-history
@@ -197,7 +198,7 @@ Todos bajo `/api`. Los protegidos requieren JWT (`🔒`); los admin requieren ro
 - **Análisis NBA** (`/nba/analyze/*`) 👑 (feature-flagged): game, chat.
 - **Picks** (`/picks/*`) 🔒: CRUD, postmortem, live-progress, clv-stats.
 - **Live** (`/games/:gamePk/*`): live, play-by-play, highlights-link.
-- **Admin** (`/admin/*`) 👑: grant-credits, run-backtest, shadow-model, feature-store, db/tables, content/queue, parlay-synergy, **ml/status, ml/retrain, ml/retrain/ensemble, ml/retrain-log, ml/ensemble, ml/chat-picks-stats, picks/:id/ensemble-breakdown**.
+- **Admin** (`/admin/*`) 👑: grant-credits, run-backtest, **shadow-model** (`?sport=mlb|nba`), **feature-store** (`?sport=mlb|nba&month=YYYY-MM`), db/tables, content/queue, parlay-synergy, **ml/status, ml/retrain, ml/retrain/ensemble, ml/retrain-log, ml/ensemble, ml/equity, ml/chat-picks-stats, picks/:id/ensemble-breakdown**.
 - **Pagos** (`/nowpayments/*`): checkout, webhook IPN HMAC-SHA512.
 - **Content API** (read-only, API key): `/content/v1/games`, `/board`, `/picks`, `/insights`, `/performance`.
 
@@ -211,7 +212,7 @@ Listado exhaustivo: [docs/architecture.md sección 6](docs/architecture.md#6-end
 [server/oracle.js](server/oracle.js) soporta tres motores seleccionables por request: `sonnet` (Claude Sonnet 4.6), `grok` (xAI), `dual` (ambos en paralelo con detección de divergencia). Modelos: Opus 4.7 (premium), Sonnet 4.6 (deep), Haiku 4.5 (content drafts). Detalle: [docs/ml-pipeline.md sección 2](docs/ml-pipeline.md#2-oracle--motor-llm-dual).
 
 ### Shadow validator + ML sidecar Python
-[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre un validador tabular determinístico (pesos hardcodeados) para observabilidad. En paralelo, [server/services/mlModelClient.js](server/services/mlModelClient.js) consulta al sidecar Python (`ml/`) que corre XGBoost real entrenado con los picks históricos. El sidecar es fire-and-forget: si falla, el circuito se abre y el pick se crea igual. Detalle: [docs/ml-pipeline.md](docs/ml-pipeline.md).
+[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre el validador MLB (pesos hardcodeados). NBA usa módulo aparte [server/services/nbaShadowValidator.js](server/services/nbaShadowValidator.js) — misma idea, features de basketball. Runs en `shadow_model_runs` con `sport`. Admin: `ShadowModeDashboard` con toggle MLB/NBA. En paralelo, [server/services/mlModelClient.js](server/services/mlModelClient.js) consulta al sidecar Python (`ml/`) con XGBoost entrenado solo en MLB por default (`ml/hexa_ml/data.py` filtra `sport='mlb'`). Detalle: [docs/ml-pipeline.md](docs/ml-pipeline.md).
 
 ### Closing Line Value (CLV)
 Captura líneas iniciales y de cierre por pick. Stats en `/api/picks/clv-stats`.
@@ -293,6 +294,11 @@ Sprint 7 completado en su mayor parte:
   - `routes/nba.js`: `resolveMarketOdds` client→server fallback, `meta.oddsSource` + `meta.context_meta` en respuesta
   - `NbaContextMetaBadge.jsx`: panel admin-only (completeness%, oddsSource, injuries, stale flags)
   - `scripts/smoke/nba-release-smoke.js` + `npm run smoke:nba`
+- ✅ **7.1 dataset + shadow aislados** (2026-05-15):
+  - APIs admin `?sport=mlb|nba` en feature-store y shadow-model
+  - `nbaShadowValidator.js` + `nbaShadowPersistence.js` en flujo analyze NBA
+  - Migración 7.1: `shadow_model_runs.sport` + columnas NBA en `pick_features`
+  - UI admin: toggles MLB/NBA en `DatasetDashboardV2` y `ShadowModeDashboard`
 - ⏳ **7e** — NBA ML sidecar: condicional, post ~500 picks NBA resueltos.
 
 ### Próximas fases — hardening
@@ -315,13 +321,13 @@ Escala de referencia: 0-10 por criterio. Para apertura publica de un deporte: sc
 | Guardrails LLM (schema + fallbacks + policy) | 8.5 | 7.5 | 8.0 |
 | Pick lifecycle (tracking -> resolver -> postmortem) | 9.0 | 7.5 | 8.0 |
 | Calibration/ROI observables por mercado | 8.5 | 6.0 | 8.0 |
-| Isolation por deporte (sin contaminacion cruzada) | 8.5 | 6.5 | 8.5 |
+| Isolation por deporte (sin contaminacion cruzada) | 8.5 | 8.0 | 8.5 |
 
 #### Criterios de go-live NBA
 
 - SAFE PICK NBA aislado de endpoints MLB. ✅
 - Player Props NBA deshabilitado hasta tener dataset y resolver dedicados. ✅
-- Historial/jobs/resolver/UX aislados por `sport` para evitar contaminacion cruzada. ✅ en código
+- Historial/jobs/resolver/UX/dataset/shadow aislados por `sport`. ✅ en código (Sprint 7.0 + 7.1)
 - Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
 Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).

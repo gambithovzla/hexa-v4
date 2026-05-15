@@ -139,9 +139,13 @@ created_at
 
 ### Endpoints
 ```
-GET /api/admin/shadow-model           # últimas N runs
-GET /api/admin/shadow-model/stats     # métricas agregadas
+GET /api/admin/shadow-model?sport=mlb|nba&limit=N   # últimas N runs (default sport=mlb)
+GET /api/admin/shadow-model/stats     # métricas agregadas (si expuesto)
 ```
+
+Query param `sport` filtra `COALESCE(shadow_model_runs.sport,'mlb')`. Runs NBA usan `model_key=nba_shadow_validator_v1` ([server/services/nbaShadowValidator.js](../server/services/nbaShadowValidator.js)); MLB sigue en [server/shadow-model.js](../server/shadow-model.js) + [server/services/xgboostValidator.js](../server/services/xgboostValidator.js).
+
+UI: [client/src/components/ShadowModeDashboard.jsx](../client/src/components/ShadowModeDashboard.jsx) — toggle MLB/NBA, persiste preferencia en `localStorage` (`hexa_admin_shadow_sport`).
 
 ### Métricas reportadas
 - **Total runs**: cantidad de picks con shadow comparison.
@@ -162,18 +166,30 @@ Detalle: [docs/ml-pipeline.md](ml-pipeline.md).
 
 ### Endpoints
 ```
-GET  /api/admin/feature-store?month=YYYY-MM      # features de picks del mes
-POST /api/admin/feature-store/backfill           # rellena features faltantes
+GET  /api/admin/feature-store?sport=mlb|nba&month=YYYY-MM   # dataset del mes (default sport=mlb)
+POST /api/admin/feature-store/backfill                     # rellena features MLB faltantes (Statcast)
 ```
 
 ### Uso típico
 - Inspeccionar manualmente qué features fueron persistidas para un pick específico.
 - Identificar huecos (features null que deberían tener valor).
 - Validar antes de exportar dataset para training.
+- Alternar `sport=nba` para ver filas generadas por `POST /api/nba/analyze/game` (no usa backfill MLB).
+
+### Por deporte
+| Vista | MLB | NBA |
+|---|---|---|
+| Coverage bars | xwOBA, whiff, lineup, temp, park | net rating, pace, rest, injuries, completeness |
+| Win-rate bucket | Por temperatura | Por perfil de descanso (B2B / 3+ días) |
+| Statcast cache block | Visible | Oculto (N/A) |
+| Backfill POST | Habilitado | Deshabilitado en UI (filas vienen del analyze live) |
+
+UI: [client/src/components/DatasetDashboardV2.jsx](../client/src/components/DatasetDashboardV2.jsx) — toggle MLB/NBA (`hexa_admin_dataset_sport`).
 
 ### Output JSON
 - Máximo 750 registros por request (paginación pendiente).
 - Incluye JOIN con `picks` para asociar features ↔ resultado.
+- Campo `data.sport` eco del query param.
 
 ### Sprint 1 añade
 - Endpoint `POST /api/admin/feature-store/export` que dispara `scripts/training/export-dataset.js` y retorna URL de descarga al Parquet.

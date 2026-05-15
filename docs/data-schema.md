@@ -351,11 +351,14 @@ feature_snapshot              JSONB         DEFAULT '{}'
 user_email                    TEXT
 pick_time_lima                TIMESTAMP
 
+sport                         VARCHAR(10)   DEFAULT 'mlb'   -- 'mlb' | 'nba' (Sprint 7.1)
+
 created_at                    TIMESTAMP     DEFAULT NOW()
 updated_at                    TIMESTAMP     DEFAULT NOW()
 ```
 
 **Índices:**
+- `idx_shadow_model_runs_sport`
 - `idx_shadow_model_runs_game_pk`
 - `idx_shadow_model_runs_created_at` (DESC)
 - `idx_shadow_model_runs_status`
@@ -364,7 +367,25 @@ updated_at                    TIMESTAMP     DEFAULT NOW()
 
 **Notas:**
 - El `feature_snapshot` JSONB permite re-evaluar el modelo en el futuro con nuevas versiones sin perder el snapshot temporal.
-- En Sprint 3 se añadirán columnas `python_model_score`, `python_model_version`, `python_home_win_prob`, etc.
+- En Sprint 3 se añadieron columnas `python_model_*` en runs MLB.
+- Runs NBA usan `model_key = 'nba_shadow_validator_v1'` y el validador en [server/services/nbaShadowValidator.js](../server/services/nbaShadowValidator.js).
+
+### 4.3 Columnas NBA en `pick_features` (Sprint 7.1)
+
+Misma tabla que MLB; filas NBA tienen `sport='nba'` y columnas MLB en NULL (y viceversa):
+
+```
+home_team_id, away_team_id, home_team_abbr, away_team_abbr
+home_off_rating, away_off_rating, home_def_rating, away_def_rating
+home_net_rating, away_net_rating, home_pace, away_pace
+home_ts_pct, away_ts_pct
+home_rest_days, away_rest_days, home_is_b2b, away_is_b2b
+home_injuries_severe, away_injuries_severe
+home_last10_wins, away_last10_wins
+context_completeness
+```
+
+Migración: `runNbaDatasetMigrations()` en [server/migrate.js](../server/migrate.js).
 
 ---
 
