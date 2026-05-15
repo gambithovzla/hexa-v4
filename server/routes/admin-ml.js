@@ -21,6 +21,7 @@ import express from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
 import { computeAdminEquity } from '../services/admin-equity.js';
+import { simulateBankroll } from '../services/monteCarloSimulator.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -494,10 +495,10 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
   }
 });
 
-// ── GET /api/admin/equity ─────────────────────────────────────────────────────
+// ── GET /api/admin/ml/equity ──────────────────────────────────────────────────
 // Returns equity curve, drawdown, Sharpe and monthly breakdown for admin dashboard.
 // Query params: sport (mlb|nba|all), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD)
-router.get('/equity', async (req, res) => {
+router.get('/ml/equity', async (req, res) => {
   const { sport = 'all', startDate, endDate } = req.query;
   if (!['all', 'mlb', 'nba'].includes(sport)) {
     return res.status(400).json({ success: false, error: 'sport must be all | mlb | nba' });
@@ -508,6 +509,42 @@ router.get('/equity', async (req, res) => {
   } catch (err) {
     console.error('[admin-equity] error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /api/admin/ml/equity/simulate ────────────────────────────────────────
+// Monte Carlo bankroll forward simulation. Pulls unit returns from the same
+// filtered pick set used by /ml/equity (bootstrap), then projects N futures.
+//
+// Body: {
+//   sport, startDate, endDate,             — same filters as /ml/equity
+//   horizonPicks, nSims,                   — simulation size
+//   startingBankroll,                      — USD
+//   stakeStrategy: 'flat' | 'percent',
+//   flatStake, percentStake, ruinThreshold,
+//   seed,                                  — optional, for reproducibility
+// }
+router.post('/ml/equity/simulate', async (req, res) => {
+  const { sport = 'all', startDate, endDate, ...simOpts } = req.body ?? {};
+  if (!['all', 'mlb', 'nba'].includes(sport)) {
+    return res.status(400).json({ success: false, error: 'sport must be all | mlb | nba' });
+  }
+  try {
+    const equity = await computeAdminEquity({ sport, startDate, endDate });
+    const outcomeSamples = (equity.series ?? []).map((p) => Number(p.units)).filter(Number.isFinite);
+    if (outcomeSamples.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error:   `Need at least 10 resolved picks for the selected filters (got ${outcomeSamples.length})`,
+      });
+    }
+    const t0 = Date.now();
+    const result = simulateBankroll({ outcomeSamples, ...simOpts });
+    const durationMs = Date.now() - t0;
+    return res.json({ success: true, data: result, duration_ms: durationMs });
+  } catch (err) {
+    console.error('[admin-equity/simulate] error:', err.message);
+    return res.status(400).json({ success: false, error: err.message });
   }
 });
 

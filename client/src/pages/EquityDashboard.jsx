@@ -9,12 +9,12 @@
  *   onBack {Function} — navigate back
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Typography, CircularProgress } from '@mui/material';
 import {
-  ComposedChart, AreaChart, Area, Bar,
+  ComposedChart, AreaChart, Area, Bar, BarChart, Line,
   XAxis, YAxis, ReferenceLine,
-  Tooltip, ResponsiveContainer, CartesianGrid,
+  Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
 import { C, MONO, BARLOW } from '../theme';
 
@@ -249,6 +249,300 @@ function SportBreakdown({ bySport }) {
           </Box>
         </Box>
       ))}
+    </Box>
+  );
+}
+
+// ── Monte Carlo: forward bankroll simulation ──────────────────────────────────
+
+function fmtUsd(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 10_000) return `$${(n / 1_000).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
+}
+
+function FanTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <Box sx={{ bgcolor: '#0a0d14', border: `1px solid ${BORDER}`, p: '10px 12px', minWidth: '160px' }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: MUTED, mb: '4px' }}>
+        Pick #{d.t}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: GREEN }}>P90: {fmtUsd(d.p90)}</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: CYAN }}>P75: {fmtUsd(d.p75)}</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: '#fff', fontWeight: 700 }}>P50: {fmtUsd(d.p50)}</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: AMBER }}>P25: {fmtUsd(d.p25)}</Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: RED }}>P10: {fmtUsd(d.p10)}</Typography>
+    </Box>
+  );
+}
+
+function MonteCarloPanel({ token, sport, startDate, endDate, sampleSize }) {
+  const [horizon,       setHorizon]       = useState(162);
+  const [nSims,         setNSims]         = useState(5_000);
+  const [bankroll,      setBankroll]      = useState(1_000);
+  const [strategy,      setStrategy]      = useState('flat');
+  const [flatStake,     setFlatStake]     = useState(10);
+  const [percentStake,  setPercentStake]  = useState(2);
+  const [result,        setResult]        = useState(null);
+  const [running,       setRunning]       = useState(false);
+  const [error,         setError]         = useState(null);
+  const [durationMs,    setDurationMs]    = useState(null);
+
+  const canRun = (sampleSize ?? 0) >= 10;
+
+  const run = useCallback(async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      const body = {
+        sport, startDate, endDate,
+        horizonPicks:     horizon,
+        nSims,
+        startingBankroll: bankroll,
+        stakeStrategy:    strategy,
+        flatStake:        Number(flatStake),
+        percentStake:     Number(percentStake) / 100,
+      };
+      const res = await fetch(`${API_URL}/api/admin/ml/equity/simulate`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? 'Failed');
+      setResult(json.data);
+      setDurationMs(json.duration_ms ?? null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setRunning(false);
+    }
+  }, [token, sport, startDate, endDate, horizon, nSims, bankroll, strategy, flatStake, percentStake]);
+
+  const fanData = useMemo(() => {
+    if (!result) return [];
+    return result.percentiles.map((p) => ({ ...p }));
+  }, [result]);
+
+  const histData = useMemo(() => {
+    if (!result) return [];
+    return result.histogram.map((h) => ({
+      x:      Math.round((h.binStart + h.binEnd) / 2),
+      count:  h.count,
+    }));
+  }, [result]);
+
+  const controlInput = {
+    background:   '#0a0d14',
+    border:       `1px solid ${BORDER}`,
+    color:        '#ccc',
+    fontFamily:   MONO,
+    fontSize:     '0.72rem',
+    padding:      '5px 8px',
+    outline:      'none',
+    width:        '90px',
+    borderRadius: '2px',
+  };
+  const controlLabel = { fontFamily: MONO, fontSize: '0.58rem', color: MUTED, letterSpacing: '0.16em', textTransform: 'uppercase' };
+
+  const s = result?.summary;
+
+  return (
+    <Box sx={{ background: SURF, border: `1px solid ${BORDER}`, p: '20px', mb: '24px' }}>
+      <SectionHeader>Monte Carlo — Forward Bankroll Simulation</SectionHeader>
+
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: '#bbb', mb: '14px', lineHeight: 1.55, maxWidth: '720px' }}>
+        Bootstraps {sampleSize ?? '—'} resolved pick outcomes from the current filter, then projects{' '}
+        <span style={{ color: CYAN }}>{nSims.toLocaleString()}</span> alternative futures over{' '}
+        <span style={{ color: CYAN }}>{horizon}</span> picks. P10/P50/P90 = pessimistic/typical/optimistic band.
+        Past edge assumed to persist — not a true forecast.
+      </Typography>
+
+      {/* Controls */}
+      <Box sx={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'flex-end', mb: '16px' }}>
+        <Box>
+          <Box sx={controlLabel}>Horizon (picks)</Box>
+          <input type="number" min={10} max={2000} step={10} value={horizon}
+            onChange={(e) => setHorizon(Math.max(10, Math.min(2000, Number(e.target.value) || 0)))}
+            style={controlInput} />
+        </Box>
+        <Box>
+          <Box sx={controlLabel}>Simulations</Box>
+          <Box component="select" value={nSims} onChange={(e) => setNSims(Number(e.target.value))}
+            sx={{ ...controlInput, width: '110px' }}>
+            <option value={1_000}>1,000</option>
+            <option value={5_000}>5,000</option>
+            <option value={10_000}>10,000</option>
+            <option value={25_000}>25,000</option>
+          </Box>
+        </Box>
+        <Box>
+          <Box sx={controlLabel}>Bankroll (USD)</Box>
+          <input type="number" min={100} step={100} value={bankroll}
+            onChange={(e) => setBankroll(Math.max(100, Number(e.target.value) || 100))}
+            style={controlInput} />
+        </Box>
+        <Box>
+          <Box sx={controlLabel}>Strategy</Box>
+          <Box component="select" value={strategy} onChange={(e) => setStrategy(e.target.value)}
+            sx={{ ...controlInput, width: '120px' }}>
+            <option value="flat">Flat stake</option>
+            <option value="percent">% of bankroll</option>
+          </Box>
+        </Box>
+        {strategy === 'flat' ? (
+          <Box>
+            <Box sx={controlLabel}>Stake / pick (USD)</Box>
+            <input type="number" min={1} step={1} value={flatStake}
+              onChange={(e) => setFlatStake(Math.max(1, Number(e.target.value) || 1))}
+              style={controlInput} />
+          </Box>
+        ) : (
+          <Box>
+            <Box sx={controlLabel}>% of bankroll</Box>
+            <input type="number" min={0.1} max={20} step={0.1} value={percentStake}
+              onChange={(e) => setPercentStake(Math.max(0.1, Math.min(20, Number(e.target.value) || 0.1)))}
+              style={controlInput} />
+          </Box>
+        )}
+        <Box
+          component="button"
+          onClick={run}
+          disabled={!canRun || running}
+          sx={{
+            px: '18px', py: '8px',
+            bgcolor:       canRun && !running ? CYAN : 'transparent',
+            color:         canRun && !running ? '#0a0d14' : MUTED,
+            border:        `1px solid ${canRun && !running ? CYAN : BORDER}`,
+            fontFamily:    MONO, fontSize: '0.7rem', fontWeight: 700,
+            letterSpacing: '0.14em', textTransform: 'uppercase',
+            cursor:        canRun && !running ? 'pointer' : 'not-allowed',
+            transition:    'all 0.15s',
+          }}
+        >
+          {running ? 'Running…' : '▶ Simulate'}
+        </Box>
+        {durationMs != null && !running && (
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: MUTED }}>{durationMs}ms</Typography>
+        )}
+      </Box>
+
+      {!canRun && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: AMBER }}>
+          Need at least 10 resolved picks for the selected filter to bootstrap.
+        </Typography>
+      )}
+
+      {error && (
+        <Box sx={{ border: `1px solid ${RED}44`, bgcolor: `${RED}0D`, p: '10px 14px', mb: '14px' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.7rem', color: RED }}>{error}</Typography>
+        </Box>
+      )}
+
+      {result && s && (
+        <>
+          {/* Summary cards */}
+          <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap', mt: '8px', mb: '20px' }}>
+            <StatCard
+              label="P(profit)"
+              value={fmtPct(s.pProfit * 100)}
+              color={s.pProfit >= 0.6 ? GREEN : s.pProfit >= 0.4 ? AMBER : RED}
+              sub={`vs P(ruin) ${(s.pRuin * 100).toFixed(2)}%`}
+            />
+            <StatCard
+              label="Median Terminal"
+              value={fmtUsd(s.medianTerminal)}
+              color={s.medianTerminal > bankroll ? GREEN : RED}
+              sub={`P10 ${fmtUsd(s.p10Terminal)} · P90 ${fmtUsd(s.p90Terminal)}`}
+            />
+            <StatCard
+              label="Mean Terminal"
+              value={fmtUsd(s.meanTerminal)}
+              color={s.meanTerminal > bankroll ? GREEN : RED}
+              sub={`worst ${fmtUsd(s.worstCase)} · best ${fmtUsd(s.bestCase)}`}
+            />
+            <StatCard
+              label="Expected Max DD"
+              value={fmtUsd(s.expectedMaxDrawdown)}
+              color={s.expectedMaxDrawdown < -bankroll * 0.3 ? RED : s.expectedMaxDrawdown < -bankroll * 0.15 ? AMBER : MUTED}
+              sub="average peak-to-trough"
+            />
+            <StatCard
+              label="Hist Mean Units"
+              value={s.historicalMeanUnits >= 0 ? `+${s.historicalMeanUnits.toFixed(3)}` : s.historicalMeanUnits.toFixed(3)}
+              color={s.historicalMeanUnits > 0 ? GREEN : RED}
+              sub={`σ ${s.historicalStdUnits.toFixed(2)}`}
+              small
+            />
+          </Box>
+
+          {/* Fan chart */}
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: MUTED, letterSpacing: '0.16em', mb: '6px' }}>
+            PERCENTILE BANDS (P10 / P25 / P50 / P75 / P90)
+          </Typography>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={fanData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke={BORDER} strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="t"
+                tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }}
+                tickLine={false} axisLine={false}
+                tickFormatter={(v) => `#${v}`}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }}
+                tickLine={false} axisLine={false}
+                tickFormatter={(v) => fmtUsd(v)}
+                width={56}
+              />
+              <ReferenceLine y={bankroll} stroke={MUTED} strokeDasharray="4 4"
+                label={{ value: 'Start', position: 'right', fill: MUTED, fontSize: 10, fontFamily: MONO }} />
+              <Tooltip content={<FanTooltip />} />
+              {/* Outer band p10-p90 */}
+              <Area type="monotone" dataKey="p90" stroke="none" fill={`${CYAN}26`} stackId="a" connectNulls={false} />
+              <Area type="monotone" dataKey="p10" stroke="none" fill={BG}     stackId="b" connectNulls={false} />
+              {/* P25/P75 lines */}
+              <Line type="monotone" dataKey="p75" stroke={CYAN} strokeWidth={1} dot={false} strokeDasharray="3 3" />
+              <Line type="monotone" dataKey="p25" stroke={AMBER} strokeWidth={1} dot={false} strokeDasharray="3 3" />
+              {/* Median */}
+              <Line type="monotone" dataKey="p50" stroke="#fff" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+
+          {/* Histogram of terminal bankroll */}
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: MUTED, letterSpacing: '0.16em', mt: '20px', mb: '6px' }}>
+            TERMINAL BANKROLL DISTRIBUTION ({nSims.toLocaleString()} sims)
+          </Typography>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={histData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke={BORDER} strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="x"
+                tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }}
+                tickLine={false} axisLine={false}
+                tickFormatter={(v) => fmtUsd(v)}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }}
+                tickLine={false} axisLine={false}
+                width={40}
+              />
+              <ReferenceLine x={bankroll} stroke={MUTED} strokeDasharray="4 4" />
+              <Tooltip
+                cursor={{ fill: `${CYAN}1A` }}
+                contentStyle={{ background: '#0a0d14', border: `1px solid ${BORDER}`, fontFamily: MONO, fontSize: 11 }}
+                formatter={(v) => [v, 'paths']}
+                labelFormatter={(v) => `≈ ${fmtUsd(v)}`}
+              />
+              <Bar dataKey="count" fill={GREEN} opacity={0.7} />
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )}
     </Box>
   );
 }
@@ -502,6 +796,15 @@ export default function EquityDashboard({ token, onBack }) {
             <SectionHeader>Monthly Breakdown</SectionHeader>
             <MonthlyTable monthly={data.monthly} />
           </Box>
+
+          {/* ── Monte Carlo forward simulation ── */}
+          <MonteCarloPanel
+            token={token}
+            sport={sport}
+            startDate={startDate}
+            endDate={endDate}
+            sampleSize={series.length}
+          />
 
           {/* ── Empty state ── */}
           {chartData.length === 0 && (
