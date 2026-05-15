@@ -95,6 +95,8 @@ hexa-v4/
 
 ### NBA Oracle
 - [server/services/oracleNba.js](server/services/oracleNba.js) — Motor LLM NBA (Anthropic only, sin Grok). Exporta `analyzeNbaGame` y `analyzeNbaChat`. **No toca oracle.js.** `serializeNbaContext` renderiza injuries por equipo y un bloque `DATA QUALITY` cuando `context_meta` reporta `staleFlags`/completeness < 100%.
+- [server/services/nbaShadowValidator.js](server/services/nbaShadowValidator.js) — Validador determinístico NBA (shadow). **No toca xgboostValidator.js.**
+- [server/services/nbaShadowPersistence.js](server/services/nbaShadowPersistence.js) — Persiste `pick_features` + `shadow_model_runs` con `sport='nba'` en analyze NBA.
 - [server/prompts/oracle-nba-prompts.js](server/prompts/oracle-nba-prompts.js) — Prompts NBA: `NBA_SYSTEM_PROMPT` (pick + JSON output) y `NBA_CHAT_PROMPT` (chat libre). Guardrail anti-hallucination: prohíbe explícitamente simular tool calls o web search.
 - [server/routes/nba.js](server/routes/nba.js) — `POST /api/nba/analyze/game` y `POST /api/nba/analyze/chat`. Feature-flagged por `NBA_ANALYSIS_ENABLED`. Admin-only. Resuelve `marketOdds` server-side vía [nba-odds.js](server/nba-odds.js) cuando el cliente no las envía y propaga `context_meta` + `oddsSource` en `meta` de la respuesta.
 
@@ -367,11 +369,12 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 - ✅ **7c pick lifecycle NBA**: `POST /api/nba/analyze/game` (admin-only, feature-flagged `NBA_ANALYSIS_ENABLED`). Persistencia con `sport='nba'`, `game_pk=parseInt(gameId)`.
 - ✅ **7c2 resolver NBA**: `pick-resolver-nba.js` — resuelve picks NBA pendientes contra scores finales. Reutiliza `resolvePickFromFinalState` de `pick-resolver.js`. Background job cada 30 min junto al MLB.
 - ✅ **7d UI**: `SportSwitcher.jsx` (pill MLB/NBA), `GameSelector` con `sport` prop (fetch `/api/nba/games`, normalización a shape MLB-compatible, oculta pitcher section), `AnalysisPanel` con `sport` prop (endpoint NBA, oculta betType/engine/webSearch/lineup gates).
+- ✅ **7.1 dataset + shadow aislados** — `?sport` en admin APIs, `nbaShadowValidator`/`nbaShadowPersistence`, migración columnas NBA, `data.py` filtra por sport, toggles en `DatasetDashboardV2` + `ShadowModeDashboard`.
 - ⏳ **7e NBA ML sidecar** — condicional, post ~500 picks NBA resueltos. No urgente.
 
-**NBA hardening — Sprint 7.0 cerrado en código (2026-05-15)**:
+**NBA hardening — Sprint 7.0 + 7.1 cerrados en código (2026-05-15)**:
 
-Última pieza añadida (2026-05-15): injuries/status estructurados desde ESPN (`getNbaLeagueInjuries` en [server/nba-api.js](server/nba-api.js)), market odds server-side vía The Odds API NBA ([server/nba-odds.js](server/nba-odds.js)), y `context_meta` (sources, completeness, staleFlags) propagado en `/api/nba/analyze/game` y `/analyze/chat`. Lookup `team_id ↔ team_abbr` con fallback para sobrevivir al mismatch ESPN ↔ stats.nba.com. Falta validación con tráfico real antes del flip público.
+7.0: injuries/status ESPN, odds server-side ([server/nba-odds.js](server/nba-odds.js)), `context_meta` en analyze game/chat. 7.1: aislamiento dataset/shadow/training por `sport`; filas NBA en `pick_features` y runs en `shadow_model_runs` sin contaminar MLB. Falta validación con tráfico real antes del flip público.
 
 **Checklist original** (preservado como referencia histórica):
 
@@ -430,18 +433,19 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 | Guardrails LLM (schema + fallbacks + policy) | 8.5 | 7.0 | 8.0 |
 | Pick lifecycle (tracking -> resolver -> postmortem) | 9.0 | 7.5 | 8.0 |
 | Calibration/ROI observables por mercado | 8.5 | 6.0 | 8.0 |
-| Isolation por deporte (sin contaminacion cruzada) | 8.5 | 6.5 | 8.5 |
+| Isolation por deporte (sin contaminacion cruzada) | 8.5 | 8.0 | 8.5 |
 
 **Criterios de "go public" para NBA**
-- SAFE PICK NBA aislado de endpoints MLB y con politica propia.
-- Player Props NBA desactivado (o habilitado solo con dataset robusto + resolver dedicado).
-- Historial, logos, resolver y jobs aislados por `sport`.
-- Contexto NBA con injuries/status + odds server-side + metadata de completitud.
+- SAFE PICK NBA aislado de endpoints MLB y con politica propia. ✅
+- Player Props NBA desactivado (o habilitado solo con dataset robusto + resolver dedicado). ✅
+- Historial, logos, resolver, jobs, dataset admin y shadow runs aislados por `sport`. ✅
+- Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
-**Próximo prioritario: Sprint 7.0 (fase restante) — hardening NBA antes de abrir público**
-- **Fuente de datos + IDs**: cerrar mapping estable `espnTeamId <-> nbaStatsTeamId`.
-- **Calidad de contexto**: injuries/status + odds server-side + `context_meta`.
-- **Guardrails de salida NBA**: schema validation estricta + fallback seguro para picks ambiguos.
+**Próximo prioritario post-7.1**
+- Validación E2E en producción tras merge/deploy del PR de aislamiento.
+- Mapping estable `espnTeamId <-> nbaStatsTeamId` (contexto sin huecos).
+- Guardrails de salida NBA: schema validation estricta + fallback seguro.
+- Performance público: filtrar `public-stats` por `sport` (hoy puede mezclar).
 
 **Pendiente del bloque ML**:
 - Sprint 5 Player Props MLB (training para hits / total_bases / strikeouts) — requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en `savant-fetcher.js`.

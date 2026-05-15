@@ -203,8 +203,8 @@ Detalle: [docs/content-pipeline.md](content-pipeline.md).
 
 - **DB Explorer** ([server/admin-db-explorer.js](../server/admin-db-explorer.js)): browser web read-only con whitelist por tabla/columna. Nunca expone `password_hash`, `verification_code`, ni reset hashes.
 - **Backtest runner**: `POST /api/admin/run-backtest` ejecuta análisis sobre juegos históricos sin consumir créditos.
-- **Shadow Model dashboard**: `GET /api/admin/shadow-model` — runs y métricas de divergencia.
-- **Feature Store inspection**: `GET /api/admin/feature-store?month=YYYY-MM` — muestra features de picks del mes.
+- **Shadow Model dashboard**: `GET /api/admin/shadow-model?sport=mlb|nba` — runs y métricas de divergencia por deporte (MLB: `shadow-model.js`; NBA: `nbaShadowValidator.js`).
+- **Feature Store inspection**: `GET /api/admin/feature-store?sport=mlb|nba&month=YYYY-MM` — dataset admin por deporte (coverage y columnas distintas MLB vs NBA).
 - **Grant credits**: `POST /api/admin/grant-credits` — manualmente añade créditos a un usuario.
 - **Parlay Synergy admin**: `GET /api/admin/parlay-synergy/recent` y `POST /api/admin/parlay-synergy/auto-resolve-all`.
 - **Content queue manager**: aprobar / publicar drafts.

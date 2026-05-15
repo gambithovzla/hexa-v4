@@ -238,12 +238,24 @@ created_at
 
 ### 3.4 Dashboard admin
 
-`GET /api/admin/shadow-model` retorna últimas N runs con stats:
+`GET /api/admin/shadow-model?sport=mlb|nba` retorna últimas N runs con stats filtrados por deporte:
 - Agreement rate (% de veces que shadow ≠ oracle).
 - Cuando divergen: ¿quién acierta más?
 - Distribución de confidence buckets.
 
-### 3.5 Limitaciones (por qué hay que reemplazarlo)
+UI: [client/src/components/ShadowModeDashboard.jsx](../client/src/components/ShadowModeDashboard.jsx).
+
+### 3.5 NBA shadow validator (paralelo, no frozen MLB)
+
+**Archivos:** [server/services/nbaShadowValidator.js](../server/services/nbaShadowValidator.js), [server/services/nbaShadowPersistence.js](../server/services/nbaShadowPersistence.js).
+
+- Scoring determinístico sobre net/off/def rating, TS%, pace, rest, injuries, last-10 form + home court.
+- Se dispara en `POST /api/nba/analyze/game` (fire-and-forget).
+- Persiste `pick_features` (`sport='nba'`) y `shadow_model_runs` (`model_key=nba_shadow_validator_v1`, `sport='nba'`).
+- Resolución post-game: [server/pick-resolver-nba.js](../server/pick-resolver-nba.js) actualiza `actual_*` en shadow runs NBA.
+- **No** reemplaza al sidecar XGBoost (Sprint 7e); es observabilidad hasta acumular volumen NBA.
+
+### 3.6 Limitaciones (por qué hay que reemplazarlo)
 
 - **No aprende.** Pesos hardcodeados, no se actualizan con datos.
 - **No captura interacciones no-lineales** (ej. pitcher élite × park alto × wind out).
@@ -251,7 +263,14 @@ created_at
 - **No produce SHAP** — no podemos saber qué feature drivers fueron decisivos.
 - **No soporta over/under, run line, props específicos** — solo predice "winner" del juego.
 
-Reemplazo: ver [sección 10](#10-plan-modelo-python-entrenado-propio).
+Reemplazo MLB: sidecar Python XGBoost (sección 10). NBA: pendiente Sprint 7e.
+
+### 3.7 Training data por deporte
+
+[ml/hexa_ml/data.py](../ml/hexa_ml/data.py) — `load_from_postgres(database_url, sport='mlb')`:
+- Solo filas `source = 'live'`.
+- `COALESCE(sport, 'mlb') = <sport>` — evita mezclar picks NBA en retrain MLB default.
+- Retrain desde `/admin/ml-control` sigue siendo MLB-first hasta entrenar mercados NBA explícitamente.
 
 ---
 
