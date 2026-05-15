@@ -79,6 +79,7 @@ import {
   getEnsembleCalibration as getMlEnsembleCalibration,
   predictEnsemble as predictMlEnsemble,
 } from './services/mlModelClient.js';
+import { normalizePickSport, validatePickSavePayload } from './services/picksPayloadGuardrails.js';
 
 dotenv.config();
 
@@ -2611,10 +2612,11 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
       feature_store, featureStore,
     } = req.body;
 
-    if (!type || !matchup || !pick) {
+    const payloadValidationError = validatePickSavePayload(req.body);
+    if (payloadValidationError) {
       return res.status(400).json({
         success: false,
-        error: 'type, matchup, and pick are required',
+        error: payloadValidationError,
       });
     }
 
@@ -2625,7 +2627,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
     const parsedOddsDetails = odds_details != null ? parseJsonMaybe(odds_details) : null;
     const parsedFeatureStore = parseJsonMaybe(feature_store ?? featureStore);
 
-    const normalizedSport = String(sport ?? '').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+    const normalizedSport = normalizePickSport(sport);
 
     const { rows } = await pool.query(
       `INSERT INTO picks (

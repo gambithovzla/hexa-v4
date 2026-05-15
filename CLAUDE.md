@@ -271,6 +271,7 @@ npm run dev:all      # ambos en paralelo (concurrently)
 
 # Operación
 npm run audit        # diagnóstico del sistema (system-audit.js)
+npm run smoke:mlb    # release smoke MLB (games/teams/hexa-board)
 npm run test:parlay  # tests del Parlay Synergy Engine
 npm start            # server en modo producción
 
