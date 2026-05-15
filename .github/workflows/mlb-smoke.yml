@@ -48,6 +48,7 @@ jobs:
           SMOKE_TIMEOUT_MS: "15000"
           SMOKE_RETRIES: "3"
           SMOKE_RETRY_DELAY_MS: "1500"
+          SMOKE_ADMIN_TOKEN: ${{ secrets.HEXA_ADMIN_SMOKE_TOKEN }}
         run: npm run smoke:mlb
 
       - name: Print server logs on failure
