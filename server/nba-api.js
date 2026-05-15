@@ -49,7 +49,171 @@ const TTL = {
   DAILY_GAMES_LIVE: 30 * 1000,       // 30s — when any game is in progress
   RECENT_GAMES: 10 * 60 * 1000,      // 10min
   STANDINGS: 15 * 60 * 1000,         // 15min
+  PLAYOFF_LIVE: 10 * 60 * 1000,      // 10min — live playoff bracket
 };
+
+// ── ESPN Playoff bracket ──────────────────────────────────────────────────────
+// stats.nba.com blocks Railway datacenter IPs; ESPN's site API does not.
+// We fetch all postseason scoreboard events and aggregate series records.
+
+const ESPN_SCOREBOARD_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
+
+function parsePlayoffNote(headline) {
+  if (!headline) return { conference: null, round: null };
+  const hl = headline.toLowerCase();
+  const conference = hl.startsWith('east') ? 'East' : hl.startsWith('west') ? 'West' : null;
+  let round = null;
+  if      (hl.includes('1st round') || hl.includes('first round')) round = 'first_round';
+  else if (hl.includes('conf') && hl.includes('final'))            round = 'conf_finals';
+  else if (hl.includes('semifinal') || hl.includes('second round')) round = 'conf_semis';
+  else if (hl.includes('final'))                                    round = 'finals';
+  return { conference, round };
+}
+
+async function fetchEspnPlayoffEvents(season) {
+  const endYear   = 2000 + parseInt(season.split('-')[1], 10); // '2025-26' → 2026
+  const startDate = `${endYear}0410`;
+  const endDate   = `${endYear}0701`;
+  const url       = `${ESPN_SCOREBOARD_BASE}?seasontype=3&dates=${startDate}-${endDate}&limit=500`;
+
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.events ?? [];
+  } catch (err) {
+    const msg = err.name === 'AbortError' ? 'timeout after 10s' : err.message;
+    throw new Error(`[nba-api] espn playoff events → ${msg}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildLiveBracketFromEvents(events, season) {
+  const seriesMap = new Map();
+
+  for (const ev of events) {
+    const comp = ev.competitions?.[0];
+    if (!comp) continue;
+    const note = comp.notes?.[0]?.headline ?? '';
+    const { conference, round } = parsePlayoffNote(note);
+    if (!round) continue;
+
+    const sorted    = [...comp.competitors].sort((a, b) => String(a.team.id).localeCompare(String(b.team.id)));
+    const key       = sorted.map(c => c.team.id).join('_');
+    const seriesComps = comp.series?.competitors ?? [];
+    const isGame1   = /game 1$/i.test(note);
+
+    const makeTeam = c => ({
+      espnId:       String(c.team.id),
+      abbreviation: c.team.abbreviation,
+      name:         c.team.shortDisplayName || c.team.name || c.team.abbreviation,
+      fullName:     c.team.displayName,
+      homeAway:     c.homeAway,
+      seriesWins:   Number(seriesComps.find(sc => String(sc.id) === String(c.team.id))?.wins ?? 0),
+    });
+
+    if (!seriesMap.has(key)) {
+      seriesMap.set(key, {
+        date: ev.date, conference, round, note,
+        summary: comp.series?.summary ?? '',
+        completed: comp.series?.completed ?? false,
+        bestOf: comp.series?.totalCompetitions ?? 7,
+        teams: comp.competitors.map(makeTeam),
+        homeIdGame1: null,
+      });
+    }
+
+    const entry = seriesMap.get(key);
+    if (ev.date >= entry.date) {
+      entry.date      = ev.date;
+      entry.summary   = comp.series?.summary ?? '';
+      entry.completed = comp.series?.completed ?? false;
+      entry.teams     = comp.competitors.map(makeTeam);
+    }
+    if (isGame1) {
+      entry.homeIdGame1 = String(comp.competitors.find(c => c.homeAway === 'home')?.team.id ?? '');
+    }
+  }
+
+  const entryToMatchup = (entry, idx) => {
+    const homeId = entry.homeIdGame1;
+    const [top, bottom] = homeId
+      ? [entry.teams.find(t => t.espnId === homeId), entry.teams.find(t => t.espnId !== homeId)]
+      : entry.teams;
+    const safeTop    = top    ?? entry.teams[0];
+    const safeBottom = bottom ?? entry.teams[1];
+    const winnerTeam = entry.completed
+      ? (safeTop.seriesWins > safeBottom.seriesWins ? safeTop : safeBottom)
+      : null;
+
+    const toShape = t => t ? {
+      seed: null,
+      teamId: `espn:${t.espnId}`,
+      abbreviation: t.abbreviation,
+      name: t.name,
+      fullName: t.fullName,
+      wins: null,
+      losses: null,
+      seriesWins: t.seriesWins,
+    } : null;
+
+    return {
+      id:        `${entry.conference ?? 'NBA'}-${entry.round}-${idx}`,
+      label:     entry.note.replace(/\s*[-–]\s*Game\s*\d+$/i, ''),
+      round:     entry.round,
+      bestOf:    entry.bestOf,
+      top:       toShape(safeTop),
+      bottom:    toShape(safeBottom),
+      winner:    winnerTeam ? (winnerTeam.espnId === safeTop?.espnId ? 'top' : 'bottom') : null,
+      series:    `${safeTop?.seriesWins ?? 0}-${safeBottom?.seriesWins ?? 0}`,
+      summary:   entry.summary,
+      completed: entry.completed,
+    };
+  };
+
+  const ROUND_NAMES = {
+    first_round: { en: 'First Round',       es: 'Primera Ronda'       },
+    conf_semis:  { en: 'Conference Semis',  es: 'Semifinales Conf.'   },
+    conf_finals: { en: 'Conference Finals', es: 'Finales Conf.'        },
+  };
+
+  const buildLiveConf = confKey => {
+    const entries = [...seriesMap.values()]
+      .filter(s => s.conference === confKey)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return {
+      key:  confKey,
+      name: CONFERENCE_LABEL[confKey],
+      playIn: [],
+      rounds: ['first_round', 'conf_semis', 'conf_finals'].map(rk => ({
+        key:      rk,
+        name:     ROUND_NAMES[rk],
+        matchups: entries.filter(s => s.round === rk).map((s, i) => entryToMatchup(s, i)),
+      })),
+    };
+  };
+
+  const finalsEntries = [...seriesMap.values()].filter(s => s.round === 'finals');
+  const finalMatchup  = finalsEntries.length > 0
+    ? entryToMatchup(finalsEntries[0], 0)
+    : makeMatchup({ id: 'NBA-FINAL', label: 'NBA Finals', round: 'finals', top: null, bottom: null });
+
+  return {
+    sport:      'nba',
+    source:     'live',
+    season,
+    updatedAt:  new Date().toISOString(),
+    conferences: [buildLiveConf('East'), buildLiveConf('West')],
+    final: {
+      key:     'nba_finals',
+      name:    { en: 'NBA Finals', es: 'Final NBA' },
+      matchup: finalMatchup,
+    },
+  };
+}
 
 // LineScore quarter columns. NBA returns up to 10 OTs.
 const QTR_KEYS = ['PTS_QTR1', 'PTS_QTR2', 'PTS_QTR3', 'PTS_QTR4'];
@@ -574,6 +738,29 @@ export async function getNbaPlayoffBracket(season = CURRENT_SEASON) {
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
+  // ESPN site API works from Railway; stats.nba.com does not.
+  // If the playoffs have started, ESPN will have events and we return a live bracket.
+  // If the season is still in regular season, events will be empty and we fall through
+  // to the standings-derived projected bracket.
+  try {
+    const events = await fetchEspnPlayoffEvents(season);
+    if (events.length > 0) {
+      const result = buildLiveBracketFromEvents(events, season);
+      cacheSet(cacheKey, result, TTL.PLAYOFF_LIVE);
+      console.log(`[nba-api] playoff bracket (live/ESPN): ${events.length} events`);
+      return result;
+    }
+    console.log(`[nba-api] ESPN returned 0 playoff events — building projected bracket from standings`);
+  } catch (err) {
+    console.warn(`[nba-api] ESPN playoff fetch failed (${err.message}) — building projected bracket`);
+    const stale = cacheGetStale(cacheKey);
+    if (stale) {
+      console.warn('[nba-api] playoff bracket: serving stale cache');
+      return stale;
+    }
+  }
+
+  // Projected bracket derived from current regular-season standings (pre-playoffs).
   const standings = await getNbaStandings(season);
 
   const buildConference = confKey => {
@@ -585,46 +772,26 @@ export async function getNbaPlayoffBracket(season = CURRENT_SEASON) {
     });
     const seed = n => bracketTeamFromStanding(byRank[n], n);
 
-    // Play-In: seeds 7-10
     const playIn = [
-      makeMatchup({
-        id: `${confKey}-PI-78`, label: '7v8 → #7 Seed', round: 'play_in', bestOf: 1,
-        top: seed(7), bottom: seed(8),
-      }),
-      makeMatchup({
-        id: `${confKey}-PI-910`, label: '9v10', round: 'play_in', bestOf: 1,
-        top: seed(9), bottom: seed(10),
-      }),
-      makeMatchup({
-        id: `${confKey}-PI-final`, label: 'Loser 7v8 vs Winner 9v10 → #8 Seed',
-        round: 'play_in', bestOf: 1,
-        top: null, bottom: null, // populated when play-in results known
-      }),
+      makeMatchup({ id: `${confKey}-PI-78`, label: '7v8 → #7 Seed', round: 'play_in', bestOf: 1, top: seed(7), bottom: seed(8) }),
+      makeMatchup({ id: `${confKey}-PI-910`, label: '9v10', round: 'play_in', bestOf: 1, top: seed(9), bottom: seed(10) }),
+      makeMatchup({ id: `${confKey}-PI-final`, label: 'Loser 7v8 vs Winner 9v10 → #8 Seed', round: 'play_in', bestOf: 1, top: null, bottom: null }),
     ];
 
-    // Round 1: 1v8, 4v5, 3v6, 2v7 (TV ordering keeps the bracket symmetrical)
     const round1 = [
-      makeMatchup({ id: `${confKey}-R1-18`, label: '1 vs 8', round: 'first_round',
-        top: seed(1), bottom: seed(8) }),
-      makeMatchup({ id: `${confKey}-R1-45`, label: '4 vs 5', round: 'first_round',
-        top: seed(4), bottom: seed(5) }),
-      makeMatchup({ id: `${confKey}-R1-36`, label: '3 vs 6', round: 'first_round',
-        top: seed(3), bottom: seed(6) }),
-      makeMatchup({ id: `${confKey}-R1-27`, label: '2 vs 7', round: 'first_round',
-        top: seed(2), bottom: seed(7) }),
+      makeMatchup({ id: `${confKey}-R1-18`, label: '1 vs 8', round: 'first_round', top: seed(1), bottom: seed(8) }),
+      makeMatchup({ id: `${confKey}-R1-45`, label: '4 vs 5', round: 'first_round', top: seed(4), bottom: seed(5) }),
+      makeMatchup({ id: `${confKey}-R1-36`, label: '3 vs 6', round: 'first_round', top: seed(3), bottom: seed(6) }),
+      makeMatchup({ id: `${confKey}-R1-27`, label: '2 vs 7', round: 'first_round', top: seed(2), bottom: seed(7) }),
     ];
 
-    // Semifinals: (1v8 winner) vs (4v5 winner), (3v6 winner) vs (2v7 winner)
     const semis = [
-      makeMatchup({ id: `${confKey}-SF-1845`, label: 'Semifinal 1', round: 'conf_semis',
-        top: null, bottom: null }),
-      makeMatchup({ id: `${confKey}-SF-3627`, label: 'Semifinal 2', round: 'conf_semis',
-        top: null, bottom: null }),
+      makeMatchup({ id: `${confKey}-SF-1845`, label: 'Semifinal 1', round: 'conf_semis', top: null, bottom: null }),
+      makeMatchup({ id: `${confKey}-SF-3627`, label: 'Semifinal 2', round: 'conf_semis', top: null, bottom: null }),
     ];
 
     const finals = [
-      makeMatchup({ id: `${confKey}-CF`, label: 'Conference Final', round: 'conf_finals',
-        top: null, bottom: null }),
+      makeMatchup({ id: `${confKey}-CF`, label: 'Conference Final', round: 'conf_finals', top: null, bottom: null }),
     ];
 
     return {
@@ -632,27 +799,27 @@ export async function getNbaPlayoffBracket(season = CURRENT_SEASON) {
       name: CONFERENCE_LABEL[confKey],
       playIn,
       rounds: [
-        { key: 'first_round', name: { en: 'First Round',         es: 'Primera Ronda' },     matchups: round1 },
-        { key: 'conf_semis',  name: { en: 'Conference Semis',    es: 'Semifinales Conf.' }, matchups: semis  },
-        { key: 'conf_finals', name: { en: 'Conference Finals',   es: 'Finales Conf.' },     matchups: finals },
+        { key: 'first_round', name: { en: 'First Round',       es: 'Primera Ronda'     }, matchups: round1 },
+        { key: 'conf_semis',  name: { en: 'Conference Semis',  es: 'Semifinales Conf.' }, matchups: semis  },
+        { key: 'conf_finals', name: { en: 'Conference Finals', es: 'Finales Conf.'     }, matchups: finals },
       ],
     };
   };
 
   const result = {
-    sport: 'nba',
+    sport:      'nba',
+    source:     'projected',
     season,
-    updatedAt: new Date().toISOString(),
+    updatedAt:  new Date().toISOString(),
     conferences: [buildConference('East'), buildConference('West')],
     final: {
-      key: 'nba_finals',
-      name: { en: 'NBA Finals', es: 'Final NBA' },
-      matchup: makeMatchup({ id: 'NBA-FINAL', label: 'NBA Finals', round: 'finals',
-        top: null, bottom: null }),
+      key:     'nba_finals',
+      name:    { en: 'NBA Finals', es: 'Final NBA' },
+      matchup: makeMatchup({ id: 'NBA-FINAL', label: 'NBA Finals', round: 'finals', top: null, bottom: null }),
     },
   };
 
   cacheSet(cacheKey, result, TTL.STANDINGS);
-  console.log(`[nba-api] playoff bracket built for ${season}`);
+  console.log(`[nba-api] playoff bracket (projected) built for ${season}`);
   return result;
 }
