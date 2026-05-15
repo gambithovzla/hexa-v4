@@ -367,6 +367,47 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 - ✅ **7d UI**: `SportSwitcher.jsx` (pill MLB/NBA), `GameSelector` con `sport` prop (fetch `/api/nba/games`, normalización a shape MLB-compatible, oculta pitcher section), `AnalysisPanel` con `sport` prop (endpoint NBA, oculta betType/engine/webSearch/lineup gates).
 - ⏳ **7e NBA ML sidecar** — condicional, post ~500 picks NBA resueltos. No urgente.
 
+**NBA hardening obligatorio antes de público (2026-05-15)**:
+
+0) **Regla de seguridad operativa**
+- No tocar lógica MLB ni archivos frozen de Oracle MLB. Todo NBA en rutas/servicios/prompt/UI NBA o archivos nuevos.
+- Trabajar en ramas dedicadas `fix/nba-*` o `feat/nba-*` (no mezclar con tareas MLB).
+
+1) **Separación MLB/NBA en historial y lifecycle (HOTFIX crítico)**
+- `client/src/hooks/useHistory.js`: propagar `sport` desde filas DB (`dbRowToEntry`).
+- `client/src/components/HistoryPanel.jsx`: render condicional por `sport`; no usar resolver/logos MLB para picks NBA.
+- Revisar flows que insertan picks para asegurar que NBA siempre persiste `sport='nba'` (evitar fallback al default `'mlb'` en inserts genéricos).
+- Criterio de salida: pick NBA nunca se visualiza como MLB en History, Dashboard, ni cards de detalle.
+
+2) **SAFE PICK en NBA (HOTFIX crítico)**
+- Hoy SAFE puede rutear al endpoint MLB (`/api/analyze/safe`) cuando `sport='nba'`; bloquear ese path en UI NBA.
+- Política vigente: **deshabilitar Player Props en NBA** hasta contar con dataset robusto y resolver dedicado.
+- Criterio de salida: en NBA solo permitir modos soportados; cero errores "Game not found" por cruce de endpoints MLB.
+
+3) **Fuente de datos y consistencia de IDs**
+- Priorizar ESPN para disponibilidad (Railway) y mantener fallback controlado.
+- Introducir mapping estable `espnTeamId <-> nbaStatsTeamId` para evitar contextos vacíos/inconsistentes en stats avanzadas.
+- Criterio de salida: contexto NBA sin bloques `data unavailable` por mismatch de IDs.
+
+4) **Calidad de contexto NBA (paridad de profesionalismo)**
+- Añadir bloque estructurado de injuries/status (fuente confiable) al contexto NBA.
+- Integrar market odds server-side para NBA cuando el cliente no envía líneas.
+- Exponer `context_meta` (freshness, completeness, stale flags) para observabilidad admin.
+
+5) **Guardrails de salida LLM NBA**
+- Validar schema de respuesta NBA server-side y aplicar fallback seguro cuando falten campos críticos.
+- Restringir picks a mercados soportados por la data disponible; evitar props sin sustento.
+- Criterio de salida: no persistir picks NBA ambiguos o con parse defectuoso sin marca explícita.
+
+6) **Resolución y tracking NBA**
+- Endurecer resolver/tracker NBA por mercado soportado (moneyline/spread/total primero).
+- Evitar que jobs MLB procesen picks NBA y viceversa.
+- Criterio de salida: lifecycle NBA cerrado end-to-end sin contaminación cruzada.
+
+7) **ML NBA (fase posterior)**
+- Iniciar sidecar NBA cuando exista volumen mínimo de picks resueltos con calidad.
+- Mantener dataset NBA aislado de MLB en entrenamiento y calibración.
+
 **Próximo prioritario: Sprint 6 — hardening antes de abrir NBA al público**
 - **Sprint 6a — Equity curve + Sharpe + drawdown dashboard**: curva de equity, drawdown peak-to-trough, Sharpe rolling 30d. Datos ya existen en `picks` + `bankroll`. Sin esto el usuario no puede evaluar Hexa como sistema de bankroll.
 - **Sprint 6b — Persistencia de modelos ML vía Railway Volumes**: `ml/hexa_ml/config.py` apunta a `artifacts/` (relativo, efímero en Railway). Cada redeploy del sidecar borra los `.pkl`. Apuntar a `/data` (volume montado en Railway) cierra esa ventana.

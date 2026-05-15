@@ -124,6 +124,30 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 **Target**: MVP NBA listo para el **All-Star Break (15-17 feb 2027)** o antes. Es la ventana donde MLB está dormido y NBA está en pico de interés (playoffs approach).
 
+#### Sprint 7.0 — NBA hardening gate (hotfix obligatorio antes de abrir) (~1-2 semanas)
+
+Estado: prioritario inmediato.
+
+Objetivo: eliminar contaminación MLB↔NBA en flujo de picks y cerrar errores de modo SAFE en NBA antes de crecer features.
+
+Entregables:
+- Separación estricta de historial por `sport`:
+  - `client/src/hooks/useHistory.js` debe preservar `sport` al mapear rows DB.
+  - `client/src/components/HistoryPanel.jsx` debe renderizar matchup/logos por deporte (NBA != MLB).
+- SAFE PICK en NBA:
+  - bloquear ruta MLB `/api/analyze/safe` cuando `sport='nba'`.
+  - permitir solo mercados NBA soportados por data real.
+- Política temporal de producto:
+  - **Player Props NBA deshabilitado** hasta contar con dataset/featurización de nivel producción.
+- Persistencia y consultas:
+  - verificar que todos los inserts NBA persistan `sport='nba'` explícitamente.
+  - auditar listados y filtros para que picks NBA no pasen por pipelines MLB.
+
+Criterio de éxito:
+- Un análisis NBA guardado aparece como NBA en historial, breakdown y cards.
+- Cero errores tipo "Game not found" causados por cruce de endpoint SAFE MLB.
+- Ninguna regresión en MLB.
+
 #### Sprint 7a — Scaffolding de datos NBA (~3 semanas)
 
 **Entregables**:
@@ -210,6 +234,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | S5 | **Newsletter weekly recap via Resend** | 3 días | Reusa email.js + `weekly_recap` content type que ya existe. Tabla `newsletter_subscribers`. |
 | S6 | **Postmortem dashboard cuantitativo** | 2 días | Agregaciones de `picks.postmortem.alert_flags` por hit/miss. Detecta patrones para refinar prompts. |
 | S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ⬆️ Promovido a **Sprint 6b**. Ver [sección 2](#sprint-6b--persistencia-de-modelos-ml-1-2-semanas). |
+| S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ⬆️ Promovido a **Sprint 7.0**. Separación historial/persistencia por `sport`, SAFE NBA aislado de MLB, props NBA temporalmente desactivados. |
 
 ### Tier A — Alta señal, esfuerzo medio
 
@@ -295,6 +320,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q2  Sprints 0-5   — Pipeline ML completo            ████████████████████████ ✅
 2026 Q3  Sprint 6a     — Equity curve dashboard          ░░░░░░░░░░░░░░░░░░░░░░░░ 🔄
 2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ░░░░░░░░░░░░░░░░░░░░░░░░ 🔄
+2026 Q3-4 Sprint 7.0   — NBA hardening gate              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q3-4 Sprint 7a    — Scaffolding NBA (datos)         ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q4  Sprint 7b     — Oracle NBA + prompts            ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q4  Sprint 7c     — NBA pick lifecycle              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
