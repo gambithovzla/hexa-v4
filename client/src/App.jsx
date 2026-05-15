@@ -44,6 +44,7 @@ import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
 import LearningCenter      from './components/LearningCenter';
 import MLBStandingsPanel   from './components/MLBStandingsPanel';
+import SportSwitcher       from './components/SportSwitcher';
 import WhatsAppSupport     from './components/WhatsAppSupport';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
@@ -300,6 +301,7 @@ function AppFooter({ lang }) {
 export default function App() {
   const [lang,              setLang]              = useState(() => localStorage.getItem('hexa_lang') || 'es');
   const [activeTab,         setActiveTab]         = useState('pizarra');
+  const [sport,             setSport]             = useState('mlb');
   const [singleGame,        setSingleGame]        = useState(null);
   const [parlayGames,       setParlayGames]       = useState([]);
   const [batchGames,        setBatchGames]        = useState([]);
@@ -476,6 +478,7 @@ export default function App() {
                 />
                 <AnalysisPanel
                   mode="single"
+                  sport={sport}
                   selectedGames={singleGame ? [singleGame] : []}
                   selectedDate={selectedDate}
                   lang={lang}
@@ -488,6 +491,8 @@ export default function App() {
                 {isMobileExperience && <MobileOnboardingCard lang={lang} />}
                 <GameSelector
                   mode="single"
+                  sport={sport}
+                  onSportChange={s => { setSport(s); setSingleGame(null); }}
                   onSelectGame={setSingleGame}
                   onDateChange={setSelectedDate}
                   language={lang}
@@ -495,6 +500,7 @@ export default function App() {
                 {!isMobileExperience && (
                   <AnalysisPanel
                     mode="single"
+                    sport={sport}
                     selectedGames={singleGame ? [singleGame] : []}
                     selectedDate={selectedDate}
                     lang={lang}

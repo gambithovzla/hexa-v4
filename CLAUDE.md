@@ -6,13 +6,13 @@ Este archivo se lee automáticamente al inicio de cada sesión. **Antes de tocar
 
 ## TL;DR del proyecto
 
-H.E.X.A. v4 es una plataforma de **análisis predictivo de MLB**:
+H.E.X.A. v4 es una plataforma de **análisis predictivo de MLB y NBA**:
 
-- Motor LLM dual (Claude + Grok) que genera picks con contexto rico (Statcast, weather, park factors, lineups, line movement).
+- Motor LLM dual (Claude + Grok) que genera picks con contexto rico (Statcast, weather, park factors, lineups, line movement para MLB; advanced team stats + rest/pace/net-rating para NBA).
 - Pick lifecycle: create → tracking en vivo → resolución automática post-game → postmortem por LLM.
 - Pipeline de contenido editorial a X (Twitter) con OAuth 1.0a.
 - Monetización con cripto vía NowPayments.
-- Frontend React 18 + Vite + MUI con PWA.
+- Frontend React 18 + Vite + MUI con PWA. Sport switcher MLB/NBA en la tab de juego.
 - Deploy: Railway (server) + Vercel (client).
 
 Cubertura completa en [docs/architecture.md](docs/architecture.md).
@@ -57,14 +57,17 @@ hexa-v4/
 - [server/prompts/x-content-prompts.js](server/prompts/x-content-prompts.js) — prompts de content. **FROZEN** los existentes; añadir nuevos sí se puede.
 
 ### Pick lifecycle
-- [server/pick-tracker.js](server/pick-tracker.js) — progress tracking en vivo.
-- [server/pick-resolver.js](server/pick-resolver.js) — resolución post-game.
+- [server/pick-tracker.js](server/pick-tracker.js) — progress tracking en vivo (MLB).
+- [server/pick-resolver.js](server/pick-resolver.js) — resolución post-game (MLB). Exporta `resolvePickFromFinalState` + `tokenMatchesTeam`, reutilizados por el resolver NBA.
+- [server/pick-resolver-nba.js](server/pick-resolver-nba.js) — resolución post-game NBA. Se ejecuta cada 30 min junto al resolver MLB cuando `NBA_ANALYSIS_ENABLED=true`.
 - [server/pick-postmortem.js](server/pick-postmortem.js) — análisis retrospectivo por LLM.
 - [server/closing-line-capture.js](server/closing-line-capture.js) — CLV.
 - [server/feature-store.js](server/feature-store.js) — persistencia de features por pick.
 
 ### Datos externos
 - [server/mlb-api.js](server/mlb-api.js) — MLB Stats API wrapper.
+- [server/nba-api.js](server/nba-api.js) — NBA Stats API wrapper (`stats.nba.com/stats/`). Endpoints: scoreboardv2 (juegos del día), leaguedashteamstats (season stats), teamgamelog (últimos 10 juegos). **Nota**: `teamgamelog` no devuelve `PLUS_MINUS` — usa `normalisePlusMinus()` con búsqueda dinámica de headers.
+- [server/nba-context-builder.js](server/nba-context-builder.js) — arma contexto NBA por partido (net/off/def rating, pace, TS%, REB%, AST%, rest days, last-10 form).
 - [server/savant-fetcher.js](server/savant-fetcher.js) — Baseball Savant leaderboards (cache 6h).
 - [server/odds-api.js](server/odds-api.js) — The Odds API (dual key fallback).
 - [server/weather-api.js](server/weather-api.js) — Open-Meteo.
@@ -89,6 +92,11 @@ hexa-v4/
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
 - Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
 
+### NBA Oracle
+- [server/services/oracleNba.js](server/services/oracleNba.js) — Motor LLM NBA (Anthropic only, sin Grok). Exporta `analyzeNbaGame` y `analyzeNbaChat`. **No toca oracle.js.**
+- [server/prompts/oracle-nba-prompts.js](server/prompts/oracle-nba-prompts.js) — Prompts NBA: `NBA_SYSTEM_PROMPT` (pick + JSON output) y `NBA_CHAT_PROMPT` (chat libre). Guardrail anti-hallucination: prohíbe explícitamente simular tool calls o web search.
+- [server/routes/nba.js](server/routes/nba.js) — `POST /api/nba/analyze/game` y `POST /api/nba/analyze/chat`. Feature-flagged por `NBA_ANALYSIS_ENABLED`. Admin-only.
+
 ### Routes principales
 - [server/routes/picks.js](server/routes/picks.js)
 - [server/routes/content.js](server/routes/content.js) — API key, read-only para consumidores externos.
@@ -98,9 +106,12 @@ hexa-v4/
 - [server/routes/admin-ml.js](server/routes/admin-ml.js) — Admin ML Control Center (status, retrain proxy con audit log, ensemble breakdown por pick, chat-picks stats).
 
 ### Frontend
-- [client/src/App.jsx](client/src/App.jsx) — root + routing.
+- [client/src/App.jsx](client/src/App.jsx) — root + routing. Tiene estado `sport` ('mlb'|'nba') que se pasa a GameSelector y AnalysisPanel en la tab de juego.
+- [client/src/components/SportSwitcher.jsx](client/src/components/SportSwitcher.jsx) — pill toggle MLB/NBA. Se renderiza dentro del header de GameSelector (modo single).
+- [client/src/components/GameSelector.jsx](client/src/components/GameSelector.jsx) — acepta `sport` prop. Cuando `sport='nba'` fetcha `/api/nba/games` y normaliza al shape MLB-compatible. Oculta la sección de pitchers para NBA.
+- [client/src/components/AnalysisPanel.jsx](client/src/components/AnalysisPanel.jsx) — acepta `sport` prop. Cuando `sport='nba'` usa `/api/nba/analyze/game`. Oculta betType, engine picker (grok/dual), webSearch toggle y lineup badges para NBA.
 - [client/src/pages/](client/src/pages/) — pages (PerformanceDashboard, ParlayArchitect, DevUIShowcase, MLCalibrationDashboard, AdminMLControlCenter).
-- [client/src/components/](client/src/components/) — componentes (AdminCreditPanel, AdminDbExplorerPanel, AdminEnsembleBadge, AnalysisPanel, OracleChat, BankrollTracker, HexaBoard, LearningCenter, MethodologyPage, etc).
+- [client/src/components/](client/src/components/) — componentes (AdminCreditPanel, AdminDbExplorerPanel, AdminEnsembleBadge, OracleChat, BankrollTracker, HexaBoard, LearningCenter, MethodologyPage, etc).
 
 ### Admin ML Control Center (Sprint 5 UI)
 - [client/src/pages/AdminMLControlCenter.jsx](client/src/pages/AdminMLControlCenter.jsx) — página `/admin/ml-control` con HUD de circuit breaker, cards por mercado, retrain on-demand, ensemble panel, chat-picks bucket stats, retrain audit log.
@@ -292,6 +303,7 @@ npm run preview      # preview del build
 - `PARLAY_SYNERGY_ENABLED` — motor parlay nuevo (default `false`)
 - `X_AUTO_PUBLISH_ENABLED` — worker publica en X (default `0`)
 - `X_AUTO_PUBLISH_INTERVAL_MINUTES` — intervalo (default `5`)
+- `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
 
 Lista completa en [.env.example](.env.example).
 
@@ -346,30 +358,21 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 
 **Picks desde Oracle Chat**: cuando el Oracle recomienda un pick durante una sesión de chat, el extractor (JSON tail + Haiku fallback) lo persiste en `picks` con `source='oracle_chat'` y `chat_session_id` apuntando a `oracle_sessions`. Estos picks **no entran al training default** (el sidecar Python filtra por `source = 'live'`). Para inspeccionarlos: panel "Chat-sourced picks" en `/admin/ml-control`. Para suprimir extracción en un chat exploratorio: header `X-HEXA-Skip-Pick-Extract: 1` (o el checkbox "NO GUARDAR PARA ENTRENAMIENTO" en OracleChat).
 
-Próximos pasos (planificados, ver [docs/roadmap.md](docs/roadmap.md) para detalle ejecutable):
+**NBA MVP — Estado actual (2026-05-15)**:
 
-**Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)**
-- **Sprint 6a — Equity curve + Sharpe + drawdown dashboard** (~2 semanas). Usa datos que ya existen en `picks` + `bankroll`. Sin esto, el usuario serio no entiende qué hace Hexa.
-- **Sprint 6b — Persistencia de modelos ML vía Railway Volumes** (~1-2 semanas). Hoy cada redeploy del sidecar borra los `.pkl` (`ml/hexa_ml/config.py` usa `artifacts_dir: Path("artifacts")`, relativo y efímero en Railway) y los picks nuevos caen al fallback legacy hasta el próximo retrain. Apuntar `artifacts_dir` a `/data` (volume montado) cierra esa ventana.
+- ✅ **7a scaffolding datos**: `nba-api.js`, `nba-context-builder.js`. Columna `sport VARCHAR(10) DEFAULT 'mlb'` en `picks` y `pick_features`. GET `/api/nba/games` y `/api/nba/teams` operativos.
+- ✅ **7b Oracle NBA**: `server/prompts/oracle-nba-prompts.js` + `server/services/oracleNba.js`. Guardrail anti-hallucination activo (prohíbe web search simulado). Validado end-to-end: pick DET ML 63% conf, JSON parse limpio, sin fabricaciones.
+- ✅ **7c pick lifecycle NBA**: `POST /api/nba/analyze/game` (admin-only, feature-flagged `NBA_ANALYSIS_ENABLED`). Persistencia con `sport='nba'`, `game_pk=parseInt(gameId)`.
+- ✅ **7c2 resolver NBA**: `pick-resolver-nba.js` — resuelve picks NBA pendientes contra scores finales. Reutiliza `resolvePickFromFinalState` de `pick-resolver.js`. Background job cada 30 min junto al MLB.
+- ✅ **7d UI**: `SportSwitcher.jsx` (pill MLB/NBA), `GameSelector` con `sport` prop (fetch `/api/nba/games`, normalización a shape MLB-compatible, oculta pitcher section), `AnalysisPanel` con `sport` prop (endpoint NBA, oculta betType/engine/webSearch/lineup gates).
+- ⏳ **7e NBA ML sidecar** — condicional, post ~500 picks NBA resueltos. No urgente.
 
-**Sprint 7 — Expansión NBA, scaffolding → MVP (Q4 2026 → Q1 2027, ~10-14 semanas)**
-- **Por qué NBA**: MLB tiene 6 meses muertos (nov–mar). NBA es oct–abr ⇒ cobertura year-round sin pelearse por la misma noche. Arquitectura ya es deporte-agnóstica; lo MLB-específico vive en 4 archivos: `mlb-api.js`, `savant-fetcher.js`, `context-builder.js`, `pick-resolver.js`.
-- **Target**: MVP NBA listo para **All-Star Break feb 2027** (ventana donde MLB está dormido y NBA está en pico).
-- Sub-sprints:
-  - **7a scaffolding datos**: `nba-api.js`, `nba-context-builder.js`, `nba-savant-equivalent.js`, tablas `nba_games`/`nba_player_stats`/`nba_team_stats`, columna `sport ENUM('mlb','nba')` en `picks` y `pick_features`.
-  - **7b Oracle NBA**: `server/prompts/oracle-nba-prompts.js` + adapter `server/services/oracleNba.js`. **No tocar `oracle.js`** — patrón ya usado en `parlayEngine/llmClient.js`.
-  - **7c pick lifecycle NBA**: `pick-resolver-nba.js`, `pick-tracker-nba.js`. Reutilizar `pick-postmortem.js` con prompt adaptado.
-  - **7d UI**: sport switcher en bottom nav, reutilizar `HexaBoard` / `AnalysisPanel` / `PickCard` con prop `sport`.
-  - **7e NBA ML sidecar** (condicional, post ~500 picks NBA resueltos, probablemente Q1-Q2 2027).
-- **Guardrails críticos**:
-  - No tocar archivos MLB existentes. Crear archivos paralelos `*-nba.js` y orquestar.
-  - Feature flag `NBA_ANALYSIS_ENABLED=false` por default hasta MVP.
-  - Columna `sport` default `'mlb'` para retrocompatibilidad de queries existentes.
+**Próximo prioritario: Sprint 6 — hardening antes de abrir NBA al público**
+- **Sprint 6a — Equity curve + Sharpe + drawdown dashboard**: curva de equity, drawdown peak-to-trough, Sharpe rolling 30d. Datos ya existen en `picks` + `bankroll`. Sin esto el usuario no puede evaluar Hexa como sistema de bankroll.
+- **Sprint 6b — Persistencia de modelos ML vía Railway Volumes**: `ml/hexa_ml/config.py` apunta a `artifacts/` (relativo, efímero en Railway). Cada redeploy del sidecar borra los `.pkl`. Apuntar a `/data` (volume montado en Railway) cierra esa ventana.
 
-**Pendiente del bloque ML actual**:
+**Pendiente del bloque ML**:
 - Sprint 5 Player Props MLB (training para hits / total_bases / strikeouts) — requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en `savant-fetcher.js`.
-
-**Trade-off explícito** del roadmap: NBA y hardening (equity + persistencia) corren en **paralelo**, no en serie. Sprint 7a no toca código MLB, así que no compite con Sprint 6. La razón: si esperamos a cerrar Sprint 6 antes de empezar NBA, perdemos la ventana de All-Star Break feb 2027.
 
 ---
 
