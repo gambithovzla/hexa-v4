@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import SportSwitcher from './SportSwitcher';
+import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -156,10 +157,12 @@ function isSelectable(game) {
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
 function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
   const [failed, setFailed] = useState(false);
-  if (!teamId || failed) return null;
   const src = sport === 'nba'
-    ? `https://cdn.nba.com/logos/nba/${teamId}/primary/L/logo.svg`
-    : `https://www.mlb.com/team-logos/${teamId}.svg`;
+    ? getNbaLogoUrl(teamId, abbr)
+    : teamId
+      ? `https://www.mlb.com/team-logos/${teamId}.svg`
+      : null;
+  if (!src || failed) return null;
   return (
     <Box
       component="img"
