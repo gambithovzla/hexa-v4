@@ -25,7 +25,12 @@ class Settings(BaseSettings):
     )
 
     # ── Paths ─────────────────────────────────────────────────────────────
-    artifacts_dir: Path = Field(default=Path("artifacts"))
+    # Set HEXA_ML_ARTIFACTS_DIR=/data/artifacts on Railway (with a volume
+    # mounted at /data) to make models survive restarts/redeploys.
+    artifacts_dir: Path = Field(
+        default=Path("artifacts"),
+        validation_alias="HEXA_ML_ARTIFACTS_DIR",
+    )
     data_dir: Path = Field(default=Path("data"))
 
     # ── Training hyperparameters ──────────────────────────────────────────
