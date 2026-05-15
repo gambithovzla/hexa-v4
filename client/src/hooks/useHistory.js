@@ -167,6 +167,7 @@ function dbRowToEntry(row) {
     selection_method:     row.selection_method ?? null,
     gamePk:               row.game_pk ?? null,
     gameDate,
+    sport:                row.sport ?? 'mlb',
   };
 }
 
@@ -253,6 +254,7 @@ export default function useHistory() {
     const hexaData             = payload?.result ?? null;
     const { pick, confidence } = extractPickAndConfidence(hexaData);
     const matchup              = extractMatchup(payload);
+    const sport                = payload?.sport ?? (payload?.games?.[0]?._sport === 'nba' ? 'nba' : 'mlb');
 
     const isSafe = !!hexaData?.safe_pick;
 
@@ -270,6 +272,7 @@ export default function useHistory() {
         pick,
         confidence,
         result:     'pending',
+        sport,
       };
       setHistory(prev => {
         const next = [entry, ...prev].slice(0, MAX_ENTRIES);
@@ -338,6 +341,7 @@ export default function useHistory() {
       odds_details:      oddsDetails ? JSON.stringify(oddsDetails) : null,
       game_pk:           payload.gamePk ?? featureGame?.gamePk ?? null,
       game_date:         payload.gameDate ?? payload.selectedDate ?? null,
+      sport,
     };
 
     try {

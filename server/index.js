@@ -2607,6 +2607,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
       odds_at_pick, odds_details, kelly_recommendation,
       value_breakdown, safe_candidates, safe_scope, selection_method,
       game_pk, gamePk, game_id, gameId, game_date, gameDate, date,
+      sport,
       feature_store, featureStore,
     } = req.body;
 
@@ -2617,15 +2618,17 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
     const parsedOddsDetails = odds_details != null ? parseJsonMaybe(odds_details) : null;
     const parsedFeatureStore = parseJsonMaybe(feature_store ?? featureStore);
 
+    const normalizedSport = String(sport ?? '').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+
     const { rows } = await pool.query(
       `INSERT INTO picks (
          user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
          oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
          model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
          game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method,
-         user_email, pick_time_lima
+         user_email, sport, pick_time_lima
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP) RETURNING *`,
       [
         req.user.id, type, matchup, pick, normalizeOracleConfidence(oracle_confidence), bet_value, model_risk,
         oracle_report, hexa_hunch,
@@ -2642,6 +2645,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
         safe_scope ?? null,
         selection_method ?? null,
         req.user.email ?? null,
+        normalizedSport,
       ]
     );
     const savedPick = rows[0];

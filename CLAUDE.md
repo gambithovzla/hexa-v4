@@ -408,6 +408,27 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 - Iniciar sidecar NBA cuando exista volumen mínimo de picks resueltos con calidad.
 - Mantener dataset NBA aislado de MLB en entrenamiento y calibración.
 
+**Matriz de calidad por deporte (release gate)**
+
+Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por criterio, con umbral de release >= 8.5 global y ningun criterio critico < 8.
+
+| Criterio | MLB (actual) | NBA (actual) | Gate minimo |
+|---|---:|---:|---:|
+| Data depth pregame (features contextuales) | 9.5 | 6.5 | 8.0 |
+| Data quality live (latencia + disponibilidad) | 8.5 | 7.0 | 8.0 |
+| Lineup/Injury verification estructurada | 9.0 | 5.5 | 8.0 |
+| Market coverage soportada por data real | 9.0 | 6.0 | 8.0 |
+| Guardrails LLM (schema + fallbacks + policy) | 8.5 | 7.0 | 8.0 |
+| Pick lifecycle (tracking -> resolver -> postmortem) | 9.0 | 7.5 | 8.0 |
+| Calibration/ROI observables por mercado | 8.5 | 6.0 | 8.0 |
+| Isolation por deporte (sin contaminacion cruzada) | 8.5 | 6.5 | 8.5 |
+
+**Criterios de "go public" para NBA**
+- SAFE PICK NBA aislado de endpoints MLB y con politica propia.
+- Player Props NBA desactivado (o habilitado solo con dataset robusto + resolver dedicado).
+- Historial, logos, resolver y jobs aislados por `sport`.
+- Contexto NBA con injuries/status + odds server-side + metadata de completitud.
+
 **Próximo prioritario: Sprint 6 — hardening antes de abrir NBA al público**
 - **Sprint 6a — Equity curve + Sharpe + drawdown dashboard**: curva de equity, drawdown peak-to-trough, Sharpe rolling 30d. Datos ya existen en `picks` + `bankroll`. Sin esto el usuario no puede evaluar Hexa como sistema de bankroll.
 - **Sprint 6b — Persistencia de modelos ML vía Railway Volumes**: `ml/hexa_ml/config.py` apunta a `artifacts/` (relativo, efímero en Railway). Cada redeploy del sidecar borra los `.pkl`. Apuntar a `/data` (volume montado en Railway) cierra esa ventana.

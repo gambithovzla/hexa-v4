@@ -353,7 +353,7 @@ function BetTypeSelect({ value, onChange, t }) {
   );
 }
 
-function ModelPicker({ value, onChange, t, lang, isAdmin = false }) {
+function ModelPicker({ value, onChange, t, lang, isAdmin = false, sport = 'mlb' }) {
   const safeActive = value === 'safe';
   const options = [
     { value: 'deep',    label: t.modelSelect.deep    },
@@ -365,27 +365,29 @@ function ModelPicker({ value, onChange, t, lang, isAdmin = false }) {
       <SectionLabel>{t.modelSelect.label}</SectionLabel>
       <Box sx={{ display: 'flex', gap: '4px' }}>
         {/* Safe Pick button */}
-        <Box
-          component="button"
-          onClick={() => onChange('safe')}
-          sx={{
-            flex:          1,
-            border:        `1px solid ${safeActive ? C.greenLine : C.borderLight}`,
-            borderRadius:  '0',
-            background:    safeActive ? C.greenDim : 'transparent',
-            color:         safeActive ? C.green : C.textDim,
-            fontFamily:    MONO,
-            fontSize:      '9px',
-            letterSpacing: '2px',
-            padding:       '7px 14px',
-            cursor:        'pointer',
-            transition:    'all 0.2s',
-            boxShadow:     safeActive ? C.greenGlow : 'none',
-            textTransform: 'uppercase',
-          }}
-        >
-          SAFE PICK
-        </Box>
+        {sport !== 'nba' && (
+          <Box
+            component="button"
+            onClick={() => onChange('safe')}
+            sx={{
+              flex:          1,
+              border:        `1px solid ${safeActive ? C.greenLine : C.borderLight}`,
+              borderRadius:  '0',
+              background:    safeActive ? C.greenDim : 'transparent',
+              color:         safeActive ? C.green : C.textDim,
+              fontFamily:    MONO,
+              fontSize:      '9px',
+              letterSpacing: '2px',
+              padding:       '7px 14px',
+              cursor:        'pointer',
+              transition:    'all 0.2s',
+              boxShadow:     safeActive ? C.greenGlow : 'none',
+              textTransform: 'uppercase',
+            }}
+          >
+            SAFE PICK
+          </Box>
+        )}
 
         {/* Deep / Premium */}
         {options.map(o => {
@@ -1114,6 +1116,12 @@ export default function AnalysisPanel({
   }, [isAdmin, modelMode]);
 
   useEffect(() => {
+    if (sport === 'nba' && modelMode === 'safe') {
+      setModelMode('deep');
+    }
+  }, [sport, modelMode]);
+
+  useEffect(() => {
     if (!isAdmin && engineMode !== 'sonnet') {
       setEngineMode('sonnet');
     }
@@ -1174,6 +1182,11 @@ export default function AnalysisPanel({
       let endpoint, body;
 
       if (modelMode === 'safe') {
+        if (sport === 'nba') {
+          throw new Error(lang === 'es'
+            ? 'SAFE PICK no esta disponible en NBA por ahora.'
+            : 'SAFE PICK is not available for NBA yet.');
+        }
         endpoint = `${API_URL}/api/analyze/safe`;
         if (mode === 'parlay' && selectedGames.length > 1) {
           // Multi-game safe pick: send all gameIds
@@ -1300,6 +1313,7 @@ export default function AnalysisPanel({
               odds: r.odds ?? null,
               featureStore: r.featureStore ?? null,
               savedPick: r.savedPick ?? null,
+              sport,
             });
           }
         }
@@ -1320,6 +1334,7 @@ export default function AnalysisPanel({
           odds:     json.odds ?? null,
           featureStore: json.featureStore ?? null,
           savedPick: json.savedPick ?? null,
+          sport,
         });
       }
     } catch (e) {
@@ -1433,7 +1448,7 @@ export default function AnalysisPanel({
         )}
 
         {/* Model picker */}
-        <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} isAdmin={isAdmin} />
+        <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} isAdmin={isAdmin} sport={sport} />
 
         {/* Engine picker — MLB only (NBA always uses Anthropic) */}
         {isAdmin && sport !== 'nba' && (
