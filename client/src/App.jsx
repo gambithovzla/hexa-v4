@@ -41,6 +41,7 @@ import MLCalibrationDashboard from './pages/MLCalibrationDashboard';
 import AdminMLControlCenter   from './pages/AdminMLControlCenter';
 import EquityDashboard        from './pages/EquityDashboard';
 import LiveTracker         from './components/LiveTracker';
+import NBALiveTracker      from './components/NBALiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
 import LearningCenter      from './components/LearningCenter';
@@ -609,7 +610,7 @@ export default function App() {
                 <SportSwitcher sport={sport} onChange={setSport} />
               </Box>
               {sport === 'nba'
-                ? <SportComingSoon lang={lang} title={lang === 'es' ? 'En Vivo NBA' : 'NBA Live'} subtitle={lang === 'es' ? 'El tracker NBA en tiempo real llega en el próximo sprint.' : 'Real-time NBA tracker shipping in the next sprint.'} />
+                ? <NBALiveTracker lang={lang} />
                 : <LiveTracker lang={lang} />}
             </Box>
           )}

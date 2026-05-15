@@ -42,10 +42,21 @@ function cacheSet(key, data, ttlMs) {
 
 const TTL = {
   TEAM_STATS: 6 * 60 * 60 * 1000,   // 6h
-  DAILY_GAMES: 5 * 60 * 1000,        // 5min
+  DAILY_GAMES: 5 * 60 * 1000,        // 5min — schedule/final games
+  DAILY_GAMES_LIVE: 30 * 1000,       // 30s — when any game is in progress
   RECENT_GAMES: 10 * 60 * 1000,      // 10min
   STANDINGS: 15 * 60 * 1000,         // 15min
 };
+
+// LineScore quarter columns. NBA returns up to 10 OTs.
+const QTR_KEYS = ['PTS_QTR1', 'PTS_QTR2', 'PTS_QTR3', 'PTS_QTR4'];
+const OT_KEYS  = Array.from({ length: 10 }, (_, i) => `PTS_OT${i + 1}`);
+const PERIOD_KEYS = [...QTR_KEYS, ...OT_KEYS];
+
+function extractPeriodScores(line) {
+  if (!line) return [];
+  return PERIOD_KEYS.map(k => line[k] ?? null);
+}
 
 // ── NBA API response parser ───────────────────────────────────────────────────
 
@@ -118,26 +129,46 @@ export async function getNbaGamesForDate(dateStr) {
       game_date: dateStr,
       status: g.GAME_STATUS_TEXT,
       game_status_id: g.GAME_STATUS_ID ?? null,
+      live_period: g.LIVE_PERIOD ?? null,
+      live_clock:  g.LIVE_PC_TIME ?? null,
       home_team_id: g.HOME_TEAM_ID,
       home_team_abbr: home?.TEAM_ABBREVIATION ?? null,
       home_team_name: home?.TEAM_CITY_NAME
         ? `${home.TEAM_CITY_NAME} ${home.TEAM_NAME}`
         : null,
-      home_score: home?.PTS ?? null,
+      home_score:    home?.PTS ?? null,
+      home_qtrs:     extractPeriodScores(home),
+      home_fg_pct:   home?.FG_PCT ?? null,
+      home_ft_pct:   home?.FT_PCT ?? null,
+      home_fg3_pct:  home?.FG3_PCT ?? null,
+      home_ast:      home?.AST ?? null,
+      home_reb:      home?.REB ?? null,
+      home_tov:      home?.TOV ?? null,
       away_team_id: g.VISITOR_TEAM_ID,
       away_team_abbr: away?.TEAM_ABBREVIATION ?? null,
       away_team_name: away?.TEAM_CITY_NAME
         ? `${away.TEAM_CITY_NAME} ${away.TEAM_NAME}`
         : null,
-      away_score: away?.PTS ?? null,
+      away_score:    away?.PTS ?? null,
+      away_qtrs:     extractPeriodScores(away),
+      away_fg_pct:   away?.FG_PCT ?? null,
+      away_ft_pct:   away?.FT_PCT ?? null,
+      away_fg3_pct:  away?.FG3_PCT ?? null,
+      away_ast:      away?.AST ?? null,
+      away_reb:      away?.REB ?? null,
+      away_tov:      away?.TOV ?? null,
       arena: g.ARENA_NAME ?? null,
       national_tv: g.NATL_TV_BROADCASTER_ABBREVIATION ?? null,
       season: CURRENT_SEASON,
     };
   });
 
-  cacheSet(cacheKey, result, TTL.DAILY_GAMES);
-  console.log(`[nba-api] scoreboardv2 ${dateStr}: ${result.length} games`);
+  // Adaptive TTL: when any game is in-progress (status 2) shorten the cache so
+  // the live tracker sees fresh scores; for schedule/final-only days keep 5min.
+  const anyLive = result.some(r => r.game_status_id === 2);
+  const ttl = anyLive ? TTL.DAILY_GAMES_LIVE : TTL.DAILY_GAMES;
+  cacheSet(cacheKey, result, ttl);
+  console.log(`[nba-api] scoreboardv2 ${dateStr}: ${result.length} games (live=${anyLive}, ttl=${Math.round(ttl/1000)}s)`);
   return result;
 }
 
