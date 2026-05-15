@@ -9,11 +9,33 @@ Each model class exposes the same interface:
 from .moneyline import MoneylineModel
 from .overunder import OverUnderModel
 from .runline import RunlineModel
+from .props import (
+    PropHitsModel,
+    PropStrikeoutsModel,
+    PropTotalBasesModel,
+    PropHomeRunsModel,
+    PropRbisModel,
+)
 
 MARKET_MODELS = {
     "moneyline": MoneylineModel,
     "overunder": OverUnderModel,
     "runline": RunlineModel,
+    "prop_hits": PropHitsModel,
+    "prop_strikeouts": PropStrikeoutsModel,
+    "prop_total_bases": PropTotalBasesModel,
+    "prop_home_runs": PropHomeRunsModel,
+    "prop_rbis": PropRbisModel,
 }
 
-__all__ = ["MoneylineModel", "OverUnderModel", "RunlineModel", "MARKET_MODELS"]
+__all__ = [
+    "MoneylineModel",
+    "OverUnderModel",
+    "RunlineModel",
+    "PropHitsModel",
+    "PropStrikeoutsModel",
+    "PropTotalBasesModel",
+    "PropHomeRunsModel",
+    "PropRbisModel",
+    "MARKET_MODELS",
+]

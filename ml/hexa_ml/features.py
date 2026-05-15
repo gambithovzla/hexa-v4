@@ -50,6 +50,14 @@ DERIVED_FEATURES = [
     "implied_prob_away",
 ]
 
+# Player-prop snapshot features (Sprint 5 deferred resumed)
+PROP_NUMERIC_FEATURES = [
+    "prop_player_xwoba", "prop_player_xba", "prop_player_xslg",
+    "prop_player_k_pct", "prop_player_bb_pct",
+    "prop_player_avg_exit_velocity", "prop_player_barrel_pct",
+    "prop_player_hard_hit_pct", "prop_player_rolling_woba_14d",
+]
+
 
 def _american_to_implied_prob(odds: pd.Series) -> pd.Series:
     """Convert American moneyline odds to implied probability."""
@@ -100,6 +108,12 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
 
     out["implied_prob_home"] = _american_to_implied_prob(_col_or_nan(out, "odds_ml_home"))
     out["implied_prob_away"] = _american_to_implied_prob(_col_or_nan(out, "odds_ml_away"))
+    out["prop_side_over"] = (
+        out.get("side", pd.Series([None] * len(out), index=out.index))
+        .astype(str)
+        .str.lower()
+        .map({"over": 1.0, "under": 0.0})
+    )
 
     # Booleans → numeric (NaN preserved)
     for col in BOOL_FEATURES:
@@ -118,6 +132,9 @@ def feature_columns(market: str) -> list[str]:
     cols = list(BASE_NUMERIC_FEATURES) + list(BOOL_FEATURES) + list(DERIVED_FEATURES)
     if market == "overunder":
         cols.append("line")
+    if market.startswith("prop_"):
+        cols.extend(PROP_NUMERIC_FEATURES)
+        cols.extend(["line", "prop_side_over"])
     return cols
 
 

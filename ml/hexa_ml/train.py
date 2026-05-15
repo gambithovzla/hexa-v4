@@ -1,7 +1,7 @@
 """Training pipeline — fits market-specific XGBoost models and persists them.
 
 Entrypoint:
-    python -m hexa_ml.train [--market moneyline|overunder|runline|all]
+    python -m hexa_ml.train [--market moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|all]
                             [--csv data/picks-dataset-YYYY-MM-DD.csv]
                             [--out-dir artifacts]
 
@@ -27,7 +27,16 @@ from .calibration import brier, kelly_roi, logloss
 
 logger = logging.getLogger("hexa_ml.train")
 
-MARKETS = ("moneyline", "overunder", "runline")
+MARKETS = (
+    "moneyline",
+    "overunder",
+    "runline",
+    "prop_hits",
+    "prop_strikeouts",
+    "prop_total_bases",
+    "prop_home_runs",
+    "prop_rbis",
+)
 
 
 def _now_iso() -> str:
@@ -196,7 +205,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train H.E.X.A. ML models")
     parser.add_argument(
         "--market",
-        choices=["moneyline", "overunder", "runline", "all"],
+        choices=[*MARKETS, "all"],
         default="all",
         help="Which market(s) to train",
     )

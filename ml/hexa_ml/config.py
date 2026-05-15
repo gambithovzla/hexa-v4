@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     runline_min_train_size: int | None = Field(default=25, ge=15)
     overunder_min_train_size: int | None = Field(default=None, ge=15)
     moneyline_min_train_size: int | None = Field(default=None, ge=15)
+    prop_hits_min_train_size: int | None = Field(default=30, ge=15)
+    prop_strikeouts_min_train_size: int | None = Field(default=30, ge=15)
+    prop_total_bases_min_train_size: int | None = Field(default=30, ge=15)
+    prop_home_runs_min_train_size: int | None = Field(default=30, ge=15)
+    prop_rbis_min_train_size: int | None = Field(default=30, ge=15)
     # Acceptance threshold (Brier score) — moneyline floor for production
     moneyline_brier_ceiling: float = Field(default=0.24)
 

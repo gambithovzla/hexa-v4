@@ -46,6 +46,11 @@ OPTIONAL_FEATURE_COLUMNS = [
     "data_quality_score", "signal_coherence_score",
     "oracle_confidence", "kelly_fraction",
     "prop_kind", "prop_player_id",
+    "prop_player_name",
+    "prop_player_xwoba", "prop_player_xba", "prop_player_xslg",
+    "prop_player_k_pct", "prop_player_bb_pct",
+    "prop_player_avg_exit_velocity", "prop_player_barrel_pct",
+    "prop_player_hard_hit_pct", "prop_player_rolling_woba_14d",
     "source",
 ]
 
@@ -145,13 +150,32 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
       - for moneyline / runline: home_score and away_score present
       - for overunder: total_runs present
     """
-    out = df[df["market_type"] == market].copy()
+    prop_market_map = {
+        "prop_hits": "hits",
+        "prop_strikeouts": "strikeouts",
+        "prop_total_bases": "total_bases",
+        "prop_home_runs": "home_runs",
+        "prop_rbis": "rbis",
+    }
+
+    if market in prop_market_map:
+        out = df[
+            (df["market_type"] == "prop")
+            & (df["prop_kind"] == prop_market_map[market])
+        ].copy()
+    else:
+        out = df[df["market_type"] == market].copy()
     out = out[out["result"].notna()]
 
     if market in {"moneyline", "runline"}:
         out = out[out["home_score"].notna() & out["away_score"].notna()]
     elif market == "overunder":
         out = out[out["total_runs"].notna() & out["line"].notna()]
+    elif market in prop_market_map:
+        out = out[out["line"].notna()]
+        out = out[
+            out["result"].astype(str).str.lower().isin(["win", "won", "loss", "lost"])
+        ]
 
     return out.reset_index(drop=True)
 
@@ -172,6 +196,9 @@ def make_target(df: pd.DataFrame, market: str) -> pd.Series:
     if market == "runline":
         diff = df["home_score"].astype(float) - df["away_score"].astype(float)
         return (diff > 1.5).astype(int)
+    if market.startswith("prop_"):
+        normalized = df["result"].astype(str).str.lower()
+        return normalized.isin(["win", "won"]).astype(int)
     raise ValueError(f"Unknown market: {market}")
 
 
