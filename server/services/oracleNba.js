@@ -39,6 +39,21 @@ function fmt(n, digits = 1) {
   return Number(n).toFixed(digits);
 }
 
+function describeInjuriesBlock(side) {
+  const inj = side?.injuries;
+  if (!inj || !inj.ok) return '  Injuries: data unavailable';
+  if (inj.count === 0)  return '  Injuries: no reported absences';
+  const top = inj.items.slice(0, 6).map(it => {
+    const pos = it.position ? ` (${it.position})` : '';
+    const type = it.type ? ` — ${it.type}${it.detail ? ' / ' + it.detail : ''}` : '';
+    const ret  = it.returnDate ? ` [return: ${it.returnDate}]` : '';
+    const status = it.status ?? it.statusKey ?? 'unknown';
+    return `    - ${it.playerName ?? 'Unknown'}${pos}: ${status}${type}${ret}`;
+  });
+  const more = inj.count > 6 ? `\n    - … +${inj.count - 6} more` : '';
+  return `  Injuries (${inj.count}, ${inj.severeCount} severe):\n${top.join('\n')}${more}`;
+}
+
 function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
   const recent = side.recentForm;
@@ -54,6 +69,7 @@ function describeTeamBlock(label, side) {
     `  Pace: ${fmt(side.pace)} | TS%: ${fmt(side.tsPct * 100)} | REB%: ${fmt(side.rebPct * 100)} | AST%: ${fmt(side.astPct * 100)}`,
     `  Rest days vs this game: ${side.daysRest ?? 'n/a'}`,
     `  ${recentLine}`,
+    describeInjuriesBlock(side),
   ].join('\n');
 }
 
@@ -118,6 +134,15 @@ function describeMarketOdds(marketOdds) {
   return parts.join('\n');
 }
 
+function describeDataQuality(context_meta) {
+  if (!context_meta) return null;
+  const flags = Array.isArray(context_meta.staleFlags) ? context_meta.staleFlags : [];
+  if (!flags.length && context_meta.overallCompleteness === 1) return null;
+  const pct = Math.round((context_meta.overallCompleteness ?? 0) * 100);
+  const flagsLine = flags.length ? ` Flags: ${flags.join(', ')}.` : '';
+  return `DATA QUALITY: completeness ${pct}%.${flagsLine}`;
+}
+
 /**
  * Serialise the NBA context object into a single deterministic text block
  * the LLM consumes. Keep ordering stable — the system prompt references
@@ -125,7 +150,8 @@ function describeMarketOdds(marketOdds) {
  */
 export function serializeNbaContext({ context, marketOdds }) {
   if (!context) return 'No NBA context provided.';
-  const { season, gameDate, home, away } = context;
+  const { season, gameDate, home, away, context_meta } = context;
+  const dataQualityLine = describeDataQuality(context_meta);
   return [
     `H.E.X.A. NBA CONTEXT — ${gameDate} (Season ${season})`,
     '',
@@ -138,6 +164,7 @@ export function serializeNbaContext({ context, marketOdds }) {
     describeTeamBlock('AWAY', away),
     '',
     describeMarketOdds(marketOdds),
+    ...(dataQualityLine ? ['', dataQualityLine] : []),
   ].join('\n');
 }
 

@@ -50,6 +50,7 @@ const TTL = {
   RECENT_GAMES: 10 * 60 * 1000,      // 10min
   STANDINGS: 15 * 60 * 1000,         // 15min
   PLAYOFF_LIVE: 10 * 60 * 1000,      // 10min — live playoff bracket
+  INJURIES: 15 * 60 * 1000,          // 15min — ESPN league injuries
 };
 
 // ── ESPN Playoff bracket ──────────────────────────────────────────────────────
@@ -1098,4 +1099,123 @@ export async function getNbaPlayoffBracket(season = CURRENT_SEASON) {
   cacheSet(cacheKey, result, TTL.STANDINGS);
   console.log(`[nba-api] playoff bracket (projected) built for ${season}`);
   return result;
+}
+
+// ── ESPN League Injuries ─────────────────────────────────────────────────────
+// ESPN's league-wide injury feed avoids per-team round-trips and ID-shape mismatches.
+// Returned shape is keyed by both team_id (string) and team abbreviation so callers
+// can look up regardless of whether the game source is stats.nba.com or ESPN.
+
+const ESPN_INJURIES_URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries';
+
+function normaliseInjuryStatus(value) {
+  const s = String(value ?? '').toLowerCase();
+  if (!s) return 'unknown';
+  if (s.includes('out for season') || s === 'out for season')   return 'out_for_season';
+  if (s.includes('out'))                                         return 'out';
+  if (s.includes('doubt'))                                       return 'doubtful';
+  if (s.includes('quest'))                                       return 'questionable';
+  if (s.includes('prob'))                                        return 'probable';
+  if (s.includes('day'))                                         return 'day_to_day';
+  if (s.includes('game time') || s.includes('time decision'))    return 'game_time_decision';
+  return s.replace(/[^a-z]+/g, '_');
+}
+
+function normaliseInjuryEntry(item) {
+  const athlete = item?.athlete ?? {};
+  const details = item?.details ?? {};
+  return {
+    playerId:   athlete.id != null ? String(athlete.id) : null,
+    playerName: athlete.displayName ?? athlete.fullName ?? null,
+    position:   athlete.position?.abbreviation ?? null,
+    status:     item?.status ?? null,
+    statusKey:  normaliseInjuryStatus(item?.status),
+    type:       details.type ?? null,
+    detail:     details.detail ?? null,
+    side:       details.side ?? null,
+    returnDate: details.returnDate ?? null,
+    comment:    item?.longComment ?? item?.shortComment ?? null,
+  };
+}
+
+/**
+ * getNbaLeagueInjuries()
+ *   Returns { byTeamId: Map<string, Team>, byAbbr: Map<string, Team>, fetchedAt, source, stale }
+ *   where Team = { teamId, abbreviation, displayName, injuries: [normaliseInjuryEntry] }.
+ *
+ * Resilient: on fetch failure returns stale cache if available, otherwise an empty
+ * payload with `source='unavailable'`. Never throws to callers.
+ */
+export async function getNbaLeagueInjuries() {
+  const cacheKey = 'injuries:league';
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await fetch(ESPN_INJURIES_URL, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const teams = Array.isArray(data.injuries) ? data.injuries : [];
+
+    const byTeamId = {};
+    const byAbbr   = {};
+    for (const t of teams) {
+      const team = t?.team ?? {};
+      const teamId = team.id != null ? String(team.id) : null;
+      const abbr   = team.abbreviation ?? null;
+      const list   = Array.isArray(t?.injuries) ? t.injuries.map(normaliseInjuryEntry) : [];
+      const payload = {
+        teamId,
+        abbreviation: abbr,
+        displayName: team.displayName ?? team.name ?? null,
+        injuries: list,
+      };
+      if (teamId) byTeamId[teamId] = payload;
+      if (abbr)   byAbbr[abbr]     = payload;
+    }
+
+    const result = {
+      byTeamId,
+      byAbbr,
+      fetchedAt: new Date().toISOString(),
+      source:    'espn',
+      stale:     false,
+    };
+    cacheSet(cacheKey, result, TTL.INJURIES);
+    const total = teams.reduce((n, t) => n + (Array.isArray(t.injuries) ? t.injuries.length : 0), 0);
+    console.log(`[nba-api] injuries (ESPN): ${teams.length} teams, ${total} entries`);
+    return result;
+  } catch (err) {
+    const msg = err.name === 'AbortError' ? 'timeout after 8s' : err.message;
+    const stale = cacheGetStale(cacheKey);
+    if (stale) {
+      console.warn(`[nba-api] injuries fetch failed (${msg}) — serving stale cache`);
+      return { ...stale, stale: true };
+    }
+    console.warn(`[nba-api] injuries fetch failed (${msg}) — no cache available`);
+    return { byTeamId: {}, byAbbr: {}, fetchedAt: null, source: 'unavailable', stale: true };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Lookup injuries for a single team across both ID shapes.
+ * Returns { teamId, abbreviation, injuries } or null.
+ */
+export function findTeamInjuries(payload, { teamId, teamAbbr }) {
+  if (!payload) return null;
+  if (teamId != null && payload.byTeamId?.[String(teamId)]) {
+    return payload.byTeamId[String(teamId)];
+  }
+  if (teamAbbr && payload.byAbbr?.[String(teamAbbr)]) {
+    return payload.byAbbr[String(teamAbbr)];
+  }
+  return null;
 }

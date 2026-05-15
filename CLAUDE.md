@@ -66,10 +66,11 @@ hexa-v4/
 
 ### Datos externos
 - [server/mlb-api.js](server/mlb-api.js) — MLB Stats API wrapper.
-- [server/nba-api.js](server/nba-api.js) — NBA Stats API wrapper (`stats.nba.com/stats/`). Endpoints: scoreboardv2 (juegos del día), leaguedashteamstats (season stats), teamgamelog (últimos 10 juegos). **Nota**: `teamgamelog` no devuelve `PLUS_MINUS` — usa `normalisePlusMinus()` con búsqueda dinámica de headers.
-- [server/nba-context-builder.js](server/nba-context-builder.js) — arma contexto NBA por partido (net/off/def rating, pace, TS%, REB%, AST%, rest days, last-10 form).
+- [server/nba-api.js](server/nba-api.js) — NBA Stats API wrapper (`stats.nba.com/stats/`) + ESPN fallback (Railway-friendly). Endpoints: scoreboardv2 (juegos del día), leaguedashteamstats (season stats), teamgamelog (últimos 10 juegos). Exporta también `getNbaLeagueInjuries` + `findTeamInjuries` (ESPN league injury feed, cache 15min, fallback stale). **Nota**: `teamgamelog` no devuelve `PLUS_MINUS` — usa `normalisePlusMinus()` con búsqueda dinámica de headers.
+- [server/nba-odds.js](server/nba-odds.js) — The Odds API `basketball_nba` con dual key fallback. Exporta `getNbaGameOdds`, `matchNbaOddsToGame`, `buildMarketOddsForGame`. Aislado del MLB `odds-api.js` por convención (frozen).
+- [server/nba-context-builder.js](server/nba-context-builder.js) — arma contexto NBA por partido (net/off/def rating, pace, TS%, REB%, AST%, rest days, last-10 form, injuries) y emite `context_meta` (sources, completeness, staleFlags). Lookup por `team_id` con fallback a `team_abbr` para tolerar mismatch ESPN ↔ stats.nba.com.
 - [server/savant-fetcher.js](server/savant-fetcher.js) — Baseball Savant leaderboards (cache 6h).
-- [server/odds-api.js](server/odds-api.js) — The Odds API (dual key fallback).
+- [server/odds-api.js](server/odds-api.js) — The Odds API MLB (dual key fallback).
 - [server/weather-api.js](server/weather-api.js) — Open-Meteo.
 - [server/live-feed.js](server/live-feed.js) — play-by-play MLB.
 
@@ -93,9 +94,9 @@ hexa-v4/
 - Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
 
 ### NBA Oracle
-- [server/services/oracleNba.js](server/services/oracleNba.js) — Motor LLM NBA (Anthropic only, sin Grok). Exporta `analyzeNbaGame` y `analyzeNbaChat`. **No toca oracle.js.**
+- [server/services/oracleNba.js](server/services/oracleNba.js) — Motor LLM NBA (Anthropic only, sin Grok). Exporta `analyzeNbaGame` y `analyzeNbaChat`. **No toca oracle.js.** `serializeNbaContext` renderiza injuries por equipo y un bloque `DATA QUALITY` cuando `context_meta` reporta `staleFlags`/completeness < 100%.
 - [server/prompts/oracle-nba-prompts.js](server/prompts/oracle-nba-prompts.js) — Prompts NBA: `NBA_SYSTEM_PROMPT` (pick + JSON output) y `NBA_CHAT_PROMPT` (chat libre). Guardrail anti-hallucination: prohíbe explícitamente simular tool calls o web search.
-- [server/routes/nba.js](server/routes/nba.js) — `POST /api/nba/analyze/game` y `POST /api/nba/analyze/chat`. Feature-flagged por `NBA_ANALYSIS_ENABLED`. Admin-only.
+- [server/routes/nba.js](server/routes/nba.js) — `POST /api/nba/analyze/game` y `POST /api/nba/analyze/chat`. Feature-flagged por `NBA_ANALYSIS_ENABLED`. Admin-only. Resuelve `marketOdds` server-side vía [nba-odds.js](server/nba-odds.js) cuando el cliente no las envía y propaga `context_meta` + `oddsSource` en `meta` de la respuesta.
 
 ### Routes principales
 - [server/routes/picks.js](server/routes/picks.js)
@@ -368,7 +369,11 @@ node --env-file=.env scripts/training/backfill-pick-features.js --batch=500
 - ✅ **7d UI**: `SportSwitcher.jsx` (pill MLB/NBA), `GameSelector` con `sport` prop (fetch `/api/nba/games`, normalización a shape MLB-compatible, oculta pitcher section), `AnalysisPanel` con `sport` prop (endpoint NBA, oculta betType/engine/webSearch/lineup gates).
 - ⏳ **7e NBA ML sidecar** — condicional, post ~500 picks NBA resueltos. No urgente.
 
-**NBA hardening obligatorio antes de público (2026-05-15)**:
+**NBA hardening — Sprint 7.0 cerrado en código (2026-05-15)**:
+
+Última pieza añadida (2026-05-15): injuries/status estructurados desde ESPN (`getNbaLeagueInjuries` en [server/nba-api.js](server/nba-api.js)), market odds server-side vía The Odds API NBA ([server/nba-odds.js](server/nba-odds.js)), y `context_meta` (sources, completeness, staleFlags) propagado en `/api/nba/analyze/game` y `/analyze/chat`. Lookup `team_id ↔ team_abbr` con fallback para sobrevivir al mismatch ESPN ↔ stats.nba.com. Falta validación con tráfico real antes del flip público.
+
+**Checklist original** (preservado como referencia histórica):
 
 0) **Regla de seguridad operativa**
 - No tocar lógica MLB ni archivos frozen de Oracle MLB. Todo NBA en rutas/servicios/prompt/UI NBA o archivos nuevos.
