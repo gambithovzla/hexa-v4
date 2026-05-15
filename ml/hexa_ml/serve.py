@@ -5,6 +5,7 @@ Endpoints:
   - POST /predict/moneyline      → P(home wins)
   - POST /predict/overunder      → P(OVER hits)
   - POST /predict/runline        → P(home covers -1.5)
+  - POST /predict/prop/{kind}    → P(prop side wins) by prop kind
   - POST /predict/batch          → batch any market
   - POST /predict/ensemble       → meta-learner combining oracle + legacy + python
   - GET  /calibration            → reliability diagram of last test set
@@ -33,8 +34,17 @@ from pydantic import BaseModel, Field
 from . import __version__
 from .config import get_settings
 from .predict import ModelNotAvailable, Prediction, get_registry
+from .models import MARKET_MODELS
 
 logger = logging.getLogger("hexa_ml.serve")
+SUPPORTED_MARKETS = tuple(MARKET_MODELS.keys())
+SUPPORTED_PROP_ENDPOINTS = {
+    "hits": "prop_hits",
+    "strikeouts": "prop_strikeouts",
+    "total_bases": "prop_total_bases",
+    "home_runs": "prop_home_runs",
+    "rbis": "prop_rbis",
+}
 
 
 @asynccontextmanager
@@ -114,6 +124,16 @@ class FeaturePayload(BaseModel):
     odds_ou_total: float | None = None
     # OverUnder needs the line itself as a feature
     line: float | None = None
+    side: str | None = None
+    prop_player_xwoba: float | None = None
+    prop_player_xba: float | None = None
+    prop_player_xslg: float | None = None
+    prop_player_k_pct: float | None = None
+    prop_player_bb_pct: float | None = None
+    prop_player_avg_exit_velocity: float | None = None
+    prop_player_barrel_pct: float | None = None
+    prop_player_hard_hit_pct: float | None = None
+    prop_player_rolling_woba_14d: float | None = None
 
     model_config = {"extra": "allow"}
 
@@ -127,7 +147,10 @@ class PredictionOut(BaseModel):
 
 
 class BatchItem(FeaturePayload):
-    market: str = Field(..., pattern="^(moneyline|overunder|runline)$")
+    market: str = Field(
+        ...,
+        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis)$",
+    )
     game_pk: int | None = None
 
 
@@ -152,7 +175,10 @@ class HealthResponse(BaseModel):
 
 
 class RetrainRequest(BaseModel):
-    market: str = Field(default="all", pattern="^(moneyline|overunder|runline|all)$")
+    market: str = Field(
+        default="all",
+        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|all)$",
+    )
     csv: str | None = None
     # Optional admin override — bypasses the per-market `min_train_size` floor.
     # Useful for probing a new market with very few samples. None = use the
@@ -225,7 +251,7 @@ def _predict_one(market: str, payload: FeaturePayload) -> PredictionOut:
 def health() -> HealthResponse:
     """Liveness check — also reports which markets have trained artifacts."""
     registry = get_registry()
-    available = [m for m in ("moneyline", "overunder", "runline") if registry.has_artifact(m)]
+    available = [m for m in SUPPORTED_MARKETS if registry.has_artifact(m)]
     ensembles_available = [
         m for m in ("moneyline",) if registry.has_ensemble_artifact(m)
     ]
@@ -269,6 +295,22 @@ def predict_overunder(payload: FeaturePayload) -> PredictionOut:
 )
 def predict_runline(payload: FeaturePayload) -> PredictionOut:
     return _predict_one("runline", payload)
+
+
+@app.post(
+    "/predict/prop/{prop_kind}",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_prop(prop_kind: str, payload: FeaturePayload) -> PredictionOut:
+    market = SUPPORTED_PROP_ENDPOINTS.get(prop_kind)
+    if not market:
+        allowed = ", ".join(SUPPORTED_PROP_ENDPOINTS.keys())
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported prop kind '{prop_kind}'. Allowed: {allowed}",
+        )
+    return _predict_one(market, payload)
 
 
 @app.post(
