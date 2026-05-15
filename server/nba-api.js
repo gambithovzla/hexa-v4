@@ -389,6 +389,24 @@ export async function getNbaGamesForDate(dateStr) {
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
+  // ESPN first: stats.nba.com hangs from Railway (~8s timeout) before any fallback.
+  try {
+    const espnGames = await fetchEspnGamesForDate(dateStr);
+    const anyLive = espnGames.some(r => r.game_status_id === 2);
+    const ttl = anyLive ? TTL.DAILY_GAMES_LIVE : TTL.DAILY_GAMES;
+    cacheSet(cacheKey, espnGames, ttl);
+    console.log(`[nba-api] scoreboard (ESPN) ${dateStr}: ${espnGames.length} games`);
+    return espnGames;
+  } catch (espnErr) {
+    console.warn(`[nba-api] ESPN scoreboard ${dateStr} failed (${espnErr.message}) — trying stats.nba.com`);
+  }
+
+  const stale = cacheGetStale(cacheKey);
+  if (stale) {
+    console.warn(`[nba-api] scoreboard ${dateStr}: serving stale cache`);
+    return stale;
+  }
+
   let data;
   try {
     data = await nbaFetch('scoreboardv2', {
@@ -397,21 +415,8 @@ export async function getNbaGamesForDate(dateStr) {
       DayOffset: '0',
     });
   } catch (err) {
-    const stale = cacheGetStale(cacheKey);
-    if (stale) {
-      console.warn(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — serving stale cache`);
-      return stale;
-    }
-    try {
-      const espnGames = await fetchEspnGamesForDate(dateStr);
-      const anyLive = espnGames.some(r => r.game_status_id === 2);
-      cacheSet(cacheKey, espnGames, anyLive ? TTL.DAILY_GAMES_LIVE : TTL.DAILY_GAMES);
-      console.warn(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — using ESPN fallback (${espnGames.length} games)`);
-      return espnGames;
-    } catch (espnErr) {
-      console.error(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}); ESPN fallback failed (${espnErr.message}) — returning empty`);
-      return [];
-    }
+    console.error(`[nba-api] scoreboardv2 ${dateStr} failed (${err.message}) — returning empty`);
+    return [];
   }
 
   const gameHeader = data.resultSets?.find(rs => rs.name === 'GameHeader');
@@ -894,6 +899,24 @@ export async function getNbaStandings(season = CURRENT_SEASON) {
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
+  try {
+    const espnStandings = await fetchEspnStandings(season);
+    const teamCount = espnStandings.conferences?.reduce((n, c) => n + (c.teams?.length ?? 0), 0) ?? 0;
+    if (teamCount > 0) {
+      cacheSet(cacheKey, espnStandings, TTL.STANDINGS);
+      console.log(`[nba-api] standings (ESPN) ${season}: ${teamCount} teams`);
+      return espnStandings;
+    }
+  } catch (espnErr) {
+    console.warn(`[nba-api] ESPN standings ${season} failed (${espnErr.message}) — trying stats.nba.com`);
+  }
+
+  const stale = cacheGetStale(cacheKey);
+  if (stale) {
+    console.warn(`[nba-api] standings ${season}: serving stale cache`);
+    return stale;
+  }
+
   let data;
   try {
     data = await nbaFetch('leaguestandingsv3', {
@@ -902,20 +925,8 @@ export async function getNbaStandings(season = CURRENT_SEASON) {
       SeasonType: 'Regular Season',
     });
   } catch (err) {
-    const stale = cacheGetStale(cacheKey);
-    if (stale) {
-      console.warn(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — serving stale cache`);
-      return stale;
-    }
-    try {
-      const espnStandings = await fetchEspnStandings(season);
-      cacheSet(cacheKey, espnStandings, TTL.STANDINGS);
-      console.warn(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — using ESPN fallback`);
-      return espnStandings;
-    } catch (espnErr) {
-      console.error(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}); ESPN fallback failed (${espnErr.message}) — returning empty`);
-      return { season, updatedAt: new Date().toISOString(), conferences: [] };
-    }
+    console.error(`[nba-api] leaguestandingsv3 ${season} failed (${err.message}) — returning empty`);
+    return { season, updatedAt: new Date().toISOString(), conferences: [] };
   }
 
   const rs = data.resultSets?.find(r => r.name === 'Standings');
