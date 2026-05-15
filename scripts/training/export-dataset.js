@@ -13,9 +13,12 @@
  *   node scripts/training/export-dataset.js --resolved-only
  *   node scripts/training/export-dataset.js --out=data/my-dataset.csv
  *
- * Output columns (43 total):
+ * Output columns include structured props + player Statcast snapshot fields.
  *   Meta: id, pick_id, backtest_id, game_pk, game_date, source, created_at
- *   Pick: pick, market_type, side, line, prop_kind, prop_player_id
+ *   Pick: pick, market_type, side, line, prop_kind, prop_player_id, prop_player_name
+ *   Prop snapshot: prop_player_xwoba, prop_player_xba, prop_player_xslg, prop_player_k_pct,
+ *                  prop_player_bb_pct, prop_player_avg_exit_velocity, prop_player_barrel_pct,
+ *                  prop_player_hard_hit_pct, prop_player_rolling_woba_14d
  *   Oracle: oracle_confidence, oracle_model, prompt_version, kelly_fraction
  *   Pitcher: home/away pitcher xwoba, whiff, k_pct, era, days_rest, pitches_last_start
  *   Bullpen: home/away bullpen_pitches_last_3d
@@ -56,7 +59,10 @@ const COLUMNS = [
   'pf.source', 'pf.created_at',
   // Pick (structured)
   'pf.pick', 'pf.market_type', 'pf.side', 'pf.line',
-  'pf.prop_kind', 'pf.prop_player_id',
+  'pf.prop_kind', 'pf.prop_player_id', 'pf.prop_player_name',
+  'pf.prop_player_xwoba', 'pf.prop_player_xba', 'pf.prop_player_xslg',
+  'pf.prop_player_k_pct', 'pf.prop_player_bb_pct', 'pf.prop_player_avg_exit_velocity',
+  'pf.prop_player_barrel_pct', 'pf.prop_player_hard_hit_pct', 'pf.prop_player_rolling_woba_14d',
   // Oracle metadata
   'pf.oracle_confidence', 'pf.oracle_model', 'pf.prompt_version', 'pf.kelly_fraction',
   // Pitcher features

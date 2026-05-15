@@ -575,6 +575,32 @@ export async function runSprint1Migrations() {
   }
 }
 
+// Sprint 5 (deferred) — MLB Player Props per-batter/per-pitcher snapshot columns
+export async function runPlayerPropsMlbMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_name TEXT`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_xwoba DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_xba DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_xslg DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_k_pct DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_bb_pct DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_avg_exit_velocity DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_barrel_pct DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_hard_hit_pct DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_rolling_woba_14d DECIMAL(7,4)`);
+    await client.query('COMMIT');
+    console.log('[migrate] player-props-mlb columns ready');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] player-props-mlb migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // Sprint 3 — Node ↔ Python sidecar: persist Python model score alongside
 // the existing legacy shadow validator score in shadow_model_runs.
 export async function runSprint3Migrations() {

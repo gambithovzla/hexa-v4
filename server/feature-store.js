@@ -3,6 +3,19 @@
  */
 
 import pool from './db.js';
+import { parsePick as parseStructuredPick } from './parsers/pickParser.js';
+import { getBatterStatcast, getPitcherStatcast } from './savant-fetcher.js';
+
+const PROPS_SAVANT_ENRICH_ENABLED = (process.env.MLB_PROPS_SAVANT_ENRICH_ENABLED ?? '1') !== '0';
+const PITCHER_PROP_KINDS = new Set(['strikeouts', 'outs_recorded']);
+
+function normalizeMarketType(value) {
+  const key = String(value ?? '').toLowerCase().trim();
+  if (!key) return null;
+  if (key === 'playerprop') return 'prop';
+  if (key === 'spread') return 'runline';
+  return key;
+}
 
 function normalizeResult(result) {
   if (result === 'won') return 'win';
@@ -41,6 +54,7 @@ export async function savePickFeatures({
   line = null,
   propKind = null,
   propPlayerId = null,
+  propPlayerName = null,
   // Sprint 1 — pitcher fatigue / game context
   homePitcherDaysRest = null,
   awayPitcherDaysRest = null,
@@ -57,6 +71,7 @@ export async function savePickFeatures({
   oracleModel = null,
   oracleConfidence = null,
   kellyFraction = null,
+  sport = 'mlb',
   source = 'live',
 }) {
   try {
@@ -91,6 +106,36 @@ export async function savePickFeatures({
       odds_ou_total: oddsData?.odds?.overUnder?.total ?? null,
     };
 
+    const parsedStructured = parseStructuredPick(pick ?? '');
+    const resolvedMarketType = normalizeMarketType(marketType ?? parsedStructured.market_type);
+    const resolvedSide = side ?? parsedStructured.side ?? null;
+    const resolvedLine = line ?? parsedStructured.line ?? null;
+    const resolvedPropKind = propKind ?? parsedStructured.prop_kind ?? null;
+    const resolvedPropPlayerName = propPlayerName ?? parsedStructured.prop_player_name ?? null;
+
+    let propSavant = null;
+    const isMlbProp = String(sport ?? 'mlb').toLowerCase() === 'mlb'
+      && resolvedMarketType === 'prop'
+      && resolvedPropPlayerName;
+    if (PROPS_SAVANT_ENRICH_ENABLED && isMlbProp) {
+      const isPitcherProp = PITCHER_PROP_KINDS.has(String(resolvedPropKind ?? '').toLowerCase());
+      propSavant = isPitcherProp
+        ? await getPitcherStatcast(resolvedPropPlayerName)
+        : await getBatterStatcast(resolvedPropPlayerName);
+    }
+
+    const propPlayerXwoba = propSavant?.xwOBA ?? propSavant?.xwOBA_against ?? null;
+    const propPlayerXba = propSavant?.xBA ?? propSavant?.xBA_against ?? null;
+    const propPlayerXslg = propSavant?.xSLG ?? propSavant?.xSLG_against ?? null;
+    const propPlayerKPct = propSavant?.k_percent ?? null;
+    const propPlayerBBPct = propSavant?.bb_percent ?? null;
+    const propPlayerAvgEv = propSavant?.avg_exit_velocity ?? null;
+    const propPlayerBarrelPct = propSavant?.barrel_batted_rate ?? null;
+    const propPlayerHardHitPct = propSavant?.hard_hit_percent ?? null;
+    const propPlayerRollingWoba14d = propSavant?.rolling_windows?.woba_14d
+      ?? propSavant?.rolling_windows_against?.woba_against_14d
+      ?? null;
+
     const normalizedResult = normalizeResult(result);
     const values = [
       pickId, backtestId, gamePk, gameDate,
@@ -106,12 +151,16 @@ export async function savePickFeatures({
       features.odds_ml_home, features.odds_ml_away, features.odds_ou_total,
       pick, normalizedResult, userEmail ?? null,
       // Sprint 1 new fields
-      marketType, side, line, propKind, propPlayerId,
+      resolvedMarketType, resolvedSide, resolvedLine, resolvedPropKind, propPlayerId,
+      resolvedPropPlayerName,
+      propPlayerXwoba, propPlayerXba, propPlayerXslg,
+      propPlayerKPct, propPlayerBBPct, propPlayerAvgEv,
+      propPlayerBarrelPct, propPlayerHardHitPct, propPlayerRollingWoba14d,
       homePitcherDaysRest, awayPitcherDaysRest,
       homePitcherPitchesLastStart, awayPitcherPitchesLastStart,
       homeBullpenPitchesLast3d, awayBullpenPitchesLast3d,
       isDayGame, isDome, gameNumberInSeries, umpireId,
-      promptVersion, oracleModel, oracleConfidence, kellyFraction, source,
+      promptVersion, oracleModel, oracleConfidence, kellyFraction, source, sport,
     ];
 
     const existing = pickId != null
@@ -136,14 +185,18 @@ export async function savePickFeatures({
           odds_ml_home = $23, odds_ml_away = $24, odds_ou_total = $25,
           pick = $26, result = $27, user_email = $28,
           market_type = $29, side = $30, line = $31, prop_kind = $32, prop_player_id = $33,
-          home_pitcher_days_rest = $34, away_pitcher_days_rest = $35,
-          home_pitcher_pitches_last_start = $36, away_pitcher_pitches_last_start = $37,
-          home_bullpen_pitches_last_3d = $38, away_bullpen_pitches_last_3d = $39,
-          is_day_game = $40, is_dome = $41, game_number_in_series = $42, umpire_id = $43,
-          prompt_version = $44, oracle_model = $45, oracle_confidence = $46,
-          kelly_fraction = $47, source = $48,
+          prop_player_name = $34,
+          prop_player_xwoba = $35, prop_player_xba = $36, prop_player_xslg = $37,
+          prop_player_k_pct = $38, prop_player_bb_pct = $39, prop_player_avg_exit_velocity = $40,
+          prop_player_barrel_pct = $41, prop_player_hard_hit_pct = $42, prop_player_rolling_woba_14d = $43,
+          home_pitcher_days_rest = $44, away_pitcher_days_rest = $45,
+          home_pitcher_pitches_last_start = $46, away_pitcher_pitches_last_start = $47,
+          home_bullpen_pitches_last_3d = $48, away_bullpen_pitches_last_3d = $49,
+          is_day_game = $50, is_dome = $51, game_number_in_series = $52, umpire_id = $53,
+          prompt_version = $54, oracle_model = $55, oracle_confidence = $56,
+          kelly_fraction = $57, source = $58, sport = $59,
           pick_time_lima = COALESCE(pick_time_lima, (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
-        WHERE id = $49
+        WHERE id = $60
       `, [...values, existing.rows[0].id]);
     } else {
       await pool.query(`
@@ -155,16 +208,20 @@ export async function savePickFeatures({
           data_quality_score, signal_coherence_score,
           odds_ml_home, odds_ml_away, odds_ou_total, pick, result, user_email,
           market_type, side, line, prop_kind, prop_player_id,
+          prop_player_name,
+          prop_player_xwoba, prop_player_xba, prop_player_xslg,
+          prop_player_k_pct, prop_player_bb_pct, prop_player_avg_exit_velocity,
+          prop_player_barrel_pct, prop_player_hard_hit_pct, prop_player_rolling_woba_14d,
           home_pitcher_days_rest, away_pitcher_days_rest,
           home_pitcher_pitches_last_start, away_pitcher_pitches_last_start,
           home_bullpen_pitches_last_3d, away_bullpen_pitches_last_3d,
           is_day_game, is_dome, game_number_in_series, umpire_id,
-          prompt_version, oracle_model, oracle_confidence, kelly_fraction, source,
+          prompt_version, oracle_model, oracle_confidence, kelly_fraction, source, sport,
           pick_time_lima)
         VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
           $21,$22,$23,$24,$25,$26,$27,$28,
-          $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,
+          $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
           (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP
         )
       `, values);
