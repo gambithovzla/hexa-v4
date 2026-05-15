@@ -272,6 +272,8 @@ export default function Sidebar({
     const analisis = [
       (isAdmin || performancePublic) && { key: 'performance', action: onPerformance,
         icon: ICONS.performance, label: 'Performance' },
+      isAdmin && { key: 'equity', action: () => { window.location.href = '/admin/equity'; },
+        icon: ICONS.performance, label: 'Equity Curve', badge: 'NEW' },
       isAdmin && { key: 'backtests', action: () => { window.location.href = '/admin/backtests'; },
         icon: ICONS.backtests, label: 'Backtests' },
       isAdmin && { key: 'run-test', action: () => { window.location.href = '/admin/run-backtest'; },

@@ -20,6 +20,7 @@
 import express from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
+import { computeAdminEquity } from '../services/admin-equity.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -490,6 +491,23 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── GET /api/admin/equity ─────────────────────────────────────────────────────
+// Returns equity curve, drawdown, Sharpe and monthly breakdown for admin dashboard.
+// Query params: sport (mlb|nba|all), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD)
+router.get('/equity', async (req, res) => {
+  const { sport = 'all', startDate, endDate } = req.query;
+  if (!['all', 'mlb', 'nba'].includes(sport)) {
+    return res.status(400).json({ success: false, error: 'sport must be all | mlb | nba' });
+  }
+  try {
+    const data = await computeAdminEquity({ sport, startDate, endDate });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[admin-equity] error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
