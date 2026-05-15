@@ -759,7 +759,7 @@ export async function resolvePendingPicks() {
       try {
         const game = findGameForPick(pick, games);
         if (!game) {
-          console.log(`[pick-resolver] Pick #${pick.id}: "${pick.matchup}" â€” no matching game found for ${date}`);
+          console.log(`[pick-resolver] Pick #${pick.id}: "${pick.matchup}" - no matching game found for ${date}`);
           continue;
         }
 
@@ -775,7 +775,7 @@ export async function resolvePendingPicks() {
 
         if (String(finalGame.status?.simplified ?? '').toLowerCase() !== 'final') {
           console.log(
-            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" â€” status: ${game.status?.simplified} (not final)`
+            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" - status: ${game.status?.simplified} (not final)`
           );
           continue;
         }
@@ -834,11 +834,11 @@ export async function resolvePendingPicks() {
 
         if (propResult) {
           console.log(
-            `[pick-resolver] Pick #${pick.id}: ${propResult.playerName} ${propResult.propType} = ${propResult.actual} vs ${propResult.direction} ${propResult.line} â†’ ${result}`
+            `[pick-resolver] Pick #${pick.id}: ${propResult.playerName} ${propResult.propType} = ${propResult.actual} vs ${propResult.direction} ${propResult.line} -> ${result}`
           );
         } else {
           console.log(
-            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" â€” pick: "${pick.pick}" â€” result: ${result.toUpperCase()} (score: ${finalGame.teams.away.score}-${finalGame.teams.home.score})`
+            `[pick-resolver] Pick #${pick.id}: "${pick.matchup}" - pick: "${pick.pick}" - result: ${result.toUpperCase()} (score: ${finalGame.teams.away.score}-${finalGame.teams.home.score}, gamePk: ${finalGame.gamePk ?? 'n/a'})`
           );
         }
 
@@ -847,7 +847,7 @@ export async function resolvePendingPicks() {
         if (result === 'loss') summary.losses++;
         if (result === 'push') summary.pushes++;
       } catch (err) {
-        const msg = `Pick #${pick.id}: unexpected error â€” ${err.message}`;
+        const msg = `Pick #${pick.id}: unexpected error - ${err.message}`;
         console.error(`[pick-resolver] ${msg}`);
         summary.errors.push(msg);
       }
@@ -855,7 +855,7 @@ export async function resolvePendingPicks() {
   }
 
   console.log(
-    `[pick-resolver] Done â€” resolved: ${summary.resolved}, wins: ${summary.wins}, ` +
+    `[pick-resolver] Done - resolved: ${summary.resolved}, wins: ${summary.wins}, ` +
     `losses: ${summary.losses}, pushes: ${summary.pushes}, errors: ${summary.errors.length}`
   );
 

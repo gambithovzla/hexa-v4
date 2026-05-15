@@ -23,7 +23,7 @@ import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from './odd
  * @param {string} matchupStr  — e.g. "NYY @ BOS"
  * @returns {number|null}      — American odds integer or null
  */
-function extractPickOdds(pickStr, matchedOdds, matchupStr) {
+export function extractPickOdds(pickStr, matchedOdds, matchupStr) {
   if (!pickStr || !matchedOdds?.odds) return null;
   const s   = pickStr.trim();
   const odd = matchedOdds.odds;
@@ -79,7 +79,7 @@ function extractPickOdds(pickStr, matchedOdds, matchupStr) {
  * Finds the game in a games list that corresponds to a matchup string.
  * Supports: "NYY @ BOS", "NYY vs BOS", "NYY - BOS", etc.
  */
-function findGameForMatchup(matchup, games) {
+export function findGameForMatchup(matchup, games) {
   if (!matchup || !games?.length) return null;
   const parts = matchup.split(/\s+(?:vs\.?|@|at|-)\s+/i);
   if (parts.length < 2) return null;

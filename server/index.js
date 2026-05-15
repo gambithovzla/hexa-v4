@@ -2611,6 +2611,13 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
       feature_store, featureStore,
     } = req.body;
 
+    if (!type || !matchup || !pick) {
+      return res.status(400).json({
+        success: false,
+        error: 'type, matchup, and pick are required',
+      });
+    }
+
     // Calculate implied probability server-side from the American odds provided by the client
     const implied_prob_at_pick = odds_at_pick != null
       ? calculateImpliedProbability(odds_at_pick)
@@ -2649,6 +2656,9 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
       ]
     );
     const savedPick = rows[0];
+    console.log(
+      `[picks] saved id=${savedPick.id} user=${req.user.id} type=${type} sport=${normalizedSport} game_pk=${savedPick.game_pk ?? 'n/a'}`
+    );
     const featureGamePk = game_pk ?? gamePk ?? game_id ?? gameId ?? null;
     const featureGameDate = game_date ?? gameDate ?? date ?? null;
     const directFeatureGamePk = parsedFeatureStore?.gamePk ?? featureGamePk;
@@ -2679,6 +2689,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
 
     res.json({ success: true, data: savedPick });
   } catch (err) {
+    console.error(`[picks] save failed user=${req.user?.id ?? 'n/a'}: ${err.message}`);
     res.status(500).json({ success: false, error: safeError(err) });
   }
 });
