@@ -722,11 +722,11 @@ function DayHeader({ dateStr, picks, lang, defaultExpanded, onMarkResult, onDele
   );
 }
 
-function AnalisisTab({ lang }) {
+function AnalisisTab({ lang, sport = 'all' }) {
   const t = TRANSLATIONS[lang] ?? TRANSLATIONS.en;
   const { isAuthenticated, token, user } = useAuth();
   const isAdmin = user?.is_admin === true;
-  const { history, markResult, deletePick, clearHistory, getStats, loadHistory, requestPostmortem } = useHistory();
+  const { history, markResult, deletePick, clearHistory, getStats, loadHistory, requestPostmortem } = useHistory({ sport });
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const stats = getStats();
   const [confirming, setConfirming] = useState(false);
@@ -1361,7 +1361,7 @@ const TABS = [
   { key: 'semana',   label: 'SEMANA' },
 ];
 
-export default function HistoryPanel({ lang = 'en' }) {
+export default function HistoryPanel({ lang = 'en', sport = 'all' }) {
   const [activeTab, setActiveTab] = useState('analisis');
 
   return (
@@ -1397,7 +1397,7 @@ export default function HistoryPanel({ lang = 'en' }) {
 
       {/* Tab content */}
       <Box sx={{ px: 2, pb: 2 }}>
-        {activeTab === 'analisis' && <AnalisisTab lang={lang} />}
+        {activeTab === 'analisis' && <AnalisisTab lang={lang} sport={sport} />}
         {activeTab === 'semana'   && <InsightsSemana lang={lang} />}
       </Box>
     </Box>

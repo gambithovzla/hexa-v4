@@ -2339,7 +2339,10 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
          ORDER BY created_at DESC
          LIMIT 1
        ) pf ON TRUE
-       WHERE p.user_id = $1 AND p.result = 'pending' AND p.deleted_at IS NULL
+       WHERE p.user_id = $1
+         AND p.result = 'pending'
+         AND p.deleted_at IS NULL
+         AND COALESCE(p.sport, 'mlb') = 'mlb'
        ORDER BY created_at DESC
        LIMIT 20`,
       [userId]
@@ -2511,7 +2514,9 @@ app.post('/api/picks/resolve-game', verifyToken, async (req, res) => {
 
     // Find pending picks that match this game
     const { rows: pendingPicks } = await pool.query(
-      `SELECT id, pick, matchup FROM picks WHERE result = 'pending' AND deleted_at IS NULL`
+      `SELECT id, pick, matchup
+       FROM picks
+       WHERE result = 'pending' AND deleted_at IS NULL AND COALESCE(sport, 'mlb') = 'mlb'`
     );
 
     let resolved = 0;
@@ -2785,22 +2790,37 @@ app.get('/api/picks/clv-stats', verifyToken, async (req, res) => {
 // GET /api/picks — obtiene el historial del usuario
 app.get('/api/picks', verifyToken, async (req, res) => {
   try {
-    const [historyResult, summaryResult] = await Promise.all([
-      pool.query(
-        'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100',
-        [req.user.id]
-      ),
-      pool.query(
-        `SELECT
+    const sport = String(req.query?.sport ?? '').toLowerCase();
+    if (sport && sport !== 'mlb' && sport !== 'nba') {
+      return res.status(400).json({ success: false, error: 'sport must be mlb or nba when provided' });
+    }
+    const hasSportFilter = sport === 'mlb' || sport === 'nba';
+    const historyQuery = hasSportFilter
+      ? 'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL AND sport = $2 ORDER BY created_at DESC LIMIT 100'
+      : 'SELECT * FROM picks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 100';
+    const historyParams = hasSportFilter ? [req.user.id, sport] : [req.user.id];
+    const summaryQuery = hasSportFilter
+      ? `SELECT
            COUNT(*) AS total_picks,
            COUNT(*) FILTER (WHERE result = 'win') AS wins,
            COUNT(*) FILTER (WHERE result = 'loss') AS losses,
            COUNT(*) FILTER (WHERE result = 'push') AS pushes,
            COUNT(*) FILTER (WHERE result = 'pending' OR result IS NULL) AS pending
          FROM picks
-         WHERE user_id = $1 AND deleted_at IS NULL`,
-        [req.user.id]
-      ),
+         WHERE user_id = $1 AND deleted_at IS NULL AND sport = $2`
+      : `SELECT
+           COUNT(*) AS total_picks,
+           COUNT(*) FILTER (WHERE result = 'win') AS wins,
+           COUNT(*) FILTER (WHERE result = 'loss') AS losses,
+           COUNT(*) FILTER (WHERE result = 'push') AS pushes,
+           COUNT(*) FILTER (WHERE result = 'pending' OR result IS NULL) AS pending
+         FROM picks
+         WHERE user_id = $1 AND deleted_at IS NULL`;
+    const summaryParams = hasSportFilter ? [req.user.id, sport] : [req.user.id];
+
+    const [historyResult, summaryResult] = await Promise.all([
+      pool.query(historyQuery, historyParams),
+      pool.query(summaryQuery, summaryParams),
     ]);
 
     const summaryRow = summaryResult.rows[0] ?? {};

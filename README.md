@@ -279,6 +279,11 @@ Sprint 7 completado en su mayor parte:
 - ✅ **7c** — `POST /api/nba/analyze/game` (admin, feature-flagged). Pick persistence con `sport='nba'`.
 - ✅ **7c2** — `pick-resolver-nba.js`: resolución automática post-game cada 30 min.
 - ✅ **7d** — UI sport switcher: `SportSwitcher.jsx`, `GameSelector` y `AnalysisPanel` con prop `sport`. Fetch y normalización de juegos NBA. Controles MLB-específicos ocultos en modo NBA.
+- ✅ **7.0 hotfix (aislamiento)** — historial y lifecycle separados por `sport`:
+  - `GET /api/picks?sport=mlb|nba` para historial/stats aislados
+  - `HistoryPanel` + `useHistory` filtrados por deporte
+  - resolver/tracking MLB ignora picks NBA pendientes
+- ✅ **7.0 hotfix (SAFE/props)** — SAFE bloqueado en NBA y Player Props NBA rechazado server-side.
 - ⏳ **7e** — NBA ML sidecar: condicional, post ~500 picks NBA resueltos.
 
 ### Próximas fases — hardening
@@ -305,9 +310,9 @@ Escala de referencia: 0-10 por criterio. Para apertura publica de un deporte: sc
 
 #### Criterios de go-live NBA
 
-- SAFE PICK NBA aislado de endpoints MLB.
-- Player Props NBA deshabilitado hasta tener dataset y resolver dedicados.
-- Historial/jobs/resolver/UX aislados por `sport` para evitar contaminacion cruzada.
+- SAFE PICK NBA aislado de endpoints MLB. ✅
+- Player Props NBA deshabilitado hasta tener dataset y resolver dedicados. ✅
+- Historial/jobs/resolver/UX aislados por `sport` para evitar contaminacion cruzada. ✅ en código
 - Contexto NBA con injuries/status + odds server-side + metadata de completitud.
 
 Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).

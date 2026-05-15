@@ -124,33 +124,36 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 ### ⏳ Sprint 7 — Expansión NBA, scaffolding + MVP (Q4 2026 → Q1 2027, ~10-14 semanas)
 
-**Status**: planificado. Arranca en paralelo con Sprint 6 — Sprint 7a no toca código MLB, así que no compite con Sprint 6.
+**Status**: 🔄 en ejecución. 7a-7d entregados + hardening 7.0 parcial.
 
 **Target**: MVP NBA listo para el **All-Star Break (15-17 feb 2027)** o antes. Es la ventana donde MLB está dormido y NBA está en pico de interés (playoffs approach).
 
 #### Sprint 7.0 — NBA hardening gate (hotfix obligatorio antes de abrir) (~1-2 semanas)
 
-Estado: prioritario inmediato.
+Estado: 🔄 en progreso (2026-05-15).
 
 Objetivo: eliminar contaminación MLB↔NBA en flujo de picks y cerrar errores de modo SAFE en NBA antes de crecer features.
 
 Entregables:
 - Separación estricta de historial por `sport`:
-  - `client/src/hooks/useHistory.js` debe preservar `sport` al mapear rows DB.
-  - `client/src/components/HistoryPanel.jsx` debe renderizar matchup/logos por deporte (NBA != MLB).
+  - ✅ `client/src/hooks/useHistory.js` preserva `sport` y soporta filtro por deporte.
+  - ✅ `client/src/components/HistoryPanel.jsx` renderiza matchup/logos por deporte.
+  - ✅ `GET /api/picks?sport=mlb|nba` retorna historial/summary aislados.
 - SAFE PICK en NBA:
-  - bloquear ruta MLB `/api/analyze/safe` cuando `sport='nba'`.
-  - permitir solo mercados NBA soportados por data real.
+  - ✅ bloqueada ruta MLB `/api/analyze/safe` cuando `sport='nba'`.
+  - ✅ mercados no soportados restringidos; Player Props NBA deshabilitado.
 - Política temporal de producto:
-  - **Player Props NBA deshabilitado** hasta contar con dataset/featurización de nivel producción.
+  - ✅ **Player Props NBA deshabilitado** hasta contar con dataset/featurización de nivel producción.
 - Persistencia y consultas:
-  - verificar que todos los inserts NBA persistan `sport='nba'` explícitamente.
-  - auditar listados y filtros para que picks NBA no pasen por pipelines MLB.
+  - ✅ inserts NBA persisten `sport='nba'` explícitamente.
+  - ✅ listados/filtros base aislados por `sport` en historial/lifecycle.
+  - ✅ resolver/tracking MLB ignora picks NBA pendientes.
 
 Criterio de éxito:
-- Un análisis NBA guardado aparece como NBA en historial, breakdown y cards.
-- Cero errores tipo "Game not found" causados por cruce de endpoint SAFE MLB.
-- Ninguna regresión en MLB.
+- ✅ Un análisis NBA guardado aparece como NBA en historial, breakdown y cards.
+- ✅ Cero errores tipo "Game not found" por cruce de SAFE MLB en flujo NBA.
+- ✅ Ninguna regresión detectada en suite MLB crítica.
+- ⏳ Pendiente para cerrar 7.0: injuries/status + odds server-side + `context_meta`.
 
 #### Sprint 7a — Scaffolding de datos NBA (~3 semanas)
 
@@ -324,7 +327,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q2  Sprints 0-5   — Pipeline ML completo            ████████████████████████ ✅
 2026 Q3  Sprint 6a     — Equity curve dashboard          ████████████████████████ ✅
 2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ████████████████░░░░░░░░ 🔄 ops
-2026 Q3-4 Sprint 7.0   — NBA hardening gate              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2026 Q3-4 Sprint 7.0   — NBA hardening gate              ████████████░░░░░░░░░░░░ 🔄
 2026 Q3-4 Sprint 7a    — Scaffolding NBA (datos)         ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q4  Sprint 7b     — Oracle NBA + prompts            ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q4  Sprint 7c     — NBA pick lifecycle              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
