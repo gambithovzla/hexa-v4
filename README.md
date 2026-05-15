@@ -151,6 +151,7 @@ CI/CD:
 - Corre en PRs y pushes a `main` cuando cambian archivos de `server/`, `scripts/smoke/` o `package.json`
 - Corre además en schedule diario (10:30 UTC) como early warning de integraciones externas
 - Pipeline en dos fases: primero `npm run test:mlb:critical`, luego smoke HTTP de release
+- Siempre sube artifact `server.log` en CI para diagnóstico rápido cuando hay fallas intermitentes
 
 ## Estructura del repo
 

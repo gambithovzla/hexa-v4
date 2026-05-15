@@ -71,6 +71,16 @@ jobs:
           npm start > server.log 2>&1 &
           echo $! > server.pid
 
+      - name: Verify API process started
+        run: |
+          sleep 2
+          if ! ps -p "$(cat server.pid)" > /dev/null; then
+            echo "::error::API process exited before smoke checks"
+            echo "----- server.log -----"
+            cat server.log || true
+            exit 1
+          fi
+
       - name: Run MLB smoke script
         env:
           SMOKE_BASE_URL: http://127.0.0.1:3001
@@ -93,4 +103,13 @@ jobs:
           if [ -f server.pid ]; then
             kill "$(cat server.pid)" || true
           fi
+
+      - name: Upload smoke logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlb-smoke-server-log-${{ github.run_id }}
+          path: server.log
+          if-no-files-found: ignore
+          retention-days: 7
 
