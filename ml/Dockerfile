@@ -29,10 +29,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH=/home/hexa/.local/bin:$PATH
-
-# Non-root user for runtime safety
-RUN groupadd -r hexa && useradd -r -g hexa -d /home/hexa -m hexa
+    PATH=/root/.local/bin:$PATH
 
 # Runtime libs only (libpq for psycopg2-binary, libgomp for xgboost)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY --from=builder /root/.local /home/hexa/.local
+COPY --from=builder /root/.local /root/.local
 COPY hexa_ml /app/hexa_ml
 COPY pyproject.toml /app/
 
