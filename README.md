@@ -119,7 +119,7 @@ Desde la raíz ([package.json](package.json)):
 | `npm run smoke:mlb` | Smoke test de release MLB (endpoints críticos `/api/games`, `/api/teams`, `/api/hexa/board`) |
 | `npm run smoke:nba` | Smoke test de release NBA (`/api/nba/games`, `/api/nba/teams`; con `SMOKE_ADMIN_TOKEN`+`SMOKE_NBA_GAME_ID` valida también `/api/nba/analyze/game` con `context_meta`) |
 | `npm run test:mlb:critical` | Suite anti-regresión MLB (resolver, closing-line, guardrails `/api/picks`, admin equity) |
-| `npm run verify:ml:persistence` | Post-deploy: valida `/health` del sidecar ML (volume + modelos cargados) |
+| `npm run verify:ml:persistence` | Post-deploy: valida `/health` del sidecar ML (`artifacts_persistent`, modelos cargados). Prod OK desde Sprint 6b (2026-05-15). |
 | `npm run test:parlay` | Tests del Parlay Synergy Engine |
 
 Desde `client/`:
@@ -271,7 +271,8 @@ Estado:
 - ✅ **Sprint 4**: Ensemble meta-learner (LogReg sobre Oracle+Legacy+Python en logit space). Endpoints `/predict/ensemble` y `/calibration/ensemble`. Sólo se guarda artifact cuando supera a la mejor fuente individual.
 - ✅ **Sprint 5 UI**: Admin ML Control Center en `/admin/ml-control` — HUD live, retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Oracle Chat → Training pipeline (JSON tail + Haiku fallback, bucket `source='oracle_chat'`).
 - ⏳ **Sprint 5 Player Props** (pendiente): training para hits / total_bases / strikeouts — requiere features per-batter en `savant-fetcher.js`. Banner "coming soon" en el Control Center.
-- ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, endpoints `/api/nba/*`, resolver automático post-game, sport switcher en UI. Feature-flagged `NBA_ANALYSIS_ENABLED`. MVP funcional, pendiente apertura pública (Sprint 6 hardening primero).
+- ✅ **Sprint 6** (6a código + 6b prod): equity/Sharpe/drawdown + persistencia ML en Railway Volume — ver sección [Próximas fases](#próximas-fases--hardening) más abajo.
+- ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, endpoints `/api/nba/*`, resolver automático post-game, sport shell MLB/NBA. Feature-flagged `NBA_ANALYSIS_ENABLED`. MVP funcional; pendiente go-live público NBA.
 
 ### Estado NBA MVP (2026-05-15)
 
@@ -304,10 +305,10 @@ Sprint 7 completado en su mayor parte:
 
 ### Próximas fases — hardening
 
-**Sprint 6 — Pre-lanzamiento público NBA (Q3 2026)**:
+**Sprint 6 — Pre-lanzamiento público NBA (Q3 2026)** — ✅ cerrado (2026-05-15):
 
-- **Sprint 6a — Equity curve + Sharpe + drawdown dashboard**: curva de equity por usuario, drawdown, Sharpe rolling 30d. Datos ya existen en `picks` + `bankroll`. Sin esto Hexa no demuestra valor como sistema de bankroll, solo como generador de picks sueltos.
-- **Sprint 6b — Persistencia de modelos ML vía Railway Volumes**: `ml/hexa_ml/config.py` usa `artifacts/` relativo → efímero en Railway. Cada redeploy borra los `.pkl`. Apuntar a `/data` (volume montado) cierra esa ventana.
+- ✅ **Sprint 6a — Equity curve + Sharpe + drawdown**: [PerformanceDashboard](client/src/pages/PerformanceDashboard.jsx) (público), [EquityDashboard](client/src/pages/EquityDashboard.jsx) (admin `/admin/equity`). Pendiente menor: comparativa "tú vs Hexa baseline".
+- ✅ **Sprint 6b — Persistencia ML (Railway Volumes)**: prod en `hexa-ml-production` con `artifacts_dir=/data/artifacts`, `artifacts_persistent=true`, redeploy verificado sin retrain. Verificación: `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app npm run verify:ml:persistence`. Runbook: [docs/admin-and-ops.md](docs/admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b).
 
 ### Matriz de calidad por deporte (operativa)
 
