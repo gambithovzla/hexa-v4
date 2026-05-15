@@ -147,6 +147,8 @@ class HealthResponse(BaseModel):
     manifest: dict
     ensembles_loaded: list[str] = []
     ensembles_available: list[str] = []
+    artifacts_dir: str = ""       # absolute path in use — confirms Volume mount
+    artifacts_persistent: bool = False  # True when not under /app (Railway Volume)
 
 
 class RetrainRequest(BaseModel):
@@ -227,6 +229,8 @@ def health() -> HealthResponse:
     ensembles_available = [
         m for m in ("moneyline",) if registry.has_ensemble_artifact(m)
     ]
+    settings = get_settings()
+    art_dir = settings.artifacts_dir.resolve()
     return HealthResponse(
         status="ok",
         version=__version__,
@@ -235,6 +239,8 @@ def health() -> HealthResponse:
         manifest=registry.manifest,
         ensembles_loaded=registry.loaded_ensembles(),
         ensembles_available=ensembles_available,
+        artifacts_dir=str(art_dir),
+        artifacts_persistent=not str(art_dir).startswith("/app"),
     )
 
 

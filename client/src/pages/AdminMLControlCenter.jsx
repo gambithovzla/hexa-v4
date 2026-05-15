@@ -225,13 +225,15 @@ function CornerBrackets({ color = CYAN, size = 10 }) {
 
 // ── HUD: top status overlay ──────────────────────────────────────────────────
 function HUDStatusBar({ status, loading, onRefresh, T }) {
-  const enabled         = !!status?.enabled;
-  const ensembleEnabled = !!status?.ensemble_enabled;
-  const circuit         = status?.circuit?.state ?? 'unknown';
-  const sidecarUrl      = status?.sidecar_url ?? '—';
-  const latency         = status?.health_latency_ms;
-  const healthOk        = !!status?.health?.status && status.health.status === 'ok';
-  const lastRetrain     = status?.last_retrain;
+  const enabled            = !!status?.enabled;
+  const ensembleEnabled    = !!status?.ensemble_enabled;
+  const circuit            = status?.circuit?.state ?? 'unknown';
+  const sidecarUrl         = status?.sidecar_url ?? '—';
+  const latency            = status?.health_latency_ms;
+  const healthOk           = !!status?.health?.status && status.health.status === 'ok';
+  const lastRetrain        = status?.last_retrain;
+  const artifactsDir       = status?.health?.artifacts_dir ?? null;
+  const artifactsPersistent = status?.health?.artifacts_persistent ?? false;
 
   const circuitColor = circuit === 'closed' ? GREEN : circuit === 'half-open' ? AMBER : circuit === 'open' ? RED : MUTED;
   const sidecarColor = enabled && healthOk ? GREEN : enabled ? AMBER : RED;
@@ -292,6 +294,16 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
         <span>{T.lastRetrain}: <span style={{ color: INK1 }}>
           {lastRetrain ? `${lastRetrain.market} → ${lastRetrain.status} · ${timeAgo(lastRetrain.created_at)}` : T.never}
         </span></span>
+        {artifactsDir && (
+          <span>
+            STORAGE:{' '}
+            <span style={{ color: artifactsPersistent ? GREEN : AMBER }}>
+              {artifactsPersistent ? '● VOLUME' : '⚠ EPHEMERAL'}
+            </span>
+            {' '}
+            <span style={{ color: MUTED, fontSize: '9px' }}>{artifactsDir}</span>
+          </span>
+        )}
       </Box>
     </Box>
   );
