@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { C, BARLOW, MONO } from '../theme';
 import PlayoffBracket from './PlayoffBracket';
+import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const STANDINGS_SELECTION_KEY = 'hexa_nba_standings_selection';
@@ -135,7 +136,7 @@ function NbaTeamLogo({ teamId, abbr, size = 44 }) {
   return (
     <Box
       component="img"
-      src={`https://cdn.nba.com/logos/nba/${teamId}/primary/L/logo.svg`}
+      src={getNbaLogoUrl(teamId, abbr)}
       alt={abbr || 'team logo'}
       loading="lazy"
       onError={() => setFailed(true)}
