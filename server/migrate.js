@@ -655,3 +655,72 @@ export async function runAdminMLControlCenterMigrations() {
     client.release();
   }
 }
+
+// Sprint 7 — NBA scaffolding
+// Adds sport column to picks/pick_features, creates nba_games and
+// nba_team_stats tables. Default 'mlb' keeps all existing rows valid.
+export async function runNbaScaffoldingMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── Sport discriminator ───────────────────────────────────────────────────
+    await client.query(`ALTER TABLE picks        ADD COLUMN IF NOT EXISTS sport VARCHAR(10) DEFAULT 'mlb'`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS sport VARCHAR(10) DEFAULT 'mlb'`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_picks_sport ON picks(sport)`);
+
+    // ── NBA games cache ───────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nba_games (
+        id              BIGSERIAL    PRIMARY KEY,
+        game_id         VARCHAR(20)  UNIQUE NOT NULL,
+        game_date       DATE         NOT NULL,
+        home_team_id    INTEGER      NOT NULL,
+        away_team_id    INTEGER      NOT NULL,
+        home_team_abbr  VARCHAR(5)   NOT NULL,
+        away_team_abbr  VARCHAR(5)   NOT NULL,
+        home_team_name  VARCHAR(60),
+        away_team_name  VARCHAR(60),
+        status          VARCHAR(40),
+        home_score      INTEGER,
+        away_score      INTEGER,
+        arena           VARCHAR(100),
+        national_tv     VARCHAR(50),
+        season          VARCHAR(10),
+        created_at      TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nba_games_date ON nba_games(game_date DESC)`);
+
+    // ── NBA team stats cache (one row per team per season) ────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nba_team_stats (
+        team_id     INTEGER      NOT NULL,
+        season      VARCHAR(10)  NOT NULL,
+        team_abbr   VARCHAR(5),
+        team_name   VARCHAR(60),
+        wins        INTEGER,
+        losses      INTEGER,
+        off_rating  DECIMAL(7,3),
+        def_rating  DECIMAL(7,3),
+        net_rating  DECIMAL(7,3),
+        pace        DECIMAL(7,3),
+        ts_pct      DECIMAL(6,4),
+        reb_pct     DECIMAL(6,4),
+        ast_pct     DECIMAL(6,4),
+        updated_at  TIMESTAMPTZ  DEFAULT NOW(),
+        PRIMARY KEY (team_id, season)
+      )
+    `);
+
+    await client.query('COMMIT');
+    console.log('[migrate] nba-scaffolding ready (nba_games, nba_team_stats, sport column)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] nba-scaffolding migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

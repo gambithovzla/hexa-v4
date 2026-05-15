@@ -62,7 +62,8 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations } from './migrate.js';
+import { getNbaGamesForDate, getNbaLeagueTeamStats } from './nba-api.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -769,6 +770,35 @@ app.get('/api/mlb/standings', async (req, res) => {
     const season = Number.parseInt(req.query.season, 10) || new Date().getFullYear();
     const standings = await getMlbStandings(season);
     res.json({ success: true, data: standings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── NBA endpoints ─────────────────────────────────────────────────────────────
+// GET /api/nba/games?date=YYYY-MM-DD
+app.get('/api/nba/games', async (req, res) => {
+  try {
+    const dateStr = req.query.date || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ success: false, error: 'date must be YYYY-MM-DD' });
+    }
+    const games = await getNbaGamesForDate(dateStr);
+    res.json({ success: true, date: dateStr, count: games.length, data: games });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nba/teams?season=2025-26
+app.get('/api/nba/teams', async (req, res) => {
+  try {
+    const season = req.query.season || '2025-26';
+    if (!/^\d{4}-\d{2}$/.test(season)) {
+      return res.status(400).json({ success: false, error: 'season must be YYYY-YY (e.g. 2025-26)' });
+    }
+    const teams = await getNbaLeagueTeamStats(season);
+    res.json({ success: true, season, count: teams.length, data: teams });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -3897,6 +3927,7 @@ runMigrations()
   .then(() => runSprint1Migrations())
   .then(() => runSprint3Migrations())
   .then(() => runAdminMLControlCenterMigrations())
+  .then(() => runNbaScaffoldingMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
