@@ -67,7 +67,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations } from './migrate.js';
 import {
   getNbaGamesForDate,
   getNbaLeagueTeamStats,
@@ -317,6 +317,7 @@ async function saveFeatureStoreForGame({
   pick,
   result = null,
   oddsData = null,
+  sport = 'mlb',
 }) {
   const resolvedDate = normalizeDateInput(gameDate) ?? getEasternDateString();
   if (!gamePk) return false;
@@ -352,6 +353,7 @@ async function saveFeatureStoreForGame({
       oddsData: features.oddsData ?? matchedOdds,
       pick,
       result,
+      sport,
     });
 
     return true;
@@ -442,6 +444,7 @@ async function persistAnalysisPick({
       pick: savedPick.pick,
       result: savedPick.result,
       userEmail: userEmail ?? null,
+      sport: 'mlb',
     });
   } else if (gamePk) {
     await saveFeatureStoreForGame({
@@ -451,6 +454,7 @@ async function persistAnalysisPick({
       pick: savedPick.pick,
       result: savedPick.result,
       oddsData,
+      sport: 'mlb',
     });
   }
 
@@ -2047,6 +2051,7 @@ app.post('/api/analyze/batch', analysisLimiter, verifyToken, isAdmin, async (req
               pick: mp.pick ?? bp.detail ?? null,
               result: null,
               userEmail: req.user.email ?? null,
+              sport: 'mlb',
             });
           }
         } catch (saveErr) {
@@ -2704,6 +2709,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
         pick: savedPick.pick,
         result: savedPick.result,
         userEmail: req.user.email ?? null,
+        sport: normalizedSport,
       });
     } else if (featureGamePk) {
       await saveFeatureStoreForGame({
@@ -2713,6 +2719,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
         pick: savedPick.pick,
         result: savedPick.result,
         oddsData: parsedOddsDetails,
+        sport: normalizedSport,
       });
     }
 
@@ -3419,6 +3426,7 @@ app.post('/api/admin/run-backtest', verifyToken, async (req, res) => {
         oddsData: contextResult2._features?.oddsData ?? matchedOdds,
         pick,
         result: actualResult,
+        sport: 'mlb',
       });
 
       if (isShadowModeEnabled() && analysis?.data && analysis?.xgboostResult) {
@@ -4064,6 +4072,7 @@ app.post('/api/admin/feature-store/backfill', verifyToken, async (req, res) => {
 runMigrations()
   .then(() => runParlaySynergyMigrations())
   .then(() => runSprint1Migrations())
+  .then(() => runPlayerPropsMlbMigrations())
   .then(() => runSprint3Migrations())
   .then(() => runAdminMLControlCenterMigrations())
   .then(() => runNbaScaffoldingMigrations())
