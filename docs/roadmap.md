@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-15 — Sprints 0-5 cerrados; Sprint 6a/6b en cierre operativo; NBA 7.0–7.1 cerrados en código (contexto + aislamiento dataset/shadow por `sport`).
+**Última actualización**: 2026-05-15 — Sprint 6b cerrado en prod (volume + redeploy verificado); Sprint 6a cerrado en código; NBA 7.0–7.1 + sport shell multi-deporte en código.
 
 ---
 
@@ -32,16 +32,16 @@ La arquitectura ya está hecha para ser deporte-agnóstica:
 
 Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js), [server/savant-fetcher.js](../server/savant-fetcher.js), [server/context-builder.js](../server/context-builder.js), [server/pick-resolver.js](../server/pick-resolver.js). Eso es **reemplazable, no reescritura total**.
 
-### Por qué cerrar 2 cosas antes de tocar NBA
+### Pre-requisitos NBA (cerrados 2026-05-15)
 
-1. **Equity curve + Sharpe + drawdown dashboard** (Tier S1 del backlog). Los datos ya están en `picks` y `bankroll`. Sin esto, Hexa parece un juguete de picks sueltos en vez de un sistema de bankroll — y un usuario serio mira eso antes de pagar.
-2. **Persistencia de modelos ML** (Railway Volumes o snapshot a Postgres). Hoy cada redeploy de Railway borra los `.pkl` y el ensemble vuelve a "OFFLINE" hasta el siguiente retrain. Es deuda silenciosa que rompe la propuesta de valor del Python XGBoost — los picks nuevos caen al validator legacy hasta que alguien dispare retrain manual.
+1. **Equity curve + Sharpe + drawdown** — ✅ Sprint 6a cerrado en código ([PerformanceDashboard](../client/src/pages/PerformanceDashboard.jsx), [EquityDashboard](../client/src/pages/EquityDashboard.jsx)). Pendiente menor: comparativa "tú vs Hexa baseline".
+2. **Persistencia de modelos ML** — ✅ Sprint 6b cerrado en prod (`hexa-ml-production`: Volume `/data`, `HEXA_ML_ARTIFACTS_DIR=/data/artifacts`, `artifacts_persistent: true`, redeploy verificado + `npm run verify:ml:persistence` OK).
 
 ### El trade-off explícito
 
 Si se queda solo en MLB y se profundiza (player props, equity, mobile), crece LTV por usuario pero no resuelve la estacionalidad — y un competidor cross-sport come el flanco. Si se salta a NBA sin la equity dashboard, los usuarios nuevos no van a entender por qué Hexa es distinto a 50 servicios de picks de NBA.
 
-Solución: **scaffolding NBA en paralelo con equity + persistencia**, no en serie.
+Solución aplicada: **scaffolding NBA en paralelo con equity + persistencia ML**, no en serie.
 
 ---
 
@@ -63,11 +63,11 @@ Solución: **scaffolding NBA en paralelo con equity + persistencia**, no en seri
 
 ---
 
-### 🔄 Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)
+### ✅ Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)
 
-**Status**: en cierre. Bloqueante implícito para abrir NBA al público — corre en paralelo con Sprint 7.0.
+**Status**: ✅ **cerrado** (2026-05-15). 6a en código; 6b en prod (volume + redeploy verificado). Pendiente menor en 6a: comparativa "tú vs Hexa baseline" y endpoint equity por usuario.
 
-Justificación: dos heridas abiertas que rompen la propuesta de valor antes de duplicar superficie de producto con NBA.
+Corre en paralelo con Sprint 7; ya no bloquea hardening NBA en código.
 
 #### Sprint 6a — Equity curve + Sharpe + drawdown dashboard (~2 semanas)
 
@@ -92,9 +92,9 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 #### Sprint 6b — Persistencia de modelos ML (~1-2 semanas)
 
-**Status**: ✅ **código listo** — `HEXA_ML_ARTIFACTS_DIR`, `/health` con `artifacts_persistent`, HUD en Control Center. ⏳ **ops en Railway**: montar Volume + checklist post-redeploy ([docs/admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b), `npm run verify:ml:persistence`).
+**Status**: ✅ **cerrado en prod** (2026-05-15). Volume en `/data`, `HEXA_ML_ARTIFACTS_DIR=/data/artifacts`, `artifacts_persistent: true` en `/health`, modelos `moneyline` + `overunder` cargados. Redeploy del servicio `hexa-ml` verificado sin retrain; `npm run verify:ml:persistence` → OK. Runbook de mantenimiento: [admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b).
 
-**Problema que resuelve**: el sidecar Python guardaba los `.pkl` en `artifacts/` efímero. Cada redeploy wipeaba modelos y los picks nuevos caían al validator legacy hasta retrain manual.
+**Problema que resolvía**: el sidecar Python guardaba los `.pkl` en `artifacts/` efímero. Cada redeploy wipeaba modelos y los picks nuevos caían al validator legacy hasta retrain manual.
 
 **Opciones evaluadas**:
 
@@ -111,14 +111,15 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 - Migración del primer retrain post-volume: forzar retrain manual de todos los mercados desde `/admin/ml-control` para poblar el volume.
 - Documentar en [docs/admin-and-ops.md](admin-and-ops.md) que el volume es crítico y no debe borrarse.
 
-**Criterio de éxito**:
-- Trigger un redeploy manual del sidecar en Railway.
-- `GET /api/admin/ml/status` sigue mostrando Brier/n_train/trained_at sin necesidad de retrain.
-- Un pick nuevo creado post-redeploy llega al Python sidecar (no cae al fallback legacy).
+**Criterio de éxito** (cumplido):
+- Redeploy manual del sidecar en Railway sin perder `.pkl` en disco.
+- `GET /health` → `artifacts_persistent: true`, `artifacts_dir=/data/artifacts`.
+- `GET /api/admin/ml/status` muestra Brier/n_train sin retrain post-redeploy.
+- Pick nuevo post-redeploy llega al Python sidecar (circuit cerrado).
 
-**Riesgo**: bajo. Cambio aislado al sidecar. Si falla el volume, el fallback del `/api/admin/ml-calibration` (PR #286 — lee de `ml_retrain_log`) sigue protegiendo la UI.
+**Verificación prod (2026-05-15)**: `GET https://hexa-ml-production.up.railway.app/health` → `artifacts_persistent=true`, `models_loaded=["moneyline","overunder"]`; redeploy verificado; `HEXA_ML_API_URL=... npm run verify:ml:persistence` → OK.
 
-**Nota**: el fallback del calibration endpoint mitiga el problema en la UI pero no en las **predicciones** — sigue habiendo una ventana post-redeploy donde los picks no tienen Python score hasta el siguiente retrain. Sprint 6b cierra esa ventana.
+**Riesgo residual**: bajo. Si se borra el Volume o se cambia `HEXA_ML_ARTIFACTS_DIR` a ruta bajo `/app`, vuelve el comportamiento efímero. El fallback de `/api/admin/ml-calibration` (lee `ml_retrain_log`) protege la UI pero no las predicciones en vivo.
 
 ---
 
@@ -274,13 +275,13 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
-| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ⬆️ Promovido a **Sprint 6a**. Ver [sección 2](#-sprint-6--pre-nba-hardening-q3-2026-6-semanas). |
+| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ✅ Cerrado en código — **Sprint 6a** (2026-05-15). Pendiente menor: "tú vs Hexa baseline". |
 | S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | Trivial, alto valor para auditoría. Sprint 1 ya incluye los campos en pick_features. Falta llenarlos desde oracle.js. |
 | S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | Health check para detectar features faltantes / fecha vieja. Útil pre-training. |
 | S4 | **Telegram channel publisher** | 3 días | Reusa `contentDraftService`, añade adapter `telegramPublisher.js`. Mayor engagement por canal. |
 | S5 | **Newsletter weekly recap via Resend** | 3 días | Reusa email.js + `weekly_recap` content type que ya existe. Tabla `newsletter_subscribers`. |
 | S6 | **Postmortem dashboard cuantitativo** | 2 días | Agregaciones de `picks.postmortem.alert_flags` por hit/miss. Detecta patrones para refinar prompts. |
-| S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ⬆️ Promovido a **Sprint 6b**. Ver [sección 2](#sprint-6b--persistencia-de-modelos-ml-1-2-semanas). |
+| S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ✅ Cerrado — **Sprint 6b** (2026-05-15). Runbook post-deploy en [admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b). |
 | S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ⬆️ Promovido a **Sprint 7.0**. Separación historial/persistencia por `sport`, SAFE NBA aislado de MLB, props NBA temporalmente desactivados. |
 
 ### Tier A — Alta señal, esfuerzo medio
@@ -366,7 +367,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 ```
 2026 Q2  Sprints 0-5   — Pipeline ML completo            ████████████████████████ ✅
 2026 Q3  Sprint 6a     — Equity curve dashboard          ████████████████████████ ✅
-2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ████████████████░░░░░░░░ 🔄 ops
+2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ████████████████████████ ✅
 2026 Q3-4 Sprint 7.0   — NBA hardening gate              ████████████░░░░░░░░░░░░ 🔄
 2026 Q3-4 Sprint 7a    — Scaffolding NBA (datos)         ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2026 Q4  Sprint 7b     — Oracle NBA + prompts            ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳

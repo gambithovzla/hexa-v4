@@ -418,6 +418,8 @@ Implementación: usar `keyGenerator` custom basado en `req.user?.id || req.ip`.
 
 ## 11. ML sidecar — persistencia de modelos (Sprint 6b)
 
+**Estado (2026-05-15)**: ✅ **cerrado en producción**. Volume montado en `/data`, `HEXA_ML_ARTIFACTS_DIR=/data/artifacts`, redeploy verificado sin retrain, `npm run verify:ml:persistence` → OK. Esta sección es **runbook de mantenimiento** post-deploy (no pendiente de implementación).
+
 Sin volume persistente, Railway borra `artifacts/` en cada redeploy. Los picks nuevos caen al validator legacy hasta el próximo retrain manual.
 
 ### Configuración en Railway (hexa-ml)
@@ -563,4 +565,4 @@ Reporte con verde/amarillo/rojo por componente. Útil antes de un deploy o cuand
 
 ---
 
-**Última actualización**: 2026-05-15 — Sprint 6b runbook (ML volume + post-redeploy). Se actualiza con cada sprint que añada herramientas admin o jobs nuevos.
+**Última actualización**: 2026-05-15 — Sprint 6b cerrado en prod (volume + redeploy + verify). Runbook ML en sección 11. Se actualiza con cada sprint que añada herramientas admin o jobs nuevos.
