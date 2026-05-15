@@ -111,6 +111,15 @@ async function run() {
         assert(Array.isArray(res.data.data), 'expected data[] array');
       },
     },
+    {
+      name: 'nba-board',
+      run: async () => {
+        const res = await fetchJson(`${BASE_URL}/api/nba/board?date=${NBA_DATE}`);
+        assert(res.ok, `expected 2xx, got ${res.status}`);
+        assert(res.data?.success === true, 'expected success=true');
+        assert(Array.isArray(res.data?.data?.insights), 'expected data.insights[]');
+      },
+    },
   ];
 
   if (ADMIN_TOKEN) {

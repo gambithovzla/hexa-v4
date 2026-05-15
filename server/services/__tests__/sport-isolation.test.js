@@ -27,8 +27,10 @@ test('capabilities prevent MLB/NBA module mixing', () => {
   const nbaHistory = getSportCapability('history', 'nba', 'en');
 
   assert.equal(mlbBoard.enabled, true);
-  assert.equal(nbaBoard.enabled, false);
-  assert.equal(nbaParlayArchitect.enabled, false);
+  assert.equal(nbaBoard.enabled, true);
+  assert.equal(nbaParlayArchitect.enabled, true);
+  const nbaOracleChat = getSportCapability('oracleChat', 'nba', 'en');
+  assert.equal(nbaOracleChat.enabled, true);
   assert.equal(mlbHistory.enabled, true);
   assert.equal(nbaHistory.enabled, true);
 });

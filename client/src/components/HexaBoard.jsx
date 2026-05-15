@@ -540,7 +540,8 @@ function InsightDrillDown({ insight, lang, t }) {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-export default function HexaBoard({ lang = 'es' }) {
+export default function HexaBoard({ lang = 'es', sport = 'mlb' }) {
+  const isNba = sport === 'nba';
   const t = T[lang] ?? T.es;
   const { C, MONO, SCALE, SPACE, INTENT } = useHexaTheme();
 
@@ -555,7 +556,8 @@ export default function HexaBoard({ lang = 'es' }) {
     if (force) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/hexa/board${force ? '?force=1' : ''}`);
+      const boardPath = isNba ? '/api/nba/board' : '/api/hexa/board';
+      const res = await fetch(`${API_URL}${boardPath}${force ? '?force=1' : ''}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Unknown error');
       setData(json.data);
@@ -565,7 +567,7 @@ export default function HexaBoard({ lang = 'es' }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isNba]);
 
   useEffect(() => { fetchBoard(false); }, [fetchBoard]);
 

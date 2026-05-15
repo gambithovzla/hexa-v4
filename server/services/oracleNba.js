@@ -328,21 +328,30 @@ export async function analyzeNbaChat({
   context,
   gameDescription,
   question,
+  conversationHistory = [],
   lang = 'en',
   marketOdds,
   model,
   timeoutMs = 90_000,
 }) {
   const contextText = serializeNbaContext({ context, marketOdds });
-  const userMessage = buildChatUserMessage({ gameDescription, question, contextText, lang });
   const modelId = model || NBA_MODELS.haiku.id;
+
+  const messages = [];
+  for (const turn of conversationHistory) {
+    if (turn?.question) messages.push({ role: 'user', content: turn.question });
+    if (turn?.answer) messages.push({ role: 'assistant', content: turn.answer });
+  }
+
+  const currentMessage = buildChatUserMessage({ gameDescription, question, contextText, lang });
+  messages.push({ role: 'user', content: currentMessage });
 
   const response = await anthropic.messages.create(
     {
       model: modelId,
       max_tokens: 1200,
       system: NBA_CHAT_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
+      messages,
     },
     { timeout: timeoutMs },
   );

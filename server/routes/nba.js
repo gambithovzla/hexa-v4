@@ -19,6 +19,9 @@ import { analyzeNbaGame, analyzeNbaChat } from '../services/oracleNba.js';
 import { getNbaGameOdds, matchNbaOddsToGame, buildMarketOddsForGame } from '../nba-odds.js';
 import { saveNbaPickFeatures, recordNbaShadowRun } from '../services/nbaShadowPersistence.js';
 import { validateNbaAnalysisOutput } from '../services/nbaOutputGuard.js';
+import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
+import { upsertOracleSession } from './oracle-history.js';
+import { buildHexaNbaBoard } from '../services/hexaNbaBoardService.js';
 
 const router = Router();
 
@@ -277,17 +280,49 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
 
 // ── POST /api/nba/analyze/chat ─────────────────────────────────────────────────
 
+function nbaGameToChatData(game, matchup) {
+  return {
+    gamePk: game.game_id,
+    game_id: game.game_id,
+    gameDate: game.game_date,
+    game_date: game.game_date,
+    matchup,
+    away_team_name: game.away_team_name,
+    home_team_name: game.home_team_name,
+    teams: {
+      away: { name: game.away_team_name, abbreviation: game.away_team_abbr },
+      home: { name: game.home_team_name, abbreviation: game.home_team_abbr },
+    },
+  };
+}
+
+// GET /api/nba/board?date=YYYY-MM-DD
+router.get('/board', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const data = await buildHexaNbaBoard({ date, force });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error(`[nba-route] board error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
+
 router.post('/analyze/chat', nbaEnabled, verifyToken, requireAdmin, async (req, res) => {
   const {
     gameId,
     question,
+    conversationHistory = [],
     lang       = 'en',
     marketOdds = null,
+    sessionKey,
+    matchups,
   } = req.body;
   const date = req.body.date || new Date().toISOString().split('T')[0];
 
   if (!gameId)   return res.status(400).json({ success: false, error: 'gameId is required' });
-  if (!question) return res.status(400).json({ success: false, error: 'question is required' });
+  if (!question?.trim()) return res.status(400).json({ success: false, error: 'question is required' });
 
   try {
     const games = await getNbaGamesForDate(date);
@@ -296,7 +331,7 @@ router.post('/analyze/chat', nbaEnabled, verifyToken, requireAdmin, async (req, 
       return res.status(404).json({ success: false, error: `NBA game ${gameId} not found on ${date}` });
     }
 
-    const matchup = `${game.away_team_abbr ?? 'AWAY'} @ ${game.home_team_abbr ?? 'HOME'}`;
+    const matchup = matchups || `${game.away_team_abbr ?? 'AWAY'} @ ${game.home_team_abbr ?? 'HOME'}`;
 
     const { marketOdds: resolvedOdds, source: oddsSource } = await resolveMarketOdds({
       clientMarketOdds: marketOdds,
@@ -314,17 +349,73 @@ router.post('/analyze/chat', nbaEnabled, verifyToken, requireAdmin, async (req, 
       marketOdds: resolvedOdds,
     });
 
+    const skipExtract = String(req.headers['x-hexa-skip-pick-extract'] ?? '') === '1';
+    const augmentedQuestion = skipExtract
+      ? question.trim()
+      : augmentChatQuestion(question.trim(), lang, 'nba');
+
     const result = await analyzeNbaChat({
       context,
       gameDescription: `${matchup} — ${date}`,
-      question,
+      question: augmentedQuestion,
+      conversationHistory,
       lang,
       marketOdds: resolvedOdds,
     });
 
+    let cleanAnswer = result.text;
+    let picked = null;
+    if (!skipExtract) {
+      try {
+        const processed = await processChatAnswer({
+          rawAnswer: result.text,
+          question: question.trim(),
+          userId: req.user.id,
+          gameData: nbaGameToChatData(game, matchup),
+          chatSessionId: null,
+          lang,
+          sport: 'nba',
+        });
+        cleanAnswer = processed.answer;
+        picked = processed.picked;
+      } catch (err) {
+        console.warn(`[nba-route] chat pick extraction failed: ${err.message}`);
+      }
+    }
+
+    if (sessionKey) {
+      const fullMessages = [
+        ...conversationHistory.flatMap(t => [
+          { role: 'user', text: t.question },
+          { role: 'assistant', text: t.answer },
+        ]),
+        { role: 'user', text: question.trim() },
+        { role: 'assistant', text: cleanAnswer },
+      ];
+      upsertOracleSession({
+        userId: req.user.id,
+        sessionKey,
+        dateEt: date,
+        mode: 'partido',
+        gameIds: [String(gameId)],
+        matchups: matchup,
+        messages: fullMessages,
+      }).then((sessionId) => {
+        if (sessionId && picked?.pick_id) {
+          pool.query(
+            'UPDATE picks SET chat_session_id = $1 WHERE id = $2 AND chat_session_id IS NULL',
+            [sessionId, picked.pick_id],
+          ).catch((err) => console.warn(`[nba-route] chat_session_id backfill failed: ${err.message}`));
+        }
+      });
+    }
+
     return res.json({
       success: true,
-      text: result.text,
+      answer: cleanAnswer,
+      text: cleanAnswer,
+      picked,
+      mode: 'chat',
       meta: {
         model:        result.model,
         usage:        result.usage,
@@ -332,6 +423,7 @@ router.post('/analyze/chat', nbaEnabled, verifyToken, requireAdmin, async (req, 
         gameDate:     date,
         oddsSource,
         context_meta: context.context_meta ?? null,
+        sport:        'nba',
       },
     });
   } catch (err) {
