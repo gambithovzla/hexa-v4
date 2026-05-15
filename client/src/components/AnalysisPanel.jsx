@@ -1072,6 +1072,7 @@ export default function AnalysisPanel({
   selectedGames = [],
   selectedDate = '',
   mode = 'single',
+  sport = 'mlb',
   lang = 'en',
   onSave,
   setIsAnalyzing,
@@ -1153,8 +1154,8 @@ export default function AnalysisPanel({
       return;
     }
 
-    // Lineup confirmation gate
-    if (unconfirmedGames.length > 0) {
+    // Lineup confirmation gate — MLB only
+    if (sport !== 'nba' && unconfirmedGames.length > 0) {
       setLineupDialogOpen(true);
       return;
     }
@@ -1193,6 +1194,16 @@ export default function AnalysisPanel({
             betType,
           };
         }
+      } else if (mode === 'single' && sport === 'nba') {
+        const g = selectedGames[0];
+        endpoint = `${API_URL}/api/nba/analyze/game`;
+        body = {
+          gameId:      g.gamePk,
+          date:        selectedDate,
+          lang,
+          riskProfile: 'balanced',
+          engine:      modelMode === 'premium' ? 'premium' : 'deep',
+        };
       } else if (mode === 'single') {
         const g = selectedGames[0];
         endpoint = `${API_URL}/api/analyze/game`;
@@ -1416,13 +1427,16 @@ export default function AnalysisPanel({
           <MatchupHeader games={selectedGames} mode={mode} />
         )}
 
-        {/* Bet type */}
-        <BetTypeSelect value={betType} onChange={setBetType} t={t} />
+        {/* Bet type — MLB only (NBA Oracle selects best bet type internally) */}
+        {sport !== 'nba' && (
+          <BetTypeSelect value={betType} onChange={setBetType} t={t} />
+        )}
 
         {/* Model picker */}
         <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} isAdmin={isAdmin} />
 
-        {isAdmin && (
+        {/* Engine picker — MLB only (NBA always uses Anthropic) */}
+        {isAdmin && sport !== 'nba' && (
           <EnginePicker
             value={engineMode}
             onChange={setEngineMode}
@@ -1443,8 +1457,8 @@ export default function AnalysisPanel({
           />
         )}
 
-        {/* Web search toggle — single game only, not in safe mode */}
-        {mode === 'single' && modelMode !== 'safe' && engineMode === 'sonnet' && (
+        {/* Web search toggle — MLB single game only, not in safe mode */}
+        {sport !== 'nba' && mode === 'single' && modelMode !== 'safe' && engineMode === 'sonnet' && (
           <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
         )}
 
@@ -1458,8 +1472,8 @@ export default function AnalysisPanel({
           modelMode={modelMode}
         />
 
-        {/* Lineup status badges — shown when games are selected */}
-        {selectedGames.length > 0 && (
+        {/* Lineup status badges — MLB only */}
+        {sport !== 'nba' && selectedGames.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             {selectedGames.map((g, i) => {
               const status = g.lineupStatus ?? 'unavailable';

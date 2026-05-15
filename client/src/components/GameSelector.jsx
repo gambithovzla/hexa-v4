@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
+import SportSwitcher from './SportSwitcher';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -97,6 +98,7 @@ function getScore(game) {
 }
 
 function getTime(game) {
+  if (game._displayTime) return game._displayTime;
   if (!game.gameDate) return '—';
   return new Date(game.gameDate).toLocaleTimeString([], {
     hour: '2-digit',
@@ -399,71 +401,73 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         </Box>
       </Box>
 
-      {/* Pitchers */}
-      <Box
-        sx={{
-          display: 'flex',
-          gap: '10px',
-          pt: '10px',
-          borderTop: `1px solid ${C.border}`,
-        }}
-      >
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '0.6rem',
-              color:         C.textMuted,
-              fontWeight:    700,
-              mb:            '3px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-            }}
-          >
-            {t.awaySP}
-          </Typography>
-          <Typography
-            noWrap
-            sx={{
-              fontFamily: MONO,
-              fontSize: '0.68rem',
-              color: C.textMuted,
-              fontStyle: 'italic',
-            }}
-          >
-            {awayP}
-          </Typography>
-        </Box>
+      {/* Pitchers — MLB only */}
+      {game._sport !== 'nba' && (
+        <Box
+          sx={{
+            display: 'flex',
+            gap: '10px',
+            pt: '10px',
+            borderTop: `1px solid ${C.border}`,
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontFamily:    BARLOW,
+                fontSize:      '0.6rem',
+                color:         C.textMuted,
+                fontWeight:    700,
+                mb:            '3px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+              }}
+            >
+              {t.awaySP}
+            </Typography>
+            <Typography
+              noWrap
+              sx={{
+                fontFamily: MONO,
+                fontSize: '0.68rem',
+                color: C.textMuted,
+                fontStyle: 'italic',
+              }}
+            >
+              {awayP}
+            </Typography>
+          </Box>
 
-        <Box sx={{ width: '1px', bgcolor: C.border, flexShrink: 0 }} />
+          <Box sx={{ width: '1px', bgcolor: C.border, flexShrink: 0 }} />
 
-        <Box sx={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
-          <Typography
-            sx={{
-              fontFamily:    BARLOW,
-              fontSize:      '0.6rem',
-              color:         C.textMuted,
-              fontWeight:    700,
-              mb:            '3px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-            }}
-          >
-            {t.homeSP}
-          </Typography>
-          <Typography
-            noWrap
-            sx={{
-              fontFamily: MONO,
-              fontSize: '0.68rem',
-              color: C.textMuted,
-              fontStyle: 'italic',
-            }}
-          >
-            {homeP}
-          </Typography>
+          <Box sx={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
+            <Typography
+              sx={{
+                fontFamily:    BARLOW,
+                fontSize:      '0.6rem',
+                color:         C.textMuted,
+                fontWeight:    700,
+                mb:            '3px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+              }}
+            >
+              {t.homeSP}
+            </Typography>
+            <Typography
+              noWrap
+              sx={{
+                fontFamily: MONO,
+                fontSize: '0.68rem',
+                color: C.textMuted,
+                fontStyle: 'italic',
+              }}
+            >
+              {homeP}
+            </Typography>
+          </Box>
         </Box>
-      </Box>
+      )}
     </Box>
   );
 }
@@ -502,9 +506,58 @@ function AnalyzeButton({ canAnalyze, analyzing, onClick, t }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
+/**
+ * Converts an NBA game row from /api/nba/games into the MLB-compatible
+ * shape that GameSelector and AnalysisPanel expect internally.
+ *
+ * Key mapping:
+ *   nba.game_id          → gamePk (string, used as the unique key)
+ *   nba.game_date        → gameDate (ISO date string)
+ *   nba.status           → status.simplified ('scheduled'|'live'|'final')
+ *   nba.home/away_abbr   → teams.home/away.abbreviation
+ *   nba.home/away_score  → linescore.teams.home/away.runs (NBA pts ≡ runs slot)
+ */
+function normalizeNbaGame(g) {
+  let simplified = 'scheduled';
+  const s = String(g.status ?? '').toLowerCase();
+  if (/final/i.test(s)) simplified = 'final';
+  else if (/in progress|halftime|qtr|quarter|ot|overtime|pm et|live/i.test(s)) simplified = 'live';
+
+  const homeScore = g.home_score ?? null;
+  const awayScore = g.away_score ?? null;
+
+  return {
+    gamePk:   String(g.game_id),
+    gameDate: g.game_date ? `${g.game_date}T00:00:00Z` : null,
+    _displayTime: g.status ?? '',
+    status: { simplified },
+    teams: {
+      away: {
+        abbreviation: g.away_team_abbr ?? 'AWAY',
+        name:         g.away_team_name ?? g.away_team_abbr ?? 'Away',
+        id:           g.away_team_id ?? null,
+      },
+      home: {
+        abbreviation: g.home_team_abbr ?? 'HOME',
+        name:         g.home_team_name ?? g.home_team_abbr ?? 'Home',
+        id:           g.home_team_id ?? null,
+      },
+    },
+    linescore: (homeScore != null && awayScore != null) ? {
+      teams: {
+        away: { runs: awayScore },
+        home: { runs: homeScore },
+      },
+    } : null,
+    _sport: 'nba',
+  };
+}
+
 export default function GameSelector({
   // New props
   mode = 'single',
+  sport = 'mlb',
+  onSportChange,
   onSelectGame,
   onSelectMultiple,
   onDateChange,
@@ -540,20 +593,16 @@ export default function GameSelector({
     onSelect?.(null);
     onSelectMultiple?.([]);
 
-    fetch(`${API_URL}/api/games?date=${date}`)
+    const url = sport === 'nba'
+      ? `${API_URL}/api/nba/games?date=${date}`
+      : `${API_URL}/api/games?date=${date}`;
+
+    fetch(url)
       .then(r => r.json())
       .then(json => {
         if (cancelled) return;
-        const list = json.success ? json.data : [];
-        // Debug: log the full MLB API game object so we can inspect all status fields
-        if (list.length > 0) {
-          console.log('[GameSelector] Sample game object (status fields):', {
-            gamePk:        list[0].gamePk,
-            gameDate:      list[0].gameDate,
-            status:        list[0].status,
-            computedStatus: getStatus(list[0]),
-          });
-        }
+        const raw = json.success ? json.data : [];
+        const list = sport === 'nba' ? raw.map(normalizeNbaGame) : raw;
         setGames(list);
         // fullDay: auto-select only schedulable games on load
         if (mode === 'fullDay') {
@@ -566,7 +615,7 @@ export default function GameSelector({
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [date, sport]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleSingleClick(game) {
@@ -626,7 +675,7 @@ export default function GameSelector({
   return (
     <Box sx={{ bgcolor: C.bg, p: 2, minHeight: '100%' }}>
 
-      {/* ── Header: title + date picker ── */}
+      {/* ── Header: title + sport switcher + date picker ── */}
       <Box
         sx={{
           display: 'flex',
@@ -636,19 +685,23 @@ export default function GameSelector({
           gap: 2,
         }}
       >
-        <Typography
-          sx={{
-            fontFamily:    BARLOW,
-            fontSize:      '1.1rem',
-            fontWeight:    800,
-            color:         C.textPrimary,
-            flexShrink:    0,
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-          }}
-        >
-          {t.title}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <Typography
+            sx={{
+              fontFamily:    BARLOW,
+              fontSize:      '1.1rem',
+              fontWeight:    800,
+              color:         C.textPrimary,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+            }}
+          >
+            {t.title}
+          </Typography>
+          {onSportChange && mode === 'single' && (
+            <SportSwitcher sport={sport} onChange={onSportChange} />
+          )}
+        </Box>
 
         <input
           type="date"
