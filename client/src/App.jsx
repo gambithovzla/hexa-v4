@@ -39,6 +39,7 @@ import ShadowModeDashboard    from './components/ShadowModeDashboard';
 import SynergyRunsDashboard  from './components/SynergyRunsDashboard';
 import MLCalibrationDashboard from './pages/MLCalibrationDashboard';
 import AdminMLControlCenter   from './pages/AdminMLControlCenter';
+import EquityDashboard        from './pages/EquityDashboard';
 import LiveTracker         from './components/LiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
@@ -408,6 +409,10 @@ export default function App() {
   if (window.location.pathname === '/admin/ml-control') {
     const token = localStorage.getItem('hexa_token');
     return <AdminMLControlCenter token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/equity') {
+    const token = localStorage.getItem('hexa_token');
+    return <EquityDashboard token={token} onBack={() => { window.location.href = '/'; }} />;
   }
 
 
