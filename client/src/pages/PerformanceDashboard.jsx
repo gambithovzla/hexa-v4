@@ -17,6 +17,9 @@ import {
   Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { C, MONO, DISPLAY } from '../theme';
+import SportSwitcher from '../components/SportSwitcher';
+import { useSport } from '../context/SportContext';
+import { getActiveSportOptions } from '../config/sports';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -424,18 +427,20 @@ function signedU(n) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function PerformanceDashboard({ onBack, isAdmin = false, performancePublic = false, onTogglePublic }) {
+  const { sport, setSport } = useSport();
+  const sportOptions = getActiveSportOptions();
   const [period,    setPeriod]    = useState('30');
   const [data,      setData]      = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
   const [fetchedAt, setFetchedAt] = useState(null);
 
-  const fetchStats = useCallback(async (p) => {
+  const fetchStats = useCallback(async (p, activeSport) => {
     setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('hexa_token');
-      const res = await fetch(`${API_URL}/api/picks/public-stats?period=${p}`, {
+      const res = await fetch(`${API_URL}/api/picks/public-stats?period=${p}&sport=${activeSport}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
@@ -451,8 +456,8 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
   }, []);
 
   useEffect(() => {
-    fetchStats(period);
-  }, [period, fetchStats]);
+    fetchStats(period, sport);
+  }, [period, sport, fetchStats]);
 
   // ── Derived values ──────────────────────────────────────────────────────────
   const positiveRoi = data && data.roi >= 0;
@@ -569,6 +574,9 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
               onClick={() => setPeriod(p.value)}
             />
           ))}
+          <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
+            <SportSwitcher sport={sport} onChange={setSport} options={sportOptions} />
+          </Box>
         </Box>
 
         {/* Last updated */}

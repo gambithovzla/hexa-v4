@@ -1,9 +1,13 @@
 import { Box } from '@mui/material';
 import { MONO } from '../theme';
 import { useHexaTheme } from '../themeProvider';
+import { getActiveSportOptions } from '../config/sports';
 
-export default function SportSwitcher({ sport = 'mlb', onChange }) {
+export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
   const { C } = useHexaTheme();
+  const renderedOptions = Array.isArray(options) && options.length > 0
+    ? options
+    : getActiveSportOptions();
 
   return (
     <Box
@@ -14,7 +18,7 @@ export default function SportSwitcher({ sport = 'mlb', onChange }) {
         overflow:     'hidden',
       }}
     >
-      {['mlb', 'nba'].map(s => (
+      {renderedOptions.map(({ sport: s, shortLabel }) => (
         <Box
           key={s}
           component="button"
@@ -35,7 +39,7 @@ export default function SportSwitcher({ sport = 'mlb', onChange }) {
             '&:hover':     sport !== s ? { color: C.cyan } : {},
           }}
         >
-          {s.toUpperCase()}
+          {shortLabel ?? s.toUpperCase()}
         </Box>
       ))}
     </Box>

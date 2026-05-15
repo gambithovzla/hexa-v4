@@ -32,6 +32,7 @@ Para profundidad técnica completa, ver carpeta [`docs/`](docs/):
 | [docs/admin-and-ops.md](docs/admin-and-ops.md) | DB explorer, backtest, jobs, logging, deployment, monitoring gaps |
 | [docs/data-schema.md](docs/data-schema.md) | 16 tablas Postgres — columnas, índices, FKs, estado para training |
 | [docs/roadmap.md](docs/roadmap.md) | Sprints en ejecución y backlog priorizado por tier |
+| [docs/sport-registry.md](docs/sport-registry.md) | Sport Shell, capability matrix y checklist para escalar a nuevos deportes |
 
 Para Claude Code (convenciones, frozen files, patrones): ver [CLAUDE.md](CLAUDE.md).
 

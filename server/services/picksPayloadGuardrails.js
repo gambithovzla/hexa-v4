@@ -1,3 +1,5 @@
+import { normalizeKnownSport } from '../sports.js';
+
 export function validatePickSavePayload(payload) {
   const { type, matchup, pick } = payload ?? {};
   if (!type || !matchup || !pick) {
@@ -7,6 +9,6 @@ export function validatePickSavePayload(payload) {
 }
 
 export function normalizePickSport(sport) {
-  return String(sport ?? '').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+  return normalizeKnownSport(sport, 'mlb');
 }
 

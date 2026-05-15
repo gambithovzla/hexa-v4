@@ -4,13 +4,16 @@ import './index.css';
 import App from './App.jsx';
 import { AuthProvider } from './store/authStore';
 import { ThemeProvider } from './themeProvider.jsx';
+import { SportProvider } from './context/SportContext.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <SportProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </SportProvider>
     </ThemeProvider>
   </StrictMode>
 );

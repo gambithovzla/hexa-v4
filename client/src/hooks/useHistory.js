@@ -19,6 +19,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../store/authStore';
+import { normalizeSport, normalizeSportFilter as normalizeSportFromConfig } from '../config/sports';
 
 const STORAGE_KEY = 'hexa_history';
 const MAX_ENTRIES = 200;
@@ -26,9 +27,7 @@ const REMOTE_HISTORY_LIMIT = 100;
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function normalizeSportFilter(sport) {
-  const value = String(sport ?? 'all').toLowerCase();
-  if (value === 'mlb' || value === 'nba') return value;
-  return 'all';
+  return normalizeSportFromConfig(sport, { allowAll: true, fallback: 'all' });
 }
 
 function normalizePickResult(result) {
@@ -173,7 +172,7 @@ function dbRowToEntry(row) {
     selection_method:     row.selection_method ?? null,
     gamePk:               row.game_pk ?? null,
     gameDate,
-    sport:                row.sport ?? 'mlb',
+    sport:                normalizeSport(row.sport ?? 'mlb'),
   };
 }
 
@@ -229,7 +228,7 @@ export default function useHistory({ sport = 'all' } = {}) {
       const entries = load().map(normalizeEntry);
       const filteredEntries = sportFilter === 'all'
         ? entries
-        : entries.filter((entry) => normalizeSportFilter(entry?.sport ?? 'mlb') === sportFilter);
+        : entries.filter((entry) => normalizeSportFilter(normalizeSport(entry?.sport ?? 'mlb')) === sportFilter);
       setHistory(filteredEntries);
       setStats(buildStatsFromEntries(filteredEntries));
       return;
@@ -268,7 +267,7 @@ export default function useHistory({ sport = 'all' } = {}) {
     const hexaData             = payload?.result ?? null;
     const { pick, confidence } = extractPickAndConfidence(hexaData);
     const matchup              = extractMatchup(payload);
-    const sport                = payload?.sport ?? (payload?.games?.[0]?._sport === 'nba' ? 'nba' : 'mlb');
+    const sport = normalizeSport(payload?.sport ?? payload?.games?.[0]?._sport ?? 'mlb');
 
     const isSafe = !!hexaData?.safe_pick;
 
