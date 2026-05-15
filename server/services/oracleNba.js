@@ -43,10 +43,12 @@ function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
   const recent = side.recentForm;
   const recentLine = recent
-    ? `last 10: ${recent.record}, avg ${fmt(recent.avgPts)} pts for / ${fmt(recent.avgOppPts)} pts allowed, avg +/- ${fmt(recent.avgPlusMinus)}`
+    ? `last 10: ${recent.record}, avg ${fmt(recent.avgPts)} pts for` +
+      (recent.avgOppPts != null ? ` / ${fmt(recent.avgOppPts)} pts allowed` : '') +
+      (recent.avgPlusMinus != null ? `, avg +/- ${fmt(recent.avgPlusMinus)}` : '')
     : 'last 10: data unavailable';
   return [
-    `${label} — ${side.teamName ?? side.teamAbbr ?? `team ${side.teamId}`}`,
+    `${label} — ${teamLabel(side)}`,
     `  Record: ${side.record ?? 'n/a'}`,
     `  Off Rating: ${fmt(side.offRating)} | Def Rating: ${fmt(side.defRating)} | Net Rating: ${fmt(side.netRating)}`,
     `  Pace: ${fmt(side.pace)} | TS%: ${fmt(side.tsPct * 100)} | REB%: ${fmt(side.rebPct * 100)} | AST%: ${fmt(side.astPct * 100)}`,
@@ -61,8 +63,17 @@ function describeRestDelta(home, away) {
   if (hr == null || ar == null) return 'Rest delta: not computable (missing recent-game data).';
   const diff = hr - ar;
   if (diff === 0) return `Rest delta: even (${hr} days both sides).`;
-  const advantage = diff > 0 ? home.teamAbbr : away.teamAbbr;
+  const advantage = diff > 0 ? teamLabel(home) : teamLabel(away);
   return `Rest delta: ${advantage} has ${Math.abs(diff)} day(s) more rest (home ${hr} vs away ${ar}).`;
+}
+
+function teamLabel(side) {
+  if (!side) return 'unknown';
+  const abbr = side.teamAbbr;
+  if (abbr && abbr !== 'null') return String(abbr);
+  const name = side.teamName;
+  if (name && name !== 'null') return String(name);
+  return side.teamId != null ? `team ${side.teamId}` : 'unknown';
 }
 
 function describeNetDelta(home, away) {
@@ -70,7 +81,7 @@ function describeNetDelta(home, away) {
   const an = away?.netRating;
   if (hn == null || an == null) return 'Net Rating gap: not computable.';
   const gap = hn - an;
-  const favorite = gap > 0 ? home.teamAbbr : away.teamAbbr;
+  const favorite = teamLabel(gap > 0 ? home : away);
   return `Net Rating gap: ${favorite} +${fmt(Math.abs(gap))} (home ${fmt(hn)} vs away ${fmt(an)}).`;
 }
 

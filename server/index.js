@@ -21,7 +21,9 @@ import { handleNowPaymentsWebhook } from './nowpayments-webhook.js';
 import picksRouter from './routes/picks.js';
 import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-history.js';
 import insightsRouter from './routes/insights.js';
+import nbaRouter from './routes/nba.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
+import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { captureClosingLines } from './closing-line-capture.js';
@@ -503,6 +505,7 @@ app.use('/api/nowpayments',  nowpaymentsRouter);
 app.use('/api/picks',        picksRouter);
 app.use('/api/oracle',       oracleHistoryRouter);
 app.use('/api/insights',     insightsRouter);
+app.use('/api/nba',          nbaRouter);
 app.use('/api/admin/content', contentAdminRouter);
 app.use('/api/admin', adminMlRouter);
 app.post('/api/nowpayments/webhook', handleNowPaymentsWebhook);
@@ -4003,6 +4006,12 @@ runMigrations()
                 console.error('[parlay-resolver] Scheduled run failed:', err.message);
               });
             });
+
+          if (process.env.NBA_ANALYSIS_ENABLED === 'true') {
+            resolveNbaPendingPicks().catch(err => {
+              console.error('[pick-resolver-nba] Scheduled run failed:', err.message);
+            });
+          }
         }
       }, THIRTY_MIN).unref();
 
