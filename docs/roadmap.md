@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-15 — Sprint 6b cerrado en prod (volume + redeploy verificado); Sprint 6a cerrado en código; NBA 7.0–7.1 + sport shell multi-deporte en código.
+**Última actualización**: 2026-05-15 — Sprint 6 cerrado (6a equity compare en bankroll, 6b prod); post-6 hardening (parlay resolve, ML observability, NBA team-map + output guard). **Player Props ML MLB diferido** a bloque posterior. Rama activa de trabajo: `feat/nba-go-live-gate`.
 
 ---
 
@@ -34,8 +34,17 @@ Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js)
 
 ### Pre-requisitos NBA (cerrados 2026-05-15)
 
-1. **Equity curve + Sharpe + drawdown** — ✅ Sprint 6a cerrado en código ([PerformanceDashboard](../client/src/pages/PerformanceDashboard.jsx), [EquityDashboard](../client/src/pages/EquityDashboard.jsx)). Pendiente menor: comparativa "tú vs Hexa baseline".
+1. **Equity curve + Sharpe + drawdown** — ✅ Sprint 6a cerrado ([PerformanceDashboard](../client/src/pages/PerformanceDashboard.jsx), [EquityDashboard](../client/src/pages/EquityDashboard.jsx)). Comparativa **tú vs Hexa baseline** en tab Oracle Stats del bankroll (`GET /api/bankroll/equity-stats`). Pendiente menor: acceso desde bottom nav / página dedicada para todos los usuarios.
 2. **Persistencia de modelos ML** — ✅ Sprint 6b cerrado en prod (`hexa-ml-production`: Volume `/data`, `HEXA_ML_ARTIFACTS_DIR=/data/artifacts`, `artifacts_persistent: true`, redeploy verificado + `npm run verify:ml:persistence` OK).
+
+### Foco inmediato (rama `feat/nba-go-live-gate`)
+
+1. **Validación E2E NBA en producción** — analyze → persist → historial → resolver post-game con tráfico real (`npm run smoke:nba` + token admin).
+2. ~~**6a menor** — equity en bankroll + performance~~ ✅ panel reutilizable `EquityComparePanel` en tab Bankroll (dashboard) y Oracle Performance (logueado).
+3. **Parlay Architect** — smoke post-deploy de AUTO (`db_*`) y `leg_results` (`npm run smoke:parlay`).
+4. **NBA live tracker** (opcional en esta rama) — `pick-tracker-nba.js` quarter-by-quarter.
+
+**Explícitamente fuera de esta fase**: Sprint 5 **Player Props ML** (hits / total_bases / strikeouts) — requiere pipeline Savant per-batter + training sidecar; ver [backlog](#3-backlog-priorizado).
 
 ### El trade-off explícito
 
@@ -58,20 +67,20 @@ Solución aplicada: **scaffolding NBA en paralelo con equity + persistencia ML**
 | Sprint 4 | Ensemble meta-learner (LogReg sobre oracle+legacy+python en logit space). `/predict/ensemble`, `/calibration/ensemble` | ✅ |
 | Sprint 5 UI | Admin ML Control Center (`/admin/ml-control`) — HUD live, retrain on-demand, audit log, chat-picks dashboard, AdminEnsembleBadge per-pick. Oracle Chat → Training pipeline con bucket `source='oracle_chat'` aislado | ✅ |
 
-**Pendiente del bloque ML**:
-- ⏳ **Sprint 5 Player Props** — training para hits / total_bases / strikeouts. Requiere features per-batter (xBA, xSLG, splits vs handedness) que aún no están en [savant-fetcher.js](../server/savant-fetcher.js). Banner "coming soon" visible en el Control Center.
+**Pendiente del bloque ML (diferido)**:
+- ⏸️ **Sprint 5 Player Props MLB** — **no en curso**. Training para hits / total_bases / strikeouts. Bloqueado hasta extender [savant-fetcher.js](../server/savant-fetcher.js) con leaderboards per-batter (xBA, xSLG, splits vs handedness, forma 7d/14d) + pipeline de labels/resolver por `prop_kind`. Banner "coming soon" en `/admin/ml-control`.
 
 ---
 
 ### ✅ Sprint 6 — Pre-NBA hardening (Q3 2026, ~6 semanas)
 
-**Status**: ✅ **cerrado** (2026-05-15). 6a en código; 6b en prod (volume + redeploy verificado). Pendiente menor en 6a: comparativa "tú vs Hexa baseline" y endpoint equity por usuario.
+**Status**: ✅ **cerrado** (2026-05-15). 6a + 6b completos; comparativa bankroll entregada. Pendiente menor: equity en bottom nav.
 
 Corre en paralelo con Sprint 7; ya no bloquea hardening NBA en código.
 
 #### Sprint 6a — Equity curve + Sharpe + drawdown dashboard (~2 semanas)
 
-**Status**: ✅ **cerrado en código** (2026-05-15). Pendiente menor: comparativa "tú vs Hexa baseline" y endpoint dedicado por usuario si se quiere bankroll USD.
+**Status**: ✅ **cerrado** (2026-05-15). Comparativa tú vs Hexa en `GET /api/bankroll/equity-stats` + panel en [BankrollTracker](../client/src/components/BankrollTracker.jsx) (tab Oracle Stats, ventana 90d). Pendiente menor: `GET /api/users/:id/equity-stats` y enlace en bottom nav.
 
 Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
@@ -123,6 +132,19 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 ---
 
+#### Post-6 — Hardening plataforma (2026-05-15, cerrado en código)
+
+**Status**: ✅ **cerrado en código**. Pendiente: smoke en producción tras deploy.
+
+| Área | Entregable | Archivos clave |
+|---|---|---|
+| Parlay Architect | Hidratación de legs desde `candidate_pool`; fechas ±1 día; legs no resueltos → loss cuando el parlay ya perdió; AUTO habilitado en runs `db_*` con `run_id` persistido | [parlayResolver.js](../server/services/parlayResolver.js), [parlayRunOutcome.js](../server/services/parlayRunOutcome.js), [ParlayArchitect.jsx](../client/src/pages/ParlayArchitect.jsx) |
+| ML observability | HUD Models/Ensemble + panel inferencia por mercado (artefacto, RAM, runline skipped/early) | [mlModelHealth.js](../server/services/mlModelHealth.js), [AdminMLControlCenter.jsx](../client/src/pages/AdminMLControlCenter.jsx) |
+| NBA datos | Mapeo estable ESPN ↔ stats.nba.com para `teamgamelog` y contexto | [nba-team-map.js](../server/nba-team-map.js), [nba-context-builder.js](../server/nba-context-builder.js) |
+| NBA guardrails | Validación de salida LLM antes de persistir pick (`outputQuality`, rechazo de props/parse defectuoso) | [nbaOutputGuard.js](../server/services/nbaOutputGuard.js), [routes/nba.js](../server/routes/nba.js) |
+
+---
+
 ### ⏳ Sprint 7 — Expansión NBA, scaffolding + MVP (Q4 2026 → Q1 2027, ~10-14 semanas)
 
 **Status**: 🔄 en ejecución. 7a–7d + hardening 7.0–7.1 entregados en código. Pendiente: go-live público y 7e (ML NBA).
@@ -131,7 +153,7 @@ Tier S1 del backlog. Sin esto, el usuario serio no entiende qué hace Hexa.
 
 #### Sprint 7.0 — NBA hardening gate (hotfix obligatorio antes de abrir) (~1-2 semanas)
 
-Estado: ✅ cerrado en código (2026-05-15). Falta solo validación end-to-end con tráfico real antes del flip público.
+Estado: ✅ cerrado en código (2026-05-15). Añadido 2026-05-15: mapeo `nba-team-map.js`, guardrails `nbaOutputGuard.js`. **Gate restante**: validación end-to-end con tráfico real antes del flip público (rama `feat/nba-go-live-gate`).
 
 Objetivo: eliminar contaminación MLB↔NBA en flujo de picks y cerrar errores de modo SAFE en NBA antes de crecer features.
 
@@ -153,6 +175,8 @@ Entregables:
   - ✅ Injuries/status estructurados desde ESPN league-feed ([server/nba-api.js](../server/nba-api.js): `getNbaLeagueInjuries`, `findTeamInjuries`) integrados en `buildNbaGameContext` y render en bloque por equipo.
   - ✅ Market odds server-side vía The Odds API `basketball_nba` ([server/nba-odds.js](../server/nba-odds.js)). Routes resuelven odds si el cliente no las envía; persistencia y prompt usan la misma fuente.
   - ✅ `context_meta` expuesto en `meta` de `/api/nba/analyze/game` y `/analyze/chat`: `sources`, `completeness`, `overallCompleteness`, `staleFlags`. Lookup `team_id ↔ team_abbr` con fallback para evitar bloques "data unavailable" cuando la fuente es ESPN.
+  - ✅ Mapeo ESPN → NBA Stats team id ([nba-team-map.js](../server/nba-team-map.js)); `context_meta.teamIds` documenta remapeo.
+  - ✅ Validación de salida Oracle NBA server-side ([nbaOutputGuard.js](../server/services/nbaOutputGuard.js)) — no persiste picks ambiguos o player props.
 
 Criterio de éxito:
 - ✅ Un análisis NBA guardado aparece como NBA en historial, breakdown y cards.
@@ -275,7 +299,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
-| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ✅ Cerrado en código — **Sprint 6a** (2026-05-15). Pendiente menor: "tú vs Hexa baseline". |
+| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ✅ Cerrado — **Sprint 6a** (2026-05-15). Comparativa bankroll OK; pendiente: bottom nav. |
 | S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | Trivial, alto valor para auditoría. Sprint 1 ya incluye los campos en pick_features. Falta llenarlos desde oracle.js. |
 | S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | Health check para detectar features faltantes / fecha vieja. Útil pre-training. |
 | S4 | **Telegram channel publisher** | 3 días | Reusa `contentDraftService`, añade adapter `telegramPublisher.js`. Mayor engagement por canal. |

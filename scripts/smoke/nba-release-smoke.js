@@ -135,6 +135,13 @@ async function run() {
         assert(typeof meta.context_meta.overallCompleteness === 'number', 'overallCompleteness missing');
         assert(Array.isArray(meta.context_meta.staleFlags), 'staleFlags missing');
         assert(['client', 'server', null, undefined].includes(meta.oddsSource ?? null), `unexpected oddsSource=${meta.oddsSource}`);
+        const teamIds = meta.context_meta?.teamIds;
+        if (teamIds?.home?.stats || teamIds?.away?.stats) {
+          assert(typeof teamIds.home.stats === 'number' || teamIds.home.stats == null, 'home stats team id');
+        }
+        if (res.data.outputQuality) {
+          assert(['ok', 'degraded'].includes(res.data.outputQuality), `unexpected outputQuality=${res.data.outputQuality}`);
+        }
       },
     });
   } else {

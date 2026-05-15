@@ -30,6 +30,7 @@ import {
   getEnsembleCalibration as getMlEnsembleCalibration,
   predictEnsemble as predictMlEnsemble,
 } from '../services/mlModelClient.js';
+import { buildMlObservability } from '../services/mlModelHealth.js';
 
 const router = express.Router();
 router.use(verifyToken, requireAdmin);
@@ -148,6 +149,13 @@ router.get('/ml/status', async (_req, res) => {
   } catch {
     /* table may not exist yet on first deploy — ignore */
   }
+
+  result.observability = buildMlObservability({
+    enabled,
+    ensembleEnabled,
+    circuit,
+    health: result.health?.status === 'ok' ? result.health : null,
+  });
 
   res.json(result);
 });

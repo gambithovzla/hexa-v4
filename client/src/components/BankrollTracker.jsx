@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import useBankroll from "../hooks/useBankroll";
 import { useAuth } from "../store/authStore";
 import { C, BARLOW, MONO } from "../theme";
+import EquityComparePanel from "./EquityComparePanel";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 function getToken() {
   return localStorage.getItem("hexa_token");
@@ -370,6 +371,7 @@ export default function BankrollTracker({ lang = "es" }) {
   const { isAuthenticated } = useAuth();
   const { bankrollData, loading, refreshBankroll, setupBankroll, addBet, updateBetResult, deleteBet, updateInitialBankroll } = useBankroll();
   const [stats, setStats] = useState(null);
+  const [equityCompare, setEquityCompare] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [activeView, setActiveView] = useState("dashboard");
   const [filterResult, setFilterResult] = useState("all");
@@ -382,11 +384,15 @@ export default function BankrollTracker({ lang = "es" }) {
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/bankroll/stats`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
-      });
-      const json = await res.json();
-      if (json.success) setStats(json.data);
+      const headers = { Authorization: `Bearer ${getToken()}` };
+      const [statsRes, equityRes] = await Promise.all([
+        fetch(`${API_URL}/api/bankroll/stats`, { headers }),
+        fetch(`${API_URL}/api/bankroll/equity-stats?period=90&sport=all`, { headers }),
+      ]);
+      const statsJson = await statsRes.json();
+      const equityJson = await equityRes.json();
+      if (statsJson.success) setStats(statsJson.data);
+      if (equityJson.success) setEquityCompare(equityJson.data?.comparison ?? null);
     } catch {}
     setStatsLoading(false);
   };
@@ -444,6 +450,13 @@ export default function BankrollTracker({ lang = "es" }) {
       {/* ── DASHBOARD ── */}
       {activeView === "dashboard" && (
         <div>
+          <EquityComparePanel
+            comparison={equityCompare}
+            loading={statsLoading}
+            lang={lang}
+            periodLabel="90D"
+            variant="compact"
+          />
           {/* Oracle ROI Panel — arriba del todo */}
           <OracleROIPanel bets={bets} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 }}>
@@ -554,6 +567,50 @@ export default function BankrollTracker({ lang = "es" }) {
             ? <div style={{ fontFamily: MONO, color: C.textMuted, textAlign: "center", padding: 40, fontSize: 10, letterSpacing: 3 }}>// COMPUTING_STATS…</div>
             : stats ? (
               <div>
+                {equityCompare && (
+                  <div style={{ background: C.surface, border: `1px solid ${C.accentLine}`, borderRadius: 0, padding: 16, marginBottom: 10, position: "relative" }}>
+                    <div style={{ position: "absolute", top: 0, left: 0, width: 10, height: 10, borderTop: `1px solid ${C.accent}`, borderLeft: `1px solid ${C.accent}` }} />
+                    <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12 }}>
+                      // YOU_vs_HEXA_BASELINE (LAST_90D)
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+                      {[
+                        {
+                          label: "YOUR_ROI_U",
+                          value: `${equityCompare.your_strategy?.roi_units >= 0 ? "+" : ""}${(equityCompare.your_strategy?.roi_units ?? 0).toFixed(2)}%`,
+                          color: (equityCompare.your_strategy?.roi_units ?? 0) >= 0 ? C.green : C.red,
+                        },
+                        {
+                          label: "HEXA_ROI_U",
+                          value: `${equityCompare.hexa_baseline?.roi_units >= 0 ? "+" : ""}${(equityCompare.hexa_baseline?.roi_units ?? 0).toFixed(2)}%`,
+                          color: (equityCompare.hexa_baseline?.roi_units ?? 0) >= 0 ? C.green : C.red,
+                        },
+                        {
+                          label: "DELTA_ROI_U",
+                          value: `${equityCompare.delta?.roi_units >= 0 ? "+" : ""}${(equityCompare.delta?.roi_units ?? 0).toFixed(2)}%`,
+                          color: (equityCompare.delta?.roi_units ?? 0) >= 0 ? C.green : C.red,
+                        },
+                        {
+                          label: "DELTA_WINRATE",
+                          value: `${equityCompare.delta?.win_rate >= 0 ? "+" : ""}${(equityCompare.delta?.win_rate ?? 0).toFixed(1)}pp`,
+                          color: (equityCompare.delta?.win_rate ?? 0) >= 0 ? C.green : C.red,
+                        },
+                      ].map((row) => (
+                        <div key={row.label} style={{ border: `1px solid ${C.borderLight}`, padding: "10px 12px" }}>
+                          <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 8, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
+                            {row.label}
+                          </div>
+                          <div style={{ color: row.color, fontFamily: MONO, fontSize: 14 }}>
+                            {row.value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 8, color: C.textMuted, fontFamily: MONO, fontSize: 8, letterSpacing: 1 }}>
+                      SAMPLE: YOUR={equityCompare.your_strategy?.sample_size ?? 0} · HEXA={equityCompare.hexa_baseline?.sample_size ?? 0} settled bets
+                    </div>
+                  </div>
+                )}
                 <div style={{ background: C.surface, border: `1px solid ${C.cyanLine}`, borderRadius: 0, padding: 16, marginBottom: 10, position: "relative" }}>
                   <div style={{ position: "absolute", top: 0, left: 0, width: 10, height: 10, borderTop: `1px solid ${C.cyan}`, borderLeft: `1px solid ${C.cyan}` }} />
                   <div style={{ fontFamily: MONO, color: C.textMuted, fontSize: 7, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12 }}>// SOURCE_PERFORMANCE</div>

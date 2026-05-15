@@ -228,7 +228,13 @@ Motor combinatorial para parlays (correlación, ortogonalidad de riesgo, coheren
 Genera drafts editoriales con Claude Haiku, los encola, y los publica en X (Twitter) vía OAuth 1.0a HMAC-SHA1. Detalle: [docs/content-pipeline.md](docs/content-pipeline.md).
 
 ### Admin ML Control Center (`/admin/ml-control`)
-Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, ensemble), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d de accuracy legacy-vs-python, pesos aprendidos del ensemble meta-learner, y un audit log de retrains manuales. Permite disparar retrains por mercado o globales con un click — cada disparo se registra en `ml_retrain_log` con duración y métricas. Por cada pick de la historia, el admin ve un chip expandible (`AdminEnsembleBadge`) con la prob de Oracle/Legacy/Python/Ensemble + correctness ✓/✗ cuando el partido resolvió.
+Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, **models loaded X/Y**, estado ensemble LIVE/READY/OFF), panel de **inferencia en vivo** por mercado (artefacto en disco, modelo en RAM, runline skipped/early), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d legacy-vs-python, pesos del ensemble meta-learner, y audit log de retrains. `GET /api/admin/ml/status` incluye bloque `observability` derivado del `/health` del sidecar.
+
+### Bankroll — comparativa tú vs Hexa
+`GET /api/bankroll/equity-stats?period=90&sport=all|mlb|nba` compara ROI en unidades, win rate y delta de bankroll entre todas las apuestas registradas y el subconjunto `source=hexa`. Panel en tab **Oracle Stats** de [BankrollTracker](client/src/components/BankrollTracker.jsx).
+
+### Parlay Architect — resolución automática
+Runs persistidos en servidor (`id` tipo `db_N`) soportan `POST /api/parlay-architect/:id/auto-resolve`: hidrata legs desde `candidate_pool`, busca partidos en fecha ±1 día, y persiste `leg_results` parciales mientras el parlay sigue en juego.
 
 ### Oracle Chat → Training pipeline
 Los picks que el Oracle recomienda durante una sesión de chat se persisten automáticamente para alimentar el entrenamiento futuro. El extractor inyecta una instrucción interna que pide al Oracle terminar con `<<<HEXA_PICK_JSON>>>{...}<<<END>>>` cuando hay un pick concreto; si no aparece y la pregunta lo amerita, un Haiku fallback parsea la respuesta. Los picks se guardan con `source='oracle_chat'` y `chat_session_id` linkeado a `oracle_sessions` — están aislados del training default (`source='live'`) y son visibles en la sección "Chat-sourced picks" del Control Center. Opt-out por chat: checkbox "NO GUARDAR PARA ENTRENAMIENTO" o header `X-HEXA-Skip-Pick-Extract: 1`.
@@ -270,13 +276,19 @@ Estado:
 - ✅ **Sprint 3**: Integración Node↔Python activa (`ML_SIDECAR_ENABLED=true` en prod) con circuit breaker y fallback al validator legacy. Dashboard `/admin/ml-calibration` operativo.
 - ✅ **Sprint 4**: Ensemble meta-learner (LogReg sobre Oracle+Legacy+Python en logit space). Endpoints `/predict/ensemble` y `/calibration/ensemble`. Sólo se guarda artifact cuando supera a la mejor fuente individual.
 - ✅ **Sprint 5 UI**: Admin ML Control Center en `/admin/ml-control` — HUD live, retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Oracle Chat → Training pipeline (JSON tail + Haiku fallback, bucket `source='oracle_chat'`).
-- ⏳ **Sprint 5 Player Props** (pendiente): training para hits / total_bases / strikeouts — requiere features per-batter en `savant-fetcher.js`. Banner "coming soon" en el Control Center.
-- ✅ **Sprint 6** (6a código + 6b prod): equity/Sharpe/drawdown + persistencia ML en Railway Volume — ver sección [Próximas fases](#próximas-fases--hardening) más abajo.
-- ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, endpoints `/api/nba/*`, resolver automático post-game, sport shell MLB/NBA. Feature-flagged `NBA_ANALYSIS_ENABLED`. MVP funcional; pendiente go-live público NBA.
+- ⏸️ **Sprint 5 Player Props MLB** (diferido): hits / total_bases / strikeouts — bloque grande; requiere Savant per-batter + pipeline sidecar. No en curso.
+- ✅ **Sprint 6** (cerrado): 6a equity/Sharpe/drawdown + comparativa bankroll; 6b persistencia ML en Railway Volume (`npm run verify:ml:persistence`).
+- ✅ **Post-6 hardening** (código): Parlay AUTO/`leg_results`, ML observability HUD, mapeo ESPN↔NBA Stats (`nba-team-map.js`), guardrails salida Oracle NBA (`nbaOutputGuard.js`).
+- ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, `/api/nba/*`, resolver post-game, sport shell. Feature-flag `NBA_ANALYSIS_ENABLED`. **Siguiente**: rama `feat/nba-go-live-gate` — E2E prod + equity en nav.
 
 ### Estado NBA MVP (2026-05-15)
 
-Sprint 7 completado en su mayor parte:
+Sprint 7 completado en su mayor parte; hardening de datos/salida añadido post-6:
+
+- ✅ **Team ID mapping** — [server/nba-team-map.js](server/nba-team-map.js) normaliza IDs ESPN → stats.nba.com para recent games y season stats.
+- ✅ **Output guard** — [server/services/nbaOutputGuard.js](server/services/nbaOutputGuard.js) valida JSON Oracle antes de persistir; rechaza player props y picks ambiguos.
+
+Sprint 7 core:
 
 - ✅ **7a** — `nba-api.js`, `nba-context-builder.js`, columna `sport` en `picks`/`pick_features`, endpoints públicos `/api/nba/games` y `/api/nba/teams`.
 - ✅ **7b** — Oracle NBA (`oracleNba.js` + `oracle-nba-prompts.js`). Guardrail anti-hallucination. Validado end-to-end.
@@ -307,7 +319,7 @@ Sprint 7 completado en su mayor parte:
 
 **Sprint 6 — Pre-lanzamiento público NBA (Q3 2026)** — ✅ cerrado (2026-05-15):
 
-- ✅ **Sprint 6a — Equity curve + Sharpe + drawdown**: [PerformanceDashboard](client/src/pages/PerformanceDashboard.jsx) (público), [EquityDashboard](client/src/pages/EquityDashboard.jsx) (admin `/admin/equity`). Pendiente menor: comparativa "tú vs Hexa baseline".
+- ✅ **Sprint 6a — Equity curve + Sharpe + drawdown**: [PerformanceDashboard](client/src/pages/PerformanceDashboard.jsx) (público), [EquityDashboard](client/src/pages/EquityDashboard.jsx) (admin `/admin/equity`), comparativa bankroll (`/api/bankroll/equity-stats`). Pendiente menor: enlace en bottom nav.
 - ✅ **Sprint 6b — Persistencia ML (Railway Volumes)**: prod en `hexa-ml-production` con `artifacts_dir=/data/artifacts`, `artifacts_persistent=true`, redeploy verificado sin retrain. Verificación: `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app npm run verify:ml:persistence`. Runbook: [docs/admin-and-ops.md](docs/admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b).
 
 ### Matriz de calidad por deporte (operativa)

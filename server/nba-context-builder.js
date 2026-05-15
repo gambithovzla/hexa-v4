@@ -16,6 +16,7 @@ import {
   getNbaLeagueInjuries,
   findTeamInjuries,
 } from './nba-api.js';
+import { resolveNbaStatsTeamId, isNbaStatsTeamId } from './nba-team-map.js';
 
 const CURRENT_SEASON = '2025-26';
 
@@ -116,16 +117,19 @@ export async function buildNbaGameContext({
 }) {
   const startedAt = Date.now();
 
+  const homeStatsTeamId = resolveNbaStatsTeamId({ teamId: homeTeamId, teamAbbr: homeTeamAbbr });
+  const awayStatsTeamId = resolveNbaStatsTeamId({ teamId: awayTeamId, teamAbbr: awayTeamAbbr });
+
   const [teamStats, homeGames, awayGames, injuriesPayload] = await Promise.all([
     getNbaLeagueTeamStats(season).catch(err => {
       console.warn(`[nba-context] team stats fetch failed: ${err.message}`);
       return [];
     }),
-    getNbaTeamRecentGames(homeTeamId, season, 10).catch(err => {
+    getNbaTeamRecentGames(homeStatsTeamId, season, 10).catch(err => {
       console.warn(`[nba-context] home recent games failed: ${err.message}`);
       return [];
     }),
-    getNbaTeamRecentGames(awayTeamId, season, 10).catch(err => {
+    getNbaTeamRecentGames(awayStatsTeamId, season, 10).catch(err => {
       console.warn(`[nba-context] away recent games failed: ${err.message}`);
       return [];
     }),
@@ -135,8 +139,8 @@ export async function buildNbaGameContext({
     }),
   ]);
 
-  const homeStats = lookupTeamStats(teamStats, homeTeamId, homeTeamAbbr);
-  const awayStats = lookupTeamStats(teamStats, awayTeamId, awayTeamAbbr);
+  const homeStats = lookupTeamStats(teamStats, homeStatsTeamId, homeTeamAbbr);
+  const awayStats = lookupTeamStats(teamStats, awayStatsTeamId, awayTeamAbbr);
 
   const homeLastGame = homeGames[0] ?? null;
   const awayLastGame = awayGames[0] ?? null;
@@ -147,7 +151,7 @@ export async function buildNbaGameContext({
   const awayInjuries = summariseInjuries(awayInjuriesRecord);
 
   const home = {
-    teamId: homeTeamId,
+    teamId: homeStatsTeamId ?? homeTeamId,
     teamAbbr: homeStats?.team_abbr ?? homeTeamAbbr ?? null,
     teamName: homeStats?.team_name ?? null,
     record: homeStats ? `${homeStats.wins}-${homeStats.losses}` : null,
@@ -164,7 +168,7 @@ export async function buildNbaGameContext({
   };
 
   const away = {
-    teamId: awayTeamId,
+    teamId: awayStatsTeamId ?? awayTeamId,
     teamAbbr: awayStats?.team_abbr ?? awayTeamAbbr ?? null,
     teamName: awayStats?.team_name ?? null,
     record: awayStats ? `${awayStats.wins}-${awayStats.losses}` : null,
@@ -205,6 +209,18 @@ export async function buildNbaGameContext({
   const context_meta = {
     generatedAt: new Date().toISOString(),
     durationMs:  Date.now() - startedAt,
+    teamIds: {
+      home: {
+        input: homeTeamId ?? null,
+        stats: homeStatsTeamId ?? null,
+        mapped: !!(homeStatsTeamId && homeTeamId && !isNbaStatsTeamId(homeTeamId)),
+      },
+      away: {
+        input: awayTeamId ?? null,
+        stats: awayStatsTeamId ?? null,
+        mapped: !!(awayStatsTeamId && awayTeamId && !isNbaStatsTeamId(awayTeamId)),
+      },
+    },
     sources: {
       teamStats:   { ok: !!(homeStats && awayStats), source: 'stats.nba.com', n: teamStats.length },
       recentForm:  { ok: !!(homeGames.length && awayGames.length), source: 'stats.nba.com', n: { home: homeGames.length, away: awayGames.length } },

@@ -55,6 +55,15 @@ function normalizeDate(value) {
   return parsed.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
+function shiftDate(dateStr, days) {
+  const d = normalizeDate(dateStr);
+  if (!d) return null;
+  const base = new Date(`${d}T12:00:00Z`);
+  if (Number.isNaN(base.getTime())) return null;
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
 /**
  * Aggregate per-leg results into a single parlay outcome.
  *
@@ -146,8 +155,17 @@ export async function resolveParlayLegs(legs, ctx = {}) {
       continue;
     }
 
-    const games = await getGamesFor(date);
-    let game = games.find(g => Number(g?.gamePk) === gamePk) ?? null;
+    const dateCandidates = Array.from(new Set([
+      date,
+      shiftDate(date, -1),
+      shiftDate(date, 1),
+    ].filter(Boolean)));
+    let game = null;
+    for (const candidateDate of dateCandidates) {
+      const games = await getGamesFor(candidateDate);
+      game = games.find(g => Number(g?.gamePk) === gamePk) ?? null;
+      if (game) break;
+    }
 
     let liveData = null;
     let finalGame = game;
@@ -189,9 +207,11 @@ export async function resolveParlayLegs(legs, ctx = {}) {
       if (!result) {
         legResults.push({
           candidateId, gamePk, pick: pickText,
-          result: null,
-          status: parsed ? 'unresolved' : 'unparseable',
-          reason: parsed ? 'grader returned no result' : 'pick string did not parse',
+          result: 'loss',
+          status: parsed ? 'unresolved_loss' : 'unparseable_loss',
+          reason: parsed
+            ? 'grader returned no result — auto-scored as loss'
+            : 'pick string did not parse — auto-scored as loss',
         });
         continue;
       }
@@ -212,8 +232,9 @@ export async function resolveParlayLegs(legs, ctx = {}) {
     } catch (err) {
       legResults.push({
         candidateId, gamePk, pick: pickText,
-        result: null, status: 'error',
-        reason: err.message,
+        result: 'loss',
+        status: 'error_loss',
+        reason: `${err.message} — auto-scored as loss`,
       });
     }
   }
@@ -254,7 +275,7 @@ export async function resolveParlayRunById({ runId, row = null, gamesByDate, liv
   });
 
   const finalized = aggregate.status !== 'pending';
-  const hit = aggregate.status === 'win';
+  const hit = aggregate.status === 'win' ? true : aggregate.status === 'loss' ? false : null;
 
   if (finalized) {
     await pool.query(

@@ -18,6 +18,7 @@ import { buildNbaGameContext } from '../nba-context-builder.js';
 import { analyzeNbaGame, analyzeNbaChat } from '../services/oracleNba.js';
 import { getNbaGameOdds, matchNbaOddsToGame, buildMarketOddsForGame } from '../nba-odds.js';
 import { saveNbaPickFeatures, recordNbaShadowRun } from '../services/nbaShadowPersistence.js';
+import { validateNbaAnalysisOutput } from '../services/nbaOutputGuard.js';
 
 const router = Router();
 
@@ -167,18 +168,27 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
       console.warn(`[nba-route] parse error for game ${gameId} — raw text returned`);
     }
 
-    if (String(result.data?.best_pick?.type ?? '').toLowerCase() === 'playerprop') {
+    const guard = validateNbaAnalysisOutput(result.data, { parseError: result.parseError });
+    if (!guard.ok) {
       return res.status(422).json({
         success: false,
-        error: 'NBA player props are temporarily disabled until the dedicated data pipeline is ready.',
+        error: 'NBA analysis output failed validation',
+        validation: {
+          quality: guard.quality,
+          errors: guard.errors,
+          schema_version: guard.schema_version,
+        },
+        rawText: result.parseError ? result.rawText : undefined,
       });
     }
+
+    const analysisData = guard.data;
 
     const savedPick = await persistNbaPick({
       userId:    req.user.id,
       userEmail: req.user.email ?? null,
       matchup,
-      analysisData: result.data ?? {},
+      analysisData,
       model:    result.model,
       language: lang,
       gameId,
@@ -204,8 +214,8 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
         context,
         gameMeta,
         marketOdds: resolvedOdds,
-        pickText:  result.data?.master_prediction?.pick ?? result.data?.best_pick?.detail ?? null,
-        oracleConfidence: result.data?.master_prediction?.oracle_confidence ?? null,
+        pickText:  analysisData?.master_prediction?.pick ?? analysisData?.best_pick?.detail ?? null,
+        oracleConfidence: analysisData?.master_prediction?.oracle_confidence ?? null,
         userEmail: req.user.email ?? null,
       }).catch(err => console.warn(`[nba-route] pick_features persist swallowed: ${err.message}`));
 
@@ -217,17 +227,19 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
         gameDate:  date,
         context,
         gameMeta,
-        analysisData: result.data ?? {},
+        analysisData,
       }).catch(err => console.warn(`[nba-route] shadow_model persist swallowed: ${err.message}`));
     }
 
-    console.log(`[nba-route] pick saved id=${savedPick?.id} game=${gameId} conf=${result.data?.master_prediction?.oracle_confidence} odds=${oddsSource ?? 'none'} flags=${context.context_meta?.staleFlags?.length ?? 0}`);
+    console.log(`[nba-route] pick saved id=${savedPick?.id} game=${gameId} conf=${analysisData?.master_prediction?.oracle_confidence} quality=${guard.quality} odds=${oddsSource ?? 'none'} flags=${context.context_meta?.staleFlags?.length ?? 0}`);
 
     return res.json({
       success: true,
-      data:    result.data,
+      data:    analysisData,
       rawText: result.parseError ? result.rawText : undefined,
       parseError: result.parseError,
+      outputQuality: guard.quality,
+      validationErrors: guard.errors.length ? guard.errors : undefined,
       savedPick: savedPick ? {
         id:                savedPick.id,
         matchup:           savedPick.matchup,

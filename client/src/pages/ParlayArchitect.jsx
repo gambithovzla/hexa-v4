@@ -510,7 +510,16 @@ export default function ParlayArchitect({ lang = 'en' }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
       setResult(json.data);
-      addRun({ date, mode, requestedLegs, betType, gameIds: [...selectedIds], result: json.data, architect_meta: json.data?.architect_meta });
+      addRun({
+        date,
+        mode,
+        requestedLegs,
+        betType,
+        gameIds: [...selectedIds],
+        result: json.data,
+        architect_meta: json.data?.architect_meta,
+        dbId: json.data?.run_id ?? null,
+      });
     } catch (err) {
       setError(err.message);
     } finally {

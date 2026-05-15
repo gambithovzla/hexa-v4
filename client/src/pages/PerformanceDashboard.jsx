@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { C, MONO, DISPLAY } from '../theme';
 import SportSwitcher from '../components/SportSwitcher';
+import EquityComparePanel from '../components/EquityComparePanel';
 import { useSport } from '../context/SportContext';
 import { getActiveSportOptions } from '../config/sports';
 
@@ -434,6 +435,15 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
   const [fetchedAt, setFetchedAt] = useState(null);
+  const [equityCompare, setEquityCompare] = useState(null);
+  const [equityLoading, setEquityLoading] = useState(false);
+  const [hasToken, setHasToken] = useState(false);
+
+  useEffect(() => {
+    setHasToken(Boolean(localStorage.getItem('hexa_token')));
+  }, []);
+
+  const equityPeriod = period === 'season' ? 'all' : period;
 
   const fetchStats = useCallback(async (p, activeSport) => {
     setLoading(true);
@@ -455,9 +465,31 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
     }
   }, []);
 
+  const fetchEquityCompare = useCallback(async (p, activeSport) => {
+    const token = localStorage.getItem('hexa_token');
+    if (!token) {
+      setEquityCompare(null);
+      return;
+    }
+    setEquityLoading(true);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/bankroll/equity-stats?period=${p}&sport=${activeSport}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const json = await res.json();
+      setEquityCompare(json.success ? json.data?.comparison ?? null : null);
+    } catch {
+      setEquityCompare(null);
+    } finally {
+      setEquityLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats(period, sport);
-  }, [period, sport, fetchStats]);
+    fetchEquityCompare(equityPeriod, sport);
+  }, [period, sport, equityPeriod, fetchStats, fetchEquityCompare]);
 
   // ── Derived values ──────────────────────────────────────────────────────────
   const positiveRoi = data && data.roi >= 0;
@@ -635,6 +667,16 @@ export default function PerformanceDashboard({ onBack, isAdmin = false, performa
           </Box>
         )}
       </Box>
+
+      {hasToken && (
+        <EquityComparePanel
+          comparison={equityCompare}
+          loading={equityLoading}
+          lang="en"
+          periodLabel={PERIODS.find((p) => p.value === period)?.label ?? period.toUpperCase()}
+          accent={AMBER}
+        />
+      )}
 
       {/* ── ERROR STATE ──────────────────────────────────────────────────────── */}
       {error && (
