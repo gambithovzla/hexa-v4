@@ -488,3 +488,116 @@ export async function getNbaStandings(season = CURRENT_SEASON) {
   console.log(`[nba-api] leaguestandingsv3 ${season}: East ${byConf.East.length}, West ${byConf.West.length}`);
   return result;
 }
+
+// ── Playoff bracket (derived from standings) ─────────────────────────────────
+
+function bracketTeamFromStanding(s, seed) {
+  if (!s) return null;
+  return {
+    seed,
+    teamId:       s.teamId,
+    abbreviation: s.abbreviation,
+    name:         s.name,
+    fullName:     s.fullName,
+    wins:         s.wins,
+    losses:       s.losses,
+    pct:          s.pct,
+  };
+}
+
+function makeMatchup({ id, label, top, bottom, round, bestOf = 7 }) {
+  return {
+    id, label, round, bestOf,
+    top, bottom,
+    winner: null, // populated when real series data is available
+    series: null, // e.g., '2-1' when real data is available
+  };
+}
+
+export async function getNbaPlayoffBracket(season = CURRENT_SEASON) {
+  const cacheKey = `playoffs:${season}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const standings = await getNbaStandings(season);
+
+  const buildConference = confKey => {
+    const conf = standings.conferences.find(c => c.key === confKey);
+    const teams = conf?.teams ?? [];
+    const byRank = Array.from({ length: 11 }, (_, i) => {
+      const target = i + 1;
+      return teams.find(t => t.conferenceRank === target) ?? null;
+    });
+    const seed = n => bracketTeamFromStanding(byRank[n], n);
+
+    // Play-In: seeds 7-10
+    const playIn = [
+      makeMatchup({
+        id: `${confKey}-PI-78`, label: '7v8 → #7 Seed', round: 'play_in', bestOf: 1,
+        top: seed(7), bottom: seed(8),
+      }),
+      makeMatchup({
+        id: `${confKey}-PI-910`, label: '9v10', round: 'play_in', bestOf: 1,
+        top: seed(9), bottom: seed(10),
+      }),
+      makeMatchup({
+        id: `${confKey}-PI-final`, label: 'Loser 7v8 vs Winner 9v10 → #8 Seed',
+        round: 'play_in', bestOf: 1,
+        top: null, bottom: null, // populated when play-in results known
+      }),
+    ];
+
+    // Round 1: 1v8, 4v5, 3v6, 2v7 (TV ordering keeps the bracket symmetrical)
+    const round1 = [
+      makeMatchup({ id: `${confKey}-R1-18`, label: '1 vs 8', round: 'first_round',
+        top: seed(1), bottom: seed(8) }),
+      makeMatchup({ id: `${confKey}-R1-45`, label: '4 vs 5', round: 'first_round',
+        top: seed(4), bottom: seed(5) }),
+      makeMatchup({ id: `${confKey}-R1-36`, label: '3 vs 6', round: 'first_round',
+        top: seed(3), bottom: seed(6) }),
+      makeMatchup({ id: `${confKey}-R1-27`, label: '2 vs 7', round: 'first_round',
+        top: seed(2), bottom: seed(7) }),
+    ];
+
+    // Semifinals: (1v8 winner) vs (4v5 winner), (3v6 winner) vs (2v7 winner)
+    const semis = [
+      makeMatchup({ id: `${confKey}-SF-1845`, label: 'Semifinal 1', round: 'conf_semis',
+        top: null, bottom: null }),
+      makeMatchup({ id: `${confKey}-SF-3627`, label: 'Semifinal 2', round: 'conf_semis',
+        top: null, bottom: null }),
+    ];
+
+    const finals = [
+      makeMatchup({ id: `${confKey}-CF`, label: 'Conference Final', round: 'conf_finals',
+        top: null, bottom: null }),
+    ];
+
+    return {
+      key: confKey,
+      name: CONFERENCE_LABEL[confKey],
+      playIn,
+      rounds: [
+        { key: 'first_round', name: { en: 'First Round',         es: 'Primera Ronda' },     matchups: round1 },
+        { key: 'conf_semis',  name: { en: 'Conference Semis',    es: 'Semifinales Conf.' }, matchups: semis  },
+        { key: 'conf_finals', name: { en: 'Conference Finals',   es: 'Finales Conf.' },     matchups: finals },
+      ],
+    };
+  };
+
+  const result = {
+    sport: 'nba',
+    season,
+    updatedAt: new Date().toISOString(),
+    conferences: [buildConference('East'), buildConference('West')],
+    final: {
+      key: 'nba_finals',
+      name: { en: 'NBA Finals', es: 'Final NBA' },
+      matchup: makeMatchup({ id: 'NBA-FINAL', label: 'NBA Finals', round: 'finals',
+        top: null, bottom: null }),
+    },
+  };
+
+  cacheSet(cacheKey, result, TTL.STANDINGS);
+  console.log(`[nba-api] playoff bracket built for ${season}`);
+  return result;
+}

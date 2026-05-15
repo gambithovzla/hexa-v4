@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { C, BARLOW, MONO } from '../theme';
+import PlayoffBracket from './PlayoffBracket';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const STANDINGS_SELECTION_KEY = 'hexa_nba_standings_selection';
@@ -337,6 +338,7 @@ export default function NBAStandingsPanel({ lang = 'es' }) {
   const copy = COPY[lang] ?? COPY.es;
   const stored = readStoredSelection();
   const [data, setData] = useState(null);
+  const [bracket, setBracket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [conference, setConference] = useState(stored.conference);
@@ -348,12 +350,15 @@ export default function NBAStandingsPanel({ lang = 'es' }) {
     setLoading(true);
     setError('');
 
-    fetch(`${API_URL}/api/nba/standings`)
-      .then(r => r.json())
-      .then(json => {
+    Promise.all([
+      fetch(`${API_URL}/api/nba/standings`).then(r => r.json()),
+      fetch(`${API_URL}/api/nba/playoffs`).then(r => r.json()).catch(() => null),
+    ])
+      .then(([standingsJson, bracketJson]) => {
         if (!mounted) return;
-        if (!json?.success) throw new Error(json?.error || 'fetch failed');
-        setData(json.data || null);
+        if (!standingsJson?.success) throw new Error(standingsJson?.error || 'fetch failed');
+        setData(standingsJson.data || null);
+        if (bracketJson?.success) setBracket(bracketJson.data || null);
       })
       .catch(err => { if (mounted) setError(err.message || 'fetch failed'); })
       .finally(() => { if (mounted) setLoading(false); });
@@ -552,6 +557,12 @@ export default function NBAStandingsPanel({ lang = 'es' }) {
               </Box>
             </Box>
           ))}
+        </Box>
+      )}
+
+      {bracket && (
+        <Box sx={{ mt: 1, pt: 2, borderTop: `1px solid ${C.border}` }}>
+          <PlayoffBracket data={bracket} lang={lang} />
         </Box>
       )}
     </Box>

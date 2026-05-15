@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import TeamLogo from './TeamLogo';
+import PlayoffBracket from './PlayoffBracket';
 import { C, BARLOW, MONO } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -325,6 +326,7 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
   const copy = COPY[lang] ?? COPY.es;
   const storedSelection = readStoredSelection();
   const [data, setData] = useState(null);
+  const [bracket, setBracket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeMode, setActiveMode] = useState(storedSelection.mode);
@@ -337,12 +339,15 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
     setLoading(true);
     setError('');
 
-    fetch(`${API_URL}/api/mlb/standings`)
-      .then((r) => r.json())
-      .then((json) => {
+    Promise.all([
+      fetch(`${API_URL}/api/mlb/standings`).then(r => r.json()),
+      fetch(`${API_URL}/api/mlb/playoffs`).then(r => r.json()).catch(() => null),
+    ])
+      .then(([standingsJson, bracketJson]) => {
         if (!mounted) return;
-        if (!json?.success) throw new Error(json?.error || 'fetch failed');
-        setData(json.data || null);
+        if (!standingsJson?.success) throw new Error(standingsJson?.error || 'fetch failed');
+        setData(standingsJson.data || null);
+        if (bracketJson?.success) setBracket(bracketJson.data || null);
       })
       .catch((err) => {
         if (!mounted) return;
@@ -614,6 +619,12 @@ export default function MLBStandingsPanel({ lang = 'es' }) {
           />
         ))}
       </Box>
+
+      {bracket && (
+        <Box sx={{ mt: 1, pt: 2, borderTop: `1px solid ${C.border}` }}>
+          <PlayoffBracket data={bracket} lang={lang} />
+        </Box>
+      )}
     </Box>
   );
 }

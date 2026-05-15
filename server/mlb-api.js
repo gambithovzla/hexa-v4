@@ -445,6 +445,143 @@ export async function getMlbStandings(season = SEASON) {
   return payload;
 }
 
+// ── Playoff bracket (derived from standings) ─────────────────────────────────
+
+function pctNumber(value) {
+  if (value == null) return 0;
+  const n = Number(value);
+  if (Number.isFinite(n)) return n;
+  const s = String(value);
+  const parsed = Number(s.startsWith('.') ? `0${s}` : s);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function bracketTeam(team, seed, isDivisionWinner = false) {
+  if (!team) return null;
+  return {
+    seed,
+    teamId:       team.teamId,
+    abbreviation: team.abbreviation,
+    name:         team.name,
+    fullName:     team.fullName,
+    wins:         team.wins,
+    losses:       team.losses,
+    pct:          team.pct,
+    isDivisionWinner,
+  };
+}
+
+function makeMlbMatchup({ id, label, top, bottom, round, bestOf }) {
+  return {
+    id, label, round, bestOf,
+    top, bottom,
+    winner: null,
+    series: null,
+  };
+}
+
+let playoffsCache = null;
+const PLAYOFFS_CACHE_TTL_MS = 15 * 60 * 1000;
+
+export async function getMlbPlayoffBracket(season = SEASON) {
+  if (playoffsCache && playoffsCache.season === season && Date.now() < playoffsCache.expiresAt) {
+    return playoffsCache.data;
+  }
+
+  const standings = await getMlbStandings(season);
+
+  const buildLeague = leagueKey => {
+    const league = standings.leagues.find(l => l.key === leagueKey);
+    const divisions = league?.divisions ?? [];
+
+    // Division winners: first team in each division (already sorted by divisionRank)
+    const divisionWinners = divisions
+      .map(d => d.teams?.[0])
+      .filter(Boolean);
+
+    // Non-winners pool for wild cards
+    const wildCardPool = divisions
+      .flatMap(d => (d.teams ?? []).slice(1));
+
+    wildCardPool.sort((a, b) => {
+      const dp = pctNumber(b.pct) - pctNumber(a.pct);
+      if (dp !== 0) return dp;
+      return (b.wins ?? 0) - (a.wins ?? 0) || (a.losses ?? 0) - (b.losses ?? 0);
+    });
+
+    // Division winners seeded 1-3 by record
+    const winnersSorted = [...divisionWinners].sort((a, b) => {
+      const dp = pctNumber(b.pct) - pctNumber(a.pct);
+      if (dp !== 0) return dp;
+      return (b.wins ?? 0) - (a.wins ?? 0) || (a.losses ?? 0) - (b.losses ?? 0);
+    });
+
+    const seeds = [
+      bracketTeam(winnersSorted[0], 1, true),
+      bracketTeam(winnersSorted[1], 2, true),
+      bracketTeam(winnersSorted[2], 3, true),
+      bracketTeam(wildCardPool[0],  4),
+      bracketTeam(wildCardPool[1],  5),
+      bracketTeam(wildCardPool[2],  6),
+    ];
+
+    const wildCard = [
+      makeMlbMatchup({ id: `${leagueKey}-WC-36`, label: '3 vs 6', round: 'wild_card', bestOf: 3,
+        top: seeds[2], bottom: seeds[5] }),
+      makeMlbMatchup({ id: `${leagueKey}-WC-45`, label: '4 vs 5', round: 'wild_card', bestOf: 3,
+        top: seeds[3], bottom: seeds[4] }),
+    ];
+
+    const divisionSeries = [
+      makeMlbMatchup({ id: `${leagueKey}-DS-1`, label: '1 vs WC1 winner', round: 'division_series', bestOf: 5,
+        top: seeds[0], bottom: null }),
+      makeMlbMatchup({ id: `${leagueKey}-DS-2`, label: '2 vs WC2 winner', round: 'division_series', bestOf: 5,
+        top: seeds[1], bottom: null }),
+    ];
+
+    const champSeries = [
+      makeMlbMatchup({ id: `${leagueKey}-CS`, label: `${leagueKey} Championship Series`, round: 'championship', bestOf: 7,
+        top: null, bottom: null }),
+    ];
+
+    return {
+      key: leagueKey,
+      name: league?.name ?? { en: leagueKey, es: leagueKey },
+      seeds,
+      rounds: [
+        { key: 'wild_card',       name: { en: 'Wild Card Series',         es: 'Serie de Wild Card' },    matchups: wildCard },
+        { key: 'division_series', name: { en: `${leagueKey} Division Series`,    es: `Serie Divisional ${leagueKey}` },  matchups: divisionSeries },
+        { key: 'championship',    name: { en: `${leagueKey} Championship Series`, es: `Serie de Campeonato ${leagueKey}` }, matchups: champSeries },
+      ],
+    };
+  };
+
+  const leagues = ['AL', 'NL']
+    .filter(k => standings.leagues.some(l => l.key === k))
+    .map(buildLeague);
+
+  const result = {
+    sport: 'mlb',
+    season,
+    updatedAt: new Date().toISOString(),
+    leagues,
+    final: {
+      key: 'world_series',
+      name: { en: 'World Series', es: 'Serie Mundial' },
+      matchup: makeMlbMatchup({ id: 'WORLD-SERIES', label: 'World Series', round: 'finals', bestOf: 7,
+        top: null, bottom: null }),
+    },
+  };
+
+  playoffsCache = {
+    season,
+    data: result,
+    expiresAt: Date.now() + PLAYOFFS_CACHE_TTL_MS,
+  };
+
+  return result;
+}
+
 /**
  * Stats de temporada de un pitcher.
  * @param {number|string} pitcherId
