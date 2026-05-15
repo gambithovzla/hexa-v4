@@ -44,6 +44,7 @@ const TTL = {
   TEAM_STATS: 6 * 60 * 60 * 1000,   // 6h
   DAILY_GAMES: 5 * 60 * 1000,        // 5min
   RECENT_GAMES: 10 * 60 * 1000,      // 10min
+  STANDINGS: 15 * 60 * 1000,         // 15min
 };
 
 // ── NBA API response parser ───────────────────────────────────────────────────
@@ -295,4 +296,93 @@ export async function getNbaTeamRecentGames(teamId, season = CURRENT_SEASON, las
 
   cacheSet(cacheKey, merged, TTL.RECENT_GAMES);
   return merged;
+}
+
+// ── Standings ────────────────────────────────────────────────────────────────
+
+const CONFERENCE_LABEL = {
+  East: { en: 'Eastern Conference', es: 'Conferencia Este' },
+  West: { en: 'Western Conference', es: 'Conferencia Oeste' },
+};
+
+function parsePlayoffRank(r) {
+  const v = r.PlayoffRank ?? r.ConferenceRank ?? null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normaliseStandingsRow(r) {
+  const wins = Number(r.WINS ?? 0);
+  const losses = Number(r.LOSSES ?? 0);
+  const total = wins + losses;
+  const pct = total > 0 ? wins / total : 0;
+  return {
+    teamId:        r.TeamID,
+    abbreviation:  r.TeamAbbreviation ?? null,
+    name:          r.TeamName ?? null,
+    fullName:      r.TeamCity && r.TeamName ? `${r.TeamCity} ${r.TeamName}` : (r.TeamName ?? null),
+    conference:    r.Conference ?? null,
+    division:      r.Division ?? null,
+    wins,
+    losses,
+    pct:           pct.toFixed(3).replace(/^0/, ''),
+    pctRaw:        pct,
+    gamesBack:     r.ConferenceGamesBack ?? r.GamesBack ?? null,
+    home:          r.HOME ?? null,
+    road:          r.ROAD ?? null,
+    last10:        r.L10 ?? null,
+    streak:        r.strCurrentStreak ?? r.CurrentStreak ?? null,
+    pointsPg:      r.PointsPG ?? null,
+    oppPointsPg:   r.OppPointsPG ?? null,
+    diff:          r.DiffPointsPG ?? null,
+    confRecord:    r.ConferenceRecord ?? null,
+    divRecord:     r.DivisionRecord ?? null,
+    conferenceRank: parsePlayoffRank(r),
+  };
+}
+
+export async function getNbaStandings(season = CURRENT_SEASON) {
+  const cacheKey = `standings:${season}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const data = await nbaFetch('leaguestandingsv3', {
+    LeagueID:   '00',
+    Season:     season,
+    SeasonType: 'Regular Season',
+  });
+
+  const rs = data.resultSets?.find(r => r.name === 'Standings');
+  if (!rs) {
+    console.warn('[nba-api] No Standings resultSet');
+    return { season, updatedAt: new Date().toISOString(), conferences: [] };
+  }
+
+  const rows = parseResultSet(rs).map(normaliseStandingsRow);
+  const byConf = { East: [], West: [] };
+  for (const t of rows) {
+    const key = t.conference === 'East' || t.conference === 'West' ? t.conference : null;
+    if (key) byConf[key].push(t);
+  }
+
+  for (const k of Object.keys(byConf)) {
+    byConf[k].sort((a, b) => {
+      if (a.conferenceRank != null && b.conferenceRank != null) return a.conferenceRank - b.conferenceRank;
+      return (b.pctRaw - a.pctRaw) || (b.wins - a.wins);
+    });
+  }
+
+  const result = {
+    season,
+    updatedAt: new Date().toISOString(),
+    conferences: ['East', 'West'].map(key => ({
+      key,
+      name: CONFERENCE_LABEL[key],
+      teams: byConf[key],
+    })),
+  };
+
+  cacheSet(cacheKey, result, TTL.STANDINGS);
+  console.log(`[nba-api] leaguestandingsv3 ${season}: East ${byConf.East.length}, West ${byConf.West.length}`);
+  return result;
 }

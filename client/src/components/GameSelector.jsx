@@ -154,13 +154,16 @@ function isSelectable(game) {
 }
 
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
-function TeamLogo({ teamId, abbr, color }) {
+function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
   const [failed, setFailed] = useState(false);
   if (!teamId || failed) return null;
+  const src = sport === 'nba'
+    ? `https://cdn.nba.com/logos/nba/${teamId}/primary/L/logo.svg`
+    : `https://www.mlb.com/team-logos/${teamId}.svg`;
   return (
     <Box
       component="img"
-      src={`https://www.mlb.com/team-logos/${teamId}.svg`}
+      src={src}
       alt={abbr}
       onError={() => setFailed(true)}
       sx={{
@@ -239,6 +242,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
 
   const awayColor = MLB_COLORS[away] ?? '#666';
   const homeColor = MLB_COLORS[home] ?? '#666';
+  const sportKey  = game._sport === 'nba' ? 'nba' : 'mlb';
 
   const leftBorderColor = isSelected ? C.accent : status === 'live' ? C.amber : 'transparent';
 
@@ -334,7 +338,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
       >
         {/* Away team */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <TeamLogo teamId={awayId} abbr={away} color={awayColor} />
+          <TeamLogo teamId={awayId} abbr={away} color={awayColor} sport={sportKey} />
           <Typography
             sx={{
               fontFamily: MONO,
@@ -397,7 +401,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
           >
             {home}
           </Typography>
-          <TeamLogo teamId={homeId} abbr={home} color={homeColor} />
+          <TeamLogo teamId={homeId} abbr={home} color={homeColor} sport={sportKey} />
         </Box>
       </Box>
 
