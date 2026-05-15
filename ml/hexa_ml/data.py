@@ -52,11 +52,14 @@ OPTIONAL_FEATURE_COLUMNS = [
 SELECT_COLUMNS = REQUIRED_COLUMNS + OPTIONAL_FEATURE_COLUMNS
 
 
-def load_from_postgres(database_url: str | None = None) -> pd.DataFrame:
+def load_from_postgres(database_url: str | None = None, sport: str = "mlb") -> pd.DataFrame:
     """Read the training dataset directly from `pick_features`.
 
     Returns a DataFrame indexed by `id` with all required + optional columns.
-    Only `source = 'live'` rows are returned (excludes admin tests and backtests).
+    Only `source = 'live'` rows for the requested sport are returned
+    (excludes admin tests, backtests, and cross-sport contamination).
+    Rows with NULL sport are treated as MLB for backwards compatibility
+    with pre-NBA pick_features data.
     """
     url = database_url or get_settings().database_url
     if not url:
@@ -65,11 +68,16 @@ def load_from_postgres(database_url: str | None = None) -> pd.DataFrame:
             "Pass a CSV path to load_dataset() instead for local dev."
         )
 
+    sport_norm = (sport or "mlb").lower()
+    if sport_norm not in {"mlb", "nba"}:
+        raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb' or 'nba'.")
+
     cols = ", ".join(SELECT_COLUMNS)
     sql = f"""
         SELECT {cols}
         FROM pick_features
         WHERE source = 'live'
+          AND COALESCE(sport, 'mlb') = '{sport_norm}'
         ORDER BY game_date ASC, id ASC
     """
     engine = create_engine(url)
@@ -116,11 +124,16 @@ def load_dataset(
     *,
     csv_path: str | Path | None = None,
     database_url: str | None = None,
+    sport: str = "mlb",
 ) -> pd.DataFrame:
-    """Smart loader — uses CSV if given, falls back to Postgres."""
+    """Smart loader — uses CSV if given, falls back to Postgres.
+
+    `sport` is passed through to `load_from_postgres` to keep the MLB
+    training pipeline isolated from NBA picks (and vice versa).
+    """
     if csv_path:
         return load_from_csv(csv_path)
-    return load_from_postgres(database_url)
+    return load_from_postgres(database_url, sport=sport)
 
 
 def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:

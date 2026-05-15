@@ -17,6 +17,7 @@ import { getNbaGamesForDate } from '../nba-api.js';
 import { buildNbaGameContext } from '../nba-context-builder.js';
 import { analyzeNbaGame, analyzeNbaChat } from '../services/oracleNba.js';
 import { getNbaGameOdds, matchNbaOddsToGame, buildMarketOddsForGame } from '../nba-odds.js';
+import { saveNbaPickFeatures, recordNbaShadowRun } from '../services/nbaShadowPersistence.js';
 
 const router = Router();
 
@@ -184,6 +185,41 @@ router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, 
       gameDate: date,
       marketOdds: resolvedOdds,
     });
+
+    // Fire-and-forget: persist NBA pick_features + shadow_model_runs.
+    // Errors are swallowed inside the helpers; never break the response.
+    if (savedPick?.id) {
+      const gameMeta = {
+        homeTeamId: game.home_team_id ?? null,
+        awayTeamId: game.away_team_id ?? null,
+        homeAbbr:   game.home_team_abbr ?? null,
+        awayAbbr:   game.away_team_abbr ?? null,
+      };
+      const gamePkInt = gameId ? parseInt(gameId, 10) : null;
+
+      saveNbaPickFeatures({
+        pickId:    savedPick.id,
+        gamePk:    gamePkInt,
+        gameDate:  date,
+        context,
+        gameMeta,
+        marketOdds: resolvedOdds,
+        pickText:  result.data?.master_prediction?.pick ?? result.data?.best_pick?.detail ?? null,
+        oracleConfidence: result.data?.master_prediction?.oracle_confidence ?? null,
+        userEmail: req.user.email ?? null,
+      }).catch(err => console.warn(`[nba-route] pick_features persist swallowed: ${err.message}`));
+
+      recordNbaShadowRun({
+        userId:    req.user.id,
+        userEmail: req.user.email ?? null,
+        pickId:    savedPick.id,
+        gamePk:    gamePkInt,
+        gameDate:  date,
+        context,
+        gameMeta,
+        analysisData: result.data ?? {},
+      }).catch(err => console.warn(`[nba-route] shadow_model persist swallowed: ${err.message}`));
+    }
 
     console.log(`[nba-route] pick saved id=${savedPick?.id} game=${gameId} conf=${result.data?.master_prediction?.oracle_confidence} odds=${oddsSource ?? 'none'} flags=${context.context_meta?.staleFlags?.length ?? 0}`);
 

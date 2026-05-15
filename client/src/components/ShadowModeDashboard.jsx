@@ -71,6 +71,11 @@ export default function ShadowModeDashboard({ onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
+  const [sport, setSport] = useState(() => localStorage.getItem('hexa_admin_shadow_sport') || 'mlb');
+
+  useEffect(() => {
+    localStorage.setItem('hexa_admin_shadow_sport', sport);
+  }, [sport]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +85,7 @@ export default function ShadowModeDashboard({ onBack }) {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`${API_URL}/api/admin/shadow-model`, {
+        const res = await fetch(`${API_URL}/api/admin/shadow-model?sport=${sport}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();
@@ -95,7 +100,7 @@ export default function ShadowModeDashboard({ onBack }) {
 
     load();
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, sport]);
 
   const summary = data?.summary ?? {};
   const bySource = data?.bySource ?? [];
@@ -133,9 +138,31 @@ export default function ShadowModeDashboard({ onBack }) {
       <Typography sx={{ fontFamily: MONO, fontSize: '1.15rem', fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em', mb: 2 }}>
         ORACLE VS SHADOW MODEL
       </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, mb: 3 }}>
-        Model: {config.modelKey ?? '—'} v{config.modelVersion ?? '—'} · Enabled: {config.enabled ? 'YES' : 'NO'}
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, mb: 2 }}>
+        Model: {config.modelKey ?? '—'} v{config.modelVersion ?? '—'} · Enabled: {config.enabled ? 'YES' : 'NO'} · Sport: {config.sport ?? sport}
       </Typography>
+
+      {/* Sport toggle */}
+      <Box sx={{ display: 'inline-flex', border: `1px solid ${C.cyanLine}`, mb: 3, overflow: 'hidden' }}>
+        {['mlb', 'nba'].map(s => (
+          <Box
+            key={s}
+            component="button"
+            onClick={() => setSport(s)}
+            sx={{
+              px: '14px', py: '5px',
+              bgcolor: sport === s ? C.cyan : 'transparent',
+              color:   sport === s ? '#0a0d14' : C.textMuted,
+              border: 'none',
+              fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.14em',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            {s.toUpperCase()}
+          </Box>
+        ))}
+      </Box>
 
       {loading ? <Typography sx={{ fontFamily: MONO, color: C.textMuted }}>Loading...</Typography> : null}
       {error ? <Typography sx={{ fontFamily: MONO, color: C.red }}>{error}</Typography> : null}
