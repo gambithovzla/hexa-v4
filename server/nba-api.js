@@ -305,10 +305,50 @@ const CONFERENCE_LABEL = {
   West: { en: 'Western Conference', es: 'Conferencia Oeste' },
 };
 
+const DIVISION_ORDER = {
+  East: ['Atlantic', 'Central', 'Southeast'],
+  West: ['Northwest', 'Pacific', 'Southwest'],
+};
+
+const DIVISION_LABEL = {
+  Atlantic:  { en: 'Atlantic',  es: 'Atlántico' },
+  Central:   { en: 'Central',   es: 'Central' },
+  Southeast: { en: 'Southeast', es: 'Sureste' },
+  Northwest: { en: 'Northwest', es: 'Noroeste' },
+  Pacific:   { en: 'Pacific',   es: 'Pacífico' },
+  Southwest: { en: 'Southwest', es: 'Suroeste' },
+};
+
 function parsePlayoffRank(r) {
   const v = r.PlayoffRank ?? r.ConferenceRank ?? null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function parseDivisionRank(r) {
+  const v = r.DivisionRank ?? null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function truthy(v) {
+  if (v === true || v === 1) return true;
+  if (typeof v === 'string') return v.trim() !== '' && v !== '0' && v.toLowerCase() !== 'false';
+  return false;
+}
+
+function derivePlayoffStatus(rank, flags) {
+  if (truthy(flags.eliminatedConference) && !truthy(flags.clinchedPlayoffBirth) && !truthy(flags.clinchedPlayIn)) {
+    return 'out';
+  }
+  if (truthy(flags.clinchedPlayoffBirth) || truthy(flags.clinchedConferenceTitle) || truthy(flags.clinchedDivisionTitle)) {
+    return 'playoff';
+  }
+  if (truthy(flags.clinchedPlayIn)) return 'playIn';
+  if (rank == null) return 'unknown';
+  if (rank <= 6) return 'playoff';
+  if (rank <= 10) return 'playIn';
+  return 'out';
 }
 
 function normaliseStandingsRow(r) {
@@ -316,6 +356,14 @@ function normaliseStandingsRow(r) {
   const losses = Number(r.LOSSES ?? 0);
   const total = wins + losses;
   const pct = total > 0 ? wins / total : 0;
+  const conferenceRank = parsePlayoffRank(r);
+  const flags = {
+    clinchedPlayoffBirth:   r.ClinchedPlayoffBirth   ?? r.ClinchedPlayoffBerth ?? null,
+    clinchedPlayIn:         r.ClinchedPlayIn         ?? null,
+    clinchedConferenceTitle:r.ClinchedConferenceTitle?? null,
+    clinchedDivisionTitle:  r.ClinchedDivisionTitle  ?? null,
+    eliminatedConference:   r.EliminatedConference   ?? null,
+  };
   return {
     teamId:        r.TeamID,
     abbreviation:  r.TeamAbbreviation ?? null,
@@ -327,7 +375,8 @@ function normaliseStandingsRow(r) {
     losses,
     pct:           pct.toFixed(3).replace(/^0/, ''),
     pctRaw:        pct,
-    gamesBack:     r.ConferenceGamesBack ?? r.GamesBack ?? null,
+    gamesBack:        r.ConferenceGamesBack ?? r.GamesBack ?? null,
+    divisionGamesBack:r.DivisionGamesBack ?? null,
     home:          r.HOME ?? null,
     road:          r.ROAD ?? null,
     last10:        r.L10 ?? null,
@@ -337,7 +386,16 @@ function normaliseStandingsRow(r) {
     diff:          r.DiffPointsPG ?? null,
     confRecord:    r.ConferenceRecord ?? null,
     divRecord:     r.DivisionRecord ?? null,
-    conferenceRank: parsePlayoffRank(r),
+    conferenceRank,
+    divisionRank:  parseDivisionRank(r),
+    playoffStatus: derivePlayoffStatus(conferenceRank, flags),
+    flags: {
+      clinchedPlayoff:        truthy(flags.clinchedPlayoffBirth),
+      clinchedPlayIn:         truthy(flags.clinchedPlayIn),
+      clinchedConferenceTitle:truthy(flags.clinchedConferenceTitle),
+      clinchedDivisionTitle:  truthy(flags.clinchedDivisionTitle),
+      eliminated:             truthy(flags.eliminatedConference),
+    },
   };
 }
 
@@ -375,11 +433,24 @@ export async function getNbaStandings(season = CURRENT_SEASON) {
   const result = {
     season,
     updatedAt: new Date().toISOString(),
-    conferences: ['East', 'West'].map(key => ({
-      key,
-      name: CONFERENCE_LABEL[key],
-      teams: byConf[key],
-    })),
+    conferences: ['East', 'West'].map(key => {
+      const teams = byConf[key];
+      const divs = DIVISION_ORDER[key].map(divKey => {
+        const divTeams = teams
+          .filter(t => t.division === divKey)
+          .sort((a, b) => {
+            if (a.divisionRank != null && b.divisionRank != null) return a.divisionRank - b.divisionRank;
+            return (b.pctRaw - a.pctRaw) || (b.wins - a.wins);
+          });
+        return { key: divKey, name: DIVISION_LABEL[divKey], teams: divTeams };
+      });
+      return {
+        key,
+        name: CONFERENCE_LABEL[key],
+        teams,
+        divisions: divs,
+      };
+    }),
   };
 
   cacheSet(cacheKey, result, TTL.STANDINGS);

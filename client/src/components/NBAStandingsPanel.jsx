@@ -7,56 +7,86 @@ const STANDINGS_SELECTION_KEY = 'hexa_nba_standings_selection';
 
 const COPY = {
   en: {
-    eyebrow:    'NBA standings',
-    title:      'Conference table',
-    subtitle:   'Switch between the Eastern and Western conferences. Ordered by official playoff rank.',
-    loading:    'Loading standings...',
-    empty:      'No standings available right now.',
-    error:      'Could not load standings.',
-    season:     'Season',
-    updated:    'Updated',
-    focus:      'Focus',
-    leader:     'Leader',
-    east:       'Eastern Conference',
-    west:       'Western Conference',
-    record:     'Record',
-    pct:        'PCT',
-    gb:         'GB',
-    streak:     'Streak',
-    last10:     'Last 10',
-    diff:       'Pt diff',
-    teams:      'Team',
+    eyebrow:      'NBA standings',
+    title:        'Conference & division table',
+    subtitle:     'Toggle between conference view (with playoff/play-in cutoffs) and division view. Order matches the official NBA playoff race.',
+    loading:      'Loading standings...',
+    empty:        'No standings available right now.',
+    error:        'Could not load standings.',
+    season:       'Season',
+    updated:      'Updated',
+    focus:        'Focus',
+    leader:       'Leader',
+    east:         'Eastern Conference',
+    west:         'Western Conference',
+    viewConf:     'Conference',
+    viewDiv:      'Divisions',
+    confMeta:     'Seeds 1-15',
+    divMeta:      '3 divisions',
+    record:       'Record',
+    pct:          'PCT',
+    gb:           'GB',
+    streak:       'Streak',
+    last10:       'Last 10',
+    diff:         'Pt diff',
+    teams:        'Team',
+    playoff:      'Playoff',
+    playIn:       'Play-In',
+    out:          'Out',
+    playoffCut:   'Playoff cutoff',
+    playInCut:    'Play-In cutoff',
+    division:     'Division',
   },
   es: {
-    eyebrow:    'Posiciones NBA',
-    title:      'Tabla por conferencia',
-    subtitle:   'Cambia entre la Conferencia Este y Oeste. Ordenado por playoff rank oficial.',
-    loading:    'Cargando posiciones...',
-    empty:      'No hay posiciones disponibles ahora mismo.',
-    error:      'No se pudieron cargar las posiciones.',
-    season:     'Temporada',
-    updated:    'Actualizado',
-    focus:      'Foco',
-    leader:     'Líder',
-    east:       'Conferencia Este',
-    west:       'Conferencia Oeste',
-    record:     'Récord',
-    pct:        'PCT',
-    gb:         'GB',
-    streak:     'Racha',
-    last10:     'Últimos 10',
-    diff:       'Dif. puntos',
-    teams:      'Equipo',
+    eyebrow:      'Posiciones NBA',
+    title:        'Tabla por conferencia y división',
+    subtitle:     'Alterna entre vista por conferencia (con cortes de playoff/play-in) y vista por división. Orden oficial según la carrera al playoff.',
+    loading:      'Cargando posiciones...',
+    empty:        'No hay posiciones disponibles ahora mismo.',
+    error:        'No se pudieron cargar las posiciones.',
+    season:       'Temporada',
+    updated:      'Actualizado',
+    focus:        'Foco',
+    leader:       'Líder',
+    east:         'Conferencia Este',
+    west:         'Conferencia Oeste',
+    viewConf:     'Conferencia',
+    viewDiv:      'Divisiones',
+    confMeta:     'Seeds 1-15',
+    divMeta:      '3 divisiones',
+    record:       'Récord',
+    pct:          'PCT',
+    gb:           'GB',
+    streak:       'Racha',
+    last10:       'Últimos 10',
+    diff:         'Dif. puntos',
+    teams:        'Equipo',
+    playoff:      'Playoff',
+    playIn:       'Play-In',
+    out:          'Eliminado',
+    playoffCut:   'Corte playoff',
+    playInCut:    'Corte play-in',
+    division:     'División',
   },
 };
 
+const PLAYOFF_TONE = {
+  playoff: { accentKey: 'green' },
+  playIn:  { accentKey: 'accent' },
+  out:     { accentKey: 'muted'  },
+  unknown: { accentKey: 'muted'  },
+};
+
 function readStoredSelection() {
-  if (typeof window === 'undefined') return { conference: 'East' };
+  if (typeof window === 'undefined') return { conference: 'East', viewMode: 'conference' };
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STANDINGS_SELECTION_KEY) || '{}');
-    return { conference: parsed.conference === 'West' ? 'West' : 'East' };
+    return {
+      conference: parsed.conference === 'West' ? 'West' : 'East',
+      viewMode:   parsed.viewMode   === 'division' ? 'division' : 'conference',
+    };
   } catch {
-    return { conference: 'East' };
+    return { conference: 'East', viewMode: 'conference' };
   }
 }
 
@@ -175,7 +205,53 @@ function MetaPill({ label, value, accent = C.cyan }) {
   );
 }
 
-function TeamRow({ team, rank, copy, selected, leader, onToggle }) {
+function PlayoffBadge({ status, copy }) {
+  const map = {
+    playoff: { label: copy.playoff, color: C.green,      bg: 'rgba(0,200,140,0.12)' },
+    playIn:  { label: copy.playIn,  color: C.accent,     bg: 'rgba(255,102,0,0.12)' },
+    out:     { label: copy.out,     color: C.textMuted,  bg: 'rgba(255,255,255,0.04)' },
+  };
+  const cfg = map[status] ?? null;
+  if (!cfg) return null;
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex', alignItems: 'center',
+        px: '7px', py: '2px',
+        border: `1px solid ${cfg.color}66`,
+        background: cfg.bg,
+        fontFamily: MONO, fontSize: '0.54rem', fontWeight: 700,
+        letterSpacing: '0.14em', textTransform: 'uppercase',
+        color: cfg.color,
+      }}
+    >
+      {cfg.label}
+    </Box>
+  );
+}
+
+function CutoffDivider({ label, color }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, my: 0.4 }}>
+      <Box sx={{ flex: 1, height: '1px', background: `${color}55` }} />
+      <Typography
+        sx={{
+          fontFamily: MONO, fontSize: '0.54rem', color,
+          letterSpacing: '0.2em', textTransform: 'uppercase',
+          px: 1, py: 0.4,
+          border: `1px solid ${color}55`,
+          background: 'rgba(0,0,0,0.4)',
+        }}
+      >
+        {label}
+      </Typography>
+      <Box sx={{ flex: 1, height: '1px', background: `${color}55` }} />
+    </Box>
+  );
+}
+
+function TeamRow({ team, rank, copy, selected, leader, onToggle, showPlayoffBadge, showDivision }) {
   const diffNum = Number(team.diff);
   const diffAccent = !Number.isFinite(diffNum) ? C.textSecondary : diffNum >= 0 ? C.green : C.red;
   const diffLabel = !Number.isFinite(diffNum) ? '-' : (diffNum > 0 ? `+${diffNum.toFixed(1)}` : diffNum.toFixed(1));
@@ -215,11 +291,15 @@ function TeamRow({ team, rank, copy, selected, leader, onToggle }) {
         <NbaTeamLogo teamId={team.teamId} abbr={team.abbreviation} size={44} />
 
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontFamily: BARLOW, fontSize: '0.94rem', fontWeight: 800, color: C.textPrimary, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.02 }}>
-            {team.abbreviation || team.name}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+            <Typography sx={{ fontFamily: BARLOW, fontSize: '0.94rem', fontWeight: 800, color: C.textPrimary, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.02 }}>
+              {team.abbreviation || team.name}
+            </Typography>
+            {showPlayoffBadge && <PlayoffBadge status={team.playoffStatus} copy={copy} />}
+          </Box>
           <Typography noWrap sx={{ fontFamily: MONO, fontSize: '0.64rem', color: C.textMuted, mt: 0.25 }}>
             {team.fullName}
+            {showDivision && team.division ? ` · ${team.division}` : ''}
           </Typography>
         </Box>
 
@@ -260,6 +340,7 @@ export default function NBAStandingsPanel({ lang = 'es' }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [conference, setConference] = useState(stored.conference);
+  const [viewMode, setViewMode] = useState(stored.viewMode);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
 
   useEffect(() => {
@@ -282,8 +363,8 @@ export default function NBAStandingsPanel({ lang = 'es' }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(STANDINGS_SELECTION_KEY, JSON.stringify({ conference }));
-  }, [conference]);
+    window.localStorage.setItem(STANDINGS_SELECTION_KEY, JSON.stringify({ conference, viewMode }));
+  }, [conference, viewMode]);
 
   const conferences = data?.conferences ?? [];
   const current = useMemo(
@@ -378,6 +459,23 @@ export default function NBAStandingsPanel({ lang = 'es' }) {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.25 }}>
         <SelectorButton
+          label={copy.viewConf}
+          meta={copy.confMeta}
+          active={viewMode === 'conference'}
+          onClick={() => { setViewMode('conference'); setSelectedTeamId(null); }}
+          accent={C.green}
+        />
+        <SelectorButton
+          label={copy.viewDiv}
+          meta={copy.divMeta}
+          active={viewMode === 'division'}
+          onClick={() => { setViewMode('division'); setSelectedTeamId(null); }}
+          accent={C.cyan}
+        />
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.25 }}>
+        <SelectorButton
           label={copy.east}
           meta="East"
           active={conference === 'East'}
@@ -393,19 +491,69 @@ export default function NBAStandingsPanel({ lang = 'es' }) {
         />
       </Box>
 
-      <Box sx={{ display: 'grid', gap: 1.1 }}>
-        {teams.map((team, index) => (
-          <TeamRow
-            key={team.teamId ?? `${team.abbreviation}-${index}`}
-            team={team}
-            rank={team.conferenceRank ?? index + 1}
-            copy={copy}
-            selected={selectedTeamId === team.teamId}
-            leader={index === 0}
-            onToggle={() => setSelectedTeamId(v => v === team.teamId ? null : team.teamId)}
-          />
-        ))}
-      </Box>
+      {viewMode === 'conference' ? (
+        <Box sx={{ display: 'grid', gap: 1.1 }}>
+          {teams.map((team, index) => {
+            const rank = team.conferenceRank ?? index + 1;
+            const row = (
+              <TeamRow
+                key={team.teamId ?? `${team.abbreviation}-${index}`}
+                team={team}
+                rank={rank}
+                copy={copy}
+                selected={selectedTeamId === team.teamId}
+                leader={index === 0}
+                showPlayoffBadge
+                onToggle={() => setSelectedTeamId(v => v === team.teamId ? null : team.teamId)}
+              />
+            );
+            const dividers = [];
+            if (rank === 6) dividers.push(<CutoffDivider key={`cut-pl-${team.teamId}`} label={copy.playoffCut}  color={C.green} />);
+            if (rank === 10) dividers.push(<CutoffDivider key={`cut-pi-${team.teamId}`} label={copy.playInCut}  color={C.accent} />);
+            return [row, ...dividers];
+          })}
+        </Box>
+      ) : (
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          {(current.divisions ?? []).map(div => (
+            <Box key={div.key} sx={{ display: 'grid', gap: 1 }}>
+              <Box
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.2,
+                  px: '12px', py: '8px',
+                  border: `1px solid ${C.cyanLine}`,
+                  background: 'rgba(0,217,255,0.05)',
+                }}
+              >
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                  {copy.division}
+                </Typography>
+                <Typography sx={{ fontFamily: BARLOW, fontSize: '0.92rem', fontWeight: 800, color: C.cyan, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  {div.name?.[lang] ?? div.name?.en ?? div.key}
+                </Typography>
+                <Box sx={{ flex: 1 }} />
+                <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted }}>
+                  {(div.teams ?? []).length} {copy.teams.toLowerCase()}{(div.teams ?? []).length === 1 ? '' : 's'}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'grid', gap: 1.1 }}>
+                {(div.teams ?? []).map((team, index) => (
+                  <TeamRow
+                    key={team.teamId ?? `${team.abbreviation}-${index}`}
+                    team={team}
+                    rank={team.divisionRank ?? index + 1}
+                    copy={copy}
+                    selected={selectedTeamId === team.teamId}
+                    leader={index === 0}
+                    showPlayoffBadge
+                    onToggle={() => setSelectedTeamId(v => v === team.teamId ? null : team.teamId)}
+                  />
+                ))}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }
