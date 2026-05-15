@@ -41,11 +41,14 @@ logger = logging.getLogger("hexa_ml.serve")
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Pre-load whatever artifacts exist so the first request is faster."""
     artifacts = Path(get_settings().artifacts_dir)
-    if artifacts.exists():
+    # Always ensure the dir exists — critical when using a Railway Volume
+    # mounted at /data with HEXA_ML_ARTIFACTS_DIR=/data/artifacts.
+    artifacts.mkdir(parents=True, exist_ok=True)
+    if any(artifacts.glob("*.pkl")):
         results = get_registry().reload()
         logger.info("Startup reload: %s", results)
     else:
-        logger.info("No artifacts dir yet — running cold")
+        logger.info("No model artifacts found in %s — running cold", artifacts)
     yield
 
 
