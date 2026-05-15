@@ -143,6 +143,7 @@ Configurable por env vars:
 - `SMOKE_TIMEOUT_MS` (default `20000`)
 - `SMOKE_RETRIES` (default `3`)
 - `SMOKE_RETRY_DELAY_MS` (default `1000`)
+- `SMOKE_ADMIN_TOKEN` (opcional; si existe valida también `/api/admin/ml/equity?sport=mlb`)
 
 CI/CD:
 - Workflow automático: `.github/workflows/mlb-smoke.yml`

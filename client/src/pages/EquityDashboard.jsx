@@ -581,6 +581,7 @@ export default function EquityDashboard({ token, onBack }) {
 
   const s = data?.summary;
   const series = data?.series ?? [];
+  const rollingSharpeData = data?.rollingSharpe30d ?? [];
 
   // Recharts needs numeric x-axis; use index
   const chartData = series.map((p, i) => ({ ...p, i: i + 1 }));
@@ -779,6 +780,43 @@ export default function EquityDashboard({ token, onBack }) {
                     dot={false}
                   />
                 </AreaChart>
+              </ResponsiveContainer>
+            </Box>
+          )}
+
+          {/* ── Rolling Sharpe 30d ── */}
+          {rollingSharpeData.length > 0 && (
+            <Box sx={{ background: SURF, border: `1px solid ${BORDER}`, p: '20px', mb: '24px' }}>
+              <SectionHeader>Rolling Sharpe (30d)</SectionHeader>
+              <ResponsiveContainer width="100%" height={160}>
+                <ComposedChart data={rollingSharpeData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke={BORDER} strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => shortDate(value)}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={40}
+                  />
+                  <ReferenceLine y={0} stroke={MUTED} strokeDasharray="4 4" />
+                  <Tooltip
+                    contentStyle={{ background: '#0a0d14', border: `1px solid ${BORDER}` }}
+                    labelStyle={{ fontFamily: MONO, fontSize: 10, color: MUTED }}
+                    formatter={(value, _name, payload) => [
+                      Number(value).toFixed(2),
+                      `Sharpe (n=${payload?.payload?.sampleSize ?? 0})`,
+                    ]}
+                    labelFormatter={(label) => shortDate(label)}
+                  />
+                  <Line type="monotone" dataKey="sharpe" stroke={CYAN} strokeWidth={2} dot={false} />
+                </ComposedChart>
               </ResponsiveContainer>
             </Box>
           )}

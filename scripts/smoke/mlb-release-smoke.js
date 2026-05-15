@@ -12,6 +12,7 @@ const WAIT_FOR_SERVER = process.env.SMOKE_WAIT_FOR_SERVER !== '0';
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 20000);
 const RETRIES = Number(process.env.SMOKE_RETRIES || 3);
 const RETRY_DELAY_MS = Number(process.env.SMOKE_RETRY_DELAY_MS || 1000);
+const ADMIN_TOKEN = process.env.SMOKE_ADMIN_TOKEN || '';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -19,11 +20,14 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs) {
+async function fetchJsonWithTimeout(url, timeoutMs, headers = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json', ...headers },
+    });
     const text = await res.text();
     let data = null;
     try {
@@ -113,9 +117,27 @@ async function run() {
     },
   ];
 
+  if (ADMIN_TOKEN) {
+    checks.push({
+      name: 'admin-equity-mlb',
+      url: `${BASE_URL}/api/admin/ml/equity?sport=mlb`,
+      headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
+      validate: (res) => {
+        assert(res.ok, `expected 2xx, got ${res.status}`);
+        assert(res.data && typeof res.data === 'object', 'expected JSON object body');
+        assert(res.data.success === true, 'expected success=true');
+        assert(res.data.data && typeof res.data.data === 'object', 'expected data object');
+        assert(res.data.data.summary && typeof res.data.data.summary === 'object', 'expected summary object');
+        assert(Array.isArray(res.data.data.rollingSharpe30d), 'expected rollingSharpe30d[] array');
+      },
+    });
+  } else {
+    console.log('[mlb-smoke] skipping admin-equity-mlb (SMOKE_ADMIN_TOKEN not set)');
+  }
+
   for (const check of checks) {
     await withRetries(check.name, async () => {
-      const res = await fetchJsonWithTimeout(check.url, TIMEOUT_MS);
+      const res = await fetchJsonWithTimeout(check.url, TIMEOUT_MS, check.headers);
       check.validate(res);
       console.log(`[mlb-smoke] PASS ${check.name} status=${res.status}`);
     });
