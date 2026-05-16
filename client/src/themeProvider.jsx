@@ -31,13 +31,18 @@ import { buildMuiTheme } from './styles/muiTheme.js';
 const MODE_KEY  = 'hexa.theme.mode';
 const BRAND_KEY = 'hexa.theme.brand';
 
-const VALID_MODES  = ['light', 'dark', 'system'];
+// 'dark' was removed from the user-selectable mode set; SYSTEM still
+// resolves to dark when the OS prefers it. Any pre-existing 'dark' value
+// in localStorage gets transparently coerced to 'system' on read so
+// returning users don't get stuck on an invalid option.
+const VALID_MODES  = ['light', 'system'];
 const VALID_BRANDS = ['classic', 'league-kinetic'];
 
 function readStored(key, valid, fallback) {
   if (typeof window === 'undefined') return fallback;
   try {
     const v = window.localStorage.getItem(key);
+    if (v === 'dark' && key === 'hexa.theme.mode') return 'system';
     if (v && valid.includes(v)) return v;
   } catch { /* localStorage unavailable */ }
   return fallback;
@@ -52,7 +57,7 @@ function detectSystemMode() {
 const HexaThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
-  const [mode,  setModeState]  = useState(() => readStored(MODE_KEY,  VALID_MODES,  'dark'));
+  const [mode,  setModeState]  = useState(() => readStored(MODE_KEY,  VALID_MODES,  'system'));
   const [brand, setBrandState] = useState(() => readStored(BRAND_KEY, VALID_BRANDS, 'classic'));
   const [systemMode, setSystemMode] = useState(() => detectSystemMode());
 

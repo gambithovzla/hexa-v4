@@ -13,12 +13,15 @@
 
 import { useHexaTheme } from '../themeProvider';
 
+// 'dark' was removed as a user-selectable option. The dark palette stays in
+// the codebase — SYSTEM resolves to it when the OS prefers dark — but the
+// user can no longer pick it manually.
 const COPY = {
-  en: { light: 'LIGHT', system: 'SYSTEM', dark: 'DARK', a11y: 'Theme' },
-  es: { light: 'CLARO', system: 'AUTO',   dark: 'OSCURO', a11y: 'Tema' },
+  en: { light: 'LIGHT', system: 'SYSTEM', a11y: 'Theme' },
+  es: { light: 'CLARO', system: 'AUTO',   a11y: 'Tema' },
 };
 
-const OPTIONS = ['light', 'system', 'dark'];
+const OPTIONS = ['light', 'system'];
 
 export default function ThemeToggle({ lang = 'en', layout = 'pill' }) {
   const { mode, setMode, C } = useHexaTheme();

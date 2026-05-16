@@ -38,7 +38,10 @@
       (function () {
         try {
           var brand = localStorage.getItem('hexa.theme.brand') || 'league-kinetic';
-          var mode  = localStorage.getItem('hexa.theme.mode')  || 'dark';
+          var mode  = localStorage.getItem('hexa.theme.mode')  || 'system';
+          // 'dark' is no longer a manually-pickable option; coerce legacy
+          // values so the UI never reads an invalid mode.
+          if (mode === 'dark') mode = 'system';
           if (mode === 'system' && window.matchMedia) {
             mode = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
           }
