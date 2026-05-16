@@ -403,6 +403,7 @@ router.get('/ml/chat-picks-stats', async (_req, res) => {
          COUNT(*)                                  AS total,
          COUNT(*) FILTER (WHERE result = 'win')    AS wins,
          COUNT(*) FILTER (WHERE result = 'loss')   AS losses,
+         COUNT(*) FILTER (WHERE result = 'push')   AS pushes,
          COUNT(*) FILTER (WHERE result IS NULL OR result = 'pending') AS pending,
          COUNT(DISTINCT chat_session_id) FILTER (WHERE chat_session_id IS NOT NULL) AS unique_sessions,
          MIN(created_at)                           AS first_at,
