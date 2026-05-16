@@ -325,8 +325,41 @@ router.post('/ml/retrain/ensemble', async (req, res) => {
   }
 
   const durationMs = Date.now() - t0;
-  const status = response && !errorText ? 'success' : 'failed';
+  const httpOk = response && !errorText;
   const metrics = _extractMetrics(response, 'ensemble');
+
+  // Detect the "soft skip" case: sidecar returned 200 but every market
+  // in the summary is null, which means train_ensemble_one() bailed out
+  // (not enough eligible rows in shadow_model_runs). The /retrain/ensemble
+  // endpoint also short-circuits in <1s in that case. Surface this to the
+  // UI as a warning, not a success, and include the actual eligible-row
+  // count so the admin knows how far from the threshold they are.
+  let skipped = false;
+  let eligibleRows = null;
+  let minRowsRequired = Number(req.body?.min_rows) || 50;
+  if (httpOk) {
+    const summary = response.summary ?? {};
+    const marketKeys = Object.keys(summary);
+    const allNull = marketKeys.length > 0 && marketKeys.every((k) => summary[k] == null);
+    if (allNull || metrics.nTrain == null) {
+      skipped = true;
+      try {
+        const { rows } = await pool.query(
+          `SELECT COUNT(*)::INT AS eligible
+             FROM shadow_model_runs
+            WHERE oracle_home_win_prob IS NOT NULL
+              AND shadow_home_win_prob IS NOT NULL
+              AND python_model_score   IS NOT NULL
+              AND actual_winner_id     IS NOT NULL`
+        );
+        eligibleRows = rows?.[0]?.eligible ?? 0;
+      } catch (err) {
+        console.warn(`[admin-ml] eligible-rows query failed: ${err.message}`);
+      }
+    }
+  }
+
+  const status = httpOk ? (skipped ? 'skipped' : 'success') : 'failed';
 
   await _logRetrain({
     userId: req.user?.id,
@@ -335,11 +368,14 @@ router.post('/ml/retrain/ensemble', async (req, res) => {
     status,
     ...metrics,
     durationMs,
-    error: errorText,
+    error: errorText
+      ?? (skipped
+        ? `Skipped — only ${eligibleRows ?? '?'} eligible rows (need >= ${minRowsRequired})`
+        : null),
     response,
   });
 
-  if (status !== 'success') {
+  if (status === 'failed') {
     return res.status(httpStatus >= 400 ? httpStatus : 502).json({
       success: false,
       error: errorText ?? 'Ensemble retrain failed',
@@ -349,6 +385,9 @@ router.post('/ml/retrain/ensemble', async (req, res) => {
 
   res.json({
     success: true,
+    skipped,
+    eligible_rows: eligibleRows,
+    min_rows_required: minRowsRequired,
     duration_ms: durationMs,
     metrics,
     response,

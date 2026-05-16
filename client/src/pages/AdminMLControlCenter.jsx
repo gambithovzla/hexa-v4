@@ -94,6 +94,8 @@ const STRINGS = {
     toastOk:          (m) => `RETRAIN OK · ${m}`,
     toastFail:        (m) => `RETRAIN FAILED · ${m}`,
     ensembleOk:       'ENSEMBLE RETRAINED',
+    ensembleSkipped:  'ENSEMBLE SKIPPED',
+    ensembleSkippedMsg: (have, need) => `Only ${have ?? '?'} eligible rows in shadow_model_runs (need ≥${need}). Waiting for more resolved picks with all 3 sources.`,
     ensembleFail:     'ENSEMBLE RETRAIN FAILED',
     allOk:            'RETRAIN ALL OK',
     allFail:          'RETRAIN ALL FAILED',
@@ -158,6 +160,8 @@ const STRINGS = {
     toastOk:          (m) => `REENTRENADO OK · ${m}`,
     toastFail:        (m) => `FALLO REENTRENAMIENTO · ${m}`,
     ensembleOk:       'ENSEMBLE REENTRENADO',
+    ensembleSkipped:  'ENSEMBLE OMITIDO',
+    ensembleSkippedMsg: (have, need) => `Solo ${have ?? '?'} filas elegibles en shadow_model_runs (se necesitan ≥${need}). Faltan picks resueltos con las 3 fuentes.`,
     ensembleFail:     'FALLO ENSEMBLE',
     allOk:            'REENTRENADO TODO OK',
     allFail:          'FALLO REENTRENAMIENTO GLOBAL',
@@ -918,7 +922,7 @@ function RetrainLog({ rows, T }) {
         }}>
           <span>{timeAgo(r.created_at)}</span>
           <span style={{ color: MARKET_TINTS[r.market] ?? INK1 }}>{r.market}</span>
-          <span style={{ color: r.status === 'success' ? GREEN : RED }}>{r.status}</span>
+          <span style={{ color: r.status === 'success' ? GREEN : r.status === 'skipped' ? AMBER : RED }} title={r.error ?? ''}>{r.status}</span>
           <span>{fmtBrier(r.brier)}</span>
           <span>{r.n_train ?? '—'}</span>
           <span>{r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : '—'}</span>
@@ -1080,10 +1084,17 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error ?? `http ${r.status}`);
-      setToast({
-        kind: 'ok', title: T.ensembleOk,
-        message: `Brier ${fmtBrier(j?.metrics?.brier)} · ${(j.duration_ms / 1000).toFixed(1)}s`,
-      });
+      if (j?.skipped) {
+        setToast({
+          kind: 'warn', title: T.ensembleSkipped,
+          message: T.ensembleSkippedMsg(j?.eligible_rows, j?.min_rows_required ?? 50),
+        });
+      } else {
+        setToast({
+          kind: 'ok', title: T.ensembleOk,
+          message: `Brier ${fmtBrier(j?.metrics?.brier)} · ${(j.duration_ms / 1000).toFixed(1)}s`,
+        });
+      }
       await Promise.all([fetchEnsemble(), fetchLog(), fetchStatus()]);
     } catch (err) {
       setToast({ kind: 'error', title: T.ensembleFail, message: err.message });
