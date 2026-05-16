@@ -24,6 +24,8 @@ import { useMemo } from 'react';
 import { Box, Typography, Tooltip } from '@mui/material';
 import { useHexaTheme } from '../../themeProvider';
 import { MONO, DISPLAY } from '../../theme';
+import BrandToggle from './BrandToggle';
+import ThemeToggle from '../ThemeToggle';
 
 // ── SVG icons ───────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 18 }) => (
@@ -394,6 +396,34 @@ export default function Sidebar({
           </Box>
         ))}
       </Box>
+
+      {/* Brand + theme toggles in the sidebar footer so mobile users (who
+          get the sidebar as a drawer) can switch identity. Hidden when
+          desktop sidebar is collapsed since the Topbar has the same pair. */}
+      {!collapsed && (
+        <Box
+          sx={{
+            borderTop:    `1px solid ${C.line}`,
+            p:            '12px',
+            display:      'flex',
+            flexDirection: 'column',
+            gap:          '8px',
+          }}
+        >
+          <Typography sx={{
+            fontFamily:    MONO,
+            fontSize:      '0.52rem',
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color:         C.ink3,
+            pb:            '2px',
+          }}>
+            {lang === 'es' ? 'Interfaz' : 'Interface'}
+          </Typography>
+          <BrandToggle lang={lang} />
+          <ThemeToggle lang={lang} layout="pill" />
+        </Box>
+      )}
 
       <Box
         sx={{
