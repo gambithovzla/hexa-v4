@@ -832,8 +832,11 @@ function ChatPicksSection({ stats, T }) {
   const total   = Number(s.total ?? 0);
   const wins    = Number(s.wins ?? 0);
   const losses  = Number(s.losses ?? 0);
+  const pushes  = Number(s.pushes ?? 0);
   const pending = Number(s.pending ?? 0);
   const sessions = Number(s.unique_sessions ?? 0);
+  // Pushes excluded from the denominator — industry-standard sportsbook
+  // accounting treats a push as no-action, not a half-win/half-loss.
   const settled = wins + losses;
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
 
@@ -868,10 +871,11 @@ function ChatPicksSection({ stats, T }) {
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(5, 1fr)' }, gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(6, 1fr)' }, gap: 1.5 }}>
         <Metric label="TOTAL"    value={total} color={CYAN} />
         <Metric label="WINS"     value={wins} color={GREEN} />
         <Metric label="LOSSES"   value={losses} color={RED} />
+        <Metric label="PUSHES"   value={pushes} color={MUTED} />
         <Metric label="PENDING"  value={pending} color={AMBER} />
         <Metric label="WIN RATE" value={winRate ? `${winRate}%` : '—'} color={winRate && Number(winRate) >= 50 ? GREEN : MUTED} />
       </Box>
