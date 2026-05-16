@@ -35,7 +35,8 @@ const ICONS = {
 
 function L(en, es, lang) { return lang === 'es' ? es : en; }
 
-function NavBtn({ icon, label, active, onClick, C }) {
+function NavBtn({ icon, label, active, onClick, C, accent }) {
+  const ACCENT = accent || C.cyan;
   return (
     <Box
       component="button"
@@ -47,19 +48,19 @@ function NavBtn({ icon, label, active, onClick, C }) {
         py: '8px',
         bgcolor: 'transparent',
         border: 'none',
-        color: active ? C.cyan : C.ink2,
+        color: active ? ACCENT : C.ink2,
         cursor: 'pointer',
         minHeight: 56,
         position: 'relative',
         transition: 'color 0.18s',
-        '&:hover': { color: active ? C.cyan : C.ink0 },
+        '&:hover': { color: active ? ACCENT : C.ink0 },
       }}
     >
       {active && (
         <Box sx={{
           position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-          width: 28, height: 2, bgcolor: C.cyan,
-          boxShadow: C.glowsEnabled ? `0 0 8px ${C.cyan}` : 'none',
+          width: 28, height: 2, bgcolor: ACCENT,
+          boxShadow: C.glowsEnabled ? `0 0 8px ${ACCENT}` : 'none',
         }} />
       )}
       {icon}
@@ -80,7 +81,10 @@ export default function BottomNav({
   isAdmin = false,
   onOracleChat,
 }) {
-  const { C } = useHexaTheme();
+  const { C, isLeague } = useHexaTheme();
+  // Active state uses CSS var so livery follows data-sport flips
+  // without re-rendering. Classic keeps its cyan.
+  const accent = isLeague ? 'var(--sport-accent)' : C.cyan;
 
   const fabIsOracle = isAdmin && Boolean(onOracleChat);
   const fabAction = fabIsOracle ? onOracleChat : () => onTabChange?.('game');
@@ -111,6 +115,7 @@ export default function BottomNav({
         active={activeTab === 'pizarra'}
         onClick={() => onTabChange?.('pizarra')}
         C={C}
+        accent={accent}
       />
       <NavBtn
         icon={ICONS.live}
@@ -118,6 +123,7 @@ export default function BottomNav({
         active={activeTab === 'live'}
         onClick={() => onTabChange?.('live')}
         C={C}
+        accent={accent}
       />
 
       {/* Central hex FAB */}
@@ -131,14 +137,20 @@ export default function BottomNav({
             top: -22,
             width: 64, height: 64,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: `linear-gradient(135deg, ${C.cyan}, ${C.accent})`,
-            color: '#0a0d14',
+            // League shows the brand shield clip + sport livery flat colour.
+            // Classic keeps the cyber gradient.
+            background: isLeague
+              ? 'var(--sport-accent)'
+              : `linear-gradient(135deg, ${C.cyan}, ${C.accent})`,
+            color: isLeague ? 'var(--sport-accent-text, #fff)' : '#0a0d14',
             border: 'none',
             cursor: 'pointer',
-            clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)',
-            boxShadow: C.glowsEnabled
+            clipPath: isLeague
+              ? 'polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%)'
+              : 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)',
+            boxShadow: C.glowsEnabled && !isLeague
               ? `0 0 24px ${C.cyan}, 0 8px 24px rgba(0,0,0,0.6)`
-              : '0 4px 12px rgba(0,0,0,0.2)',
+              : '0 4px 12px rgba(0,0,0,0.4)',
             transition: 'transform 0.18s',
             '&:active': { transform: 'scale(0.95)' },
           }}
@@ -160,6 +172,7 @@ export default function BottomNav({
         active={activeTab === 'history'}
         onClick={() => onTabChange?.('history')}
         C={C}
+        accent={accent}
       />
       <NavBtn
         icon={ICONS.account}
@@ -167,6 +180,7 @@ export default function BottomNav({
         active={activeTab === 'bankroll'}
         onClick={() => onTabChange?.('bankroll')}
         C={C}
+        accent={accent}
       />
     </Box>
   );

@@ -13,6 +13,11 @@ export function SportProvider({ children }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     localStorage.setItem(STORAGE_KEY, sport);
+    // Mirror on <body data-sport="…"> so the League × Kinetic CSS layer
+    // can swap --sport-accent (lava ↔ volt) without React re-renders.
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.setAttribute('data-sport', sport);
+    }
   }, [sport]);
 
   const setSport = (nextSport) => {

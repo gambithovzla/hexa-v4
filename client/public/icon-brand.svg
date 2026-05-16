@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Hexa Oracle">
+  <!-- Navy canvas -->
+  <rect width="512" height="512" fill="#0B2540"/>
+  <!-- Cream shield (clip-path: 0 0, 100% 0, 100% 70%, 50% 100%, 0 70%) scaled into 512 -->
+  <!-- Shield bounding box: 96,96 to 416,416 (320x320). Shield bottom point at y=416. -->
+  <path d="M96 96 L416 96 L416 320 L256 416 L96 320 Z" fill="#F4ECD8"/>
+  <!-- Lava red bar — 6px equivalent inside shield, sitting at ~22% from shield top -->
+  <rect x="96" y="166" width="320" height="14" fill="#E63946"/>
+  <!-- H glyph in Oswald-like weight. We embed a path since the font may not be present at boot. -->
+  <text x="256" y="338"
+        text-anchor="middle"
+        font-family="Oswald, 'Barlow Condensed', 'Liberation Sans', Impact, sans-serif"
+        font-weight="700"
+        font-size="220"
+        fill="#0B2540"
+        letter-spacing="-4">H</text>
+</svg>

@@ -16,9 +16,12 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { Shell }             from './components/shell';
-import GameSelector         from './components/GameSelector';
-import AnalysisPanel        from './components/AnalysisPanel';
-import HistoryPanel         from './components/HistoryPanel';
+import GameSelectorClassic  from './components/GameSelector';
+import AnalysisPanelClassic from './components/AnalysisPanel';
+import GameSelectorLeague   from './components/GameSelectorLeague';
+import AnalysisPanelLeague  from './components/AnalysisPanelLeague';
+import HistoryPanelClassic  from './components/HistoryPanel';
+import HistoryPanelLeague   from './components/HistoryPanelLeague';
 import InsightsSemana       from './components/InsightsSemana';
 import BankrollTracker      from './components/BankrollTracker';
 import OddsLab              from './components/OddsLab';
@@ -44,6 +47,7 @@ import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
+import HexaBoardLeague     from './components/HexaBoardLeague';
 import LearningCenter      from './components/LearningCenter';
 import MLBStandingsPanel   from './components/MLBStandingsPanel';
 import NBAStandingsPanel   from './components/NBAStandingsPanel';
@@ -52,6 +56,7 @@ import WhatsAppSupport     from './components/WhatsAppSupport';
 import useHistory           from './hooks/useHistory';
 import { C, MONO, BARLOW } from './theme';
 import { useSport } from './context/SportContext';
+import { useHexaTheme } from './themeProvider';
 import { getActiveSportOptions, SPORT_META } from './config/sports';
 import { getSportCapability } from './config/sportCapabilities';
 
@@ -371,6 +376,10 @@ function LockedModuleView({ lang, onBack, title, subtitle }) {
 
 export default function App() {
   const { sport, setSport } = useSport();
+  const { isLeague } = useHexaTheme();
+  const GameSelector  = isLeague ? GameSelectorLeague  : GameSelectorClassic;
+  const AnalysisPanel = isLeague ? AnalysisPanelLeague : AnalysisPanelClassic;
+  const HistoryPanel  = isLeague ? HistoryPanelLeague  : HistoryPanelClassic;
   const [lang,              setLang]              = useState(() => localStorage.getItem('hexa_lang') || 'es');
   const [activeTab,         setActiveTab]         = useState('pizarra');
   const [singleGame,        setSingleGame]        = useState(null);
@@ -571,7 +580,9 @@ export default function App() {
           {/* Pizarra H.E.X.A. — landing tab */}
           {activeTab === 'pizarra' && (
             boardCapability.enabled
-              ? <HexaBoard lang={lang} sport={sport} />
+              ? (isLeague
+                  ? <HexaBoardLeague lang={lang} sport={sport} />
+                  : <HexaBoard       lang={lang} sport={sport} />)
               : <SportComingSoon
                 lang={lang}
                 title={lang === 'es' ? `Pizarra ${sportLabel}` : `${sportLabel} Board`}
