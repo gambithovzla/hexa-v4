@@ -190,14 +190,28 @@ def train_all(
             summary[market] = {"error": str(exc), "min_train_size_used": effective_min}
 
     manifest_path = out_path / "manifest.json"
+    # Merge with any existing manifest so partial retrains (e.g. only
+    # "overunder") don't wipe metrics for markets that weren't retrained
+    # this run. Without the merge a single-market retrain leaves the
+    # admin dashboard showing "trained: never" for the other markets
+    # even though their .pkl artifacts are still on disk.
+    existing_markets: dict = {}
+    if manifest_path.exists():
+        try:
+            prev = json.loads(manifest_path.read_text(encoding="utf-8"))
+            existing_markets = prev.get("markets") or {}
+        except Exception as exc:
+            logger.warning("Could not parse existing manifest.json (%s) — starting fresh", exc)
+    merged_markets = {**existing_markets, **summary}
     manifest_path.write_text(
         json.dumps(
-            {"trained_at": _now_iso(), "markets": summary},
+            {"trained_at": _now_iso(), "markets": merged_markets},
             indent=2,
         ),
         encoding="utf-8",
     )
-    logger.info("Manifest written → %s", manifest_path)
+    logger.info("Manifest written → %s (merged %d existing + %d new markets)",
+                manifest_path, len(existing_markets), len(summary))
     return summary
 
 

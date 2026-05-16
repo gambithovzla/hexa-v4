@@ -189,9 +189,19 @@ def train_ensemble(
             summary[market] = None
 
     manifest_path = out_path / "ensemble_manifest.json"
+    # Same merge logic as train.py — avoid wiping per-market entries
+    # when a partial retrain only covers a subset of markets.
+    existing_markets: dict = {}
+    if manifest_path.exists():
+        try:
+            prev = json.loads(manifest_path.read_text(encoding="utf-8"))
+            existing_markets = prev.get("markets") or {}
+        except Exception as exc:
+            logger.warning("Could not parse existing ensemble_manifest.json (%s)", exc)
+    merged_markets = {**existing_markets, **summary}
     manifest_path.write_text(
         json.dumps(
-            {"trained_at": _now_iso(), "markets": summary},
+            {"trained_at": _now_iso(), "markets": merged_markets},
             indent=2,
         ),
         encoding="utf-8",
