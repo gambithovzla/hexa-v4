@@ -25,7 +25,6 @@ import { Box, Typography, Tooltip } from '@mui/material';
 import { useHexaTheme } from '../../themeProvider';
 import { MONO, DISPLAY } from '../../theme';
 import BrandToggle from './BrandToggle';
-import ThemeToggle from '../ThemeToggle';
 
 // ── SVG icons ───────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 18 }) => (
@@ -397,9 +396,9 @@ export default function Sidebar({
         ))}
       </Box>
 
-      {/* Brand + theme toggles in the sidebar footer so mobile users (who
-          get the sidebar as a drawer) can switch identity. Hidden when
-          desktop sidebar is collapsed since the Topbar has the same pair. */}
+      {/* Brand toggle in the sidebar footer so mobile users (who get the
+          sidebar as a drawer) can switch identity. Hidden when the desktop
+          sidebar is collapsed since the Topbar has the same pill. */}
       {!collapsed && (
         <Box
           sx={{
@@ -421,7 +420,6 @@ export default function Sidebar({
             {lang === 'es' ? 'Interfaz' : 'Interface'}
           </Typography>
           <BrandToggle lang={lang} />
-          <ThemeToggle lang={lang} layout="pill" />
         </Box>
       )}
 
