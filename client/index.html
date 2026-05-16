@@ -25,30 +25,17 @@
       generated, restore <link rel="apple-touch-startup-image"> entries here.
     -->
 
-    <!-- Default theme-color is brand navy (League × Kinetic v.2.6).
-         The inline script below reads the user's persisted brand + mode and
-         updates theme-color before paint, so the system chrome (Android URL
-         bar, iOS status bar tint) matches the skin selected at runtime. -->
+    <!-- App is locked to dark. theme-color defaults to League navy and only
+         flips to classic black when the user picks the classic brand. -->
     <meta name="theme-color" content="#0B2540" id="hexa-theme-color" />
     <script>
-      // Sync theme-color with the skin the user last picked. Runs before
-      // React mounts so there's no FOUC of the wrong colour in the system UI.
-      // Storage keys mirror themeProvider.jsx; values fall back to brand+dark
-      // (the canonical presentation) when nothing is stored yet.
+      // Sync theme-color with the brand the user last picked (dark canvas
+      // assumed). Runs before React mounts so there's no FOUC of the wrong
+      // colour in the system UI on cold boot.
       (function () {
         try {
           var brand = localStorage.getItem('hexa.theme.brand') || 'league-kinetic';
-          var mode  = localStorage.getItem('hexa.theme.mode')  || 'system';
-          // 'dark' is no longer a manually-pickable option; coerce legacy
-          // values so the UI never reads an invalid mode.
-          if (mode === 'dark') mode = 'system';
-          if (mode === 'system' && window.matchMedia) {
-            mode = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-          }
-          var color =
-            brand === 'league-kinetic'
-              ? (mode === 'light' ? '#F9F5E8' : '#0B2540')
-              : (mode === 'light' ? '#F5F2EB' : '#05080a');
+          var color = brand === 'league-kinetic' ? '#0B2540' : '#05080a';
           var meta = document.getElementById('hexa-theme-color');
           if (meta) meta.setAttribute('content', color);
         } catch (e) { /* private mode / SSR — leave default */ }
