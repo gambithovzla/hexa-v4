@@ -1,0 +1,511 @@
+/* ════════════════════════════════════════════════════════════════════════
+ * League × Kinetic — brand book v.2.6 overrides
+ *
+ * Activated when <html data-brand="league-kinetic">. Co-exists with
+ * data-theme="dark|light" so dark+league and light+league are distinct.
+ *
+ * The base index.css drives MUI components via palette tokens (already
+ * swapped by ThemeProvider). This file owns the *non-MUI* layer: global
+ * CSS variables (--neon-*, --bg-*, scanlines, glows), font stacks, body
+ * backdrop, and brand-only utility classes (.brand-clip-bevel, .brand-skew,
+ * .brand-broadcast-strip, .brand-ticker, etc).
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/* ── DARK + LEAGUE × KINETIC (canonical) ──────────────────────────────── */
+:root[data-brand='league-kinetic'][data-theme='dark'],
+:root[data-brand='league-kinetic']:not([data-theme='light']) {
+  /* Canvas + panel layers — Navy uniform */
+  --bg-0:         #061827;
+  --bg-1:         #0B2540;
+  --bg-2:         #102E54;
+  --bg-3:         #0a1d35;
+
+  --bg-primary:   #061827;
+  --bg-secondary: #0B2540;
+  --bg-card:      #0B2540;
+  --bg-elevated:  #102E54;
+
+  --line:         rgba(244, 236, 216, 0.14);
+  --line-strong:  rgba(244, 236, 216, 0.30);
+
+  /* Neon vars REPURPOSED to brand roles so legacy components recolor:
+     --neon-cyan   → Cream (primary text)
+     --neon-orange → Lava   (CTA / accent)
+     --neon-green  → Volt   (HIT / high edge)
+     --neon-pink   → Lava   (MISS / loss)                                */
+  --neon-cyan:        #F4ECD8;
+  --neon-cyan-dim:    rgba(244, 236, 216, 0.10);
+  --neon-cyan-line:   rgba(244, 236, 216, 0.28);
+  --neon-cyan-glow:   none;
+
+  --neon-orange:      #E63946;
+  --neon-orange-dim:  rgba(230, 57, 70, 0.10);
+  --neon-orange-line: rgba(230, 57, 70, 0.32);
+  --neon-orange-glow: none;
+
+  --neon-green:       #FFD60A;
+  --neon-green-dim:   rgba(255, 214, 10, 0.10);
+  --neon-green-line:  rgba(255, 214, 10, 0.28);
+  --neon-green-glow:  none;
+
+  --neon-pink:        #E63946;
+  --neon-pink-dim:    rgba(230, 57, 70, 0.10);
+  --neon-pink-line:   rgba(230, 57, 70, 0.28);
+  --neon-pink-glow:   none;
+
+  --accent:   var(--neon-orange);
+  --accent-2: var(--neon-cyan);
+  --success:  var(--neon-green);
+  --warning:  #B8985A;
+  --danger:   var(--neon-pink);
+  --gold:     #B8985A;
+
+  --border:       rgba(244, 236, 216, 0.22);
+  --border-light: rgba(244, 236, 216, 0.10);
+
+  /* Ink — cream on navy */
+  --ink-0:        #F4ECD8;
+  --ink-1:        #cfd6e0;
+  --ink-2:        #7a8a9d;
+  --ink-3:        #506378;
+  --text-primary: #F4ECD8;
+  --text-muted:   #7a8a9d;
+
+  /* Type stacks — Oswald display + Barlow subhead + Mono data */
+  --font-display: 'Oswald', 'Barlow Condensed', 'Liberation Sans', sans-serif;
+  --font-mono:    'JetBrains Mono', 'Share Tech Mono', monospace;
+  --font-bar:     'Barlow Condensed', 'Oswald', sans-serif;
+  --font-body:    'Helvetica Neue', Helvetica, 'Liberation Sans', sans-serif;
+
+  /* Brand-only tokens (read by League components) */
+  --brand-navy:        #0B2540;
+  --brand-navy-deep:   #061827;
+  --brand-cream:       #F4ECD8;
+  --brand-cream-2:     #cfd6e0;
+  --brand-lava:        #E63946;
+  --brand-lava-deep:   #B5101F;
+  --brand-volt:        #FFD60A;
+  --brand-bronze:      #B8985A;
+  --brand-bronze-deep: #8a6f3c;
+  --brand-ink:         #0a0a0a;
+  --brand-rule:        rgba(244, 236, 216, 0.14);
+  --brand-rule-strong: rgba(244, 236, 216, 0.30);
+
+  /* Sport livery — driven by data-sport on body (set by SportSwitcher) */
+  --sport-accent:      var(--brand-lava);
+  --sport-accent-text: #ffffff;
+
+  /* Angular geometry */
+  --brand-cut:    10px;
+  --brand-skew:   -3deg;
+
+  /* Kill CRT effects — brand book forbids glows + scanlines */
+  --glow-mul:       0;
+  --grid-mul:       0.6;
+  --particle-mul:   0;
+  --glitch-mul:     0;
+  --scanline-alpha: 0;
+
+  /* Card brackets repurposed as red accent bar */
+  --hexa-card-bracket-tl: var(--brand-lava);
+  --hexa-card-bracket-br: var(--brand-bronze);
+  --hexa-card-shadow:     0 0 0 1px rgba(244, 236, 216, 0.08) inset;
+}
+
+/* When user is on NBA, accent flips to volt yellow. The SportSwitcher
+   sets data-sport on <body>; SportProvider also fires this. */
+:root[data-brand='league-kinetic'] body[data-sport='nba'] {
+  --sport-accent:      var(--brand-volt);
+  --sport-accent-text: var(--brand-ink);
+}
+
+/* ── LIGHT + LEAGUE × KINETIC (programa paper) ────────────────────────── */
+:root[data-brand='league-kinetic'][data-theme='light'] {
+  --bg-0:         #F9F5E8;
+  --bg-1:         #F4ECD8;
+  --bg-2:         #EDE6CF;
+  --bg-3:         #ffffff;
+
+  --bg-primary:   #F9F5E8;
+  --bg-secondary: #EDE6CF;
+  --bg-card:      #ffffff;
+  --bg-elevated:  #ffffff;
+
+  --line:         rgba(11, 37, 64, 0.15);
+  --line-strong:  rgba(11, 37, 64, 0.30);
+
+  --neon-cyan:        #0B2540;
+  --neon-cyan-dim:    rgba(11, 37, 64, 0.08);
+  --neon-cyan-line:   rgba(11, 37, 64, 0.28);
+  --neon-cyan-glow:   none;
+
+  --neon-orange:      #E63946;
+  --neon-orange-dim:  rgba(230, 57, 70, 0.08);
+  --neon-orange-line: rgba(230, 57, 70, 0.35);
+  --neon-orange-glow: none;
+
+  --neon-green:       #B8985A;
+  --neon-green-dim:   rgba(184, 152, 90, 0.10);
+  --neon-green-line:  rgba(184, 152, 90, 0.28);
+  --neon-green-glow:  none;
+
+  --neon-pink:        #B5101F;
+  --neon-pink-dim:    rgba(181, 16, 31, 0.08);
+  --neon-pink-line:   rgba(181, 16, 31, 0.28);
+  --neon-pink-glow:   none;
+
+  --accent:   var(--neon-orange);
+  --accent-2: var(--neon-cyan);
+  --success:  var(--neon-green);
+  --warning:  #8a6f3c;
+  --danger:   var(--neon-pink);
+  --gold:     #8a6f3c;
+
+  --border:       rgba(11, 37, 64, 0.18);
+  --border-light: rgba(11, 37, 64, 0.10);
+
+  --ink-0:        #0B2540;
+  --ink-1:        rgba(11, 37, 64, 0.72);
+  --ink-2:        rgba(11, 37, 64, 0.55);
+  --ink-3:        rgba(11, 37, 64, 0.30);
+  --text-primary: #0B2540;
+  --text-muted:   rgba(11, 37, 64, 0.55);
+
+  --brand-rule:        rgba(11, 37, 64, 0.15);
+  --brand-rule-strong: rgba(11, 37, 64, 0.30);
+
+  --hexa-card-shadow: 0 1px 2px rgba(11, 37, 64, 0.06);
+}
+
+/* ── Body backdrop — disable CRT, swap to broadcast grid ───────────────── */
+:root[data-brand='league-kinetic'] body {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(230, 57, 70, 0.06), transparent 60%),
+    radial-gradient(900px 500px at 5% 110%, rgba(255, 214, 10, 0.04), transparent 60%),
+    var(--bg-0);
+}
+:root[data-brand='league-kinetic'] body::before {
+  /* 48×48 broadcast grid instead of 56×56 hex grid */
+  background-image:
+    linear-gradient(rgba(244, 236, 216, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244, 236, 216, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: linear-gradient(180deg, black 30%, transparent 100%);
+          mask-image: linear-gradient(180deg, black 30%, transparent 100%);
+}
+:root[data-brand='league-kinetic'] body::after {
+  /* kill scanline */
+  display: none;
+}
+
+/* ── Body fonts — Oswald display when brand is active ──────────────────── */
+:root[data-brand='league-kinetic'] body {
+  font-family: var(--font-body);
+}
+
+/* ── Typography utilities (scoped) ─────────────────────────────────────── */
+:root[data-brand='league-kinetic'] .brand-osw,
+.brand-osw {
+  font-family: 'Oswald', 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+:root[data-brand='league-kinetic'] .brand-bar,
+.brand-bar {
+  font-family: 'Barlow Condensed', 'Oswald', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+:root[data-brand='league-kinetic'] .brand-mono,
+.brand-mono {
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+}
+.brand-skew {
+  display: inline-block;
+  font-style: italic;
+  transform: skewX(-3deg);
+  transform-origin: left;
+}
+
+/* ── Clip-path utility classes ─────────────────────────────────────────── */
+.brand-clip-bevel {
+  -webkit-clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 10px 100%);
+          clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 10px 100%);
+}
+.brand-clip-bevel-l {
+  -webkit-clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+          clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+.brand-clip-bevel-r {
+  -webkit-clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%);
+          clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%);
+}
+.brand-clip-shield {
+  -webkit-clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+          clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+}
+
+@media (max-width: 600px) {
+  /* Mobile: drop clip-paths to keep CTAs sharp */
+  .brand-clip-bevel,
+  .brand-clip-bevel-l,
+  .brand-clip-bevel-r {
+    -webkit-clip-path: none;
+            clip-path: none;
+  }
+}
+
+/* ── Broadcast strip (top black bar with live dot) ─────────────────────── */
+.brand-broadcast-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #000;
+  color: var(--brand-cream);
+  padding: 8px 22px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--sport-accent);
+}
+.brand-broadcast-strip .live-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--brand-lava);
+  border-radius: 50%;
+  display: inline-block;
+  animation: brand-pulse 1.6s infinite;
+}
+.brand-broadcast-strip .sep { opacity: 0.3; margin: 0 6px; }
+.brand-broadcast-strip .right {
+  margin-left: auto;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+@keyframes brand-pulse {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0.3; }
+}
+
+/* ── Shield (the H emblem) ─────────────────────────────────────────────── */
+.brand-shield {
+  width: 38px;
+  height: 42px;
+  flex-shrink: 0;
+  background: var(--brand-cream);
+  color: var(--brand-navy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+          clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  position: relative;
+}
+.brand-shield::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--brand-lava);
+}
+
+/* ── Ticker (scrolling horizontal feed) ───────────────────────────────── */
+.brand-ticker {
+  background: #000;
+  border-top: 1px solid var(--sport-accent);
+  border-bottom: 1px solid var(--brand-rule);
+  padding: 9px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+.brand-ticker-track {
+  display: inline-flex;
+  gap: 36px;
+  padding-left: 24px;
+  animation: brand-scroll 60s linear infinite;
+}
+.brand-ticker-track span b { color: var(--brand-volt); font-weight: 500; margin: 0 4px; }
+.brand-ticker-track span i {
+  color: var(--brand-lava);
+  font-style: normal;
+  font-weight: 500;
+  margin-left: 6px;
+}
+.brand-ticker-track .ticker-game { color: var(--brand-cream-2); }
+.brand-ticker-track .ticker-sep  { color: #333; margin: 0 6px; }
+
+@keyframes brand-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-ticker-track { animation: none; }
+}
+
+/* ── Chips (mono labels with hairline border) ─────────────────────────── */
+.brand-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border: 1px solid var(--brand-rule-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand-cream);
+  background: transparent;
+}
+.brand-chip.live    { border-color: var(--brand-lava);  color: var(--brand-lava); }
+.brand-chip.volt    { border-color: var(--brand-volt);  color: var(--brand-volt); }
+.brand-chip.bronze  { border-color: var(--brand-bronze);color: var(--brand-bronze); }
+.brand-chip.cta     {
+  background: var(--brand-cream);
+  color: var(--brand-ink);
+  border-color: var(--brand-cream);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ── Pin (corner label tab inside cards) ───────────────────────────────── */
+.brand-pin {
+  position: absolute;
+  top: -1px;
+  left: 24px;
+  background: var(--sport-accent);
+  color: var(--sport-accent-text);
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  padding: 5px 14px;
+  -webkit-clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+          clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  text-transform: uppercase;
+}
+.brand-pin.bronze { background: var(--brand-bronze); color: var(--brand-ink); }
+.brand-pin.volt   { background: var(--brand-volt);   color: var(--brand-ink); }
+
+/* ── Section head (title with vertical accent bar) ─────────────────────── */
+.brand-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 32px 0 14px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand-section-head .title {
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--brand-cream);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-section-head .title .bar-acc {
+  width: 6px;
+  height: 24px;
+  background: var(--sport-accent);
+}
+.brand-section-head .lbl {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ── In-page controls that should adopt brand looks under league ──────── */
+
+/* MUI ToggleButton / button groups inside League turn into segmented
+ * pill-style controls with Oswald uppercase and the sport accent. We
+ * target by attribute so we don't fight the MUI emotion runtime — only
+ * static, low-specificity nudges. */
+:root[data-brand='league-kinetic'] .MuiToggleButton-root {
+  font-family: 'Oswald', 'Barlow Condensed', sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  border-radius: 0 !important;
+}
+
+:root[data-brand='league-kinetic'] .MuiButton-root {
+  font-family: 'Oswald', 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 0;
+}
+
+:root[data-brand='league-kinetic'] .MuiButton-contained {
+  background: var(--sport-accent);
+  color: var(--sport-accent-text);
+  box-shadow: none;
+}
+:root[data-brand='league-kinetic'] .MuiButton-contained:hover {
+  background: var(--brand-lava-deep);
+  box-shadow: none;
+}
+
+/* Run-button-class CTAs: nudge to clip-path bevel when inside league */
+:root[data-brand='league-kinetic'] [data-league-cta='true'] {
+  -webkit-clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 10px 100%);
+          clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 10px 100%);
+}
+
+/* Card-like containers (MUI Paper / Card) re-skin softly */
+:root[data-brand='league-kinetic'] .MuiPaper-root {
+  background-image: none !important;
+}
+
+/* Headings within league context default to Oswald uppercase letterspace
+ * so legacy H1/H2 absorb the brand voice without component edits.
+ * MUI Typography wraps headings in .MuiTypography-h* emotion classes; we
+ * use !important sparingly to beat emotion specificity. */
+:root[data-brand='league-kinetic'] h1,
+:root[data-brand='league-kinetic'] h2,
+:root[data-brand='league-kinetic'] h3,
+:root[data-brand='league-kinetic'] .MuiTypography-h1,
+:root[data-brand='league-kinetic'] .MuiTypography-h2,
+:root[data-brand='league-kinetic'] .MuiTypography-h3,
+:root[data-brand='league-kinetic'] .MuiTypography-h4,
+:root[data-brand='league-kinetic'] .MuiTypography-h5,
+:root[data-brand='league-kinetic'] .MuiTypography-h6 {
+  font-family: 'Oswald', 'Barlow Condensed', sans-serif !important;
+  letter-spacing: -0.005em;
+}
+
+/* ── Status bar (footer mono row) ──────────────────────────────────────── */
+.brand-statusbar {
+  margin-top: 32px;
+  border-top: 1px solid var(--brand-rule);
+  padding-top: 14px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.brand-statusbar b { color: var(--brand-volt); font-weight: 500; }
+.brand-statusbar .end { margin-left: auto; }

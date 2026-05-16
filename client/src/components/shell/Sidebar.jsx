@@ -62,7 +62,7 @@ const ICONS = {
 function L(en, es, lang) { return lang === 'es' ? es : en; }
 
 // ── HEXA logo block ─────────────────────────────────────────────────────────
-function LogoBlock({ collapsed, C }) {
+function LogoBlock({ collapsed, C, isLeague }) {
   return (
     <Box
       sx={{
@@ -75,44 +75,78 @@ function LogoBlock({ collapsed, C }) {
         borderBottom: `1px solid ${C.line}`,
       }}
     >
-      <Box
-        component="img"
-        src="/logo-hexa.png"
-        alt="HEXA"
-        sx={{
-          width:      '40px',
-          height:     '40px',
-          objectFit:  'contain',
-          flexShrink: 0,
-          filter:     C.glowsEnabled ? 'drop-shadow(0 0 8px rgba(34,240,255,0.45))' : 'none',
-        }}
-      />
+      {isLeague ? (
+        // League × Kinetic: brand shield with cream H + red bar accent.
+        <Box
+          aria-label="HEXA"
+          sx={{
+            width:      '40px',
+            height:     '44px',
+            flexShrink: 0,
+            background: 'var(--brand-cream, #F4ECD8)',
+            color:      'var(--brand-navy, #0B2540)',
+            display:    'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            clipPath:   'polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%)',
+            fontFamily: "'Oswald', sans-serif",
+            fontWeight: 700,
+            fontSize:   '20px',
+            position:   'relative',
+            '&::after': {
+              content:    '""',
+              position:   'absolute',
+              top:        '6px',
+              left:       0,
+              right:      0,
+              height:     '2px',
+              background: 'var(--brand-lava, #E63946)',
+            },
+          }}
+        >
+          H
+        </Box>
+      ) : (
+        <Box
+          component="img"
+          src="/logo-hexa.png"
+          alt="HEXA"
+          sx={{
+            width:      '40px',
+            height:     '40px',
+            objectFit:  'contain',
+            flexShrink: 0,
+            filter:     C.glowsEnabled ? 'drop-shadow(0 0 8px rgba(34,240,255,0.45))' : 'none',
+          }}
+        />
+      )}
       {!collapsed && (
         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Typography
             sx={{
-              fontFamily:    DISPLAY,
-              fontSize:      '0.95rem',
+              fontFamily:    isLeague ? "'Oswald', sans-serif" : DISPLAY,
+              fontSize:      isLeague ? '1rem' : '0.95rem',
               fontWeight:    700,
-              letterSpacing: '0.18em',
+              letterSpacing: isLeague ? '0.04em' : '0.18em',
               color:         C.ink0,
               lineHeight:    1,
+              textTransform: 'uppercase',
             }}
           >
-            H.E.X.A.
+            {isLeague ? 'HEXA ORACLE' : 'H.E.X.A.'}
           </Typography>
           <Typography
             sx={{
               fontFamily:    MONO,
               fontSize:      '0.52rem',
-              letterSpacing: '0.16em',
-              color:         C.ink2,
+              letterSpacing: isLeague ? '0.32em' : '0.16em',
+              color:         isLeague ? 'var(--brand-bronze, #B8985A)' : C.ink2,
               lineHeight:    1.2,
               mt:            '4px',
               textTransform: 'uppercase',
             }}
           >
-            ORACLE
+            {isLeague ? 'LEAGUE · 2026' : 'ORACLE'}
           </Typography>
         </Box>
       )}
@@ -239,7 +273,7 @@ export default function Sidebar({
   onPerformance,
   performancePublic = false,
 }) {
-  const { C } = useHexaTheme();
+  const { C, isLeague } = useHexaTheme();
 
   const groups = useMemo(() => {
     const principal = [
@@ -333,7 +367,7 @@ export default function Sidebar({
         overflow:       'hidden',
       }}
     >
-      <LogoBlock collapsed={collapsed} C={C} />
+      <LogoBlock collapsed={collapsed} C={C} isLeague={isLeague} />
 
       <Box
         sx={{

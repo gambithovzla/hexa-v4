@@ -1,14 +1,19 @@
 /* ── H.E.X.A. V4 — Global Design System (Cyberpunk redesign) ─────────────── */
 /*
  * Theming contract:
- *   ThemeProvider sets `data-theme="light|dark"` on the <html> element.
- *   :root defaults to DARK values; [data-theme="light"] overrides them.
- *   Existing components that use `var(--*)` automatically follow the mode.
+ *   ThemeProvider sets `data-theme="light|dark"` AND `data-brand="classic|league-kinetic"`
+ *   on the <html> element.
+ *   :root defaults to DARK + CLASSIC values; [data-theme="light"] overrides them.
+ *   When data-brand="league-kinetic", the leagueKineticOverrides.css layer (imported
+ *   below) takes over with brand book v.2.6 tokens.
+ *   Existing components that use `var(--*)` automatically follow both axes.
  *
  * Cyberpunk redesign tokens come from the design_handoff_hexa_upgrade brief.
  * Every legacy var (--neon-*, --bg-card, --text-*) survives so old components
  * still resolve; their values just shift to the new palette.
  */
+
+@import './styles/leagueKineticOverrides.css';
 
 /* ── DARK (default · cyberpunk) ────────────────────────────────────────── */
 :root,

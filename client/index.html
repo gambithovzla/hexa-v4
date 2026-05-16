@@ -3,32 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hexa Oracle — MLB Intelligence</title>
-    <link rel="icon" type="image/png" href="/favicon-32.png" />
+    <title>Hexa Oracle · La liga del análisis</title>
+    <meta name="description" content="Hexa Oracle — la liga del análisis. Inteligencia MLB · NBA en tiempo real." />
+
+    <!-- Favicons — SVG (modern) + PNG fallback for legacy clients -->
+    <link rel="icon" type="image/svg+xml" href="/icon-brand.svg" />
+    <link rel="icon" type="image/png"     href="/favicon-32.png" sizes="32x32" />
+    <link rel="mask-icon" href="/icon-brand.svg" color="#E63946" />
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="HEXA" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
 
-    <!-- iOS Splash Screens -->
-    <!-- iPhone SE (750x1334) -->
-    <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" href="/splash-750x1334.png" />
-    <!-- iPhone 12 mini / 13 mini (1080x2340) -->
-    <link rel="apple-touch-startup-image" media="screen and (device-width: 360px) and (device-height: 780px) and (-webkit-device-pixel-ratio: 3)" href="/splash-1080x2340.png" />
-    <!-- iPhone 12 / 13 / 14 (1170x2532) -->
-    <link rel="apple-touch-startup-image" media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" href="/splash-1170x2532.png" />
-    <!-- iPhone 14 Pro / 15 / 16 (1179x2556) -->
-    <link rel="apple-touch-startup-image" media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)" href="/splash-1179x2556.png" />
-    <!-- iPhone 14 Plus / 15 Plus / 16 Plus (1284x2778) -->
-    <link rel="apple-touch-startup-image" media="screen and (device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)" href="/splash-1284x2778.png" />
-    <!-- iPhone 14 Pro Max / 15 Pro Max / 16 Pro Max (1290x2796) -->
-    <link rel="apple-touch-startup-image" media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" href="/splash-1290x2796.png" />
-    <meta name="theme-color" content="#05080a" />
+    <!--
+      NOTE: brand book v.2.6 — League × Kinetic.
+      Static iOS splash screen PNGs (splash-*.png) are not present in /public
+      yet; previous entries 404'd in production. They will need to be
+      rasterized from icon-brand.svg + the brand wordmark per device-size. Once
+      generated, restore <link rel="apple-touch-startup-image"> entries here.
+    -->
+
+    <!-- Default theme-color is brand navy (League × Kinetic v.2.6).
+         The inline script below reads the user's persisted brand + mode and
+         updates theme-color before paint, so the system chrome (Android URL
+         bar, iOS status bar tint) matches the skin selected at runtime. -->
+    <meta name="theme-color" content="#0B2540" id="hexa-theme-color" />
+    <script>
+      // Sync theme-color with the skin the user last picked. Runs before
+      // React mounts so there's no FOUC of the wrong colour in the system UI.
+      // Storage keys mirror themeProvider.jsx; values fall back to brand+dark
+      // (the canonical presentation) when nothing is stored yet.
+      (function () {
+        try {
+          var brand = localStorage.getItem('hexa.theme.brand') || 'league-kinetic';
+          var mode  = localStorage.getItem('hexa.theme.mode')  || 'dark';
+          if (mode === 'system' && window.matchMedia) {
+            mode = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          var color =
+            brand === 'league-kinetic'
+              ? (mode === 'light' ? '#F9F5E8' : '#0B2540')
+              : (mode === 'light' ? '#F5F2EB' : '#05080a');
+          var meta = document.getElementById('hexa-theme-color');
+          if (meta) meta.setAttribute('content', color);
+        } catch (e) { /* private mode / SSR — leave default */ }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;600;700&family=Oswald:wght@500;600;700&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>

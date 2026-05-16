@@ -19,6 +19,7 @@ import { useState, useEffect } from 'react';
 import { Box, Typography, Tooltip } from '@mui/material';
 import LanguageToggle from '../LanguageToggle';
 import ThemeToggle from '../ThemeToggle';
+import BrandToggle from './BrandToggle';
 import AuthModal from '../AuthModal';
 import HexaHelpModal from '../HexaHelpModal';
 import PricingModal from '../PricingModal';
@@ -322,6 +323,10 @@ export default function Topbar({ lang = 'es', onLangToggle, activeTab, onMobileM
       </Box>
 
       <AuthCluster lang={lang} C={C} />
+
+      <Box sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
+        <BrandToggle lang={lang} />
+      </Box>
 
       <Box sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
         <ThemeToggle lang={lang} layout="compact" />

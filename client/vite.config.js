@@ -7,18 +7,30 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon-32.png', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
+      includeAssets: ['favicon-32.png', 'icon-192.png', 'icon-512.png', 'icon-brand.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'H.E.X.A. Oracle',
+        // Brand book v.2.6 — League × Kinetic. Navy uniform, lava accent.
+        // PWA install identity reflects the brand even when classic skin is
+        // also available inside the app (user-toggleable at runtime).
+        name: 'Hexa Oracle · League',
         short_name: 'HEXA',
-        description: 'Hybrid Expert X-Analysis — MLB Intelligence',
-        theme_color: '#0a0a0a',
-        background_color: '#0a0a0a',
+        description: 'Hexa Oracle — la liga del análisis. Inteligencia MLB · NBA en tiempo real.',
+        theme_color: '#0B2540',
+        background_color: '#0B2540',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
         start_url: '/',
+        categories: ['sports', 'productivity', 'utilities'],
         icons: [
+          // Scalable brand mark — first so modern browsers (Android, desktop)
+          // prefer it over the PNG fallbacks.
+          {
+            src: 'icon-brand.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any'
+          },
           {
             src: 'icon-192.png',
             sizes: '192x192',
@@ -47,6 +59,9 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Cache the build output + brand SVG icon. PNG screenshots like
+        // hexa-mascot-*.png are excluded by the negative glob so they
+        // don't bloat the SW precache; icon SVG is small and worth caching.
         globPatterns: ['**/*.{js,css,html,svg}', '**/!(icon-*|favicon-*|apple-touch-icon).png'],
         runtimeCaching: [
           {
