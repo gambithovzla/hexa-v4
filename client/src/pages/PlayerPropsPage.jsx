@@ -20,6 +20,8 @@ const STRINGS = {
     back: '← BACK',
     loading: 'Loading props…',
     noData: 'No prop lines available for this date.',
+    oracleSection: 'Oracle picks (saved)',
+    oracleSource: 'From your analysis — odds lines may not be posted yet.',
     calibrating: 'ML scores in calibration — lines and Savant stats still shown.',
     filters: 'Filters',
     allKinds: 'All markets',
@@ -38,6 +40,8 @@ const STRINGS = {
     back: '← VOLVER',
     loading: 'Cargando props…',
     noData: 'No hay líneas de props para esta fecha.',
+    oracleSection: 'Picks Oracle (guardados)',
+    oracleSource: 'De tu análisis — las líneas de la casa pueden no estar publicadas aún.',
     calibrating: 'Scores ML en calibración — líneas y Savant visibles.',
     filters: 'Filtros',
     allKinds: 'Todos los mercados',
@@ -174,8 +178,43 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
         <Typography sx={{ color: RED, fontFamily: MONO, fontSize: '11px' }}>{error}</Typography>
       )}
 
-      {!loading && !error && (board?.games?.length ?? 0) === 0 && (
+      {!loading && !error && (board?.games?.length ?? 0) === 0 && (board?.oraclePropPicks?.length ?? 0) === 0 && (
         <Typography sx={{ fontFamily: MONO, color: MUTED }}>{T.noData}</Typography>
+      )}
+
+      {!loading && (board?.oraclePropPicks?.length ?? 0) > 0 && (
+        <Box sx={{ mb: 3, background: SURF, border: `1px solid ${CYAN}`, p: 2 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: CYAN, mb: 0.5, letterSpacing: '2px' }}>
+            {T.oracleSection}
+          </Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mb: 1.5 }}>
+            {T.oracleSource}
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {board.oraclePropPicks.map((p) => (
+              <Box
+                key={p.pickId}
+                sx={{
+                  border: `1px solid ${BORDER}`,
+                  borderLeft: `3px solid ${CYAN}`,
+                  p: '10px 12px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 1,
+                  alignItems: 'center',
+                }}
+              >
+                <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: INK0, fontWeight: 700 }}>
+                  {p.pick}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>
+                  {p.matchup} · {KL[p.propKind] ?? p.propKind} {p.side?.toUpperCase()} {p.line}
+                  {p.confidence != null ? ` · ${p.confidence}%` : ''}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
       )}
 
       {!loading && board?.games?.map((g) => (

@@ -25,9 +25,26 @@ function extractPickText(analysisData) {
   return (
     analysisData?.master_prediction?.pick ??
     analysisData?.best_pick?.pick ??
+    analysisData?.best_pick?.detail ??
     analysisData?.safe_pick?.pick ??
+    analysisData?.oracle_report?.recommended_pick ??
     null
   );
+}
+
+function inferMarketTypeFromText(pickText, parsed) {
+  if (parsed?.market_type) return parsed.market_type;
+  const t = String(pickText ?? '').toLowerCase();
+  if (!t) return null;
+  if (/\b(ponches?|strikeouts?|hits?|home runs?|jonrones?|hr|tb|total bases|bases totales|rbis?|walks?)\b/.test(t)) {
+    return 'prop';
+  }
+  if (/\b(over|under|o|u|más de|mas de|menos de|bajo|alto)\s+\d/.test(t)) {
+    return 'overunder';
+  }
+  if (/[+-]\d+\.5/.test(t)) return 'runline';
+  if (/\bml\b/.test(t)) return 'moneyline';
+  return null;
 }
 
 function extractOraclePickProb(analysisData) {
@@ -171,8 +188,14 @@ export async function buildPickAlignedMlOpinion({
   const pickText = extractPickText(analysisData);
   const homeAbbr = gameData?.teams?.home?.abbreviation ?? null;
   const awayAbbr = gameData?.teams?.away?.abbreviation ?? null;
-  const parsed = parsePick(pickText, { homeAbbr, awayAbbr });
-  const marketType = parsed.market_type ?? 'moneyline';
+  let parsed = parsePick(pickText, { homeAbbr, awayAbbr });
+  const marketType = inferMarketTypeFromText(pickText, parsed) ?? 'moneyline';
+  if (!parsed.market_type && marketType === 'prop') {
+    parsed = parsePick(pickText, { homeAbbr, awayAbbr }) ?? parsed;
+    if (!parsed.market_type) {
+      parsed = { ...parsed, market_type: 'prop' };
+    }
+  }
 
   const oracleProb = extractOraclePickProb(analysisData);
   const oracleSide = parsed.side ?? (marketType === 'moneyline' || marketType === 'runline'
