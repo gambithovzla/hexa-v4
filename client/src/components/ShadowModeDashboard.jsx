@@ -265,9 +265,15 @@ export default function ShadowModeDashboard({ onBack }) {
                     }}
                   >
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>
-                      {row.pick_time_lima
-                        ? new Date(row.pick_time_lima).toLocaleString('es-PE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
-                        : formatDateTime(row.created_at)}
+                      {(() => {
+                        const runAt = row.pick_time_lima
+                          ? new Date(row.pick_time_lima).toLocaleString('es-PE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
+                          : formatDateTime(row.created_at);
+                        const gameDay = row.game_date
+                          ? new Date(`${String(row.game_date).slice(0, 10)}T12:00:00`).toLocaleDateString('es-PE', { month: 'short', day: 'numeric' })
+                          : null;
+                        return gameDay ? `${runAt} · juego ${gameDay}` : runAt;
+                      })()}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {row.user_email ?? '—'}

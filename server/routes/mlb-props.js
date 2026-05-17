@@ -170,19 +170,45 @@ router.get('/props/board', verifyToken, async (req, res) => {
       g.props.sort((a, b) => Math.abs(b.edge ?? 0) - Math.abs(a.edge ?? 0));
     }
 
-    const oraclePickRows = await pool.query(
-      `SELECT id, pick, matchup, game_pk, game_date, confidence, result, created_at
-       FROM picks
-       WHERE COALESCE(sport, 'mlb') = 'mlb'
-         AND game_date::date = $1::date
-         AND pick IS NOT NULL
-       ORDER BY created_at DESC
-       LIMIT 40`,
-      [date],
-    );
+    const gamePks = (games ?? [])
+      .map((g) => Number(g.gamePk ?? g.game_pk))
+      .filter((pk) => Number.isFinite(pk));
+
+    let oraclePickRows;
+    if (gamePks.length > 0) {
+      oraclePickRows = await pool.query(
+        `SELECT id, pick, matchup, game_pk, game_date, oracle_confidence, result, created_at
+         FROM picks
+         WHERE COALESCE(sport, 'mlb') = 'mlb'
+           AND deleted_at IS NULL
+           AND pick IS NOT NULL
+           AND (
+             game_date::date = $1::date
+             OR game_pk = ANY($2::int[])
+           )
+         ORDER BY created_at DESC
+         LIMIT 40`,
+        [date, gamePks],
+      );
+    } else {
+      oraclePickRows = await pool.query(
+        `SELECT id, pick, matchup, game_pk, game_date, oracle_confidence, result, created_at
+         FROM picks
+         WHERE COALESCE(sport, 'mlb') = 'mlb'
+           AND deleted_at IS NULL
+           AND game_date::date = $1::date
+           AND pick IS NOT NULL
+         ORDER BY created_at DESC
+         LIMIT 40`,
+        [date],
+      );
+    }
 
     const oraclePropPicks = [];
+    const seenPickIds = new Set();
     for (const row of oraclePickRows.rows) {
+      if (seenPickIds.has(row.id)) continue;
+      seenPickIds.add(row.id);
       const parsed = parsePick(row.pick);
       if (parsed.market_type !== 'prop') continue;
       oraclePropPicks.push({
@@ -194,7 +220,7 @@ router.get('/props/board', verifyToken, async (req, res) => {
         side: parsed.side,
         line: parsed.line,
         playerName: parsed.prop_player_name,
-        confidence: row.confidence,
+        confidence: row.oracle_confidence,
         result: row.result,
         createdAt: row.created_at,
         source: 'oracle',
@@ -202,6 +228,7 @@ router.get('/props/board', verifyToken, async (req, res) => {
     }
 
     res.json({
+      success: true,
       date,
       mlPublic: PUBLIC_PROPS_ENABLED,
       mlEnabled: isMlEnabled(),
