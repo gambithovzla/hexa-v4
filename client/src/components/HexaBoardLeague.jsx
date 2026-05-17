@@ -125,6 +125,8 @@ function minutesAgo(iso) {
   return Math.max(0, Math.round(ms / 60000));
 }
 
+const LEAGUE_MEDIA_ACCENT = 'var(--brand-bronze)';
+
 function isPlayerInsight(ins) {
   return ins?.type === 'hit_streak' || ins?.type === 'cold_batter';
 }
@@ -133,19 +135,39 @@ function pickInsightMedia(ins, size = 36) {
   const m = ins?.meta ?? {};
   if (ins?.type === 'high_scoring_matchup') {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <TeamLogo teamId={m.awayId} abbr={m.awayAbbr} size={size} />
-        <TeamLogo teamId={m.homeId} abbr={m.homeAbbr} size={size} />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <TeamLogo teamId={m.awayId} abbr={m.awayAbbr} size={size} color={LEAGUE_MEDIA_ACCENT} variant="plain" glow={false} />
+        <TeamLogo teamId={m.homeId} abbr={m.homeAbbr} size={size} color={LEAGUE_MEDIA_ACCENT} variant="plain" glow={false} />
       </Box>
     );
   }
   if (isPlayerInsight(ins) && m.playerId) {
-    return <PlayerHeadshot playerId={m.playerId} name={m.playerName} size={size + 4} />;
+    return <PlayerHeadshot playerId={m.playerId} name={m.playerName} size={size} color={LEAGUE_MEDIA_ACCENT} />;
   }
   if (m.teamId || m.teamAbbr) {
-    return <TeamLogo teamId={m.teamId} abbr={m.teamAbbr} size={size} />;
+    return <TeamLogo teamId={m.teamId} abbr={m.teamAbbr} size={size} color={LEAGUE_MEDIA_ACCENT} variant="plain" glow={false} />;
   }
   return null;
+}
+
+function tickerPrimary(ins) {
+  const m = ins?.meta ?? {};
+  if (m.playerName) return m.playerName;
+  if (m.teamName) return m.teamName;
+  if (m.awayAbbr && m.homeAbbr) return `${m.awayAbbr} @ ${m.homeAbbr}`;
+  return m.teamAbbr ?? '';
+}
+
+function tickerHook(ins, lang) {
+  const txt = (ins.text?.[lang] ?? ins.text?.en ?? '').trim();
+  if (!txt) return '';
+  const name = ins.meta?.playerName || ins.meta?.teamName;
+  let hook = txt;
+  if (name && hook.toLowerCase().startsWith(name.toLowerCase())) {
+    hook = hook.slice(name.length).replace(/^[\s,·\-–]+/, '').trim();
+  }
+  const max = 54;
+  return hook.length > max ? `${hook.slice(0, max - 1)}…` : hook;
 }
 
 // ── Hero scoreboard ─────────────────────────────────────────────────────────
@@ -344,27 +366,31 @@ function HeroScoreboard({ t, data, lang }) {
 }
 
 // ── Ticker (animated horizontal feed) ──────────────────────────────────────
-function BoardTicker({ data, t, lang }) {
+function BoardTicker({ data, lang }) {
   const insights = data?.insights ?? [];
   if (insights.length === 0) return null;
 
-  // Repeat the items twice so the CSS infinite scroll loops seamlessly.
-  const items = [...insights.slice(1, 10), ...insights.slice(1, 10)];
+  const source = insights.slice(1, 12);
+  const items = [...source, ...source];
 
   return (
     <Box className="brand-ticker" sx={{ mb: '18px' }}>
       <Box className="brand-ticker-track">
         {items.map((ins, idx) => {
-          const teamAbbr = ins.meta?.teamAbbr
-            || (ins.meta?.awayAbbr && ins.meta?.homeAbbr
-                ? `${ins.meta.awayAbbr} @ ${ins.meta.homeAbbr}` : '');
-          const label = t.typeLabels[ins.type] || ins.type.toUpperCase();
+          const primary = tickerPrimary(ins);
+          const hook = tickerHook(ins, lang);
+          const media = pickInsightMedia(ins, 22);
+          const key = `${ins.type}-${ins.meta?.playerId ?? ins.meta?.teamId ?? ins.meta?.awayAbbr ?? ''}-${idx}`;
+
           return (
-            <span key={`${ins.type}-${idx}`}>
-              <span className="ticker-game">{teamAbbr}</span>
-              {' '}<b>{label}</b>
+            <Box key={key} component="span" className="ticker-item">
+              {media && <span className="ticker-avatar">{media}</span>}
+              <span className="ticker-copy">
+                {primary && <b className="ticker-name">{primary}</b>}
+                {hook && <span className="ticker-hook">{hook}</span>}
+              </span>
               <span className="ticker-sep">/</span>
-            </span>
+            </Box>
           );
         })}
       </Box>
@@ -466,7 +492,7 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
   return (
     <Box sx={{ maxWidth: 1280, mx: 'auto', width: '100%', px: { xs: '4px', md: 0 } }}>
       <HeroScoreboard t={t} data={data} lang={lang} />
-      <BoardTicker data={data} t={t} lang={lang} />
+      <BoardTicker data={data} lang={lang} />
 
       {/* Section head */}
       <Box className="brand-section-head">

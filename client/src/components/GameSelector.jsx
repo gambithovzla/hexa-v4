@@ -4,6 +4,7 @@ import { C, BARLOW, MONO, SANS } from '../theme';
 import SportSwitcher from './SportSwitcher';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 import { useHexaTheme } from '../themeProvider';
+import { formatGameTimeLima } from '../utils/dateKeys.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -101,11 +102,11 @@ function getScore(game) {
 
 function getTime(game) {
   if (game._displayTime) return game._displayTime;
-  if (!game.gameDate) return '—';
-  return new Date(game.gameDate).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  if (game.gameDate) {
+    const lima = formatGameTimeLima(game.gameDate);
+    if (lima) return lima;
+  }
+  return game.gameTime ?? '—';
 }
 
 /**

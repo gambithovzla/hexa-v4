@@ -344,7 +344,41 @@
   margin-left: 6px;
 }
 .brand-ticker-track .ticker-game { color: var(--brand-cream-2); }
-.brand-ticker-track .ticker-sep  { color: #333; margin: 0 6px; }
+.brand-ticker-track .ticker-sep  { color: #333; margin: 0 0 0 4px; }
+.brand-ticker-track .ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.brand-ticker-track .ticker-avatar {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 0;
+}
+.brand-ticker-track .ticker-copy {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 420px;
+}
+.brand-ticker-track .ticker-name {
+  color: var(--brand-volt);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+.brand-ticker-track .ticker-hook {
+  color: var(--brand-cream-2);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 @keyframes brand-scroll {
   from { transform: translateX(0); }
@@ -533,4 +567,63 @@
 
 .brand-phase-card {
   user-select: none;
+}
+
+/* ── History panel (League wrapper) ─────────────────────────────────────── */
+.league-history-panel .history-panel-root {
+  background: transparent;
+}
+
+.league-history-panel .history-section-bracket {
+  display: none;
+}
+
+.league-history-panel .history-section-label {
+  color: var(--brand-bronze);
+  letter-spacing: 0.22em;
+}
+
+.league-history-panel .history-stat-card::before {
+  border-color: var(--brand-bronze) !important;
+}
+
+.league-history-panel .history-stat-card {
+  border-color: var(--brand-rule);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.league-history-panel .history-tab-bar {
+  border-bottom-color: var(--brand-rule-strong);
+}
+
+.league-history-panel .history-tab {
+  font-family: 'Oswald', 'Barlow Condensed', sans-serif !important;
+  font-size: 11px !important;
+  letter-spacing: 0.2em !important;
+}
+
+.league-history-panel .history-tab-active {
+  color: var(--brand-volt) !important;
+  border-bottom-color: var(--brand-lava) !important;
+}
+
+.league-history-panel .history-pick-card {
+  background: rgba(0, 0, 0, 0.28);
+  border-color: var(--brand-rule);
+}
+
+.league-history-panel .history-pick-card::after {
+  border-color: var(--brand-rule) !important;
+}
+
+.league-history-panel .history-pick-best {
+  box-shadow: none !important;
+  border-top: 1px solid var(--brand-rule) !important;
+  border-left: 3px solid var(--brand-lava) !important;
+  background: rgba(230, 57, 70, 0.08) !important;
+}
+
+.league-history-panel .history-pick-best-label {
+  color: var(--brand-lava) !important;
+  text-shadow: none !important;
 }

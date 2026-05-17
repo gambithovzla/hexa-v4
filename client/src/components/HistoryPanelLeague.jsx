@@ -74,13 +74,16 @@ export default function HistoryPanelLeague({ lang = 'es', sport = 'all' }) {
       </Box>
 
       {/* Brand-framed history container */}
-      <Box sx={{
-        background:    'var(--brand-navy)',
-        border:        '1px solid var(--brand-rule-strong)',
-        borderTop:     '4px solid var(--brand-bronze)',
-        overflow:      'hidden',
-      }}>
-        <HistoryPanel lang={lang} sport={sport} />
+      <Box
+        className="hexa-themed-page league-history-panel"
+        sx={{
+          background:    'var(--brand-navy)',
+          border:        '1px solid var(--brand-rule-strong)',
+          borderTop:     '4px solid var(--brand-bronze)',
+          overflow:      'hidden',
+        }}
+      >
+        <HistoryPanel lang={lang} sport={sport} embedded />
       </Box>
 
       <Box className="brand-statusbar">

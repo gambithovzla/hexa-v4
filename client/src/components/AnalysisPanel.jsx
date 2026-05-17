@@ -17,6 +17,7 @@ import NbaContextMetaBadge from './NbaContextMetaBadge';
 import { useAuth } from '../store/authStore';
 import { BARLOW, MONO, SANS } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
+import { formatGameTimeLima } from '../utils/dateKeys.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -229,9 +230,7 @@ function MatchupHeader({ games, mode }) {
   const gameDate = g.gameDate
     ? new Date(g.gameDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
     : '';
-  const gameTime = g.gameDate
-    ? new Date(g.gameDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '';
+  const gameTime = g.gameDate ? (formatGameTimeLima(g.gameDate) ?? '') : '';
 
   return (
     <Box sx={{ borderBottom: `1px solid ${C.cyanLine}`, pb: '14px', position: 'relative' }}>

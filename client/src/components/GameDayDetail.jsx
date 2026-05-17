@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, LinearProgress, Typography } from '@mui/material';
 import { BARLOW, MONO } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
+import { formatGameTimeLima } from '../utils/dateKeys.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL = 30_000;
@@ -210,7 +211,7 @@ function GameListItem({ game, selected, onClick, t }) {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', mb: '9px' }}>
         <StatusBadge status={status} t={t} />
         <Typography sx={{ fontFamily: MONO, color: C.textMuted, fontSize: '0.6rem', letterSpacing: 0 }}>
-          {game?.gameDate ? new Date(game.gameDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+          {game?.gameDate ? (formatGameTimeLima(game.gameDate) ?? '') : ''}
         </Typography>
       </Box>
 

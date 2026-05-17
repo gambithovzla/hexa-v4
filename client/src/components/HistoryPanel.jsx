@@ -15,7 +15,8 @@ import useBankroll from '../hooks/useBankroll';
 import { useAuth } from '../store/authStore';
 import en from '../i18n/en.json';
 import es from '../i18n/es.json';
-import { C, BARLOW, MONO, SANS } from '../theme';
+import { BARLOW, MONO, SANS } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 import InsightsSemana from './InsightsSemana';
 import AdminEnsembleBadge from './AdminEnsembleBadge';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
@@ -109,17 +110,17 @@ function MatchupWithLogos({ matchup, sport = 'mlb' }) {
 
 function SectionLabel({ children }) {
   return (
-    <Typography component="div" sx={{ fontFamily: MONO, fontSize: '8px', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '3px', mb: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-      <span style={{ color: C.cyan, opacity: 0.7 }}>[ </span>
+    <Typography component="div" className="history-section-label" sx={{ fontFamily: MONO, fontSize: '8px', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '3px', mb: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <span className="history-section-bracket" style={{ color: C.cyan, opacity: 0.7 }}>[ </span>
       {children}
-      <span style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
+      <span className="history-section-bracket" style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
     </Typography>
   );
 }
 
 function StatCard({ value, label, color, sub }) {
   return (
-    <Box sx={{
+    <Box className="history-stat-card" sx={{
       bgcolor: C.surface, border: `1px solid ${C.border}`, borderRadius: '0',
       p: '12px 8px', textAlign: 'center', display: 'flex', flexDirection: 'column',
       alignItems: 'center', gap: '4px', position: 'relative',
@@ -254,7 +255,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
   );
 
   return (
-    <Box sx={{
+    <Box className="history-pick-card" sx={{
       bgcolor: C.surface, border: `1px solid ${C.border}`,
       borderLeft: `2px solid ${borderColor}`, borderRadius: '0',
       p: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px',
@@ -317,13 +318,13 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
       </Typography>
 
       {entry.pick && (
-        <Box sx={{
+        <Box className="history-pick-best" sx={{
           background: C.accentDim, border: `1px solid ${C.accentLine}`,
           borderTop: `2px solid ${C.accent}`, borderRadius: '0',
           p: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px',
           boxShadow: C.accentGlow,
         }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: '7px', color: C.accent, textTransform: 'uppercase', letterSpacing: '3px', textShadow: `0 0 8px rgba(255,102,0,0.5)` }}>
+          <Typography className="history-pick-best-label" sx={{ fontFamily: MONO, fontSize: '7px', color: C.accent, textTransform: 'uppercase', letterSpacing: '3px', textShadow: `0 0 8px rgba(255,102,0,0.5)` }}>
             BEST_PICK // ORACLE_OUTPUT
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
@@ -1361,13 +1362,13 @@ const TABS = [
   { key: 'semana',   label: 'SEMANA' },
 ];
 
-export default function HistoryPanel({ lang = 'en', sport = 'all' }) {
+export default function HistoryPanel({ lang = 'en', sport = 'all', embedded = false }) {
   const [activeTab, setActiveTab] = useState('analisis');
 
   return (
-    <Box sx={{ bgcolor: C.bg, minHeight: '60vh', display: 'flex', flexDirection: 'column', gap: '0' }}>
+    <Box className="history-panel-root" sx={{ bgcolor: embedded ? 'transparent' : C.bg, minHeight: embedded ? 0 : '60vh', display: 'flex', flexDirection: 'column', gap: '0' }}>
       {/* Tab bar */}
-      <Box sx={{
+      <Box className="history-tab-bar" sx={{
         display: 'flex', borderBottom: `1px solid ${C.border}`,
         mb: '16px', px: 2, pt: 2,
       }}>
@@ -1375,6 +1376,7 @@ export default function HistoryPanel({ lang = 'en', sport = 'all' }) {
           <Box
             key={tab.key}
             component="button"
+            className={activeTab === tab.key ? 'history-tab history-tab-active' : 'history-tab'}
             onClick={() => setActiveTab(tab.key)}
             sx={{
               px: '18px', py: '8px',
