@@ -247,6 +247,22 @@ export async function predictRunLine(features) {
   return _post('/predict/runline', features ?? {});
 }
 
+const PROP_KIND_ENDPOINTS = {
+  hits: 'hits',
+  strikeouts: 'strikeouts',
+  total_bases: 'total_bases',
+  home_runs: 'home_runs',
+  rbis: 'rbis',
+};
+
+export async function predictProp(propKind, features) {
+  if (!_guard()) return null;
+  const kind = String(propKind ?? '').toLowerCase();
+  const segment = PROP_KIND_ENDPOINTS[kind];
+  if (!segment) return null;
+  return _post(`/predict/prop/${segment}`, features ?? {});
+}
+
 /**
  * Score up to 50 items in one call. Each item must include a `market` field.
  * @param {Array<{market: string, [key: string]: any}>} items
@@ -381,5 +397,76 @@ export function buildMLFeaturePayload(statcastData = {}, features = {}) {
     odds_ml_home:                   safe(odds?.moneylineHome ?? odds?.homeML),
     odds_ml_away:                   safe(odds?.moneylineAway ?? odds?.awayML),
     odds_ou_total:                  safe(odds?.total ?? odds?.ouTotal),
+  };
+}
+
+export function buildPropMLFeaturePayload(row = {}) {
+  const base = buildMLFeaturePayload(
+    {
+      homePitcher: {
+        xwOBA_against: row.home_pitcher_xwoba,
+        whiff_percent: row.home_pitcher_whiff,
+        k_percent: row.home_pitcher_k_pct,
+        era: row.home_pitcher_era,
+      },
+      awayPitcher: {
+        xwOBA_against: row.away_pitcher_xwoba,
+        whiff_percent: row.away_pitcher_whiff,
+        k_percent: row.away_pitcher_k_pct,
+        era: row.away_pitcher_era,
+      },
+      homeLineup: { avg_xwOBA: row.home_lineup_avg_xwoba },
+      awayLineup: { avg_xwOBA: row.away_lineup_avg_xwoba },
+    },
+    {
+      homePitcherDaysRest: row.home_pitcher_days_rest,
+      awayPitcherDaysRest: row.away_pitcher_days_rest,
+      homePitcherPitchesLastStart: row.home_pitcher_pitches_last_start,
+      awayPitcherPitchesLastStart: row.away_pitcher_pitches_last_start,
+      homeBullpenPitchesLast3d: row.home_bullpen_pitches_last_3d,
+      awayBullpenPitchesLast3d: row.away_bullpen_pitches_last_3d,
+      homeTeamOps: row.home_team_ops,
+      awayTeamOps: row.away_team_ops,
+      isDayGame: row.is_day_game,
+      isDome: row.is_dome,
+      gameNumberInSeries: row.game_number_in_series,
+      weatherData: { temperature: row.temperature, wind_speed: row.wind_speed },
+      parkFactorData: { overall: row.park_factor_overall, hr: row.park_factor_hr },
+      oddsData: {
+        moneylineHome: row.odds_ml_home,
+        moneylineAway: row.odds_ml_away,
+        total: row.odds_ou_total,
+      },
+    },
+  );
+
+  function safe(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const side = String(row.side ?? '').toLowerCase();
+  return {
+    ...base,
+    line: safe(row.line),
+    prop_side_over: side === 'over' ? 1 : side === 'under' ? 0 : null,
+    prop_player_xwoba: safe(row.prop_player_xwoba),
+    prop_player_xba: safe(row.prop_player_xba),
+    prop_player_xslg: safe(row.prop_player_xslg),
+    prop_player_k_pct: safe(row.prop_player_k_pct),
+    prop_player_bb_pct: safe(row.prop_player_bb_pct),
+    prop_player_avg_exit_velocity: safe(row.prop_player_avg_exit_velocity),
+    prop_player_barrel_pct: safe(row.prop_player_barrel_pct),
+    prop_player_hard_hit_pct: safe(row.prop_player_hard_hit_pct),
+    prop_player_rolling_woba_7d: safe(row.prop_player_rolling_woba_7d),
+    prop_player_rolling_woba_14d: safe(row.prop_player_rolling_woba_14d),
+    prop_player_rolling_woba_21d: safe(row.prop_player_rolling_woba_21d),
+    prop_player_ops_vs_lhp: safe(row.prop_player_ops_vs_lhp),
+    prop_player_ops_vs_rhp: safe(row.prop_player_ops_vs_rhp),
+    prop_opponent_pitcher_hand: row.prop_opponent_pitcher_hand ?? null,
+    prop_opponent_pitcher_xwoba_against: safe(row.prop_opponent_pitcher_xwoba_against),
+    prop_opponent_pitcher_k_pct: safe(row.prop_opponent_pitcher_k_pct),
+    prop_odds_american: safe(row.prop_odds_american),
+    prop_implied_prob: safe(row.prop_implied_prob),
   };
 }

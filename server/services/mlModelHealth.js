@@ -1,4 +1,7 @@
-const MLB_MARKETS = ['moneyline', 'overunder', 'runline'];
+const MLB_MARKETS = [
+  'moneyline', 'overunder', 'runline',
+  'prop_hits', 'prop_strikeouts', 'prop_total_bases', 'prop_home_runs', 'prop_rbis',
+];
 const RUNLINE_EARLY_FLOOR = 60;
 const RUNLINE_MIN_FLOOR_DEFAULT = 25;
 

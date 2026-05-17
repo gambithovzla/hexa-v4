@@ -30,7 +30,9 @@ const ALL_TEAM_ABBRS = new Set([
 const RL_SIGNED = /(?:rl\s+)?([+-]\d+\.5)(?!\d)/i;
 
 // ── Over/Under patterns ───────────────────────────────────────────────────
-const OU_PATTERN = /\b(over|under|o|u)\s+([\d]+(?:\.5)?)\b/i;
+const OU_PATTERN = /\b(over|under|o|u|más de|mas de|menos de)\s+([\d]+(?:\.5)?)\b/i;
+const STAT_FIRST_PROP_PATTERN =
+  /^(.+?)\s+(hits?|strikeouts?|ponches?|total bases|bases totales|tb|hr|home runs?|jonrones?|rbis?|carreras impulsadas)\s+(over|under|o|u|más de|mas de|menos de)\s+([\d]+(?:\.5)?)$/i;
 
 // ── Moneyline — plain team abbreviation or "Team ML" ─────────────────────
 const ML_EXPLICIT = /\bml\b/i;
@@ -39,15 +41,17 @@ const ML_EXPLICIT = /\bml\b/i;
 // "Aaron Judge Over 0.5 HR", "Shohei Ohtani Under 8.5 Strikeouts"
 // "Juan Soto Over 1.5 Hits", "Yordan Alvarez Over 1.5 TB"
 const PROP_PATTERN =
-  /^(.+?)\s+(over|under)\s+([\d]+(?:\.5)?)\s+(.+)$/i;
+  /^(.+?)\s+(over|under|más de|mas de|menos de)\s+([\d]+(?:\.5)?)\s+(.+)$/i;
 
 const PROP_KIND_MAP = {
   'hit': 'hits', 'hits': 'hits',
   'tb': 'total_bases', 'total base': 'total_bases', 'total bases': 'total_bases',
+  'bases totales': 'total_bases', 'base total': 'total_bases',
   'hr': 'home_runs', 'home run': 'home_runs', 'home runs': 'home_runs',
+  'jonron': 'home_runs', 'jonrones': 'home_runs',
   'k': 'strikeouts', 'strikeout': 'strikeouts', 'strikeouts': 'strikeouts',
-  'so': 'strikeouts',
-  'rbi': 'rbis', 'rbis': 'rbis',
+  'so': 'strikeouts', 'ponche': 'strikeouts', 'ponches': 'strikeouts',
+  'rbi': 'rbis', 'rbis': 'rbis', 'carreras impulsadas': 'rbis',
   'sb': 'stolen_bases', 'stolen base': 'stolen_bases', 'stolen bases': 'stolen_bases',
   'walk': 'walks', 'walks': 'walks', 'bb': 'walks',
   'out': 'outs_recorded', 'outs recorded': 'outs_recorded', 'outs': 'outs_recorded',
@@ -62,6 +66,17 @@ function normalizeText(t) {
 function parseNumber(s) {
   const n = parseFloat(s);
   return Number.isNaN(n) ? null : n;
+}
+
+function resolveOuSide(raw) {
+  const key = normalizeText(raw);
+  if (key.startsWith('o') || key.includes('over') || key.includes('mas de') || key.includes('más de')) {
+    return 'over';
+  }
+  if (key.startsWith('u') || key.includes('under') || key.includes('menos de')) {
+    return 'under';
+  }
+  return null;
 }
 
 function resolvePropKind(raw) {
@@ -119,23 +134,34 @@ export function parsePick(text, ctx = {}) {
 
   const norm = normalizeText(clean);
 
+  const statFirst = clean.match(STAT_FIRST_PROP_PATTERN);
+  if (statFirst) {
+    return {
+      market_type: 'prop',
+      side: resolveOuSide(statFirst[3]),
+      line: parseNumber(statFirst[4]),
+      prop_kind: resolvePropKind(statFirst[2]),
+      prop_player_name: statFirst[1].trim(),
+    };
+  }
+
   // ── 1. Over/Under ─────────────────────────────────────────────────────────
   const ouMatch = clean.match(OU_PATTERN);
   if (ouMatch) {
-    const sideRaw = ouMatch[1].toLowerCase();
+    const sideRaw = ouMatch[1];
     const lineRaw = ouMatch[2];
-    // Distinguish team total prop O/U from game total by presence of player/team name before it
+    const ouSide = resolveOuSide(sideRaw);
     const isProp = PROP_PATTERN.test(clean);
     if (isProp) {
       const propMatch = clean.match(PROP_PATTERN);
       const playerName = propMatch[1].trim();
+      const propSide = resolveOuSide(propMatch[2]);
       const propLineRaw = propMatch[3];
       const propKindRaw = propMatch[4];
-      // Heuristic: if playerName starts with a team abbr and propKind is a game-total keyword, treat as OU
       if (startsWithTeamAbbr(playerName) && resolvePropKind(propKindRaw) === null) {
         return {
           market_type: 'overunder',
-          side: sideRaw.startsWith('o') ? 'over' : 'under',
+          side: propSide ?? ouSide,
           line: parseNumber(propLineRaw),
           prop_kind: null,
           prop_player_name: null,
@@ -143,7 +169,7 @@ export function parsePick(text, ctx = {}) {
       }
       return {
         market_type: 'prop',
-        side: sideRaw.startsWith('o') ? 'over' : 'under',
+        side: propSide ?? ouSide,
         line: parseNumber(propLineRaw),
         prop_kind: resolvePropKind(propKindRaw),
         prop_player_name: playerName,
@@ -151,7 +177,7 @@ export function parsePick(text, ctx = {}) {
     }
     return {
       market_type: 'overunder',
-      side: sideRaw.startsWith('o') ? 'over' : 'under',
+      side: ouSide,
       line: parseNumber(lineRaw),
       prop_kind: null,
       prop_player_name: null,

@@ -55,7 +55,11 @@ PROP_NUMERIC_FEATURES = [
     "prop_player_xwoba", "prop_player_xba", "prop_player_xslg",
     "prop_player_k_pct", "prop_player_bb_pct",
     "prop_player_avg_exit_velocity", "prop_player_barrel_pct",
-    "prop_player_hard_hit_pct", "prop_player_rolling_woba_14d",
+    "prop_player_hard_hit_pct",
+    "prop_player_rolling_woba_7d", "prop_player_rolling_woba_14d", "prop_player_rolling_woba_21d",
+    "prop_player_ops_vs_lhp", "prop_player_ops_vs_rhp",
+    "prop_opponent_pitcher_xwoba_against", "prop_opponent_pitcher_k_pct",
+    "prop_implied_prob",
 ]
 
 

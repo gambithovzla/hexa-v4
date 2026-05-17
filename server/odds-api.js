@@ -10,7 +10,13 @@
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const CACHE_TTL_MS  = 60 * 60 * 1000; // 60 minutes
-const PROP_MARKETS  = ['batter_hits', 'pitcher_strikeouts'];
+const PROP_MARKETS  = [
+  'batter_hits',
+  'pitcher_strikeouts',
+  'batter_total_bases',
+  'batter_home_runs',
+  'batter_rbis',
+];
 
 const _cache = new Map();
 const _propCache = new Map();

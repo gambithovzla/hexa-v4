@@ -44,8 +44,17 @@ const INK0    = 'var(--ink-0)';
 const DIM     = 'var(--neon-cyan-dim)';
 
 const MARKETS = ['moneyline', 'overunder', 'runline'];
-const MARKET_LABELS = { moneyline: 'Moneyline', overunder: 'Over / Under', runline: 'Runline' };
-const MARKET_TINTS  = { moneyline: CYAN, overunder: GREEN, runline: AMBER };
+const PROP_MARKETS = ['prop_hits', 'prop_strikeouts', 'prop_total_bases', 'prop_home_runs', 'prop_rbis'];
+const MARKET_LABELS = {
+  moneyline: 'Moneyline', overunder: 'Over / Under', runline: 'Runline',
+  prop_hits: 'Hits', prop_strikeouts: 'Strikeouts', prop_total_bases: 'Total Bases',
+  prop_home_runs: 'Home Runs', prop_rbis: 'RBIs',
+};
+const MARKET_TINTS  = {
+  moneyline: CYAN, overunder: GREEN, runline: AMBER,
+  prop_hits: CYAN, prop_strikeouts: GREEN, prop_total_bases: AMBER,
+  prop_home_runs: ACCENT, prop_rbis: CYAN,
+};
 
 // ── Bilingual strings ─────────────────────────────────────────────────────────
 const STRINGS = {
@@ -99,8 +108,9 @@ const STRINGS = {
     allOk:            'RETRAIN ALL OK',
     allFail:          'RETRAIN ALL FAILED',
     allOkMsg:         (s) => `Completed in ${s}s — see retrain log for per-market metrics.`,
-    comingSoon:       'Hits, Total Bases, Strikeouts — coming soon',
-    propsDesc:        'Player-prop training requires per-batter features (xBA, xSLG, splits vs handedness, recent form 7d/14d) that are not yet in the pipeline. A dedicated sprint will extend savant-fetcher with batter leaderboards and add per-prop_kind models alongside the existing game-level ones.',
+    playerPropsTitle: 'Player Props Models',
+    propsBoardLink:   'Open props board → /props',
+    propsDesc:        'Per-prop_kind XGBoost models (hits, TB, K, HR, RBI). Features include Savant xBA/xSLG, 7d/14d form, platoon splits, and matchup pitcher. Enable public ML scores with MLB_PROPS_ML_PUBLIC_ENABLED after Brier gate (100+ resolved per market).',
     inferencePanel:   'Live inference status',
     modelsHud:        (loaded, avail) => `MODELS ${loaded}/${avail}`,
     ensembleHudLive:  'ENSEMBLE LIVE',
@@ -165,8 +175,9 @@ const STRINGS = {
     allOk:            'REENTRENADO TODO OK',
     allFail:          'FALLO REENTRENAMIENTO GLOBAL',
     allOkMsg:         (s) => `Completado en ${s}s — ver historial para métricas por mercado.`,
-    comingSoon:       'Hits, Total Bases, Ponches — próximamente',
-    propsDesc:        'El entrenamiento de props por jugador requiere features individuales (xBA, xSLG, splits por lateralidad, forma reciente 7d/14d) que aún no están en el pipeline. Un sprint dedicado extenderá savant-fetcher con leaderboards de bateadores y añadirá modelos por prop_kind junto a los modelos de nivel de juego existentes.',
+    playerPropsTitle: 'Modelos Player Props',
+    propsBoardLink:   'Abrir tablero de props → /props',
+    propsDesc:        'Modelos XGBoost por prop_kind (hits, bases totales, ponches, HR, RBI). Features: Savant xBA/xSLG, forma 7d/14d, splits vs mano y pitcher rival. Activa scores públicos con MLB_PROPS_ML_PUBLIC_ENABLED tras gate Brier (100+ resueltos por mercado).',
     inferencePanel:   'Estado de inferencia en vivo',
     modelsHud:        (loaded, avail) => `MODELOS ${loaded}/${avail}`,
     ensembleHudLive:  'ENSEMBLE LIVE',
@@ -1285,22 +1296,30 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
       <SectionTitle>{T.retrainLog}</SectionTitle>
       <RetrainLog rows={logRows} T={T} />
 
-      {/* Player Props banner */}
-      <Box sx={{
-        mt: 3, position: 'relative',
-        background: `linear-gradient(135deg, ${SURFACE} 0%, ${SURFACE2} 100%)`,
-        border: `1px dashed ${ACCENT}66`, p: '16px 18px', overflow: 'hidden',
-      }}>
-        <CornerBrackets color={ACCENT} />
-        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px' }}>
-          SPRINT 5 // PLAYER PROPS
-        </Typography>
-        <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.05rem', fontWeight: 700, color: ACCENT, mt: '4px' }}>
-          {T.comingSoon}
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, mt: 1, maxWidth: 720 }}>
-          {T.propsDesc}
-        </Typography>
+      <SectionTitle>{T.playerPropsTitle}</SectionTitle>
+      <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, mb: 1.5, maxWidth: 720 }}>
+        {T.propsDesc}
+      </Typography>
+      <Typography
+        component="a"
+        href="/props"
+        sx={{ fontFamily: MONO, fontSize: '10px', color: ACCENT, display: 'block', mb: 2, textDecoration: 'none' }}
+      >
+        {T.propsBoardLink}
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+        {PROP_MARKETS.map((m, i) => (
+          <MarketCard
+            key={m}
+            market={m}
+            manifest={manifest}
+            marketObs={status?.observability?.markets?.find((row) => row.market === m)}
+            onRetrain={handleRetrain}
+            busy={busyMarket === m || busyMarket === 'all'}
+            index={i}
+            T={T}
+          />
+        ))}
       </Box>
 
       <Box sx={{ mt: 3, textAlign: 'center', fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '2px' }}>
