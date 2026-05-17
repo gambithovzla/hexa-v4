@@ -47,6 +47,7 @@ import {
   updateShadowModelRunsForGame,
 } from './shadow-model.js';
 import { buildHexaBoard } from './services/hexaBoardService.js';
+import { purgePickTrainingRows, DATASET_PICK_VISIBILITY_SQL } from './services/pickTrainingCleanup.js';
 import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
 import adminMlRouter from './routes/admin-ml.js';
@@ -377,6 +378,7 @@ async function persistAnalysisPick({
   gameDate = null,
   oddsData = null,
   featureStore = null,
+  mlOpinion = null,
 }) {
   if (!userId || !analysisData) return null;
 
@@ -395,9 +397,9 @@ async function persistAnalysisPick({
        oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
        model, language, odds_at_pick, implied_prob_at_pick, odds_details, kelly_recommendation,
        game_pk, game_date, value_breakdown, safe_candidates, safe_scope, selection_method,
-       user_email, sport, pick_time_lima
+       user_email, sport, pick_time_lima, ml_opinion
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,'mlb',(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,'mlb',(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP,$26)
      RETURNING *`,
     [
       userId,
@@ -425,6 +427,7 @@ async function persistAnalysisPick({
       analysisData.safe_scope ?? null,
       analysisData.selection_method ?? null,
       userEmail ?? null,
+      mlOpinion != null ? JSON.stringify(mlOpinion) : null,
     ]
   );
 
@@ -1011,27 +1014,6 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       }
     }
 
-    if (isShadowModeEnabled() && analysis?.data && gameData) {
-      try {
-        await recordShadowModelRun({
-          userId: req.user.id,
-          userEmail: req.user.email ?? null,
-          sourceType: 'analysis',
-          analysisMode: 'single',
-          gameData,
-          gameDate: normalizeDateInput(date ?? gameData?.gameDate),
-          analysisData: analysis.data,
-          xgboostResult: analysis.xgboostResult ?? null,
-          statcastData: shadowStatcast,
-          features: shadowFeatures,
-          pickAligned: pickAlignedForShadow,
-          adminMl: req.user.is_admin === true,
-        });
-      } catch (shadowErr) {
-        console.warn('[shadow-mode] Could not persist analysis run:', shadowErr.message);
-      }
-    }
-
     let savedPick = null;
     if (responseData && !analysis.parseError) {
       try {
@@ -1048,9 +1030,32 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
           gameDate: date,
           oddsData: matchedOdds ?? null,
           featureStore: featureStore ?? null,
+          mlOpinion: req.user.is_admin ? mlOpinion : null,
         });
       } catch (saveErr) {
         console.warn('[single-persist] Could not auto-save single pick:', saveErr.message);
+      }
+    }
+
+    if (isShadowModeEnabled() && analysis?.data && gameData) {
+      try {
+        await recordShadowModelRun({
+          userId: req.user.id,
+          userEmail: req.user.email ?? null,
+          pickId: savedPick?.id ?? null,
+          sourceType: 'analysis',
+          analysisMode: 'single',
+          gameData,
+          gameDate: normalizeDateInput(date ?? gameData?.gameDate),
+          analysisData: analysis.data,
+          xgboostResult: analysis.xgboostResult ?? null,
+          statcastData: shadowStatcast,
+          features: shadowFeatures,
+          pickAligned: pickAlignedForShadow,
+          adminMl: req.user.is_admin === true,
+        });
+      } catch (shadowErr) {
+        console.warn('[shadow-mode] Could not persist analysis run:', shadowErr.message);
       }
     }
 
@@ -1771,27 +1776,6 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             }
           }
 
-          if (isShadowModeEnabled() && deterministicSafe) {
-            try {
-              await recordShadowModelRun({
-                userId: req.user.id,
-                userEmail: req.user.email ?? null,
-                sourceType: 'analysis',
-                analysisMode: isMulti ? 'safe_multi' : 'safe_single',
-                gameData,
-                gameDate: normalizeDateInput(resolvedDate ?? gameData?.gameDate),
-                analysisData: deterministicSafe,
-                xgboostResult: xgboostResult ?? null,
-                statcastData: shadowStatcastData,
-                features: shadowFeatures,
-                pickAligned: pickAlignedForShadow,
-                adminMl: req.user.is_admin === true,
-              });
-            } catch (shadowErr) {
-              console.warn('[shadow-mode] Could not persist safe analysis run:', shadowErr.message);
-            }
-          }
-
           let savedPick = null;
           if (deterministicSafe && !analysis.parseError) {
             try {
@@ -1807,9 +1791,32 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
                 gameDate: resolvedDate,
                 oddsData: matchedOdds ?? null,
                 featureStore: buildFeatureStorePayload(gameData, resolvedDate, shadowFeatures),
+                mlOpinion: req.user.is_admin ? mlOpinion : null,
               });
             } catch (saveErr) {
               console.warn('[safe-persist] Could not auto-save safe pick:', saveErr.message);
+            }
+          }
+
+          if (isShadowModeEnabled() && deterministicSafe) {
+            try {
+              await recordShadowModelRun({
+                userId: req.user.id,
+                userEmail: req.user.email ?? null,
+                pickId: savedPick?.id ?? null,
+                sourceType: 'analysis',
+                analysisMode: isMulti ? 'safe_multi' : 'safe_single',
+                gameData,
+                gameDate: normalizeDateInput(resolvedDate ?? gameData?.gameDate),
+                analysisData: deterministicSafe,
+                xgboostResult: xgboostResult ?? null,
+                statcastData: shadowStatcastData,
+                features: shadowFeatures,
+                pickAligned: pickAlignedForShadow,
+                adminMl: req.user.is_admin === true,
+              });
+            } catch (shadowErr) {
+              console.warn('[shadow-mode] Could not persist safe analysis run:', shadowErr.message);
             }
           }
 
@@ -3166,6 +3173,12 @@ app.delete('/api/picks/:id', verifyToken, async (req, res) => {
       [req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
+    try {
+      const purged = await purgePickTrainingRows(rows[0].id);
+      console.log(`[picks] purged training rows for pick ${rows[0].id}:`, purged);
+    } catch (purgeErr) {
+      console.warn(`[picks] training purge failed for pick ${rows[0].id}:`, purgeErr.message);
+    }
     res.json({ success: true, id: rows[0].id });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -3178,7 +3191,18 @@ app.delete('/api/picks', verifyToken, async (req, res) => {
     if (!req.user.is_admin) {
       return res.status(403).json({ success: false, error: 'Only admin can clear all history' });
     }
+    const pending = await pool.query(
+      'SELECT id FROM picks WHERE user_id = $1 AND deleted_at IS NULL',
+      [req.user.id]
+    );
     await pool.query('UPDATE picks SET deleted_at = NOW() WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    for (const row of pending.rows) {
+      try {
+        await purgePickTrainingRows(row.id);
+      } catch (purgeErr) {
+        console.warn(`[picks] training purge failed for pick ${row.id}:`, purgeErr.message);
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -3853,56 +3877,56 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
     }
     const rawSport = String(req.query.sport ?? 'mlb').toLowerCase();
     const sport = rawSport === 'nba' ? 'nba' : 'mlb';
-    const sportFilter = `COALESCE(sport,'mlb') = '${sport}'`;
     const sportFilterPf = `COALESCE(pf.sport,'mlb') = '${sport}'`;
+    const datasetBaseWhere = `WHERE ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}`;
 
     const summarySql = sport === 'nba'
       ? `
         SELECT
           COUNT(*) as total_records,
-          COUNT(*) FILTER (WHERE result = 'win') as wins,
-          COUNT(*) FILTER (WHERE result = 'loss') as losses,
-          COUNT(*) FILTER (WHERE result IS NULL) as pending,
-          COUNT(*) FILTER (WHERE pick_id IS NOT NULL) as from_real_picks,
-          COUNT(*) FILTER (WHERE backtest_id IS NOT NULL) as from_backtests,
-          ROUND(AVG(home_net_rating)::numeric, 2) as avg_home_net_rating,
-          ROUND(AVG(away_net_rating)::numeric, 2) as avg_away_net_rating,
-          ROUND(AVG(home_pace)::numeric, 1) as avg_home_pace,
-          ROUND(AVG(context_completeness)::numeric, 2) as avg_completeness,
-          MIN(game_date) as earliest_date,
-          MAX(game_date) as latest_date
-        FROM pick_features
-        WHERE ${sportFilter}
+          COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+          COUNT(*) FILTER (WHERE pf.result = 'loss') as losses,
+          COUNT(*) FILTER (WHERE pf.result IS NULL) as pending,
+          COUNT(*) FILTER (WHERE pf.pick_id IS NOT NULL) as from_real_picks,
+          COUNT(*) FILTER (WHERE pf.backtest_id IS NOT NULL) as from_backtests,
+          ROUND(AVG(pf.home_net_rating)::numeric, 2) as avg_home_net_rating,
+          ROUND(AVG(pf.away_net_rating)::numeric, 2) as avg_away_net_rating,
+          ROUND(AVG(pf.home_pace)::numeric, 1) as avg_home_pace,
+          ROUND(AVG(pf.context_completeness)::numeric, 2) as avg_completeness,
+          MIN(pf.game_date) as earliest_date,
+          MAX(pf.game_date) as latest_date
+        FROM pick_features pf
+        ${datasetBaseWhere}
       `
       : `
         SELECT
           COUNT(*) as total_records,
-          COUNT(*) FILTER (WHERE result = 'win') as wins,
-          COUNT(*) FILTER (WHERE result = 'loss') as losses,
-          COUNT(*) FILTER (WHERE result IS NULL) as pending,
-          COUNT(*) FILTER (WHERE pick_id IS NOT NULL) as from_real_picks,
-          COUNT(*) FILTER (WHERE backtest_id IS NOT NULL) as from_backtests,
-          ROUND(AVG(home_pitcher_xwoba)::numeric, 3) as avg_home_p_xwoba,
-          ROUND(AVG(away_pitcher_xwoba)::numeric, 3) as avg_away_p_xwoba,
-          ROUND(AVG(temperature)::numeric, 1) as avg_temperature,
-          ROUND(AVG(data_quality_score)::numeric, 0) as avg_data_quality,
-          MIN(game_date) as earliest_date,
-          MAX(game_date) as latest_date
-        FROM pick_features
-        WHERE ${sportFilter}
+          COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+          COUNT(*) FILTER (WHERE pf.result = 'loss') as losses,
+          COUNT(*) FILTER (WHERE pf.result IS NULL) as pending,
+          COUNT(*) FILTER (WHERE pf.pick_id IS NOT NULL) as from_real_picks,
+          COUNT(*) FILTER (WHERE pf.backtest_id IS NOT NULL) as from_backtests,
+          ROUND(AVG(pf.home_pitcher_xwoba)::numeric, 3) as avg_home_p_xwoba,
+          ROUND(AVG(pf.away_pitcher_xwoba)::numeric, 3) as avg_away_p_xwoba,
+          ROUND(AVG(pf.temperature)::numeric, 1) as avg_temperature,
+          ROUND(AVG(pf.data_quality_score)::numeric, 0) as avg_data_quality,
+          MIN(pf.game_date) as earliest_date,
+          MAX(pf.game_date) as latest_date
+        FROM pick_features pf
+        ${datasetBaseWhere}
       `;
     const summary = await pool.query(summarySql);
 
     const monthOptions = await pool.query(`
       SELECT
-        TO_CHAR(game_date::date, 'YYYY-MM') as month_key,
-        MIN(game_date::date) as month_start,
+        TO_CHAR(pf.game_date::date, 'YYYY-MM') as month_key,
+        MIN(pf.game_date::date) as month_start,
         COUNT(*) as total_records,
-        COUNT(*) FILTER (WHERE result = 'win') as wins,
-        COUNT(*) FILTER (WHERE result = 'loss') as losses,
-        COUNT(*) FILTER (WHERE result IS NULL) as pending
-      FROM pick_features
-      WHERE game_date IS NOT NULL AND ${sportFilter}
+        COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+        COUNT(*) FILTER (WHERE pf.result = 'loss') as losses,
+        COUNT(*) FILTER (WHERE pf.result IS NULL) as pending
+      FROM pick_features pf
+      WHERE pf.game_date IS NOT NULL AND ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}
       GROUP BY 1
       ORDER BY month_key DESC
     `);
@@ -3912,13 +3936,13 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
     const dailySummaries = selectedMonth
       ? await pool.query(`
           SELECT
-            TO_CHAR(game_date::date, 'YYYY-MM-DD') as day_key,
+            TO_CHAR(pf.game_date::date, 'YYYY-MM-DD') as day_key,
             COUNT(*) as total_records,
-            COUNT(*) FILTER (WHERE result = 'win') as wins,
-            COUNT(*) FILTER (WHERE result = 'loss') as losses,
-            COUNT(*) FILTER (WHERE result IS NULL) as pending
-          FROM pick_features
-          WHERE TO_CHAR(game_date::date, 'YYYY-MM') = $1 AND ${sportFilter}
+            COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+            COUNT(*) FILTER (WHERE pf.result = 'loss') as losses,
+            COUNT(*) FILTER (WHERE pf.result IS NULL) as pending
+          FROM pick_features pf
+          WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1 AND ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}
           GROUP BY 1
           ORDER BY day_key DESC
         `, [selectedMonth])
@@ -3929,7 +3953,11 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
           ? await pool.query(`
               SELECT pf.game_date, pf.game_pk, pf.pick, pf.result,
                 p.matchup,
-                pf.user_email, pf.pick_time_lima,
+                CASE
+                  WHEN COALESCE(pf.source, p.source) = 'oracle_chat' THEN 'Oraclechat'
+                  ELSE COALESCE(pf.user_email, p.user_email)
+                END AS user_email,
+                pf.pick_time_lima,
                 pf.home_team_abbr, pf.away_team_abbr,
                 pf.home_net_rating, pf.away_net_rating,
                 pf.home_off_rating, pf.away_off_rating,
@@ -3944,14 +3972,18 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
                 pf.odds_ml_home, pf.odds_ml_away, pf.odds_ou_total
               FROM pick_features pf
               LEFT JOIN picks p ON pf.pick_id = p.id
-              WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1 AND ${sportFilterPf}
+              WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1 AND ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}
               ORDER BY pf.game_date DESC, pf.created_at DESC
               LIMIT 750
             `, [selectedMonth])
           : await pool.query(`
               SELECT pf.game_date, pf.game_pk, pf.pick, pf.result,
                 p.matchup,
-                pf.user_email, pf.pick_time_lima,
+                CASE
+                  WHEN COALESCE(pf.source, p.source) = 'oracle_chat' THEN 'Oraclechat'
+                  ELSE COALESCE(pf.user_email, p.user_email)
+                END AS user_email,
+                pf.pick_time_lima,
                 pf.home_pitcher_xwoba, pf.away_pitcher_xwoba,
                 pf.home_pitcher_whiff, pf.away_pitcher_whiff,
                 pf.home_lineup_avg_xwoba, pf.away_lineup_avg_xwoba,
@@ -3960,7 +3992,7 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
                 pf.odds_ml_home, pf.odds_ml_away, pf.odds_ou_total
               FROM pick_features pf
               LEFT JOIN picks p ON pf.pick_id = p.id
-              WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1 AND ${sportFilterPf}
+              WHERE TO_CHAR(pf.game_date::date, 'YYYY-MM') = $1 AND ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}
               ORDER BY pf.game_date DESC, pf.created_at DESC
               LIMIT 750
             `, [selectedMonth]))
@@ -3970,31 +4002,31 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
       ? `
         SELECT
           COUNT(*) as total,
-          COUNT(home_net_rating) as has_home_net,
-          COUNT(away_net_rating) as has_away_net,
-          COUNT(home_pace)       as has_home_pace,
-          COUNT(away_pace)       as has_away_pace,
-          COUNT(home_rest_days)  as has_home_rest,
-          COUNT(away_rest_days)  as has_away_rest,
-          COUNT(odds_ml_home)    as has_odds,
-          COUNT(context_completeness) as has_completeness
-        FROM pick_features
-        WHERE ${sportFilter}
+          COUNT(pf.home_net_rating) as has_home_net,
+          COUNT(pf.away_net_rating) as has_away_net,
+          COUNT(pf.home_pace)       as has_home_pace,
+          COUNT(pf.away_pace)       as has_away_pace,
+          COUNT(pf.home_rest_days)  as has_home_rest,
+          COUNT(pf.away_rest_days)  as has_away_rest,
+          COUNT(pf.odds_ml_home)    as has_odds,
+          COUNT(pf.context_completeness) as has_completeness
+        FROM pick_features pf
+        ${datasetBaseWhere}
       `
       : `
         SELECT
           COUNT(*) as total,
-          COUNT(home_pitcher_xwoba) as has_home_xwoba,
-          COUNT(away_pitcher_xwoba) as has_away_xwoba,
-          COUNT(home_pitcher_whiff) as has_home_whiff,
-          COUNT(away_pitcher_whiff) as has_away_whiff,
-          COUNT(home_lineup_avg_xwoba) as has_home_lineup,
-          COUNT(away_lineup_avg_xwoba) as has_away_lineup,
-          COUNT(temperature) as has_temperature,
-          COUNT(odds_ml_home) as has_odds,
-          COUNT(park_factor_overall) as has_park
-        FROM pick_features
-        WHERE ${sportFilter}
+          COUNT(pf.home_pitcher_xwoba) as has_home_xwoba,
+          COUNT(pf.away_pitcher_xwoba) as has_away_xwoba,
+          COUNT(pf.home_pitcher_whiff) as has_home_whiff,
+          COUNT(pf.away_pitcher_whiff) as has_away_whiff,
+          COUNT(pf.home_lineup_avg_xwoba) as has_home_lineup,
+          COUNT(pf.away_lineup_avg_xwoba) as has_away_lineup,
+          COUNT(pf.temperature) as has_temperature,
+          COUNT(pf.odds_ml_home) as has_odds,
+          COUNT(pf.park_factor_overall) as has_park
+        FROM pick_features pf
+        ${datasetBaseWhere}
       `;
     const featureCoverage = await pool.query(featureCoverageSql);
 
@@ -4003,26 +4035,26 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
       ? await pool.query(`
           SELECT
             CASE
-              WHEN home_rest_days = 0 OR away_rest_days = 0 THEN 'B2B PRESENT'
-              WHEN home_rest_days >= 3 OR away_rest_days >= 3 THEN '3+ REST DAYS'
+              WHEN pf.home_rest_days = 0 OR pf.away_rest_days = 0 THEN 'B2B PRESENT'
+              WHEN pf.home_rest_days >= 3 OR pf.away_rest_days >= 3 THEN '3+ REST DAYS'
               ELSE '1-2 REST DAYS'
             END as bucket,
-            COUNT(*) FILTER (WHERE result = 'win') as wins,
-            COUNT(*) FILTER (WHERE result IN ('win','loss')) as total
-          FROM pick_features
-          WHERE ${sportFilter}
-            AND result IN ('win','loss')
-            AND (home_rest_days IS NOT NULL OR away_rest_days IS NOT NULL)
+            COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+            COUNT(*) FILTER (WHERE pf.result IN ('win','loss')) as total
+          FROM pick_features pf
+          WHERE ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}
+            AND pf.result IN ('win','loss')
+            AND (pf.home_rest_days IS NOT NULL OR pf.away_rest_days IS NOT NULL)
           GROUP BY bucket
           ORDER BY bucket
         `)
       : await pool.query(`
           SELECT
-            CASE WHEN temperature < 50 THEN 'COLD (<50F)' WHEN temperature < 70 THEN 'MILD (50-70F)' ELSE 'WARM (70F+)' END as temp_bucket,
-            COUNT(*) FILTER (WHERE result = 'win') as wins,
-            COUNT(*) FILTER (WHERE result IN ('win','loss')) as total
-          FROM pick_features
-          WHERE temperature IS NOT NULL AND result IN ('win','loss') AND ${sportFilter}
+            CASE WHEN pf.temperature < 50 THEN 'COLD (<50F)' WHEN pf.temperature < 70 THEN 'MILD (50-70F)' ELSE 'WARM (70F+)' END as temp_bucket,
+            COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+            COUNT(*) FILTER (WHERE pf.result IN ('win','loss')) as total
+          FROM pick_features pf
+          WHERE pf.temperature IS NOT NULL AND pf.result IN ('win','loss') AND ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}
           GROUP BY temp_bucket
           ORDER BY temp_bucket
         `);

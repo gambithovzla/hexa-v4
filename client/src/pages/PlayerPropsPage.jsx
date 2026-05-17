@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Button, CircularProgress, MenuItem, Select, FormControl, InputLabel,
+  Box, Typography, Button, CircularProgress, MenuItem, Select, FormControl, InputLabel, Tooltip,
 } from '@mui/material';
 import { MONO, BARLOW } from '../theme';
 
@@ -34,6 +34,26 @@ const STRINGS = {
     implied: 'Implied %',
     edge: 'Edge',
     game: 'Game',
+    helpHint: 'Hover the ? icons to see what each section means.',
+    mlControlLink: 'ML metrics & retrain → /admin/ml-control',
+    help: {
+      page: 'Daily scouting board for MLB player props. Pulls book lines (Odds API), enriches with Savant, and compares to Python XGBoost when enabled. Your saved Oracle prop picks appear even before books post lines.',
+      date: 'Slate date (US Eastern). Loads games and props scheduled for that day.',
+      marketFilter: 'Limit rows to one prop type: hits, strikeouts, total bases, HR, or RBI.',
+      minEdge: 'Only show lines where |model % − implied %| is at least this value (0–1). Example: 0.05 = 5 points of edge.',
+      refresh: 'Reload the board with current filters.',
+      calibrating: 'Sidecar has prop models but public scores are gated (MLB_PROPS_ML_PUBLIC_ENABLED). Admins still see model %; everyone else sees lines + Savant only until ~100 resolved picks per market.',
+      oracleSection: 'Prop picks already saved from Oracle analysis (single/safe/chat). Not live odds — your recorded recommendation for that game.',
+      oracleConfidence: 'Oracle confidence at pick time (%). May differ from Python model % in the table below.',
+      gameBlock: 'One MLB game. Table = available book lines matched to players + Savant snapshot.',
+      player: 'Player name from the sportsbook prop offer.',
+      marketCol: 'Prop market and side (OVER / UNDER).',
+      lineCol: 'Book line (e.g. 5.5 strikeouts).',
+      oddsCol: 'American odds for that side at snapshot time.',
+      implied: 'Implied win probability from the posted odds (no vig removed).',
+      model: 'Python XGBoost probability for that side (prop_* model). Empty if ML public gate is off.',
+      edge: 'Model % minus implied %. Positive = model likes the bet more than the market price.',
+    },
   },
   es: {
     title: 'Tablero de Player Props',
@@ -54,8 +74,107 @@ const STRINGS = {
     implied: 'Implícita %',
     edge: 'Edge',
     game: 'Partido',
+    helpHint: 'Pasa el cursor sobre los ? para ver qué significa cada bloque.',
+    mlControlLink: 'Métricas ML y reentrenar → /admin/ml-control',
+    help: {
+      page: 'Tablero diario de player props MLB. Trae líneas de casas (Odds API), enriquece con Savant y compara con XGBoost Python si está activo. Tus picks Oracle guardados aparecen aunque la casa aún no publique la línea.',
+      date: 'Fecha del slate (hora Este EE.UU.). Carga partidos y props de ese día.',
+      marketFilter: 'Filtra por tipo: hits, ponches, bases totales, HR o RBI.',
+      minEdge: 'Solo filas donde |modelo % − implícita %| ≥ este valor (0–1). Ej.: 0.05 = 5 puntos de edge.',
+      refresh: 'Vuelve a cargar el tablero con los filtros actuales.',
+      calibrating: 'El sidecar tiene modelos prop pero los scores públicos están con gate (MLB_PROPS_ML_PUBLIC_ENABLED). Admin ve modelo %; el resto ve líneas + Savant hasta ~100 picks resueltos por mercado.',
+      oracleSection: 'Props ya guardados desde análisis Oracle (single/safe/chat). No son odds en vivo — tu recomendación registrada para ese partido.',
+      oracleConfidence: 'Confianza Oracle al momento del pick (%). Puede diferir del % del modelo Python en la tabla.',
+      gameBlock: 'Un partido MLB. La tabla = líneas de casa con jugador + snapshot Savant.',
+      player: 'Nombre del jugador según la oferta de la casa.',
+      marketCol: 'Mercado de prop y lado (OVER / UNDER).',
+      lineCol: 'Línea de la casa (ej. 5.5 ponches).',
+      oddsCol: 'Odds americanas de ese lado al momento del snapshot.',
+      implied: 'Probabilidad implícita desde la cuota publicada (sin quitar vig).',
+      model: 'Probabilidad del XGBoost Python para ese lado (modelo prop_*). Vacío si el gate público ML está apagado.',
+      edge: 'Modelo % menos implícita %. Positivo = el modelo valora más la apuesta que el precio del mercado.',
+    },
   },
 };
+
+function HelpTip({ title }) {
+  if (!title) return null;
+  return (
+    <Tooltip
+      title={(
+        <Typography
+          component="span"
+          sx={{
+            fontFamily: MONO,
+            fontSize: '11px',
+            lineHeight: 1.55,
+            display: 'block',
+            maxWidth: 340,
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {title}
+        </Typography>
+      )}
+      arrow
+      placement="top"
+    >
+      <Box
+        component="span"
+        role="img"
+        aria-label="help"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 14,
+          height: 14,
+          ml: 0.5,
+          border: `1px solid ${MUTED}`,
+          borderRadius: '50%',
+          color: MUTED,
+          fontFamily: MONO,
+          fontSize: '9px',
+          lineHeight: 1,
+          cursor: 'help',
+          flexShrink: 0,
+          '&:hover': { color: CYAN, borderColor: CYAN },
+        }}
+      >
+        ?
+      </Box>
+    </Tooltip>
+  );
+}
+
+function SectionHeading({ title, subtitle, help }) {
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.25 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: CYAN, letterSpacing: '2px' }}>
+          {title}
+        </Typography>
+        <HelpTip title={help} />
+      </Box>
+      {subtitle ? (
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 0.5 }}>
+          {subtitle}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+}
+
+function ThLabel({ label, help }) {
+  return (
+    <th style={{ padding: '6px 8px' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+        {label}
+        <HelpTip title={help} />
+      </span>
+    </th>
+  );
+}
 
 const KIND_LABELS = {
   en: {
@@ -80,7 +199,8 @@ function fmtEdge(v) {
 }
 
 export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
-  const T = STRINGS[lang] ?? STRINGS.es;
+  const T = { ...(STRINGS[lang] ?? STRINGS.es), lang };
+  const H = T.help ?? {};
   const KL = KIND_LABELS[lang] ?? KIND_LABELS.es;
 
   const [date, setDate] = useState(() =>
@@ -121,51 +241,69 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
         <Button onClick={onBack} sx={{ color: CYAN, fontFamily: MONO, fontSize: '10px', border: `1px solid ${BORDER}` }}>
           {T.back}
         </Button>
-        <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '1.25rem', color: CYAN }}>
-          {T.title}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography sx={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '1.25rem', color: CYAN }}>
+            {T.title}
+          </Typography>
+          <HelpTip title={H.page} />
+        </Box>
       </Box>
 
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, alignItems: 'center' }}>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', fontFamily: MONO }}
-        />
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED }}>{T.market}</InputLabel>
-          <Select
-            value={propKind}
-            label={T.market}
-            onChange={(e) => setPropKind(e.target.value)}
-            sx={{ fontFamily: MONO, fontSize: '11px', color: INK0, border: `1px solid ${BORDER}` }}
-          >
-            <MenuItem value="">{T.allKinds}</MenuItem>
-            {Object.keys(KL).map((k) => (
-              <MenuItem key={k} value={k}>{KL[k]}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          max="1"
-          placeholder={T.minEdge}
-          value={minEdge}
-          onChange={(e) => setMinEdge(e.target.value)}
-          style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', width: 120, fontFamily: MONO }}
-        />
-        <Button onClick={load} sx={{ color: CYAN, fontFamily: MONO, border: `1px solid ${CYAN}` }}>
-          ↻
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', fontFamily: MONO }}
+          />
+          <HelpTip title={H.date} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED }}>{T.market}</InputLabel>
+            <Select
+              value={propKind}
+              label={T.market}
+              onChange={(e) => setPropKind(e.target.value)}
+              sx={{ fontFamily: MONO, fontSize: '11px', color: INK0, border: `1px solid ${BORDER}` }}
+            >
+              <MenuItem value="">{T.allKinds}</MenuItem>
+              {Object.keys(KL).map((k) => (
+                <MenuItem key={k} value={k}>{KL[k]}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <HelpTip title={H.marketFilter} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            max="1"
+            placeholder={T.minEdge}
+            value={minEdge}
+            onChange={(e) => setMinEdge(e.target.value)}
+            style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', width: 120, fontFamily: MONO }}
+          />
+          <HelpTip title={H.minEdge} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Button onClick={load} sx={{ color: CYAN, fontFamily: MONO, border: `1px solid ${CYAN}` }}>
+            ↻
+          </Button>
+          <HelpTip title={H.refresh} />
+        </Box>
       </Box>
 
       {board && !board.mlPublic && board.mlEnabled && (
-        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED, mb: 2 }}>
-          {T.calibrating}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED, flex: 1 }}>
+            {T.calibrating}
+          </Typography>
+          <HelpTip title={H.calibrating} />
+        </Box>
       )}
 
       {loading && (
@@ -184,12 +322,11 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
 
       {!loading && (board?.oraclePropPicks?.length ?? 0) > 0 && (
         <Box sx={{ mb: 3, background: SURF, border: `1px solid ${CYAN}`, p: 2 }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: CYAN, mb: 0.5, letterSpacing: '2px' }}>
-            {T.oracleSection}
-          </Typography>
-          <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mb: 1.5 }}>
-            {T.oracleSource}
-          </Typography>
+          <SectionHeading
+            title={T.oracleSection}
+            subtitle={T.oracleSource}
+            help={H.oracleSection}
+          />
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {board.oraclePropPicks.map((p) => (
               <Box
@@ -209,7 +346,13 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
                 </Typography>
                 <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>
                   {p.matchup} · {KL[p.propKind] ?? p.propKind} {p.side?.toUpperCase()} {p.line}
-                  {p.confidence != null ? ` · ${p.confidence}%` : ''}
+                  {p.confidence != null ? (
+                    <>
+                      {' · '}
+                      {p.confidence}%
+                      <HelpTip title={H.oracleConfidence} />
+                    </>
+                  ) : null}
                 </Typography>
               </Box>
             ))}
@@ -219,21 +362,21 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
 
       {!loading && board?.games?.map((g) => (
         <Box key={g.gamePk} sx={{ mb: 3, background: SURF, border: `1px solid ${BORDER}`, p: 2 }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: CYAN, mb: 1.5, letterSpacing: '2px' }}>
-            {T.game}: {g.awayTeam} @ {g.homeTeam}
-            {g.startTime ? ` · ${g.startTime}` : ''}
-          </Typography>
+          <SectionHeading
+            title={`${T.game}: ${g.awayTeam} @ ${g.homeTeam}${g.startTime ? ` · ${g.startTime}` : ''}`}
+            help={H.gameBlock}
+          />
           <Box sx={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: MONO, fontSize: '10px' }}>
               <thead>
                 <tr style={{ color: MUTED, textAlign: 'left' }}>
-                  <th style={{ padding: '6px 8px' }}>{T.player}</th>
-                  <th>{T.market}</th>
-                  <th>{T.line}</th>
-                  <th>{T.odds}</th>
-                  <th>{T.implied}</th>
-                  <th>{T.model}</th>
-                  <th>{T.edge}</th>
+                  <ThLabel label={T.player} help={H.player} />
+                  <ThLabel label={T.market} help={H.marketCol} />
+                  <ThLabel label={T.line} help={H.lineCol} />
+                  <ThLabel label={T.odds} help={H.oddsCol} />
+                  <ThLabel label={T.implied} help={H.implied} />
+                  <ThLabel label={T.model} help={H.model} />
+                  <ThLabel label={T.edge} help={H.edge} />
                 </tr>
               </thead>
               <tbody>
@@ -256,6 +399,27 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
           </Box>
         </Box>
       ))}
+
+      <Box sx={{ mt: 4, textAlign: 'center' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '1px' }}>
+          {T.helpHint}
+        </Typography>
+        <Typography
+          component="a"
+          href="/admin/ml-control"
+          sx={{
+            fontFamily: MONO,
+            fontSize: '9px',
+            color: CYAN,
+            display: 'inline-block',
+            mt: 0.75,
+            textDecoration: 'none',
+            '&:hover': { textDecoration: 'underline' },
+          }}
+        >
+          {T.mlControlLink}
+        </Typography>
+      </Box>
     </Box>
   );
 }

@@ -28,6 +28,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { ORACLE_CHAT_USER_LABEL } from '../constants/oracleChat.js';
 import pool from '../db.js';
 import { resolveGameCalendarDate } from '../utils/dateKeys.js';
 import { parsePick } from '../parsers/pickParser.js';
@@ -434,8 +435,8 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
     const pickRes = await pool.query(
       `INSERT INTO picks
          (user_id, type, matchup, pick, oracle_confidence, oracle_report,
-          model, language, result, source, chat_session_id, game_pk, game_date, sport)
-       VALUES ($1,'chat',$2,$3,$4,$5,$6,$7,'pending','oracle_chat',$8,$9,$10,$11)
+          model, language, result, source, chat_session_id, game_pk, game_date, sport, user_email)
+       VALUES ($1,'chat',$2,$3,$4,$5,$6,$7,'pending','oracle_chat',$8,$9,$10,$11,$12)
        RETURNING id`,
       [
         userId,
@@ -449,6 +450,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
         Number.isFinite(gamePk) ? gamePk : null,
         gameDate,
         sportNorm,
+        ORACLE_CHAT_USER_LABEL,
       ]
     );
     const pickId = pickRes.rows[0]?.id ?? null;
@@ -458,8 +460,8 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
     await pool.query(
       `INSERT INTO pick_features
          (pick_id, game_pk, game_date, pick, market_type, side, line,
-          prop_kind, prop_player_id, oracle_confidence, source, sport)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'oracle_chat',$11)`,
+          prop_kind, prop_player_id, oracle_confidence, source, sport, user_email)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'oracle_chat',$11,$12)`,
       [
         pickId,
         Number.isFinite(gamePk) ? gamePk : null,
@@ -472,6 +474,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
         null,
         confidence,
         sportNorm,
+        ORACLE_CHAT_USER_LABEL,
       ]
     );
 

@@ -131,7 +131,16 @@ async function main() {
     conditions.push(`pf.result IS NOT NULL`);
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const visibility = `(
+    pf.backtest_id IS NOT NULL
+    OR pf.pick_id IS NULL
+    OR NOT EXISTS (
+      SELECT 1 FROM picks px
+      WHERE px.id = pf.pick_id AND px.deleted_at IS NOT NULL
+    )
+  )`;
+  conditions.push(visibility);
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   const sql = `
     SELECT ${COLUMNS.join(', ')}

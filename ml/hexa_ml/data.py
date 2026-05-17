@@ -81,13 +81,19 @@ def load_from_postgres(database_url: str | None = None, sport: str = "mlb") -> p
     if sport_norm not in {"mlb", "nba"}:
         raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb' or 'nba'.")
 
-    cols = ", ".join(SELECT_COLUMNS)
+    cols = ", ".join(f"pf.{c}" for c in SELECT_COLUMNS)
     sql = f"""
         SELECT {cols}
-        FROM pick_features
-        WHERE source = 'live'
-          AND COALESCE(sport, 'mlb') = '{sport_norm}'
-        ORDER BY game_date ASC, id ASC
+        FROM pick_features pf
+        LEFT JOIN picks p ON p.id = pf.pick_id
+        WHERE pf.source = 'live'
+          AND COALESCE(pf.sport, 'mlb') = '{sport_norm}'
+          AND (
+            pf.backtest_id IS NOT NULL
+            OR pf.pick_id IS NULL
+            OR p.deleted_at IS NULL
+          )
+        ORDER BY pf.game_date ASC, pf.id ASC
     """
     engine = create_engine(url)
     try:

@@ -27,6 +27,7 @@ import {
 import { useHexaTheme } from '../themeProvider';
 import InsightsSemana from './InsightsSemana';
 import AdminEnsembleBadge from './AdminEnsembleBadge';
+import AdminMlOpinionCard from './AdminMlOpinionCard';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 
 const TRANSLATIONS = { en, es };
@@ -559,6 +560,9 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
           </Box>
         )}
 
+        {isAdmin && entry.mlOpinion && (
+          <AdminMlOpinionCard mlOpinion={entry.mlOpinion} lang={lang} />
+        )}
         {isAdmin && entry.id && token && (
           <AdminEnsembleBadge pickId={entry.id} token={token} />
         )}

@@ -551,7 +551,7 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
 
   try {
     const pickRes = await pool.query(
-      `SELECT id, matchup, pick, oracle_confidence, result, game_pk, created_at
+      `SELECT id, matchup, pick, oracle_confidence, result, game_pk, created_at, ml_opinion
          FROM picks
         WHERE id = $1 AND deleted_at IS NULL`,
       [pickId]
@@ -567,6 +567,9 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
               shadow_predicted_winner_id, actual_winner_id,
               actual_home_score, actual_away_score,
               home_team_id, away_team_id, home_team_abbr, away_team_abbr,
+              pick_market_type, pick_side, pick_line, prop_kind,
+              oracle_pick_prob, legacy_pick_prob, python_pick_prob, python_pick_market,
+              pick_agree_legacy, pick_agree_python, oracle_pick,
               created_at AS shadow_created_at
          FROM shadow_model_runs
         WHERE pick_id = $1
@@ -633,6 +636,17 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
       teams: { home: r.home_team_abbr, away: r.away_team_abbr },
       sources,
       ensemble,
+      pickAligned: r.pick_market_type ? {
+        market_type: r.pick_market_type,
+        oracle_pick_prob: r.oracle_pick_prob,
+        legacy_pick_prob: r.legacy_pick_prob,
+        python_pick_prob: r.python_pick_prob,
+        python_pick_market: r.python_pick_market,
+        pick_agree_legacy: r.pick_agree_legacy,
+        pick_agree_python: r.pick_agree_python,
+        oracle_pick: r.oracle_pick,
+      } : null,
+      mlOpinion: pick.ml_opinion ?? null,
       resolution,
       python_model_status: r.python_model_status,
       python_model_version: r.python_model_version,

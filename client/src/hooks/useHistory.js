@@ -37,6 +37,16 @@ function normalizePickResult(result) {
   return value;
 }
 
+function parseMlOpinion(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 function normalizeEntry(entry) {
   return { ...entry, result: normalizePickResult(entry?.result) };
 }
@@ -173,6 +183,7 @@ function dbRowToEntry(row) {
     gamePk:               row.game_pk ?? null,
     gameDate,
     sport:                normalizeSport(row.sport ?? 'mlb'),
+    mlOpinion:            parseMlOpinion(row.ml_opinion),
   };
 }
 
