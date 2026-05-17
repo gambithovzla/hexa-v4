@@ -626,6 +626,7 @@ export async function getShadowModeDashboard(limit = 50, sport = 'mlb') {
          pick_market_type, pick_side, pick_line, prop_kind,
          oracle_pick_prob, legacy_pick_prob, python_pick_prob, python_pick_market,
          pick_agree_legacy, pick_agree_python,
+         game_date,
          actual_winner_abbr, actual_home_score, actual_away_score, actual_status,
          user_email, pick_time_lima
        FROM shadow_model_runs
