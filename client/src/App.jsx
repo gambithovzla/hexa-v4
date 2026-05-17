@@ -42,6 +42,7 @@ import ShadowModeDashboard    from './components/ShadowModeDashboard';
 import SynergyRunsDashboard  from './components/SynergyRunsDashboard';
 import MLCalibrationDashboard from './pages/MLCalibrationDashboard';
 import AdminMLControlCenter   from './pages/AdminMLControlCenter';
+import PlayerPropsPage        from './pages/PlayerPropsPage';
 import EquityDashboard        from './pages/EquityDashboard';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
@@ -508,6 +509,10 @@ export default function App() {
   if (window.location.pathname === '/admin/equity') {
     const token = localStorage.getItem('hexa_token');
     return <EquityDashboard token={token} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/props') {
+    const token = localStorage.getItem('hexa_token');
+    return <PlayerPropsPage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
 
 

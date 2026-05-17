@@ -4,10 +4,10 @@
 
 import pool from './db.js';
 import { parsePick as parseStructuredPick } from './parsers/pickParser.js';
-import { getBatterStatcast, getPitcherStatcast } from './savant-fetcher.js';
+import { enrichPropFeatures } from './services/propFeatureEnricher.js';
+import { scorePropPickFeatures } from './services/mlbPropShadow.js';
 
 const PROPS_SAVANT_ENRICH_ENABLED = (process.env.MLB_PROPS_SAVANT_ENRICH_ENABLED ?? '1') !== '0';
-const PITCHER_PROP_KINDS = new Set(['strikeouts', 'outs_recorded']);
 
 function normalizeMarketType(value) {
   const key = String(value ?? '').toLowerCase().trim();
@@ -55,6 +55,7 @@ export async function savePickFeatures({
   propKind = null,
   propPlayerId = null,
   propPlayerName = null,
+  propOddsAmerican = null,
   // Sprint 1 — pitcher fatigue / game context
   homePitcherDaysRest = null,
   awayPitcherDaysRest = null,
@@ -113,28 +114,39 @@ export async function savePickFeatures({
     const resolvedPropKind = propKind ?? parsedStructured.prop_kind ?? null;
     const resolvedPropPlayerName = propPlayerName ?? parsedStructured.prop_player_name ?? null;
 
-    let propSavant = null;
+    let propEnriched = {};
     const isMlbProp = String(sport ?? 'mlb').toLowerCase() === 'mlb'
       && resolvedMarketType === 'prop'
       && resolvedPropPlayerName;
     if (PROPS_SAVANT_ENRICH_ENABLED && isMlbProp) {
-      const isPitcherProp = PITCHER_PROP_KINDS.has(String(resolvedPropKind ?? '').toLowerCase());
-      propSavant = isPitcherProp
-        ? await getPitcherStatcast(resolvedPropPlayerName)
-        : await getBatterStatcast(resolvedPropPlayerName);
+      propEnriched = await enrichPropFeatures({
+        propKind: resolvedPropKind,
+        propPlayerName: resolvedPropPlayerName,
+        propPlayerId,
+        gamePk,
+        propOddsAmerican,
+      });
     }
 
-    const propPlayerXwoba = propSavant?.xwOBA ?? propSavant?.xwOBA_against ?? null;
-    const propPlayerXba = propSavant?.xBA ?? propSavant?.xBA_against ?? null;
-    const propPlayerXslg = propSavant?.xSLG ?? propSavant?.xSLG_against ?? null;
-    const propPlayerKPct = propSavant?.k_percent ?? null;
-    const propPlayerBBPct = propSavant?.bb_percent ?? null;
-    const propPlayerAvgEv = propSavant?.avg_exit_velocity ?? null;
-    const propPlayerBarrelPct = propSavant?.barrel_batted_rate ?? null;
-    const propPlayerHardHitPct = propSavant?.hard_hit_percent ?? null;
-    const propPlayerRollingWoba14d = propSavant?.rolling_windows?.woba_14d
-      ?? propSavant?.rolling_windows_against?.woba_against_14d
-      ?? null;
+    const resolvedPropPlayerId = propEnriched.prop_player_id ?? propPlayerId ?? null;
+    const propPlayerXwoba = propEnriched.prop_player_xwoba ?? null;
+    const propPlayerXba = propEnriched.prop_player_xba ?? null;
+    const propPlayerXslg = propEnriched.prop_player_xslg ?? null;
+    const propPlayerKPct = propEnriched.prop_player_k_pct ?? null;
+    const propPlayerBBPct = propEnriched.prop_player_bb_pct ?? null;
+    const propPlayerAvgEv = propEnriched.prop_player_avg_exit_velocity ?? null;
+    const propPlayerBarrelPct = propEnriched.prop_player_barrel_pct ?? null;
+    const propPlayerHardHitPct = propEnriched.prop_player_hard_hit_pct ?? null;
+    const propPlayerRollingWoba7d = propEnriched.prop_player_rolling_woba_7d ?? null;
+    const propPlayerRollingWoba14d = propEnriched.prop_player_rolling_woba_14d ?? null;
+    const propPlayerRollingWoba21d = propEnriched.prop_player_rolling_woba_21d ?? null;
+    const propPlayerOpsVsLhp = propEnriched.prop_player_ops_vs_lhp ?? null;
+    const propPlayerOpsVsRhp = propEnriched.prop_player_ops_vs_rhp ?? null;
+    const propOpponentPitcherHand = propEnriched.prop_opponent_pitcher_hand ?? null;
+    const propOpponentPitcherXwoba = propEnriched.prop_opponent_pitcher_xwoba_against ?? null;
+    const propOpponentPitcherKPct = propEnriched.prop_opponent_pitcher_k_pct ?? null;
+    const propOddsAmericanVal = propEnriched.prop_odds_american ?? propOddsAmerican ?? null;
+    const propImpliedProb = propEnriched.prop_implied_prob ?? null;
 
     const normalizedResult = normalizeResult(result);
     const values = [
@@ -151,11 +163,16 @@ export async function savePickFeatures({
       features.odds_ml_home, features.odds_ml_away, features.odds_ou_total,
       pick, normalizedResult, userEmail ?? null,
       // Sprint 1 new fields
-      resolvedMarketType, resolvedSide, resolvedLine, resolvedPropKind, propPlayerId,
+      resolvedMarketType, resolvedSide, resolvedLine, resolvedPropKind, resolvedPropPlayerId,
       resolvedPropPlayerName,
       propPlayerXwoba, propPlayerXba, propPlayerXslg,
       propPlayerKPct, propPlayerBBPct, propPlayerAvgEv,
-      propPlayerBarrelPct, propPlayerHardHitPct, propPlayerRollingWoba14d,
+      propPlayerBarrelPct, propPlayerHardHitPct,
+      propPlayerRollingWoba7d, propPlayerRollingWoba14d, propPlayerRollingWoba21d,
+      propPlayerOpsVsLhp, propPlayerOpsVsRhp,
+      propOpponentPitcherHand, propOpponentPitcherXwoba, propOpponentPitcherKPct,
+      propOddsAmericanVal, propImpliedProb,
+      null, null,
       homePitcherDaysRest, awayPitcherDaysRest,
       homePitcherPitchesLastStart, awayPitcherPitchesLastStart,
       homeBullpenPitchesLast3d, awayBullpenPitchesLast3d,
@@ -188,15 +205,20 @@ export async function savePickFeatures({
           prop_player_name = $34,
           prop_player_xwoba = $35, prop_player_xba = $36, prop_player_xslg = $37,
           prop_player_k_pct = $38, prop_player_bb_pct = $39, prop_player_avg_exit_velocity = $40,
-          prop_player_barrel_pct = $41, prop_player_hard_hit_pct = $42, prop_player_rolling_woba_14d = $43,
-          home_pitcher_days_rest = $44, away_pitcher_days_rest = $45,
-          home_pitcher_pitches_last_start = $46, away_pitcher_pitches_last_start = $47,
-          home_bullpen_pitches_last_3d = $48, away_bullpen_pitches_last_3d = $49,
-          is_day_game = $50, is_dome = $51, game_number_in_series = $52, umpire_id = $53,
-          prompt_version = $54, oracle_model = $55, oracle_confidence = $56,
-          kelly_fraction = $57, source = $58, sport = $59,
+          prop_player_barrel_pct = $41, prop_player_hard_hit_pct = $42,
+          prop_player_rolling_woba_7d = $43, prop_player_rolling_woba_14d = $44, prop_player_rolling_woba_21d = $45,
+          prop_player_ops_vs_lhp = $46, prop_player_ops_vs_rhp = $47,
+          prop_opponent_pitcher_hand = $48, prop_opponent_pitcher_xwoba_against = $49, prop_opponent_pitcher_k_pct = $50,
+          prop_odds_american = $51, prop_implied_prob = $52,
+          python_prop_prob = $53, python_prop_market = $54,
+          home_pitcher_days_rest = $55, away_pitcher_days_rest = $56,
+          home_pitcher_pitches_last_start = $57, away_pitcher_pitches_last_start = $58,
+          home_bullpen_pitches_last_3d = $59, away_bullpen_pitches_last_3d = $60,
+          is_day_game = $61, is_dome = $62, game_number_in_series = $63, umpire_id = $64,
+          prompt_version = $65, oracle_model = $66, oracle_confidence = $67,
+          kelly_fraction = $68, source = $69, sport = $70,
           pick_time_lima = COALESCE(pick_time_lima, (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
-        WHERE id = $60
+        WHERE id = $71
       `, [...values, existing.rows[0].id]);
     } else {
       await pool.query(`
@@ -211,7 +233,11 @@ export async function savePickFeatures({
           prop_player_name,
           prop_player_xwoba, prop_player_xba, prop_player_xslg,
           prop_player_k_pct, prop_player_bb_pct, prop_player_avg_exit_velocity,
-          prop_player_barrel_pct, prop_player_hard_hit_pct, prop_player_rolling_woba_14d,
+          prop_player_barrel_pct, prop_player_hard_hit_pct,
+          prop_player_rolling_woba_7d, prop_player_rolling_woba_14d, prop_player_rolling_woba_21d,
+          prop_player_ops_vs_lhp, prop_player_ops_vs_rhp,
+          prop_opponent_pitcher_hand, prop_opponent_pitcher_xwoba_against, prop_opponent_pitcher_k_pct,
+          prop_odds_american, prop_implied_prob, python_prop_prob, python_prop_market,
           home_pitcher_days_rest, away_pitcher_days_rest,
           home_pitcher_pitches_last_start, away_pitcher_pitches_last_start,
           home_bullpen_pitches_last_3d, away_bullpen_pitches_last_3d,
@@ -221,10 +247,58 @@ export async function savePickFeatures({
         VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
           $21,$22,$23,$24,$25,$26,$27,$28,
-          $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,
+          $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,
           (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP
         )
       `, values);
+    }
+
+    if (isMlbProp && pickId != null) {
+      const featureRowId = existing.rows.length > 0
+        ? existing.rows[0].id
+        : (await pool.query(
+          'SELECT id FROM pick_features WHERE pick_id = $1 ORDER BY id DESC LIMIT 1',
+          [pickId],
+        )).rows[0]?.id;
+      if (featureRowId) {
+        scorePropPickFeatures({
+          featureRowId,
+          propKind: resolvedPropKind,
+          gameFeatures: features,
+          propFeatures: {
+            ...propEnriched,
+            market_type: resolvedMarketType,
+            side: resolvedSide,
+            line: resolvedLine,
+            prop_kind: resolvedPropKind,
+            prop_player_name: resolvedPropPlayerName,
+            home_pitcher_xwoba: features.home_pitcher_xwoba,
+            away_pitcher_xwoba: features.away_pitcher_xwoba,
+            home_pitcher_whiff: features.home_pitcher_whiff,
+            away_pitcher_whiff: features.away_pitcher_whiff,
+            home_pitcher_k_pct: features.home_pitcher_k_pct,
+            away_pitcher_k_pct: features.away_pitcher_k_pct,
+            home_pitcher_era: features.home_pitcher_era,
+            away_pitcher_era: features.away_pitcher_era,
+            home_team_ops: features.home_team_ops,
+            away_team_ops: features.away_team_ops,
+            home_lineup_avg_xwoba: features.home_lineup_avg_xwoba,
+            away_lineup_avg_xwoba: features.away_lineup_avg_xwoba,
+            park_factor_overall: features.park_factor_overall,
+            park_factor_hr: features.park_factor_hr,
+            temperature: features.temperature,
+            wind_speed: features.wind_speed,
+            odds_ml_home: features.odds_ml_home,
+            odds_ml_away: features.odds_ml_away,
+            odds_ou_total: features.odds_ou_total,
+            is_day_game: isDayGame,
+            is_dome: isDome,
+            game_number_in_series: gameNumberInSeries,
+          },
+        }).catch((err) => {
+          console.warn(`[feature-store] prop shadow score failed: ${err.message}`);
+        });
+      }
     }
 
     console.log(`[feature-store] Saved features for game ${gamePk} (pick_id=${pickId}, bt_id=${backtestId})`);

@@ -12,6 +12,8 @@
     "smoke:mlb": "node scripts/smoke/mlb-release-smoke.js",
     "smoke:nba": "node scripts/smoke/nba-release-smoke.js",
     "smoke:parlay": "node scripts/smoke/parlay-architect-smoke.js",
+    "smoke:props": "node scripts/smoke/props-board-smoke.js",
+    "prop-brier-gate": "node --env-file=.env scripts/training/prop-brier-gate.js",
     "smoke:go-live": "node scripts/smoke/nba-release-smoke.js && node scripts/smoke/parlay-architect-smoke.js",
     "test:go-live": "node --test server/services/__tests__/parlayResolver.test.js server/services/__tests__/parlayRunOutcome.test.js server/services/__tests__/pick-tracker-nba.test.js server/services/__tests__/postmortemSport.test.js server/services/__tests__/nbaOutputGuard.test.js server/services/__tests__/nbaTeamMap.test.js server/services/__tests__/mlModelHealth.test.js server/services/__tests__/sport-isolation.test.js",
     "verify:ml:persistence": "node scripts/ops/verify-ml-persistence.js",

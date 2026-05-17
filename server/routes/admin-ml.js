@@ -42,7 +42,11 @@ const ML_TOKEN   = process.env.HEXA_ML_INTERNAL_TOKEN ?? '';
 const RETRAIN_TIMEOUT_MS = 5 * 60 * 1000;   // 5 minutes — training can be slow
 const HEALTH_TIMEOUT_MS  = 2_000;
 
-const ALLOWED_MARKETS = new Set(['all', 'moneyline', 'overunder', 'runline']);
+const ALLOWED_MARKETS = new Set([
+  'all',
+  'moneyline', 'overunder', 'runline',
+  'prop_hits', 'prop_strikeouts', 'prop_total_bases', 'prop_home_runs', 'prop_rbis',
+]);
 
 // In-process rate limit: 1 retrain per scope every 5 minutes.
 const _lastRetrainAt = new Map();

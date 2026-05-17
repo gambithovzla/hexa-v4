@@ -133,6 +133,23 @@ describe('pickParser — player props', () => {
     assert.equal(r.prop_kind, 'walks');
     assert.equal(r.side, 'under');
   });
+
+  test('stat-first: Gerrit Cole Strikeouts Over 6.5', () => {
+    const r = parsePick('Gerrit Cole Strikeouts Over 6.5');
+    assert.equal(r.market_type, 'prop');
+    assert.equal(r.prop_kind, 'strikeouts');
+    assert.equal(r.prop_player_name, 'Gerrit Cole');
+    assert.equal(r.side, 'over');
+    assert.equal(r.line, 6.5);
+  });
+
+  test('Spanish: Juan Soto Más de 1.5 Hits', () => {
+    const r = parsePick('Juan Soto Más de 1.5 Hits');
+    assert.equal(r.market_type, 'prop');
+    assert.equal(r.prop_kind, 'hits');
+    assert.equal(r.side, 'over');
+    assert.equal(r.prop_player_name, 'Juan Soto');
+  });
 });
 
 describe('pickParser — edge cases', () => {

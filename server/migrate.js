@@ -590,6 +590,17 @@ export async function runPlayerPropsMlbMigrations() {
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_barrel_pct DECIMAL(7,4)`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_hard_hit_pct DECIMAL(7,4)`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_rolling_woba_14d DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_rolling_woba_7d DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_rolling_woba_21d DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_ops_vs_lhp DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_player_ops_vs_rhp DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_opponent_pitcher_hand VARCHAR(1)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_opponent_pitcher_xwoba_against DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_opponent_pitcher_k_pct DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_odds_american INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS prop_implied_prob DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS python_prop_prob DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS python_prop_market VARCHAR(32)`);
     await client.query('COMMIT');
     console.log('[migrate] player-props-mlb columns ready');
   } catch (err) {

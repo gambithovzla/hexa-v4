@@ -296,6 +296,8 @@ export default function Sidebar({
         icon: ICONS.synergy, label: L('Synergy Runs', 'Synergy Runs', lang) },
       isAdmin && { key: 'ml-control', action: () => { window.location.href = '/admin/ml-control'; },
         icon: ICONS.architect, label: L('ML Control', 'ML Control', lang), badge: 'NEW' },
+      { key: 'props-board', action: () => { window.location.href = '/props'; },
+        icon: ICONS.game, label: L('Player Props', 'Player Props', lang) },
       isAdmin && { key: 'synergy', tab: 'synergy', icon: ICONS.architect,
         label: L('Architect', 'Arquitecto', lang) },
       isAdmin && { key: 'batch', tab: 'batch', icon: ICONS.synergy,

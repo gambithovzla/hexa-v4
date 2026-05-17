@@ -113,7 +113,12 @@ def train_one_market(
     brier_test = brier(y_test, p_test)
     ll_test = logloss(y_test, p_test)
 
-    odds_col = "odds_ml_home" if market in {"moneyline", "runline"} else "odds_ou_total"
+    if market.startswith("prop_"):
+        odds_col = "prop_odds_american"
+    elif market in {"moneyline", "runline"}:
+        odds_col = "odds_ml_home"
+    else:
+        odds_col = "odds_ou_total"
     odds_test = pd.to_numeric(test_df.get(odds_col), errors="coerce").fillna(-110).to_numpy()
     roi = kelly_roi(y_test, p_test, odds_test, kelly_fraction=0.25)
 
