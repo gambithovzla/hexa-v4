@@ -835,10 +835,14 @@ function ChatPicksSection({ stats, T }) {
   const pushes  = Number(s.pushes ?? 0);
   const pending = Number(s.pending ?? 0);
   const sessions = Number(s.unique_sessions ?? 0);
+  const unitsProfit = s.units_profit != null ? Number(s.units_profit) : null;
+  const roiPct = s.roi_pct != null ? Number(s.roi_pct) : null;
   // Pushes excluded from the denominator — industry-standard sportsbook
   // accounting treats a push as no-action, not a half-win/half-loss.
   const settled = wins + losses;
-  const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
+  const winRate = s.hit_rate != null
+    ? Number(s.hit_rate).toFixed(1)
+    : (settled > 0 ? ((wins / settled) * 100).toFixed(1) : null);
 
   return (
     <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '18px 18px 16px', mt: 3, overflow: 'hidden' }}>
@@ -871,12 +875,14 @@ function ChatPicksSection({ stats, T }) {
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(6, 1fr)' }, gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', xl: 'repeat(8, 1fr)' }, gap: 1.5 }}>
         <Metric label="TOTAL"    value={total} color={CYAN} />
         <Metric label="WINS"     value={wins} color={GREEN} />
         <Metric label="LOSSES"   value={losses} color={RED} />
         <Metric label="PUSHES"   value={pushes} color={MUTED} />
         <Metric label="PENDING"  value={pending} color={AMBER} />
+        <Metric label="UNITS"    value={unitsProfit != null ? `${unitsProfit >= 0 ? '+' : ''}${unitsProfit.toFixed(2)}` : '—'} color={unitsProfit == null ? MUTED : unitsProfit >= 0 ? GREEN : RED} />
+        <Metric label="ROI"      value={roiPct != null ? `${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(1)}%` : '—'} color={roiPct == null ? MUTED : roiPct >= 0 ? GREEN : RED} />
         <Metric label="WIN RATE" value={winRate ? `${winRate}%` : '—'} color={winRate && Number(winRate) >= 50 ? GREEN : MUTED} />
       </Box>
 
@@ -897,6 +903,39 @@ function ChatPicksSection({ stats, T }) {
               <span style={{ color: MARKET_TINTS[m.market_type] ?? ACCENT, fontWeight: 700 }}>{m.n}</span>
             </Box>
           ))}
+        </Box>
+      )}
+
+      {(stats?.by_sport?.length > 0 || stats?.by_mode?.length > 0) && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5, mt: 1.5 }}>
+          <Box sx={{ border: `1px solid ${BORDER}`, p: '10px 12px' }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: MUTED, letterSpacing: '2px', mb: 0.8 }}>
+              BY SPORT
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {(stats.by_sport ?? []).map((row) => (
+                <Box key={row.sport} sx={{ fontFamily: MONO, fontSize: '9px', color: INK1, border: `1px solid ${BORDER}`, px: '8px', py: '4px' }}>
+                  <span style={{ color: MUTED }}>{String(row.sport || '?').toUpperCase()}: </span>
+                  <span style={{ color: CYAN, fontWeight: 700 }}>{row.n}</span>
+                  {row.hit_rate != null && <span style={{ color: MUTED }}> / {Number(row.hit_rate).toFixed(1)}%</span>}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+          <Box sx={{ border: `1px solid ${BORDER}`, p: '10px 12px' }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: MUTED, letterSpacing: '2px', mb: 0.8 }}>
+              BY CHAT MODE
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {(stats.by_mode ?? []).map((row) => (
+                <Box key={row.mode} sx={{ fontFamily: MONO, fontSize: '9px', color: INK1, border: `1px solid ${BORDER}`, px: '8px', py: '4px' }}>
+                  <span style={{ color: MUTED }}>{String(row.mode || '?').toUpperCase()}: </span>
+                  <span style={{ color: ACCENT, fontWeight: 700 }}>{row.n}</span>
+                  {row.hit_rate != null && <span style={{ color: MUTED }}> / {Number(row.hit_rate).toFixed(1)}%</span>}
+                </Box>
+              ))}
+            </Box>
+          </Box>
         </Box>
       )}
     </Box>

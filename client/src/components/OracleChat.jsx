@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, BARLOW, MONO, SANS } from '../theme';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -14,6 +15,7 @@ function genSessionKey() {
 // tail block ("tail") or whether Haiku had to parse the prose ("haiku").
 
 function PickSavedBadge({ picked, lang }) {
+  const { C } = useHexaTheme();
   const stageLabel = picked?.source_stage === 'haiku'
     ? (lang === 'es' ? 'parseado por Haiku' : 'parsed by Haiku')
     : (lang === 'es' ? 'extraído directo' : 'inline JSON');
@@ -39,6 +41,19 @@ function PickSavedBadge({ picked, lang }) {
   );
 }
 
+function PickSavedBadges({ picked, lang }) {
+  const picks = Array.isArray(picked) ? picked : (picked ? [picked] : []);
+  const saved = picks.filter(p => p?.pick_id);
+  if (saved.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {saved.map((p, i) => (
+        <PickSavedBadge key={p.pick_id || i} picked={p} lang={lang} />
+      ))}
+    </div>
+  );
+}
+
 function getEasternDate() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
@@ -46,6 +61,7 @@ function getEasternDate() {
 // ─── History view ─────────────────────────────────────────────────────────────
 
 function SessionModal({ session, onClose }) {
+  const { C } = useHexaTheme();
   return (
     <div
       style={{
@@ -115,6 +131,7 @@ function SessionModal({ session, onClose }) {
 }
 
 function OracleHistoryView({ lang }) {
+  const { C } = useHexaTheme();
   const [days, setDays] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [sessions, setSessions] = useState([]);
@@ -256,6 +273,7 @@ function getEasternDateString(value = new Date()) {
 }
 
 export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
+  const { C, isLeague } = useHexaTheme();
   const isNba = sport === 'nba';
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
@@ -425,6 +443,11 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
 
     try {
       const token = localStorage.getItem('hexa_token');
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      if (skipExtract) headers['X-HEXA-Skip-Pick-Extract'] = '1';
       const jornadaMatchups = games
         .filter(g => selectedIds.has(g.gamePk || g.id))
         .map(g => getMatchup(g))
@@ -432,7 +455,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
 
       const res = await fetch(`${API_URL}/api/analyze/chat-jornada`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({
           gameIds: [...selectedIds],
           question: q,
@@ -444,7 +467,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
       });
       const data = await res.json();
       if (data.success && data.answer) {
-        setConversation(prev => [...prev, { role: 'assistant', text: data.answer }]);
+        setConversation(prev => [...prev, { role: 'assistant', text: data.answer, picked: data.picked ?? null }]);
       } else {
         setConversation(prev => [...prev, { role: 'assistant', text: data.error || 'Error getting response.' }]);
       }
@@ -495,11 +518,18 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   // Render
   // --------------------------------------------------------------------------
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', color: C.textPrimary, fontFamily: SANS }}>
+    <div style={{
+      background: C.bg,
+      minHeight: '100vh',
+      color: C.textPrimary,
+      fontFamily: isLeague ? 'Helvetica Neue, Helvetica, sans-serif' : SANS,
+    }}>
 
       {/* TOP BAR */}
       <div style={{
-        padding: '12px 20px', background: C.surface, borderBottom: `1px solid ${C.border}`,
+        padding: isLeague ? '14px 22px' : '12px 20px',
+        background: isLeague ? '#000' : C.surface,
+        borderBottom: `2px solid ${isLeague ? 'var(--sport-accent)' : C.border}`,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -511,7 +541,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
             ← BACK
           </button>
           <span style={{ fontFamily: BARLOW, fontWeight: 800, fontSize: '16px', color: C.accent }}>
-            ORACLE CHAT
+            {isLeague ? 'HEXA ORACLE CHAT' : 'ORACLE CHAT'}
           </span>
           <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim, letterSpacing: '1px' }}>
             ADMIN ONLY
@@ -770,9 +800,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                   }}>
                     {msg.text}
                   </div>
-                  {msg.picked && msg.picked.pick_id && (
-                    <PickSavedBadge picked={msg.picked} lang={lang} />
-                  )}
+                  <PickSavedBadges picked={msg.picked} lang={lang} />
                 </div>
               ))}
               {loading && (
@@ -856,7 +884,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                 </button>
               </div>
               {/* Admin: opt-out of pick extraction for exploratory chats */}
-              {mode === 'partido' && (
+              {(mode === 'partido' || mode === 'jornada') && (
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px',
                   fontFamily: MONO, fontSize: '10px', color: C.textDim, letterSpacing: '1px',

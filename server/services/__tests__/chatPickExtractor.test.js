@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import {
   augmentChatQuestion,
   extractJsonTail,
+  normalizePickJsonList,
   normalizeExtracted,
 } from '../chatPickExtractor.js';
 
@@ -39,6 +40,19 @@ describe('augmentChatQuestion', () => {
     const q = 'Statcast on Judge? Park factor at Yankee Stadium for HRs?';
     const out = augmentChatQuestion(q, 'en');
     assert.ok(out.startsWith(q));
+  });
+
+  test('jornada mode asks for a multi-pick tail with game ids', () => {
+    const out = augmentChatQuestion('Give me top 2 picks', 'en', 'mlb', {
+      mode: 'jornada',
+      games: [
+        { game_id: 101, matchup: 'NYY @ BOS', away: 'NYY', home: 'BOS' },
+        { game_id: 202, matchup: 'LAD @ SF', away: 'LAD', home: 'SF' },
+      ],
+    });
+    assert.ok(out.includes('"picks"'), 'multi schema present');
+    assert.ok(out.includes('game_id=101'), 'selected game id present');
+    assert.ok(out.includes('NYY @ BOS'), 'matchup present');
   });
 });
 
@@ -95,6 +109,29 @@ describe('extractJsonTail', () => {
     const answer = `Analysis.\n\n<<<hexa_pick_json>>>\n{"market_type":"moneyline"}\n<<<end>>>`;
     const { pickJson } = extractJsonTail(answer);
     assert.equal(pickJson?.market_type, 'moneyline');
+  });
+});
+
+describe('normalizePickJsonList', () => {
+  test('single pick object becomes a one-item list', () => {
+    const out = normalizePickJsonList({ market_type: 'moneyline', team_or_player: 'NYY' });
+    assert.equal(out.length, 1);
+    assert.equal(out[0].team_or_player, 'NYY');
+  });
+
+  test('multi-pick envelope returns the picks array', () => {
+    const out = normalizePickJsonList({
+      picks: [
+        { game_id: '1', market_type: 'moneyline', team_or_player: 'NYY' },
+        { game_id: '2', market_type: 'overunder', side: 'under', line: 8.5 },
+      ],
+    });
+    assert.equal(out.length, 2);
+    assert.equal(out[1].line, 8.5);
+  });
+
+  test('has_pick:false returns an empty list', () => {
+    assert.deepEqual(normalizePickJsonList({ has_pick: false }), []);
   });
 });
 

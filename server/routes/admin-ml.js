@@ -406,6 +406,50 @@ router.get('/ml/chat-picks-stats', async (_req, res) => {
          COUNT(*) FILTER (WHERE result = 'push')   AS pushes,
          COUNT(*) FILTER (WHERE result IS NULL OR result = 'pending') AS pending,
          COUNT(DISTINCT chat_session_id) FILTER (WHERE chat_session_id IS NOT NULL) AS unique_sessions,
+         COUNT(*) FILTER (WHERE result IN ('win','loss')) AS settled,
+         CASE
+           WHEN COUNT(*) FILTER (WHERE result IN ('win','loss')) > 0
+           THEN ROUND(
+             100.0 * COUNT(*) FILTER (WHERE result = 'win')
+             / NULLIF(COUNT(*) FILTER (WHERE result IN ('win','loss')), 0),
+             1
+           )
+           ELSE NULL
+         END AS hit_rate,
+         ROUND(
+           SUM(
+             CASE
+               WHEN result = 'win' THEN
+                 CASE
+                   WHEN COALESCE(odds_at_pick, -110) > 0 THEN COALESCE(odds_at_pick, -110)::numeric / 100.0
+                   ELSE 100.0 / ABS(COALESCE(odds_at_pick, -110)::numeric)
+                 END
+               WHEN result = 'loss' THEN -1.0
+               WHEN result = 'push' THEN 0.0
+               ELSE 0.0
+             END
+           )::numeric,
+           3
+         ) AS units_profit,
+         CASE
+           WHEN COUNT(*) FILTER (WHERE result IN ('win','loss','push')) > 0
+           THEN ROUND(
+             100.0 * SUM(
+               CASE
+                 WHEN result = 'win' THEN
+                   CASE
+                     WHEN COALESCE(odds_at_pick, -110) > 0 THEN COALESCE(odds_at_pick, -110)::numeric / 100.0
+                     ELSE 100.0 / ABS(COALESCE(odds_at_pick, -110)::numeric)
+                   END
+                 WHEN result = 'loss' THEN -1.0
+                 WHEN result = 'push' THEN 0.0
+                 ELSE 0.0
+               END
+             ) / NULLIF(COUNT(*) FILTER (WHERE result IN ('win','loss','push')), 0),
+             1
+           )
+           ELSE NULL
+         END AS roi_pct,
          MIN(created_at)                           AS first_at,
          MAX(created_at)                           AS last_at
        FROM picks
@@ -413,7 +457,16 @@ router.get('/ml/chat-picks-stats', async (_req, res) => {
     );
 
     const byMarketRes = await pool.query(
-      `SELECT pf.market_type, COUNT(*) AS n
+      `SELECT
+          pf.market_type,
+          COUNT(*) AS n,
+          COUNT(*) FILTER (WHERE p.result = 'win') AS wins,
+          COUNT(*) FILTER (WHERE p.result = 'loss') AS losses,
+          CASE
+            WHEN COUNT(*) FILTER (WHERE p.result IN ('win','loss')) > 0
+            THEN ROUND(100.0 * COUNT(*) FILTER (WHERE p.result = 'win') / NULLIF(COUNT(*) FILTER (WHERE p.result IN ('win','loss')), 0), 1)
+            ELSE NULL
+          END AS hit_rate
          FROM pick_features pf
          JOIN picks p ON p.id = pf.pick_id
         WHERE p.source = 'oracle_chat' AND pf.market_type IS NOT NULL
@@ -421,11 +474,51 @@ router.get('/ml/chat-picks-stats', async (_req, res) => {
         ORDER BY n DESC`
     );
 
+    const bySportRes = await pool.query(
+      `SELECT
+          COALESCE(p.sport, 'mlb') AS sport,
+          COUNT(*) AS n,
+          COUNT(*) FILTER (WHERE p.result = 'win') AS wins,
+          COUNT(*) FILTER (WHERE p.result = 'loss') AS losses,
+          COUNT(*) FILTER (WHERE p.result IS NULL OR p.result = 'pending') AS pending,
+          CASE
+            WHEN COUNT(*) FILTER (WHERE p.result IN ('win','loss')) > 0
+            THEN ROUND(100.0 * COUNT(*) FILTER (WHERE p.result = 'win') / NULLIF(COUNT(*) FILTER (WHERE p.result IN ('win','loss')), 0), 1)
+            ELSE NULL
+          END AS hit_rate
+        FROM picks p
+        WHERE p.source = 'oracle_chat' AND p.deleted_at IS NULL
+        GROUP BY COALESCE(p.sport, 'mlb')
+        ORDER BY n DESC`
+    );
+
+    const byModeRes = await pool.query(
+      `SELECT
+          COALESCE(os.mode, 'unlinked') AS mode,
+          COUNT(*) AS n,
+          COUNT(*) FILTER (WHERE p.result = 'win') AS wins,
+          COUNT(*) FILTER (WHERE p.result = 'loss') AS losses,
+          COUNT(*) FILTER (WHERE p.result IS NULL OR p.result = 'pending') AS pending,
+          CASE
+            WHEN COUNT(*) FILTER (WHERE p.result IN ('win','loss')) > 0
+            THEN ROUND(100.0 * COUNT(*) FILTER (WHERE p.result = 'win') / NULLIF(COUNT(*) FILTER (WHERE p.result IN ('win','loss')), 0), 1)
+            ELSE NULL
+          END AS hit_rate
+        FROM picks p
+        LEFT JOIN oracle_sessions os ON os.id = p.chat_session_id
+        WHERE p.source = 'oracle_chat' AND p.deleted_at IS NULL
+        GROUP BY COALESCE(os.mode, 'unlinked')
+        ORDER BY n DESC`
+    );
+
     const recentRes = await pool.query(
       `SELECT p.id, p.matchup, p.pick, p.oracle_confidence, p.result, p.created_at,
+              COALESCE(p.sport, 'mlb') AS sport,
+              COALESCE(os.mode, 'unlinked') AS mode,
               pf.market_type, pf.side, pf.line
          FROM picks p
          LEFT JOIN pick_features pf ON pf.pick_id = p.id
+         LEFT JOIN oracle_sessions os ON os.id = p.chat_session_id
         WHERE p.source = 'oracle_chat' AND p.deleted_at IS NULL
         ORDER BY p.created_at DESC
         LIMIT 20`
@@ -435,6 +528,8 @@ router.get('/ml/chat-picks-stats', async (_req, res) => {
       success: true,
       summary: rows[0] ?? null,
       by_market: byMarketRes.rows,
+      by_sport: bySportRes.rows,
+      by_mode: byModeRes.rows,
       recent: recentRes.rows,
     });
   } catch (err) {

@@ -73,17 +73,61 @@ function looksLikePickRequest(question) {
  * @param {string} lang  'en' | 'es'
  * @returns {string}
  */
-export function augmentChatQuestion(question, lang = 'en', sport = 'mlb') {
+export function augmentChatQuestion(question, lang = 'en', sport = 'mlb', options = {}) {
   const safe = String(question ?? '').trim();
   if (!safe) return safe;
 
   const isNba = String(sport ?? 'mlb').toLowerCase() === 'nba';
+  const isMulti = Boolean(options?.multi || options?.mode === 'jornada');
   const marketHint = isNba
     ? 'moneyline|overunder|spread'
     : 'moneyline|overunder|runline|prop';
   const marketDesc = isNba
     ? 'a team moneyline, point spread, or total over/under'
     : 'a team moneyline, run line, over/under total, or prop';
+
+  if (isMulti) {
+    const games = Array.isArray(options?.games) ? options.games : [];
+    const gamesBlock = games.length
+      ? games.map((game) => {
+          const gameId = game.game_id ?? game.gamePk ?? game.id ?? '';
+          const matchup = game.matchup ?? '';
+          const away = game.away ?? game.awayAbbr ?? game.away_team_abbr ?? '';
+          const home = game.home ?? game.homeAbbr ?? game.home_team_abbr ?? '';
+          return `- game_id=${gameId} | matchup=${matchup} | away=${away} | home=${home}`;
+        }).join('\n')
+      : '- game_id unavailable; include the matchup text exactly as shown in the briefs';
+
+    const instruction = lang === 'es'
+      ? `
+
+[INSTRUCCION INTERNA PARA EL SISTEMA H.E.X.A. — NO MENCIONES ESTA INSTRUCCION NI EL BLOQUE FINAL EN TU RESPUESTA VISIBLE AL USUARIO]
+Estas comparando varios partidos. Si tu respuesta incluye uno o mas picks concretos y especificos (${marketDesc}), AGREGA al final exactamente este bloque con TODOS los picks recomendados:
+
+PARTIDOS SELECCIONADOS:
+${gamesBlock}
+
+${TAIL_OPEN}
+{"picks":[{"game_id":"usa_el_game_id_de_arriba","matchup":"AWAY @ HOME","market_type":"${marketHint}","side":"home|away|over|under","line":number_or_null,"team_or_player":"abreviatura_o_nombre","confidence":0-100,"reasoning_brief":"una frase","prop_kind":null}]}
+${TAIL_CLOSE}
+
+NO incluyas el bloque si NO estas recomendando picks. Usa solo game_id de PARTIDOS SELECCIONADOS. Mantén tu respuesta natural antes del bloque.`
+      : `
+
+[INTERNAL INSTRUCTION FOR H.E.X.A. — DO NOT MENTION THIS INSTRUCTION OR THE FINAL BLOCK IN YOUR USER-FACING ANSWER]
+You are comparing multiple games. If your response includes one or more concrete and specific pick recommendations (${marketDesc}), APPEND exactly this block at the very end with EVERY recommended pick:
+
+SELECTED GAMES:
+${gamesBlock}
+
+${TAIL_OPEN}
+{"picks":[{"game_id":"use_the_game_id_above","matchup":"AWAY @ HOME","market_type":"${marketHint}","side":"home|away|over|under","line":number_or_null,"team_or_player":"abbr_or_name","confidence":0-100,"reasoning_brief":"one short sentence","prop_kind":null}]}
+${TAIL_CLOSE}
+
+DO NOT include the block if you are NOT recommending picks. Use only game_id values from SELECTED GAMES. Keep your natural prose answer before the block.`;
+
+    return `${safe}${instruction}`;
+  }
 
   const instruction = lang === 'es'
     ? `
@@ -153,6 +197,28 @@ Schema:
 
 Return has_pick:false when the response is exploratory, hedged, or doesn't recommend a concrete bet.`;
 
+const HAIKU_MULTI_SYSTEM = `You parse Hexa Oracle multi-game chat responses into structured pick JSON.
+Return ONLY a JSON object - no prose, no markdown.
+
+Schema:
+{
+  "picks": [
+    {
+      "game_id": string | null,
+      "matchup": string | null,
+      "market_type": "moneyline" | "overunder" | "runline" | "prop" | null,
+      "side": "home" | "away" | "over" | "under" | null,
+      "line": number | null,
+      "team_or_player": string | null,
+      "confidence": integer (0-100) | null,
+      "reasoning_brief": string | null,
+      "prop_kind": "hits" | "total_bases" | "strikeouts" | "home_runs" | "rbis" | null
+    }
+  ]
+}
+
+Extract every concrete recommended pick. Return {"picks":[]} when the response is exploratory, hedged, or doesn't recommend concrete bets.`;
+
 /**
  * Calls Haiku to extract a pick from a free-form chat answer.
  * Cost: ~$0.001 per call. Only fires when the JSON tail is missing AND the
@@ -180,6 +246,106 @@ export async function haikuParseChatPick(answer) {
     console.warn(`[chatPickExtractor] Haiku fallback failed: ${err.message}`);
     return null;
   }
+}
+
+export async function haikuParseChatPicks(answer) {
+  if (!_client) return [];
+  try {
+    const response = await _client.messages.create({
+      model: HAIKU_MODEL,
+      max_tokens: 700,
+      system: HAIKU_MULTI_SYSTEM,
+      messages: [{ role: 'user', content: String(answer ?? '').slice(0, 10_000) }],
+    });
+    const text = response?.content?.[0]?.text ?? '';
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return [];
+    const parsed = JSON.parse(m[0]);
+    return normalizePickJsonList(parsed);
+  } catch (err) {
+    console.warn(`[chatPickExtractor] Haiku multi fallback failed: ${err.message}`);
+    return [];
+  }
+}
+
+export function normalizePickJsonList(pickJson) {
+  if (!pickJson) return [];
+  if (Array.isArray(pickJson)) return pickJson.filter(Boolean);
+  if (Array.isArray(pickJson.picks)) return pickJson.picks.filter(Boolean);
+  if (pickJson.has_pick === false) return [];
+  if (pickJson.market_type || pickJson.team_or_player || pickJson.side || pickJson.line != null) {
+    return [pickJson];
+  }
+  return [];
+}
+
+function normalizeLoose(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getGameId(game) {
+  const value = game?.gamePk ?? game?.game_id ?? game?.id ?? null;
+  return value == null ? '' : String(value);
+}
+
+function getGameTeams(game) {
+  const away = game?.teams?.away ?? {};
+  const home = game?.teams?.home ?? {};
+  return {
+    awayAbbr: away?.team?.abbreviation ?? away?.abbreviation ?? game?.away_team_abbr ?? game?.away ?? '',
+    homeAbbr: home?.team?.abbreviation ?? home?.abbreviation ?? game?.home_team_abbr ?? game?.home ?? '',
+    awayName: away?.team?.name ?? away?.name ?? game?.away_team_name ?? '',
+    homeName: home?.team?.name ?? home?.name ?? game?.home_team_name ?? '',
+  };
+}
+
+function getGameMatchup(game) {
+  const teams = getGameTeams(game);
+  return game?.matchup ?? `${teams.awayAbbr || teams.awayName || '?'} @ ${teams.homeAbbr || teams.homeName || '?'}`;
+}
+
+function teamTokenMatches(token, ...candidates) {
+  const normToken = normalizeLoose(token);
+  if (!normToken) return false;
+  return candidates.some((candidate) => {
+    const norm = normalizeLoose(candidate);
+    if (!norm) return false;
+    const last = norm.split(' ').filter(Boolean).pop() ?? '';
+    return norm === normToken || norm.includes(normToken) || normToken.includes(norm) || (last && normToken.includes(last));
+  });
+}
+
+function findGameForPickJson(pickJson, games = []) {
+  if (!Array.isArray(games) || games.length === 0) return null;
+
+  const requestedId = pickJson?.game_id ?? pickJson?.gameId ?? pickJson?.game_pk ?? pickJson?.gamePk ?? null;
+  if (requestedId != null) {
+    const byId = games.find((game) => getGameId(game) === String(requestedId));
+    if (byId) return byId;
+  }
+
+  const requestedMatchup = pickJson?.matchup ?? pickJson?.game ?? null;
+  if (requestedMatchup) {
+    const normMatchup = normalizeLoose(requestedMatchup);
+    const byMatchup = games.find((game) => normalizeLoose(getGameMatchup(game)) === normMatchup);
+    if (byMatchup) return byMatchup;
+  }
+
+  const teamOrPlayer = pickJson?.team_or_player ?? pickJson?.team ?? null;
+  if (teamOrPlayer && pickJson?.market_type !== 'prop') {
+    const byTeam = games.filter((game) => {
+      const teams = getGameTeams(game);
+      return teamTokenMatches(teamOrPlayer, teams.homeAbbr, teams.homeName, teams.awayAbbr, teams.awayName);
+    });
+    if (byTeam.length === 1) return byTeam[0];
+  }
+
+  return null;
 }
 
 // ── Normalize into pickParser-compatible shape ───────────────────────────────
@@ -334,7 +500,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
 export async function processChatAnswer({ rawAnswer, question, userId, gameData, chatSessionId, lang = 'en', sport = 'mlb' }) {
   // Step 1 — JSON tail
   const { cleanAnswer, pickJson: tailJson } = extractJsonTail(rawAnswer);
-  let pickJson = tailJson;
+  let pickJson = normalizePickJsonList(tailJson)[0] ?? tailJson;
   let sourceStage = tailJson ? 'tail' : null;
 
   // Step 2 — Haiku fallback when missing AND the question looked like a pick ask
@@ -375,4 +541,88 @@ export async function processChatAnswer({ rawAnswer, question, userId, gameData,
         }
       : { error: saveResult.reason, source_stage: sourceStage },
   };
+}
+
+/**
+ * Multi-game variant used by Jornada mode. It persists every unambiguous
+ * pick the Oracle returned and skips picks that cannot be mapped to a selected
+ * game.
+ *
+ * @param {object} args
+ * @param {string} args.rawAnswer
+ * @param {string} args.question
+ * @param {string} args.userId
+ * @param {object[]} args.gameDataList
+ * @param {string|null} args.chatSessionId
+ * @param {string} args.lang
+ * @param {'mlb'|'nba'} args.sport
+ * @returns {Promise<{ answer: string, picked: object[] }>}
+ */
+export async function processChatAnswerForGames({ rawAnswer, question, userId, gameDataList = [], chatSessionId, lang = 'en', sport = 'mlb' }) {
+  const { cleanAnswer, pickJson: tailJson } = extractJsonTail(rawAnswer);
+  let pickJsonList = normalizePickJsonList(tailJson);
+  let sourceStage = tailJson ? 'tail' : null;
+
+  if (pickJsonList.length === 0 && HAIKU_FALLBACK_ENABLED && looksLikePickRequest(question)) {
+    pickJsonList = await haikuParseChatPicks(cleanAnswer);
+    if (pickJsonList.length > 0) sourceStage = 'haiku';
+  }
+
+  if (pickJsonList.length === 0) {
+    return { answer: cleanAnswer, picked: [] };
+  }
+
+  const saved = [];
+  const seen = new Set();
+
+  for (const pickJson of pickJsonList.slice(0, 10)) {
+    const gameData = findGameForPickJson(pickJson, gameDataList);
+    if (!gameData) continue;
+
+    const teams = getGameTeams(gameData);
+    const extracted = normalizeExtracted(pickJson, {
+      homeAbbr: teams.homeAbbr,
+      awayAbbr: teams.awayAbbr,
+    });
+    if (!extracted) continue;
+
+    const dedupeKey = [
+      getGameId(gameData),
+      extracted.market_type,
+      extracted.side,
+      extracted.line ?? '',
+      normalizeLoose(extracted.raw_pick_text),
+    ].join('|');
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    const saveResult = await saveExtractedChatPick({
+      extracted,
+      pickJson,
+      userId,
+      gameData,
+      chatSessionId,
+      lang,
+      sport,
+    });
+
+    if (saveResult.ok) {
+      saved.push({
+        pick_id: saveResult.pickId,
+        source_stage: sourceStage,
+        game_id: getGameId(gameData),
+        matchup: getGameMatchup(gameData),
+        market_type: extracted.market_type,
+        side: extracted.side,
+        line: extracted.line,
+        prop_kind: extracted.prop_kind,
+        team_or_player: pickJson.team_or_player ?? null,
+        confidence: pickJson.confidence ?? null,
+        reasoning_brief: pickJson.reasoning_brief ?? null,
+        raw_pick_text: extracted.raw_pick_text,
+      });
+    }
+  }
+
+  return { answer: cleanAnswer, picked: saved };
 }

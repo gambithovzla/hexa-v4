@@ -3,6 +3,7 @@ import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import SportSwitcher from './SportSwitcher';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -178,6 +179,7 @@ function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
 
 // ── StatusBadge ───────────────────────────────────────────────────────────────
 function StatusBadge({ status, t }) {
+  const { C } = useHexaTheme();
   const map = {
     scheduled: { label: t.scheduled, color: C.green, pulse: false },
     live:      { label: t.live,      color: C.amber, pulse: true  },
@@ -230,6 +232,7 @@ function StatusBadge({ status, t }) {
 
 // ── GameCard ──────────────────────────────────────────────────────────────────
 function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t }) {
+  const { C, isLeague } = useHexaTheme();
   const away    = getAbbr(game.teams?.away);
   const home    = getAbbr(game.teams?.home);
   const awayId  = getTeamId(game.teams?.away);
@@ -257,13 +260,14 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         background:   isSelected ? C.accentDim : C.surface,
         border:       `1px solid ${isSelected ? C.accentLine : C.border}`,
         borderLeft:   `3px solid ${leftBorderColor}`,
-        borderRadius: '4px',
+        borderRadius: isLeague ? 0 : '4px',
         p:            '14px',
         cursor:       blocked ? 'not-allowed' : 'pointer',
         opacity:      status === 'final' ? 0.5 : 1,
-        boxShadow:    isSelected ? `0 0 0 1px rgba(255,102,0,0.12), 0 0 20px rgba(255,102,0,0.1)` : 'none',
+        boxShadow:    isSelected && !isLeague ? `0 0 0 1px rgba(255,102,0,0.12), 0 0 20px rgba(255,102,0,0.1)` : 'none',
         transform:    isSelected ? 'translateY(-1px)' : 'none',
         transition:   'border-color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s',
+        clipPath:     isLeague ? 'polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%)' : 'none',
         '&:hover': blocked ? {} : {
           borderColor: isSelected ? C.accentLine : C.border,
           background:  isSelected ? C.accentDim : C.elevated,
@@ -481,6 +485,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
 
 // ── AnalyzeButton ─────────────────────────────────────────────────────────────
 function AnalyzeButton({ canAnalyze, analyzing, onClick, t }) {
+  const { C, isLeague } = useHexaTheme();
   const active = canAnalyze && !analyzing;
   return (
     <Box
@@ -492,9 +497,9 @@ function AnalyzeButton({ canAnalyze, analyzing, onClick, t }) {
         px:            2,
         mt:            3,
         border:        `1px solid ${active ? C.accentLine : C.border}`,
-        borderRadius:  '2px',
+        borderRadius:  isLeague ? 0 : '2px',
         background:    active ? C.accent : C.surface,
-        color:         active ? '#fff' : C.textMuted,
+        color:         active ? (isLeague ? 'var(--sport-accent-text, #fff)' : '#fff') : C.textMuted,
         fontFamily:    BARLOW,
         fontSize:      '15px',
         fontWeight:    700,
@@ -502,6 +507,7 @@ function AnalyzeButton({ canAnalyze, analyzing, onClick, t }) {
         textTransform: 'uppercase',
         cursor:        active ? 'pointer' : 'not-allowed',
         transition:    'all 0.15s',
+        clipPath:      isLeague ? 'polygon(0 0, 100% 0, calc(100% - 10px) 100%, 10px 100%)' : 'none',
         '&:hover': active
           ? { background: '#fb923c' }
           : {},
@@ -616,6 +622,7 @@ export default function GameSelector({
   analyzing = false,
   language = 'en',
 }) {
+  const { C, isLeague } = useHexaTheme();
   const t = L[language] ?? L.en;
 
   const [date, setDate]         = useState(todayStr);
@@ -722,7 +729,12 @@ export default function GameSelector({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <Box sx={{ bgcolor: C.bg, p: 2, minHeight: '100%' }}>
+    <Box sx={{
+      bgcolor: isLeague ? 'rgba(6,24,39,0.45)' : C.bg,
+      p: 2,
+      minHeight: '100%',
+      border: isLeague ? `1px solid ${C.borderLight}` : 'none',
+    }}>
 
       {/* ── Header: title + date picker ── */}
       <Box

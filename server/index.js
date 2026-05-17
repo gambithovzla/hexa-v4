@@ -50,7 +50,7 @@ import { buildHexaBoard } from './services/hexaBoardService.js';
 import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
 import adminMlRouter from './routes/admin-ml.js';
-import { augmentChatQuestion, processChatAnswer } from './services/chatPickExtractor.js';
+import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames } from './services/chatPickExtractor.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { mountAdminDbExplorer } from './admin-db-explorer.js';
@@ -2261,19 +2261,61 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
       })
     );
 
+    const extractorGames = resolvedGames.map((gameData) => {
+      const away = gameData.teams?.away?.abbreviation || gameData.teams?.away?.team?.abbreviation || '?';
+      const home = gameData.teams?.home?.abbreviation || gameData.teams?.home?.team?.abbreviation || '?';
+      return {
+        game_id: gameData.gamePk,
+        matchup: `${away} @ ${home}`,
+        away,
+        home,
+      };
+    });
+
+    const skipExtract = String(req.headers['x-hexa-skip-pick-extract'] ?? '') === '1';
+    const userQuestion = question.trim();
+    const augmentedQuestion = skipExtract
+      ? userQuestion
+      : augmentChatQuestion(userQuestion, lang, 'mlb', {
+          mode: 'jornada',
+          multi: true,
+          games: extractorGames,
+        });
+
     // REDUCE phase: single Opus 4.7 call across all briefs
-    const answer = await analyzeChatJornada({
+    const rawAnswer = await analyzeChatJornada({
       gameBriefs,
-      question: question.trim(),
+      question: augmentedQuestion,
       conversationHistory,
       lang,
     });
 
+    let cleanAnswer = rawAnswer;
+    let picked = [];
+    if (!skipExtract) {
+      try {
+        const processed = await processChatAnswerForGames({
+          rawAnswer,
+          question: userQuestion,
+          userId: req.user.id,
+          gameDataList: resolvedGames,
+          chatSessionId: null,
+          lang,
+          sport: 'mlb',
+        });
+        cleanAnswer = processed.answer;
+        picked = processed.picked;
+      } catch (err) {
+        console.warn('[Oracle Jornada Chat] pick extraction failed (non-critical):', err.message);
+      }
+    }
+
     res.json({
       success: true,
-      answer,
+      answer: cleanAnswer,
       mode: 'jornada',
       gamesAnalyzed: resolvedGames.length,
+      picked,
     });
 
     // Persist jornada session asynchronously
@@ -2283,17 +2325,25 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
           { role: 'user', text: t.question },
           { role: 'assistant', text: t.answer },
         ]),
-        { role: 'user', text: question.trim() },
-        { role: 'assistant', text: answer },
+        { role: 'user', text: userQuestion },
+        { role: 'assistant', text: cleanAnswer },
       ];
       upsertOracleSession({
         userId: req.user.id,
         sessionKey,
-        dateEt: getEasternDateString(),
+        dateEt: resolvedDate,
         mode: 'jornada',
         gameIds,
         matchups: matchups || gameIds.join(', '),
         messages: fullMessages,
+      }).then((sessionId) => {
+        const pickIds = picked.map((p) => p.pick_id).filter(Boolean);
+        if (sessionId && pickIds.length > 0) {
+          pool.query(
+            'UPDATE picks SET chat_session_id = $1 WHERE id = ANY($2::int[]) AND chat_session_id IS NULL',
+            [sessionId, pickIds]
+          ).catch((err) => console.warn(`[Oracle Jornada Chat] backfill chat_session_id failed: ${err.message}`));
+        }
       });
     }
   } catch (err) {
