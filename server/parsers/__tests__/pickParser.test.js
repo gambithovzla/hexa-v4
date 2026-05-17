@@ -150,6 +150,15 @@ describe('pickParser — player props', () => {
     assert.equal(r.side, 'over');
     assert.equal(r.prop_player_name, 'Juan Soto');
   });
+
+  test('Spanish line-last: Drew Rasmussen Bajo 4.5 Ponches', () => {
+    const r = parsePick('Drew Rasmussen Bajo 4.5 Ponches');
+    assert.equal(r.market_type, 'prop');
+    assert.equal(r.prop_kind, 'strikeouts');
+    assert.equal(r.side, 'under');
+    assert.equal(r.line, 4.5);
+    assert.equal(r.prop_player_name, 'Drew Rasmussen');
+  });
 });
 
 describe('pickParser — edge cases', () => {

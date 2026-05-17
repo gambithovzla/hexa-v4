@@ -1,4 +1,6 @@
 import express from 'express';
+import pool from '../db.js';
+import { parsePick } from '../parsers/pickParser.js';
 import { getTodayGames } from '../mlb-api.js';
 import { getGameOdds, hydrateOddsForGame, matchOddsToGame } from '../odds-api.js';
 import { verifyToken } from '../middleware/auth-middleware.js';
@@ -168,11 +170,44 @@ router.get('/props/board', verifyToken, async (req, res) => {
       g.props.sort((a, b) => Math.abs(b.edge ?? 0) - Math.abs(a.edge ?? 0));
     }
 
+    const oraclePickRows = await pool.query(
+      `SELECT id, pick, matchup, game_pk, game_date, confidence, result, created_at
+       FROM picks
+       WHERE COALESCE(sport, 'mlb') = 'mlb'
+         AND game_date::date = $1::date
+         AND pick IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 40`,
+      [date],
+    );
+
+    const oraclePropPicks = [];
+    for (const row of oraclePickRows.rows) {
+      const parsed = parsePick(row.pick);
+      if (parsed.market_type !== 'prop') continue;
+      oraclePropPicks.push({
+        pickId: row.id,
+        pick: row.pick,
+        matchup: row.matchup,
+        gamePk: row.game_pk,
+        propKind: parsed.prop_kind,
+        side: parsed.side,
+        line: parsed.line,
+        playerName: parsed.prop_player_name,
+        confidence: row.confidence,
+        result: row.result,
+        createdAt: row.created_at,
+        source: 'oracle',
+      });
+    }
+
     res.json({
       date,
       mlPublic: PUBLIC_PROPS_ENABLED,
       mlEnabled: isMlEnabled(),
       games: filteredGames,
+      oraclePropPicks,
+      oddsAvailable: filteredGames.length > 0,
     });
   } catch (err) {
     console.error('[mlb-props] board failed:', err.message);

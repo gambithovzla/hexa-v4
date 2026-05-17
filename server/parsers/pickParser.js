@@ -30,9 +30,12 @@ const ALL_TEAM_ABBRS = new Set([
 const RL_SIGNED = /(?:rl\s+)?([+-]\d+\.5)(?!\d)/i;
 
 // ── Over/Under patterns ───────────────────────────────────────────────────
-const OU_PATTERN = /\b(over|under|o|u|más de|mas de|menos de)\s+([\d]+(?:\.5)?)\b/i;
+const OU_SIDE_PATTERN = '(?:over|under|o|u|más de|mas de|menos de|bajo|alto|arriba|abajo)';
+const OU_PATTERN = new RegExp(`\\b(${OU_SIDE_PATTERN})\\s+([\\d]+(?:\\.5)?)\\b`, 'i');
 const STAT_FIRST_PROP_PATTERN =
-  /^(.+?)\s+(hits?|strikeouts?|ponches?|total bases|bases totales|tb|hr|home runs?|jonrones?|rbis?|carreras impulsadas)\s+(over|under|o|u|más de|mas de|menos de)\s+([\d]+(?:\.5)?)$/i;
+  /^(.+?)\s+(hits?|strikeouts?|ponches?|total bases|bases totales|tb|hr|home runs?|jonrones?|rbis?|carreras impulsadas)\s+(over|under|o|u|más de|mas de|menos de|bajo|alto|arriba|abajo)\s+([\d]+(?:\.5)?)$/i;
+const LINE_LAST_PROP_PATTERN =
+  new RegExp(`^(.+?)\\s+${OU_SIDE_PATTERN}\\s+([\\d]+(?:\\.5)?)\\s+(.+)$`, 'i');
 
 // ── Moneyline — plain team abbreviation or "Team ML" ─────────────────────
 const ML_EXPLICIT = /\bml\b/i;
@@ -41,7 +44,7 @@ const ML_EXPLICIT = /\bml\b/i;
 // "Aaron Judge Over 0.5 HR", "Shohei Ohtani Under 8.5 Strikeouts"
 // "Juan Soto Over 1.5 Hits", "Yordan Alvarez Over 1.5 TB"
 const PROP_PATTERN =
-  /^(.+?)\s+(over|under|más de|mas de|menos de)\s+([\d]+(?:\.5)?)\s+(.+)$/i;
+  /^(.+?)\s+(over|under|más de|mas de|menos de|bajo|alto|arriba|abajo)\s+([\d]+(?:\.5)?)\s+(.+)$/i;
 
 const PROP_KIND_MAP = {
   'hit': 'hits', 'hits': 'hits',
@@ -70,10 +73,10 @@ function parseNumber(s) {
 
 function resolveOuSide(raw) {
   const key = normalizeText(raw);
-  if (key.startsWith('o') || key.includes('over') || key.includes('mas de') || key.includes('más de')) {
+  if (/^(over|o|más de|mas de|alto|arriba)$/.test(key) || key.includes('over')) {
     return 'over';
   }
-  if (key.startsWith('u') || key.includes('under') || key.includes('menos de')) {
+  if (/^(under|u|menos de|bajo|abajo)$/.test(key) || key.includes('under') || key.includes('menos de')) {
     return 'under';
   }
   return null;
@@ -133,6 +136,21 @@ export function parsePick(text, ctx = {}) {
   if (!clean) return { market_type: null, side: null, line: null, prop_kind: null, prop_player_name: null };
 
   const norm = normalizeText(clean);
+
+  const lineLastProp = clean.match(LINE_LAST_PROP_PATTERN);
+  if (lineLastProp) {
+    const playerName = lineLastProp[1].trim();
+    const propKindRaw = lineLastProp[4];
+    if (!startsWithTeamAbbr(playerName) && resolvePropKind(propKindRaw)) {
+      return {
+        market_type: 'prop',
+        side: resolveOuSide(lineLastProp[2]),
+        line: parseNumber(lineLastProp[3]),
+        prop_kind: resolvePropKind(propKindRaw),
+        prop_player_name: playerName,
+      };
+    }
+  }
 
   const statFirst = clean.match(STAT_FIRST_PROP_PATTERN);
   if (statFirst) {

@@ -44,6 +44,25 @@ test('overunder infers python side from probability', async () => {
   assert.equal(mlOpinion.agree.legacy, null);
 });
 
+test('Spanish prop pick uses strikeouts market not moneyline labels', async () => {
+  const { mlOpinion } = await buildPickAlignedMlOpinion({
+    analysisData: {
+      master_prediction: { pick: 'Drew Rasmussen Bajo 4.5 Ponches', oracle_confidence: 58 },
+    },
+    gameData,
+    xgboostResult: { score: 57, predicted_winner: 139 },
+    statcastData: {},
+    features: {},
+  });
+
+  assert.equal(mlOpinion.market_type, 'prop');
+  assert.equal(mlOpinion.prop_kind, 'strikeouts');
+  assert.equal(mlOpinion.side, 'under');
+  assert.equal(mlOpinion.legacy.available, false);
+  assert.match(mlOpinion.oracle.label, /Under|under/i);
+  assert.doesNotMatch(mlOpinion.oracle.label, /Home ML/i);
+});
+
 test('prop legacy is not available', async () => {
   const { mlOpinion } = await buildPickAlignedMlOpinion({
     analysisData: {
