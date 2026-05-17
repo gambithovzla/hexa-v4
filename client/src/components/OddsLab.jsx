@@ -28,7 +28,8 @@ import {
   formatProbability,
   parseProbabilityPercent,
 } from '../utils/odds';
-import { C, BARLOW, MONO } from '../theme';
+import { BARLOW, MONO } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 
 const LABELS = {
   en: {

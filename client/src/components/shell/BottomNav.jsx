@@ -26,6 +26,7 @@ const Icon = ({ d, size = 22 }) => (
 
 const ICONS = {
   board:   <Icon d="M3 3h18v18H3z M3 9h18 M9 21V9" />,
+  gameday: <Icon d="M4 6h16v12H4z M8 10h8 M8 14h5" />,
   live:    <Icon d="M3 12h4 M17 12h4 M12 3v4 M12 17v4 M5 5l3 3 M16 16l3 3 M5 19l3-3 M16 8l3-3" />,
   oracle:  <Icon d="M12 2l9 5v10l-9 5-9-5V7z M3 7l9 5 9-5" size={28} />,
   game:    <Icon d="M12 2l9 5v10l-9 5-9-5V7z M12 8v4 M12 16h.01" size={28} />,
@@ -80,18 +81,36 @@ export default function BottomNav({
   onTabChange,
   isAdmin = false,
   onOracleChat,
+  oracleChatOpen = false,
 }) {
   const { C, isLeague } = useHexaTheme();
-  // Active state uses CSS var so livery follows data-sport flips
-  // without re-rendering. Classic keeps its cyan.
   const accent = isLeague ? 'var(--sport-accent)' : C.cyan;
 
-  const fabIsOracle = isAdmin && Boolean(onOracleChat);
-  const fabAction = fabIsOracle ? onOracleChat : () => onTabChange?.('game');
-  const fabLabel  = fabIsOracle
-    ? L('Oracle', 'Oracle', lang)
+  const firstTab = isAdmin
+    ? { key: 'gameday', icon: ICONS.gameday, label: L('Details', 'Detalles', lang) }
+    : { key: 'pizarra', icon: ICONS.board, label: L('Board', 'Pizarra', lang) };
+
+  const fabAction = () => onTabChange?.('game');
+  const fabLabel = isAdmin
+    ? L('Single Game', 'Juego', lang)
     : L('Game', 'Juego', lang);
-  const fabIcon = fabIsOracle ? ICONS.oracle : ICONS.game;
+  const fabIcon = isAdmin ? ICONS.game : ICONS.game;
+
+  const lastTab = isAdmin
+    ? {
+        key: 'oracle',
+        icon: ICONS.oracle,
+        label: 'Oracle',
+        onClick: () => onOracleChat?.(),
+        active: Boolean(oracleChatOpen),
+      }
+    : {
+        key: 'bankroll',
+        icon: ICONS.account,
+        label: L('Bankroll', 'Bankroll', lang),
+        onClick: () => onTabChange?.('bankroll'),
+        active: activeTab === 'bankroll',
+      };
 
   return (
     <Box
@@ -110,10 +129,10 @@ export default function BottomNav({
       }}
     >
       <NavBtn
-        icon={ICONS.board}
-        label={L('Board', 'Pizarra', lang)}
-        active={activeTab === 'pizarra'}
-        onClick={() => onTabChange?.('pizarra')}
+        icon={firstTab.icon}
+        label={firstTab.label}
+        active={activeTab === firstTab.key}
+        onClick={() => onTabChange?.(firstTab.key)}
         C={C}
         accent={accent}
       />
@@ -175,10 +194,10 @@ export default function BottomNav({
         accent={accent}
       />
       <NavBtn
-        icon={ICONS.account}
-        label={L('Bankroll', 'Bankroll', lang)}
-        active={activeTab === 'bankroll'}
-        onClick={() => onTabChange?.('bankroll')}
+        icon={lastTab.icon}
+        label={lastTab.label}
+        active={lastTab.active}
+        onClick={lastTab.onClick}
         C={C}
         accent={accent}
       />

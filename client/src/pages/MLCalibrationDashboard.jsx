@@ -23,21 +23,21 @@ import {
   ResponsiveContainer, ScatterChart, Scatter,
   LineChart,
 } from 'recharts';
-import { C, MONO, DISPLAY } from '../theme';
+import { MONO, DISPLAY } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
-const BG      = '#0a0e1a';
-const SURFACE = '#07090E';
-const BORDER  = 'rgba(0,217,255,0.18)';
-const CYAN    = '#00D9FF';
-const GREEN   = '#00FF88';
-const RED     = '#FF2244';
-const AMBER   = '#FF9900';
-const PURPLE  = '#B060FF';
-const MUTED   = 'rgba(0,217,255,0.45)';
-const DIM     = 'rgba(0,217,255,0.12)';
+// ── Design tokens (CSS vars — classic + league-kinetic) ───────────────────────
+const BG      = 'var(--bg-0)';
+const SURFACE = 'var(--bg-1)';
+const BORDER  = 'var(--border)';
+const CYAN    = 'var(--neon-cyan)';
+const GREEN   = 'var(--neon-green)';
+const RED     = 'var(--neon-pink)';
+const AMBER   = 'var(--warning)';
+const PURPLE  = 'var(--neon-cyan)';
+const MUTED   = 'var(--ink-2)';
+const DIM     = 'var(--neon-cyan-dim)';
 
 const CSS = `
 @keyframes mcd-fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
@@ -373,7 +373,7 @@ export default function MLCalibrationDashboard({ token, onBack }) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <Box sx={{ minHeight: '100vh', background: BG, p: { xs: 2, sm: 3 } }}>
+    <Box className="hexa-themed-page" sx={{ minHeight: '100vh', background: BG, p: { xs: 2, sm: 3 } }}>
       <style>{CSS}</style>
 
       {/* Header */}

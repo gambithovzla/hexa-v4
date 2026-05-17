@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C, MONO, BARLOW } from '../theme';
+import { MONO, BARLOW } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 import { useAuth } from '../store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -291,7 +292,7 @@ export default function BacktestDashboard({ lang = 'en', onBack }) {
   const winRate = resolved > 0 ? ((parseInt(s.wins) / resolved) * 100).toFixed(1) : '—';
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#000', p: { xs: 2, sm: 3 }, maxWidth: '100vw', overflowX: 'hidden' }}>
+    <Box className="hexa-themed-page" sx={{ minHeight: '100vh', bgcolor: C.bg, p: { xs: 2, sm: 3 }, maxWidth: '100vw', overflowX: 'hidden' }}>
       <Box component="button" onClick={onBack} sx={{
         background: 'transparent', border: `1px solid ${C.cyanLine}`, color: C.textMuted,
         fontFamily: MONO, fontSize: '0.65rem', letterSpacing: '2px', padding: '6px 14px',

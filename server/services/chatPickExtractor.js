@@ -29,6 +29,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import pool from '../db.js';
+import { resolveGameCalendarDate } from '../utils/dateKeys.js';
 import { parsePick } from '../parsers/pickParser.js';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
@@ -422,7 +423,7 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
   const home = gameData.teams?.home?.team?.name ?? gameData.teams?.home?.name ?? gameData.home_team_name ?? '?';
   const matchup = gameData.matchup ?? `${away} @ ${home}`;
   const gamePk  = Number(gameData.gamePk ?? gameData.game_id);
-  const gameDate = String(gameData.gameDate ?? gameData.game_date ?? gameData.officialDate ?? '').slice(0, 10) || null;
+  const gameDate = resolveGameCalendarDate(gameData);
   const sportNorm = String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
 
   const confidence = Number.isFinite(Number(pickJson?.confidence))

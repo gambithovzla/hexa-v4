@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C, MONO, BARLOW } from '../theme';
+import { MONO, BARLOW } from '../theme';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -120,7 +121,7 @@ function fmtMs(ms) {
   return `${ms}ms`;
 }
 
-function modeColor(mode) {
+function modeColor(mode, C) {
   return { conservative: C.green, balanced: C.cyan, aggressive: C.amber, dreamer: C.red }[mode] ?? C.textMuted;
 }
 
@@ -136,6 +137,7 @@ function actualLegCount(run) {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color }) {
+  const { C } = useHexaTheme();
   return (
     <Box sx={{ border: `1px solid ${C.border}`, bgcolor: C.surface, p: '12px 14px', flex: 1, minWidth: '110px' }}>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.56rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.12em', mb: '4px' }}>
@@ -149,6 +151,7 @@ function StatCard({ label, value, color }) {
 }
 
 function StatusBadge({ run, t }) {
+  const { C } = useHexaTheme();
   const totalLegs = actualLegCount(run);
   if (!run.resolved) {
     const isFallback = run.architect_output?._fallback;
@@ -177,6 +180,7 @@ function StatusBadge({ run, t }) {
 }
 
 function ResolveControls({ run, t, token, onResolved }) {
+  const { C } = useHexaTheme();
   const [legsHit, setLegsHit] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -233,6 +237,7 @@ function ResolveControls({ run, t, token, onResolved }) {
 }
 
 function ActionBtn({ label, color, onClick, disabled }) {
+  const { C } = useHexaTheme();
   return (
     <Box
       onClick={disabled ? undefined : onClick}
@@ -254,6 +259,7 @@ function ActionBtn({ label, color, onClick, disabled }) {
 }
 
 function RunDetail({ run, t, lang }) {
+  const { C } = useHexaTheme();
   const legs = run.chosen_legs ?? [];
   const archOut = run.architect_output ?? {};
   const timings = run.timings ?? {};
@@ -331,6 +337,7 @@ function RunDetail({ run, t, lang }) {
 }
 
 function RunRow({ run, t, lang, token, onResolved }) {
+  const { C } = useHexaTheme();
   const [expanded, setExpanded] = useState(false);
   const archOut = run.architect_output ?? {};
   const timings = run.timings ?? {};
@@ -350,7 +357,7 @@ function RunRow({ run, t, lang, token, onResolved }) {
         '&:hover': { bgcolor: 'rgba(0,217,255,0.02)' },
       }}>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted }}>{fmtDate(run.game_date ?? run.created_at)}</Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: modeColor(run.mode), textTransform: 'uppercase' }}>{run.mode ?? '—'}</Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: modeColor(run.mode, C), textTransform: 'uppercase' }}>{run.mode ?? '—'}</Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: C.cyan, textAlign: 'center' }}>{totalLegs ?? run.requested_legs ?? '—'}</Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {run.synergy_type ? run.synergy_type.replace(/_/g, ' ') : '—'}
@@ -378,6 +385,7 @@ function RunRow({ run, t, lang, token, onResolved }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function SynergyRunsDashboard({ lang = 'en', onBack }) {
+  const { C, isLeague } = useHexaTheme();
   const t = L[lang] ?? L.en;
   const token = localStorage.getItem('hexa_token');
 
@@ -424,7 +432,7 @@ export default function SynergyRunsDashboard({ lang = 'en', onBack }) {
   const fallbackRate = runs.length > 0 ? `${((fallbacks / runs.length) * 100).toFixed(1)}%` : '—';
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: C.bg, display: 'flex', flexDirection: 'column' }}>
+    <Box className="hexa-themed-page" sx={{ minHeight: '100vh', bgcolor: isLeague ? C.bg : C.bg, display: 'flex', flexDirection: 'column' }}>
       {/* Header bar */}
       <Box sx={{
         display: 'flex',

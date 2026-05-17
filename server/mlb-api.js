@@ -112,6 +112,8 @@ function normalizeGame(game) {
 
   return {
     gamePk: game.gamePk,
+    officialDate: game.officialDate ?? null,
+    game_date: game.officialDate ?? null,
     gameDate: game.gameDate,                         // ISO 8601 UTC
     gameTime: game.gameDate
       ? new Date(game.gameDate).toLocaleTimeString('en-US', {

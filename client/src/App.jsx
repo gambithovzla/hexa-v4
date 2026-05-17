@@ -555,6 +555,7 @@ export default function App() {
         isAdmin={isAdmin}
         performancePublic={performancePublic}
         onOracleChat={() => setShowOracleChat(true)}
+        oracleChatOpen={showOracleChat}
         onMethodology={() => setShowMethodology(true)}
         onPerformance={() => setShowPerformance(true)}
       >

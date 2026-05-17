@@ -25,24 +25,25 @@ import {
   XAxis, YAxis, ReferenceLine, Tooltip as RTooltip, Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { C, MONO, DISPLAY } from '../theme';
+import { MONO, DISPLAY } from '../theme';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-// ── Palette ──────────────────────────────────────────────────────────────────
-const BG      = C.bg;
-const SURFACE = C.bg1;
-const SURFACE2 = C.bg2;
-const BORDER  = C.border;
-const CYAN    = C.cyan;
-const GREEN   = C.green;
-const RED     = C.red;
-const AMBER   = C.amber;
-const ACCENT  = C.accent;
-const MUTED   = C.ink2;
-const INK1    = C.ink1;
-const INK0    = C.ink0;
-const DIM     = 'rgba(34,240,255,0.10)';
+// ── Palette (CSS vars — follows classic + league-kinetic via index.css) ───────
+const BG      = 'var(--bg-0)';
+const SURFACE = 'var(--bg-1)';
+const SURFACE2 = 'var(--bg-2)';
+const BORDER  = 'var(--border)';
+const CYAN    = 'var(--neon-cyan)';
+const GREEN   = 'var(--neon-green)';
+const RED     = 'var(--neon-pink)';
+const AMBER   = 'var(--warning)';
+const ACCENT  = 'var(--accent)';
+const MUTED   = 'var(--ink-2)';
+const INK1    = 'var(--ink-1)';
+const INK0    = 'var(--ink-0)';
+const DIM     = 'var(--neon-cyan-dim)';
 
 const MARKETS = ['moneyline', 'overunder', 'runline'];
 const MARKET_LABELS = { moneyline: 'Moneyline', overunder: 'Over / Under', runline: 'Runline' };
@@ -1005,6 +1006,7 @@ function Toast({ toast, onClose }) {
 // ── Main component ──────────────────────────────────────────────────────────
 
 export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
+  const { isLeague } = useHexaTheme();
   const T = { ...(STRINGS[lang] ?? STRINGS.es), lang };
 
   const [status, setStatus]         = useState(null);
@@ -1183,7 +1185,7 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', background: BG, color: INK0, p: { xs: 1.5, md: 3 } }}>
+    <Box className="hexa-themed-page" sx={{ minHeight: '100vh', background: BG, color: INK0, p: { xs: 1.5, md: 3 } }}>
       <style>{CSS}</style>
       <Toast toast={toast} onClose={() => setToast(null)} />
 

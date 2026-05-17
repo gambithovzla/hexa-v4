@@ -13,7 +13,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C, MONO } from '../theme';
+import { MONO } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 import { useAuth } from '../store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';

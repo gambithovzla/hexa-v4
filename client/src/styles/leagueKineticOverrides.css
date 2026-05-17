@@ -509,3 +509,28 @@
 }
 .brand-statusbar b { color: var(--brand-volt); font-weight: 500; }
 .brand-statusbar .end { margin-left: auto; }
+
+/* Full-page admin / tool surfaces — navy canvas under league brand */
+:root[data-brand='league-kinetic'] .hexa-themed-page,
+:root[data-brand='league-kinetic'] .league-page-frame {
+  background: var(--bg-0);
+  color: var(--text-primary);
+}
+
+:root[data-brand='league-kinetic'] .hexa-themed-page .MuiTypography-root {
+  color: inherit;
+}
+
+/* Analysis wait overlay — full viewport broadcast stack */
+.league-analysis-overlay .brand-broadcast-strip {
+  padding-left: max(22px, env(safe-area-inset-left));
+  padding-right: max(22px, env(safe-area-inset-right));
+}
+
+.league-analysis-overlay .brand-ticker {
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+}
+
+.brand-phase-card {
+  user-select: none;
+}

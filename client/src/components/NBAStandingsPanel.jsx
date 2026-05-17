@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C, BARLOW, MONO } from '../theme';
+import { BARLOW, MONO } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 import PlayoffBracket from './PlayoffBracket';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 
