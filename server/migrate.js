@@ -823,3 +823,29 @@ export async function runNbaDatasetMigrations() {
     client.release();
   }
 }
+
+export async function runPickAlignedShadowMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS pick_market_type VARCHAR(20)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS pick_side VARCHAR(10)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS pick_line DECIMAL(6,2)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS prop_kind VARCHAR(32)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS oracle_pick_prob DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS legacy_pick_prob DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS python_pick_prob DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS python_pick_market VARCHAR(32)`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS pick_agree_legacy BOOLEAN`);
+    await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS pick_agree_python BOOLEAN`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shadow_model_runs_pick_market ON shadow_model_runs(pick_market_type)`);
+    await client.query('COMMIT');
+    console.log('[migrate] pick-aligned shadow_model_runs columns ready');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] pick-aligned shadow migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

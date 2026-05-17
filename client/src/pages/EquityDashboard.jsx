@@ -26,8 +26,9 @@ const BG     = 'var(--bg-0)';
 const SURF   = 'var(--bg-1)';
 const BORDER = 'var(--border)';
 const CYAN   = 'var(--neon-cyan)';
-const GREEN  = 'var(--neon-green)';
-const RED    = 'var(--neon-pink)';
+const GREEN  = 'var(--outcome-win)';
+const RED    = 'var(--outcome-loss)';
+const PUSH   = 'var(--outcome-push)';
 const AMBER  = 'var(--warning)';
 const MUTED  = 'var(--ink-2)';
 const DIM    = 'var(--neon-cyan-dim)';
@@ -144,7 +145,7 @@ function EquityTooltip({ active, payload }) {
           {d.pick}
         </Typography>
       )}
-      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: d.result === 'win' ? GREEN : d.result === 'loss' ? RED : AMBER }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: d.result === 'win' ? GREEN : d.result === 'loss' ? RED : d.result === 'push' ? PUSH : AMBER }}>
         {d.result?.toUpperCase()} {d.units != null ? (d.units >= 0 ? `+${d.units}u` : `${d.units}u`) : ''}
       </Typography>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.68rem', color: CYAN, mt: '2px' }}>
@@ -204,7 +205,7 @@ function MonthlyTable({ monthly }) {
                 <Box component="td" sx={{ color: '#ccc', textAlign: 'right', pr: '12px' }}>{m.picks}</Box>
                 <Box component="td" sx={{ color: GREEN, textAlign: 'right', pr: '12px' }}>{m.wins}</Box>
                 <Box component="td" sx={{ color: RED,   textAlign: 'right', pr: '12px' }}>{m.losses}</Box>
-                <Box component="td" sx={{ color: AMBER, textAlign: 'right', pr: '12px' }}>{m.pushes}</Box>
+                <Box component="td" sx={{ color: PUSH, textAlign: 'right', pr: '12px' }}>{m.pushes}</Box>
                 <Box component="td" sx={{ color: '#ccc', textAlign: 'right', pr: '12px' }}>{fmtPct(m.winRate)}</Box>
                 <Box component="td" sx={{ color: unitColor, textAlign: 'right', pr: '12px', fontWeight: 700 }}>
                   {m.units >= 0 ? '+' : ''}{fmt(m.units, 2)}u

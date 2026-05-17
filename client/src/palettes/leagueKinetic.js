@@ -64,6 +64,16 @@ export const leagueKineticPalette = {
   redDim:      'rgba(230, 57, 70, 0.10)',
   redLine:     'rgba(230, 57, 70, 0.28)',
 
+  outcomeWin:      '#FFD60A',
+  outcomeWinDim:   'rgba(255, 214, 10, 0.22)',
+  outcomeWinLine:  'rgba(255, 214, 10, 0.45)',
+  outcomeLoss:     '#E63946',
+  outcomeLossDim:  'rgba(230, 57, 70, 0.22)',
+  outcomeLossLine: 'rgba(230, 57, 70, 0.45)',
+  outcomePush:     '#B8985A',
+  outcomePushDim:  'rgba(184, 152, 90, 0.22)',
+  outcomePushLine: 'rgba(184, 152, 90, 0.45)',
+
   // ── Text (cream-on-navy) ─────────────────────────────────────────────────
   ink0:        '#F4ECD8',
   ink1:        '#cfd6e0',

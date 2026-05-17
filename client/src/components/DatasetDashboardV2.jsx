@@ -3,6 +3,7 @@ import { Box, Typography } from '@mui/material';
 import { C, MONO, BARLOW } from '../theme';
 import { useAuth } from '../store/authStore';
 import { useHexaTheme } from '../themeProvider';
+import { outcomeTextColor } from '../theme/outcomeStyles';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -488,7 +489,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
                     {row.matchup ?? `${row.away_team_abbr ?? '—'} @ ${row.home_team_abbr ?? '—'}`}
                   </Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.cyan, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.pick}</Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', flex: 1, minWidth: '50px', fontWeight: 700, color: row.result === 'win' ? C.green : row.result === 'loss' ? C.red : C.textMuted }}>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', flex: 1, minWidth: '50px', fontWeight: 700, color: outcomeTextColor(C, row.result) }}>
                     {row.result?.toUpperCase() ?? '—'}
                   </Typography>
                   {isNba ? (

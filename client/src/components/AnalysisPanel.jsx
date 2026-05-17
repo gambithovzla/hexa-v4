@@ -14,6 +14,7 @@ import { Box, Typography, Switch, Slider } from '@mui/material';
 import ResultCard from './ResultCard';
 import AuthModal from './AuthModal';
 import NbaContextMetaBadge from './NbaContextMetaBadge';
+import AdminMlOpinionCard from './AdminMlOpinionCard';
 import { useAuth } from '../store/authStore';
 import { BARLOW, MONO, SANS } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
@@ -1609,6 +1610,9 @@ export default function AnalysisPanel({
               oddsSource={result.meta.oddsSource ?? null}
               lang={lang}
             />
+          )}
+          {isAdmin && sport !== 'nba' && result?.mlOpinion && (
+            <AdminMlOpinionCard mlOpinion={result.mlOpinion} lang={lang} />
           )}
           <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} />
         </>

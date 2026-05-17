@@ -2,9 +2,14 @@ import pool from './db.js';
 import { getLiveGameData } from './live-feed.js';
 import {
   buildMLFeaturePayload,
+  buildPropMLFeaturePayload,
   isEnabled as isMlSidecarEnabled,
   predictMoneyline,
+  predictOverUnder,
+  predictProp,
+  predictRunLine,
 } from './services/mlModelClient.js';
+import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 
 const DISABLED_VALUES = new Set(['0', 'false', 'off', 'no']);
 const SHADOW_MODE_ENABLED = !DISABLED_VALUES.has(String(process.env.SHADOW_MODE_ENABLED ?? 'true').toLowerCase());
@@ -215,7 +220,24 @@ export function getShadowModeConfig() {
  * @param {object} statcastData — from buildShadowStatcastData()
  * @param {object} features     — raw features from context-builder
  */
-async function _enrichWithPythonScore(rowId, statcastData, features) {
+async function _enrichWithPythonScore(rowId, statcastData, features, pickAligned = null) {
+  if (pickAligned?.python_model_status === 'ok' && pickAligned?.python_pick_prob != null) {
+    await pool.query(
+      `UPDATE shadow_model_runs
+       SET python_model_score   = $1,
+           python_model_version = $2,
+           python_model_status  = 'ok',
+           updated_at           = NOW()
+       WHERE id = $3`,
+      [
+        pickAligned.python_pick_prob,
+        pickAligned.python_model_version ?? null,
+        rowId,
+      ]
+    );
+    return;
+  }
+
   if (!isMlSidecarEnabled()) {
     await pool.query(
       `UPDATE shadow_model_runs SET python_model_status = 'disabled' WHERE id = $1`,
@@ -225,8 +247,24 @@ async function _enrichWithPythonScore(rowId, statcastData, features) {
   }
 
   try {
+    const marketType = pickAligned?.pick_market_type ?? 'moneyline';
     const featurePayload = buildMLFeaturePayload(statcastData, features);
-    const prediction = await predictMoneyline(featurePayload);
+    let prediction = null;
+
+    if (marketType === 'overunder' && pickAligned?.pick_line != null) {
+      prediction = await predictOverUnder({ ...featurePayload, line: Number(pickAligned.pick_line) });
+    } else if (marketType === 'runline') {
+      prediction = await predictRunLine(featurePayload);
+    } else if (marketType === 'prop' && pickAligned?.prop_kind) {
+      const propPayload = buildPropMLFeaturePayload({
+        ...featurePayload,
+        line: pickAligned.pick_line,
+        side: pickAligned.pick_side,
+      });
+      prediction = await predictProp(pickAligned.prop_kind, propPayload);
+    } else {
+      prediction = await predictMoneyline(featurePayload);
+    }
 
     if (!prediction) {
       await pool.query(
@@ -241,6 +279,7 @@ async function _enrichWithPythonScore(rowId, statcastData, features) {
        SET python_model_score   = $1,
            python_model_version = $2,
            python_model_status  = 'ok',
+           python_pick_prob     = COALESCE(python_pick_prob, $1),
            updated_at           = NOW()
        WHERE id = $3`,
       [
@@ -262,11 +301,67 @@ async function _enrichWithPythonScore(rowId, statcastData, features) {
   }
 }
 
+const PICK_ALIGNED_COLUMNS = `
+  pick_market_type, pick_side, pick_line, prop_kind,
+  oracle_pick_prob, legacy_pick_prob, python_pick_prob, python_pick_market,
+  pick_agree_legacy, pick_agree_python
+`;
+
+function mergePickAlignedIntoPayload(payload, pickAligned) {
+  if (!pickAligned) return payload;
+  return {
+    ...payload,
+    pick_market_type: pickAligned.pick_market_type ?? null,
+    pick_side: pickAligned.pick_side ?? null,
+    pick_line: pickAligned.pick_line ?? null,
+    prop_kind: pickAligned.prop_kind ?? null,
+    oracle_pick_prob: pickAligned.oracle_pick_prob ?? null,
+    legacy_pick_prob: pickAligned.legacy_pick_prob ?? null,
+    python_pick_prob: pickAligned.python_pick_prob ?? null,
+    python_pick_market: pickAligned.python_pick_market ?? null,
+    pick_agree_legacy: pickAligned.pick_agree_legacy ?? null,
+    pick_agree_python: pickAligned.pick_agree_python ?? null,
+    agree_with_oracle: pickAligned.pick_agree_python ?? payload.agree_with_oracle,
+  };
+}
+
+function pickAlignedSqlValues(payload) {
+  return [
+    payload.pick_market_type,
+    payload.pick_side,
+    payload.pick_line,
+    payload.prop_kind,
+    payload.oracle_pick_prob,
+    payload.legacy_pick_prob,
+    payload.python_pick_prob,
+    payload.python_pick_market,
+    payload.pick_agree_legacy,
+    payload.pick_agree_python,
+  ];
+}
+
 export async function recordShadowModelRun(params) {
   if (!SHADOW_MODE_ENABLED) return null;
-  if (!params?.analysisData || !params?.xgboostResult || !params?.gameData?.gamePk) return null;
+  if (!params?.analysisData || !params?.gameData?.gamePk) return null;
 
-  const payload = buildPayload(params);
+  let pickAligned = params.pickAligned ?? null;
+  if (!pickAligned && params.resolvePickAligned !== false) {
+    try {
+      const aligned = await buildPickAlignedMlOpinion({
+        analysisData: params.analysisData,
+        gameData: params.gameData,
+        statcastData: params.statcastData,
+        features: params.features,
+        xgboostResult: params.xgboostResult,
+        admin: params.adminMl === true,
+      });
+      pickAligned = aligned.shadowFields;
+    } catch (err) {
+      console.warn(`[shadow-model] pick-aligned enrichment skipped: ${err.message}`);
+    }
+  }
+
+  const payload = mergePickAlignedIntoPayload(buildPayload(params), pickAligned);
   const existingId = await findExistingShadowRun({
     pickId: payload.pick_id,
     backtestId: payload.backtest_id,
@@ -303,8 +398,18 @@ export async function recordShadowModelRun(params) {
            actual_status = $26,
            feature_snapshot = $27,
            user_email = $28,
+           pick_market_type = $29,
+           pick_side = $30,
+           pick_line = $31,
+           prop_kind = $32,
+           oracle_pick_prob = $33,
+           legacy_pick_prob = $34,
+           python_pick_prob = $35,
+           python_pick_market = $36,
+           pick_agree_legacy = $37,
+           pick_agree_python = $38,
            updated_at = NOW()
-       WHERE id = $29`,
+       WHERE id = $39`,
       [
         payload.user_id,
         payload.source_type,
@@ -334,12 +439,14 @@ export async function recordShadowModelRun(params) {
         payload.actual_status,
         JSON.stringify(payload.feature_snapshot),
         payload.user_email,
+        ...pickAlignedSqlValues(payload),
         existingId,
       ]
     );
 
-    // Fire-and-forget Python enrichment (never blocks the caller)
-    _enrichWithPythonScore(existingId, params.statcastData, params.features).catch(() => {});
+    if (pickAligned?.python_pick_prob == null) {
+      _enrichWithPythonScore(existingId, params.statcastData, params.features, pickAligned).catch(() => {});
+    }
 
     return { id: existingId, ...payload };
   }
@@ -351,9 +458,10 @@ export async function recordShadowModelRun(params) {
        oracle_pick, oracle_confidence, oracle_home_win_prob, oracle_predicted_winner_id, oracle_predicted_winner_abbr,
        shadow_score, shadow_confidence, shadow_home_win_prob, shadow_predicted_winner_id, shadow_predicted_winner_abbr,
        agree_with_oracle, actual_winner_id, actual_winner_abbr, actual_home_score, actual_away_score,
-       actual_status, feature_snapshot, user_email, pick_time_lima
+       actual_status, feature_snapshot, user_email, pick_time_lima,
+       ${PICK_ALIGNED_COLUMNS}
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
      RETURNING id`,
     [
       payload.user_id,
@@ -387,14 +495,14 @@ export async function recordShadowModelRun(params) {
       payload.actual_status,
       JSON.stringify(payload.feature_snapshot),
       payload.user_email,
+      ...pickAlignedSqlValues(payload),
     ]
   );
 
   const newId = insert.rows[0]?.id ?? null;
 
-  // Fire-and-forget Python enrichment (never blocks the caller)
-  if (newId != null) {
-    _enrichWithPythonScore(newId, params.statcastData, params.features).catch(() => {});
+  if (newId != null && pickAligned?.python_pick_prob == null) {
+    _enrichWithPythonScore(newId, params.statcastData, params.features, pickAligned).catch(() => {});
   }
 
   return { id: newId, ...payload };
@@ -488,8 +596,8 @@ export async function getShadowModeDashboard(limit = 50, sport = 'mlb') {
         COUNT(*) AS total_runs,
         COUNT(*) FILTER (WHERE actual_status = 'pending') AS pending_runs,
         COUNT(*) FILTER (WHERE actual_status <> 'pending') AS resolved_runs,
-        COUNT(*) FILTER (WHERE agree_with_oracle IS TRUE) AS agree_runs,
-        COUNT(*) FILTER (WHERE agree_with_oracle IS FALSE) AS disagree_runs,
+        COUNT(*) FILTER (WHERE COALESCE(pick_agree_python, agree_with_oracle) IS TRUE) AS agree_runs,
+        COUNT(*) FILTER (WHERE COALESCE(pick_agree_python, agree_with_oracle) IS FALSE) AS disagree_runs,
         COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL AND oracle_predicted_winner_id = actual_winner_id) AS oracle_correct,
         COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL AND shadow_predicted_winner_id = actual_winner_id) AS shadow_correct,
         COUNT(*) FILTER (WHERE actual_winner_id IS NOT NULL AND oracle_predicted_winner_id = actual_winner_id AND shadow_predicted_winner_id = actual_winner_id) AS both_correct,
@@ -503,7 +611,7 @@ export async function getShadowModeDashboard(limit = 50, sport = 'mlb') {
         source_type,
         COUNT(*) AS total,
         COUNT(*) FILTER (WHERE actual_status <> 'pending') AS resolved,
-        COUNT(*) FILTER (WHERE agree_with_oracle IS FALSE) AS disagreements
+        COUNT(*) FILTER (WHERE COALESCE(pick_agree_python, agree_with_oracle) IS FALSE) AS disagreements
       FROM shadow_model_runs
       WHERE ${sportClause}
       GROUP BY source_type
@@ -515,6 +623,9 @@ export async function getShadowModeDashboard(limit = 50, sport = 'mlb') {
          home_team_abbr, away_team_abbr,
          oracle_pick, oracle_confidence, oracle_predicted_winner_abbr,
          shadow_confidence, shadow_predicted_winner_abbr, agree_with_oracle,
+         pick_market_type, pick_side, pick_line, prop_kind,
+         oracle_pick_prob, legacy_pick_prob, python_pick_prob, python_pick_market,
+         pick_agree_legacy, pick_agree_python,
          actual_winner_abbr, actual_home_score, actual_away_score, actual_status,
          user_email, pick_time_lima
        FROM shadow_model_runs

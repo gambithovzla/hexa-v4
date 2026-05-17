@@ -42,6 +42,7 @@ const ENSEMBLE_ENABLED     = readBool('ENSEMBLE_ENABLED', false);
 const ML_API_URL           = (process.env.HEXA_ML_API_URL ?? '').replace(/\/$/, '');
 const ML_TOKEN             = process.env.HEXA_ML_INTERNAL_TOKEN ?? '';
 const TIMEOUT_MS           = 500;
+const ADMIN_TIMEOUT_MS     = Math.max(500, Number(process.env.ML_ADMIN_TIMEOUT_MS) || 2500);
 const MAX_RETRIES          = 1;
 const FAILURE_THRESHOLD    = 3;   // consecutive failures to open circuit
 const FAILURE_WINDOW_MS    = 5 * 60 * 1000;  // 5 minutes
@@ -112,9 +113,9 @@ function _buildHeaders() {
   return headers;
 }
 
-async function _fetchWithTimeout(url, options) {
+async function _fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...options, signal: controller.signal });
     return response;
@@ -123,7 +124,7 @@ async function _fetchWithTimeout(url, options) {
   }
 }
 
-async function _post(path, body, attempt = 0) {
+async function _post(path, body, attempt = 0, timeoutMs = TIMEOUT_MS) {
   if (_isCircuitOpen()) {
     return null;
   }
@@ -134,7 +135,7 @@ async function _post(path, body, attempt = 0) {
       method: 'POST',
       headers: _buildHeaders(),
       body: JSON.stringify(body),
-    });
+    }, timeoutMs);
 
     if (!response.ok) {
       // 4xx/5xx from the server — record failure, no retry
@@ -151,11 +152,11 @@ async function _post(path, body, attempt = 0) {
     const isRetryable = attempt < MAX_RETRIES && err.name !== 'AbortError';
     if (isRetryable) {
       // One immediate retry without delay (we're already within a single request)
-      return _post(path, body, attempt + 1);
+      return _post(path, body, attempt + 1, timeoutMs);
     }
     _recordFailure();
     if (err.name === 'AbortError') {
-      console.warn(`[mlModelClient] ${path} timed out after ${TIMEOUT_MS}ms`);
+      console.warn(`[mlModelClient] ${path} timed out after ${timeoutMs}ms`);
     } else {
       console.warn(`[mlModelClient] ${path} error: ${err.message}`);
     }
@@ -221,9 +222,10 @@ _guard._warned = false;
  * @param {Object} features  — keys matching FeaturePayload in serve.py
  * @returns {Promise<Prediction|null>}
  */
-export async function predictMoneyline(features) {
+export async function predictMoneyline(features, options = {}) {
   if (!_guard()) return null;
-  return _post('/predict/moneyline', features ?? {});
+  const timeoutMs = options.admin ? ADMIN_TIMEOUT_MS : TIMEOUT_MS;
+  return _post('/predict/moneyline', features ?? {}, 0, timeoutMs);
 }
 
 /**
@@ -232,9 +234,10 @@ export async function predictMoneyline(features) {
  * @param {Object} features
  * @returns {Promise<Prediction|null>}
  */
-export async function predictOverUnder(features) {
+export async function predictOverUnder(features, options = {}) {
   if (!_guard()) return null;
-  return _post('/predict/overunder', features ?? {});
+  const timeoutMs = options.admin ? ADMIN_TIMEOUT_MS : TIMEOUT_MS;
+  return _post('/predict/overunder', features ?? {}, 0, timeoutMs);
 }
 
 /**
@@ -242,9 +245,10 @@ export async function predictOverUnder(features) {
  * @param {Object} features
  * @returns {Promise<Prediction|null>}
  */
-export async function predictRunLine(features) {
+export async function predictRunLine(features, options = {}) {
   if (!_guard()) return null;
-  return _post('/predict/runline', features ?? {});
+  const timeoutMs = options.admin ? ADMIN_TIMEOUT_MS : TIMEOUT_MS;
+  return _post('/predict/runline', features ?? {}, 0, timeoutMs);
 }
 
 const PROP_KIND_ENDPOINTS = {
@@ -255,12 +259,13 @@ const PROP_KIND_ENDPOINTS = {
   rbis: 'rbis',
 };
 
-export async function predictProp(propKind, features) {
+export async function predictProp(propKind, features, options = {}) {
   if (!_guard()) return null;
   const kind = String(propKind ?? '').toLowerCase();
   const segment = PROP_KIND_ENDPOINTS[kind];
   if (!segment) return null;
-  return _post(`/predict/prop/${segment}`, features ?? {});
+  const timeoutMs = options.admin ? ADMIN_TIMEOUT_MS : TIMEOUT_MS;
+  return _post(`/predict/prop/${segment}`, features ?? {}, 0, timeoutMs);
 }
 
 /**
