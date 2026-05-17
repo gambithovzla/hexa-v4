@@ -169,8 +169,8 @@ function missedLegCount(entry) {
 function ResultBadge({ result, t }) {
   const map = {
     pending: { label: t.pending, color: C.textMuted,  bg: 'transparent', border: C.borderLight },
-    win:     { label: t.win,     color: C.green,      bg: `${C.green}12`, border: `${C.green}40` },
-    loss:    { label: t.loss,    color: C.red,        bg: C.redDim,       border: C.redLine },
+    win:     { label: t.win,     color: C.outcomeWin ?? C.green,      bg: `${C.outcomeWin ?? C.green}12`, border: `${C.outcomeWinLine ?? C.greenLine}` },
+    loss:    { label: t.loss,    color: C.outcomeLoss ?? C.red,        bg: C.outcomeLossDim ?? C.redDim,       border: C.outcomeLossLine ?? C.redLine },
     push:    { label: t.push,    color: C.amber,      bg: C.amberDim,     border: C.amberLine },
   };
   const s = map[result] ?? map.pending;
@@ -323,8 +323,8 @@ function LegResultBadge({ legResult, t }) {
   if (!legResult) return null;
   const r = legResult.result;
   const map = {
-    win:  { label: t.win,  color: C.green },
-    loss: { label: t.loss, color: C.red   },
+    win:  { label: t.win,  color: C.outcomeWin ?? C.green },
+    loss: { label: t.loss, color: C.outcomeLoss ?? C.red   },
     push: { label: t.push, color: C.amber },
   };
   const s = r ? map[r] : null;
@@ -539,7 +539,7 @@ function DateChip({ date, summary, isActive, onClick, label }) {
       </Typography>
       {summary && (
         <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, mt: '2px', letterSpacing: '0.06em' }}>
-          {total} · <span style={{ color: C.green }}>{wins}W</span> <span style={{ color: C.red }}>{losses}L</span>
+          {total} · <span style={{ color: C.outcomeWin ?? C.green }}>{wins}W</span> <span style={{ color: C.outcomeLoss ?? C.red }}>{losses}L</span>
         </Typography>
       )}
     </Box>
@@ -651,8 +651,8 @@ function HistoryFilterBar({ filters, setFilters, availableModes, availableSynerg
 
   const resultOptions = [
     { key: 'all',     label: t.filters.anyResult,  color: C.cyan },
-    { key: 'win',     label: t.filters.resultWin,  color: C.green },
-    { key: 'loss',    label: t.filters.resultLoss, color: C.red },
+    { key: 'win',     label: t.filters.resultWin,  color: C.outcomeWin ?? C.green },
+    { key: 'loss',    label: t.filters.resultLoss, color: C.outcomeLoss ?? C.red },
     { key: 'push',    label: t.filters.resultPush, color: C.amber },
     { key: 'pending', label: t.filters.resultPend, color: C.textMuted },
   ];

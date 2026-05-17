@@ -68,7 +68,8 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations } from './migrate.js';
+import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
   getNbaLeagueTeamStats,
@@ -988,7 +989,29 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
         }
       : null;
 
-    if (isShadowModeEnabled() && analysis?.data && analysis?.xgboostResult && gameData) {
+    let mlOpinion = null;
+    let pickAlignedForShadow = null;
+    const shadowStatcast = buildShadowStatcastData(featureStore?.features ?? {});
+    const shadowFeatures = featureStore?.features ?? {};
+
+    if (req.user.is_admin && analysis?.data && gameData) {
+      try {
+        const aligned = await buildPickAlignedMlOpinion({
+          analysisData: analysis.data,
+          gameData,
+          statcastData: shadowStatcast,
+          features: shadowFeatures,
+          xgboostResult: analysis.xgboostResult ?? null,
+          admin: true,
+        });
+        mlOpinion = aligned.mlOpinion;
+        pickAlignedForShadow = aligned.shadowFields;
+      } catch (mlErr) {
+        console.warn('[analyze/game] mlOpinion failed:', mlErr.message);
+      }
+    }
+
+    if (isShadowModeEnabled() && analysis?.data && gameData) {
       try {
         await recordShadowModelRun({
           userId: req.user.id,
@@ -998,9 +1021,11 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
           gameData,
           gameDate: normalizeDateInput(date ?? gameData?.gameDate),
           analysisData: analysis.data,
-          xgboostResult: analysis.xgboostResult,
-          statcastData: buildShadowStatcastData(featureStore?.features ?? {}),
-          features: featureStore?.features ?? {},
+          xgboostResult: analysis.xgboostResult ?? null,
+          statcastData: shadowStatcast,
+          features: shadowFeatures,
+          pickAligned: pickAlignedForShadow,
+          adminMl: req.user.is_admin === true,
         });
       } catch (shadowErr) {
         console.warn('[shadow-mode] Could not persist analysis run:', shadowErr.message);
@@ -1040,6 +1065,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       credits: updatedUser.credits,
       engine: resolvedEngine,
       engineMeta: analysis.engineMeta ?? null,
+      mlOpinion: mlOpinion ?? undefined,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -1726,7 +1752,26 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
           const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
           const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
 
-          if (isShadowModeEnabled() && deterministicSafe && xgboostResult) {
+          let mlOpinion = null;
+          let pickAlignedForShadow = null;
+          if (req.user.is_admin && deterministicSafe) {
+            try {
+              const aligned = await buildPickAlignedMlOpinion({
+                analysisData: deterministicSafe,
+                gameData,
+                statcastData: shadowStatcastData,
+                features: shadowFeatures,
+                xgboostResult,
+                admin: true,
+              });
+              mlOpinion = aligned.mlOpinion;
+              pickAlignedForShadow = aligned.shadowFields;
+            } catch (mlErr) {
+              console.warn('[analyze/safe] mlOpinion failed:', mlErr.message);
+            }
+          }
+
+          if (isShadowModeEnabled() && deterministicSafe) {
             try {
               await recordShadowModelRun({
                 userId: req.user.id,
@@ -1736,9 +1781,11 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
                 gameData,
                 gameDate: normalizeDateInput(resolvedDate ?? gameData?.gameDate),
                 analysisData: deterministicSafe,
-                xgboostResult,
+                xgboostResult: xgboostResult ?? null,
                 statcastData: shadowStatcastData,
                 features: shadowFeatures,
+                pickAligned: pickAlignedForShadow,
+                adminMl: req.user.is_admin === true,
               });
             } catch (shadowErr) {
               console.warn('[shadow-mode] Could not persist safe analysis run:', shadowErr.message);
@@ -1775,6 +1822,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             odds: matchedOdds ?? undefined,
             featureStore: buildFeatureStorePayload(gameData, resolvedDate, shadowFeatures),
             savedPick,
+            mlOpinion: mlOpinion ?? undefined,
           };
         } catch (err) {
           return {
@@ -1816,6 +1864,7 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
         mode: 'safe',
         engine: resolvedEngine,
         engineMeta: single.data?.engine_meta ?? null,
+        mlOpinion: single.mlOpinion ?? undefined,
       });
     }
 
@@ -4129,6 +4178,7 @@ runMigrations()
   .then(() => runAdminMLControlCenterMigrations())
   .then(() => runNbaScaffoldingMigrations())
   .then(() => runNbaDatasetMigrations())
+  .then(() => runPickAlignedShadowMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {

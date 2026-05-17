@@ -416,7 +416,7 @@ export default function BacktestDashboard({ lang = 'en', onBack }) {
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.cyan }}>{pick.pick}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.textMuted }}>{pick.oracle_confidence}%</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-                    color: pick.actual_result === 'win' ? C.green : pick.actual_result === 'loss' ? C.red : C.amber
+                    color: pick.actual_result === 'win' ? (C.outcomeWin ?? C.green) : pick.actual_result === 'loss' ? (C.outcomeLoss ?? C.red) : pick.actual_result === 'push' ? (C.outcomePush ?? C.amber) : C.amber
                   }}>
                     {pick.actual_result?.toUpperCase() ?? 'PENDING'}
                   </Typography>

@@ -47,26 +47,50 @@ function renderOutcome(row) {
   return `${row.actual_winner_abbr ?? '—'} (${row.actual_away_score}-${row.actual_home_score})`;
 }
 
+function formatPctProb(prob) {
+  const n = Number(prob);
+  if (!Number.isFinite(n)) return '';
+  const pct = n <= 1 ? n * 100 : n;
+  return ` ${pct.toFixed(0)}%`;
+}
+
 function renderOracleCell(row) {
+  if (row.pick_market_type && row.oracle_pick) {
+    const prob = formatPctProb(row.oracle_pick_prob);
+    return `${row.oracle_pick}${prob}`;
+  }
+
   const isSafeRun = String(row.analysis_mode ?? '').startsWith('safe');
 
   if (isSafeRun && row.oracle_pick) {
-    return `PICK ONLY: ${row.oracle_pick}${row.oracle_confidence != null ? ` (${row.oracle_confidence})` : ''}`;
+    return `PICK: ${row.oracle_pick}${row.oracle_confidence != null ? ` (${row.oracle_confidence})` : ''}`;
   }
   if (row.oracle_predicted_winner_abbr) {
     return `${row.oracle_predicted_winner_abbr} ${row.oracle_confidence != null ? `(${row.oracle_confidence})` : ''}`.trim();
   }
   if (row.oracle_pick) {
-    return `PICK ONLY: ${row.oracle_pick}${row.oracle_confidence != null ? ` (${row.oracle_confidence})` : ''}`;
+    return `PICK: ${row.oracle_pick}${row.oracle_confidence != null ? ` (${row.oracle_confidence})` : ''}`;
   }
   return 'N/A';
 }
 
 function renderShadowCell(row) {
+  if (row.pick_market_type && row.python_pick_prob != null) {
+    const market = row.python_pick_market ? ` [${row.python_pick_market}]` : '';
+    return `PY${formatPctProb(row.python_pick_prob)}${market}`;
+  }
+  if (row.pick_market_type && row.legacy_pick_prob != null) {
+    return `LEG${formatPctProb(row.legacy_pick_prob)}`;
+  }
   if (row.shadow_predicted_winner_abbr) {
     return `${row.shadow_predicted_winner_abbr} ${row.shadow_confidence != null ? `(${row.shadow_confidence})` : ''}`.trim();
   }
   return 'N/A';
+}
+
+function resolveAgree(row) {
+  if (row.pick_agree_python != null) return row.pick_agree_python;
+  return row.agree_with_oracle;
 }
 
 export default function ShadowModeDashboard({ onBack }) {
@@ -260,8 +284,8 @@ export default function ShadowModeDashboard({ onBack }) {
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: '#FF9900' }}>
                       {renderShadowCell(row)}
                     </Typography>
-                    <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: row.agree_with_oracle == null ? C.textMuted : row.agree_with_oracle ? C.green : C.red }}>
-                      {row.agree_with_oracle == null ? 'N/A' : row.agree_with_oracle ? 'YES' : 'NO'}
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: resolveAgree(row) == null ? C.textMuted : resolveAgree(row) ? (C.outcomeWin ?? C.green) : (C.outcomeLoss ?? C.red), fontWeight: 700 }}>
+                      {resolveAgree(row) == null ? 'N/A' : resolveAgree(row) ? 'YES' : 'NO'}
                     </Typography>
                     <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textPrimary }}>
                       {renderOutcome(row)}

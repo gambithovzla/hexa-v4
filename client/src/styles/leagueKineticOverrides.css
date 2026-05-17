@@ -53,6 +53,16 @@
   --neon-pink-line:   rgba(230, 57, 70, 0.28);
   --neon-pink-glow:   none;
 
+  --outcome-win:       #FFD60A;
+  --outcome-win-dim:   rgba(255, 214, 10, 0.22);
+  --outcome-win-line:  rgba(255, 214, 10, 0.45);
+  --outcome-loss:      #E63946;
+  --outcome-loss-dim:  rgba(230, 57, 70, 0.22);
+  --outcome-loss-line: rgba(230, 57, 70, 0.45);
+  --outcome-push:      #B8985A;
+  --outcome-push-dim:  rgba(184, 152, 90, 0.22);
+  --outcome-push-line: rgba(184, 152, 90, 0.45);
+
   --accent:   var(--neon-orange);
   --accent-2: var(--neon-cyan);
   --success:  var(--neon-green);
@@ -153,6 +163,16 @@
   --neon-pink-dim:    rgba(181, 16, 31, 0.08);
   --neon-pink-line:   rgba(181, 16, 31, 0.28);
   --neon-pink-glow:   none;
+
+  --outcome-win:       #007A40;
+  --outcome-win-dim:   rgba(0, 122, 64, 0.12);
+  --outcome-win-line:  rgba(0, 122, 64, 0.35);
+  --outcome-loss:      #B5101F;
+  --outcome-loss-dim:  rgba(181, 16, 31, 0.12);
+  --outcome-loss-line: rgba(181, 16, 31, 0.35);
+  --outcome-push:      #8a6f3c;
+  --outcome-push-dim:  rgba(138, 111, 60, 0.14);
+  --outcome-push-line: rgba(138, 111, 60, 0.35);
 
   --accent:   var(--neon-orange);
   --accent-2: var(--neon-cyan);
@@ -626,4 +646,23 @@
 .league-history-panel .history-pick-best-label {
   color: var(--brand-lava) !important;
   text-shadow: none !important;
+}
+
+:root[data-brand='league-kinetic'] .history-pick-card[data-result='win'] {
+  background: color-mix(in srgb, var(--outcome-win) 8%, var(--bg-1));
+}
+
+:root[data-brand='league-kinetic'] .history-pick-card[data-result='loss'] {
+  background: color-mix(in srgb, var(--outcome-loss) 8%, var(--bg-1));
+}
+
+:root[data-brand='league-kinetic'] .history-pick-card[data-result='push'] {
+  background: color-mix(in srgb, var(--outcome-push) 10%, var(--bg-1));
+}
+
+:root[data-brand='league-kinetic'] .hexa-outcome-badge--win,
+:root[data-brand='league-kinetic'] .hexa-outcome-badge--loss,
+:root[data-brand='league-kinetic'] .hexa-outcome-badge--push {
+  font-weight: 700;
+  letter-spacing: 0.14em;
 }

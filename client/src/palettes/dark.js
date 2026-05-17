@@ -64,6 +64,16 @@ export const darkPalette = {
   redDim:      'rgba(255, 61, 110, 0.10)',
   redLine:     'rgba(255, 61, 110, 0.28)',
 
+  outcomeWin:      '#2BFF88',
+  outcomeWinDim:   'rgba(43, 255, 136, 0.10)',
+  outcomeWinLine:  'rgba(43, 255, 136, 0.28)',
+  outcomeLoss:     '#FF3D6E',
+  outcomeLossDim:  'rgba(255, 61, 110, 0.10)',
+  outcomeLossLine: 'rgba(255, 61, 110, 0.28)',
+  outcomePush:     '#22F0FF',
+  outcomePushDim:  'rgba(34, 240, 255, 0.10)',
+  outcomePushLine: 'rgba(34, 240, 255, 0.28)',
+
   // ── Text (ink scale) ────────────────────────────────────────────────────
   ink0:        '#e6f7ff',
   ink1:        '#aac4d2',

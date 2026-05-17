@@ -54,6 +54,16 @@
   --neon-pink-line:   rgba(255, 61, 110, 0.28);
   --neon-pink-glow:   0 0 10px rgba(255, 61, 110, 0.50), 0 0 24px rgba(255, 61, 110, 0.20);
 
+  --outcome-win:       var(--neon-green);
+  --outcome-win-dim:   var(--neon-green-dim);
+  --outcome-win-line:  var(--neon-green-line);
+  --outcome-loss:      var(--neon-pink);
+  --outcome-loss-dim:  var(--neon-pink-dim);
+  --outcome-loss-line: var(--neon-pink-line);
+  --outcome-push:      var(--neon-cyan);
+  --outcome-push-dim:  var(--neon-cyan-dim);
+  --outcome-push-line: var(--neon-cyan-line);
+
   --accent:   var(--neon-orange);
   --accent-2: var(--neon-cyan);
   --success:  var(--neon-green);
@@ -128,6 +138,16 @@
   --neon-pink-dim:    rgba(168, 23, 58, 0.08);
   --neon-pink-line:   rgba(168, 23, 58, 0.28);
   --neon-pink-glow:   none;
+
+  --outcome-win:       var(--neon-green);
+  --outcome-win-dim:   var(--neon-green-dim);
+  --outcome-win-line:  var(--neon-green-line);
+  --outcome-loss:      var(--neon-pink);
+  --outcome-loss-dim:  var(--neon-pink-dim);
+  --outcome-loss-line: var(--neon-pink-line);
+  --outcome-push:      var(--neon-cyan);
+  --outcome-push-dim:  var(--neon-cyan-dim);
+  --outcome-push-line: var(--neon-cyan-line);
 
   --accent:   var(--neon-orange);
   --accent-2: var(--neon-cyan);

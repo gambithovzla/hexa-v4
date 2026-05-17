@@ -204,7 +204,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.matchup ?? '—'}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.cyan, flex: 2, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.pick}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', flex: 1, minWidth: '50px', fontWeight: 700,
-                    color: row.result === 'win' ? C.green : row.result === 'loss' ? C.red : C.textMuted
+                    color: row.result === 'win' ? (C.outcomeWin ?? C.green) : row.result === 'loss' ? (C.outcomeLoss ?? C.red) : row.result === 'push' ? (C.outcomePush ?? C.cyan) : C.textMuted
                   }}>{row.result?.toUpperCase() ?? '—'}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.home_pitcher_xwoba ?? '—'}</Typography>
                   <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textSecondary, flex: 1, minWidth: '50px' }}>{row.away_pitcher_xwoba ?? '—'}</Typography>

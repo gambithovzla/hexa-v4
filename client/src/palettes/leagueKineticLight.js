@@ -61,6 +61,16 @@ export const leagueKineticLightPalette = {
   redDim:      'rgba(181, 16, 31, 0.08)',
   redLine:     'rgba(181, 16, 31, 0.28)',
 
+  outcomeWin:      '#007A40',
+  outcomeWinDim:   'rgba(0, 122, 64, 0.12)',
+  outcomeWinLine:  'rgba(0, 122, 64, 0.35)',
+  outcomeLoss:     '#B5101F',
+  outcomeLossDim:  'rgba(181, 16, 31, 0.12)',
+  outcomeLossLine: 'rgba(181, 16, 31, 0.35)',
+  outcomePush:     '#8a6f3c',
+  outcomePushDim:  'rgba(138, 111, 60, 0.14)',
+  outcomePushLine: 'rgba(138, 111, 60, 0.35)',
+
   // ── Navy ink ────────────────────────────────────────────────────────────
   ink0:        '#0B2540',
   ink1:        'rgba(11, 37, 64, 0.78)',
