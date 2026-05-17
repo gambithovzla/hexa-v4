@@ -14,6 +14,7 @@ import { Box, Typography, LinearProgress } from '@mui/material';
 import { C, BARLOW, MONO } from '../theme';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 import { useAuth } from '../store/authStore';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL = 30_000;
@@ -68,6 +69,7 @@ const T = {
 };
 
 function NbaPickProgressPanel({ picks, lang }) {
+  const { C } = useHexaTheme();
   const t = T[lang] || T.en;
   const nbaPicks = picks ?? [];
   if (!nbaPicks.length) return null;
@@ -131,6 +133,7 @@ function getEasternDateString(value = new Date()) {
 }
 
 function NbaLogo({ teamId, abbr, size = 56 }) {
+  const { C } = useHexaTheme();
   const [failed, setFailed] = useState(false);
   if (!teamId || failed) {
     return (
@@ -175,6 +178,7 @@ function formatPeriodLabel(period, clock, statusText, t) {
 }
 
 function PeriodScoreTable({ game, lang }) {
+  const { C } = useHexaTheme();
   const t = T[lang] || T.en;
   const home = game.home_qtrs ?? [];
   const away = game.away_qtrs ?? [];
@@ -262,6 +266,7 @@ function PeriodScoreTable({ game, lang }) {
 }
 
 function StatStrip({ game, lang }) {
+  const { C } = useHexaTheme();
   const t = T[lang] || T.en;
   const fmtPct = v => v == null ? '—' : `${Math.round(v * 1000) / 10}%`;
   const fmt = v => v == null ? '—' : v;
@@ -324,6 +329,7 @@ function StatStrip({ game, lang }) {
 }
 
 function GameCard({ game, lang }) {
+  const { C, isLeague } = useHexaTheme();
   const t = T[lang] || T.en;
   const periodLabel = formatPeriodLabel(game.live_period, game.live_clock, game.status, t);
   const awayLeading = game.away_score != null && game.home_score != null && game.away_score > game.home_score;
@@ -335,9 +341,9 @@ function GameCard({ game, lang }) {
         position: 'relative',
         p: 2.5,
         border: `1px solid ${C.cyanLine}`,
-        borderLeft: `3px solid ${C.cyan}`,
-        background: 'linear-gradient(180deg, rgba(7,9,14,0.98), rgba(2,4,8,0.96))',
-        boxShadow: '0 12px 28px rgba(0,0,0,0.42)',
+        borderLeft: `3px solid ${isLeague ? 'var(--sport-accent)' : C.cyan}`,
+        background: isLeague ? C.surface : 'linear-gradient(180deg, rgba(7,9,14,0.98), rgba(2,4,8,0.96))',
+        boxShadow: isLeague ? 'none' : '0 12px 28px rgba(0,0,0,0.42)',
         display: 'grid', gap: 2,
       }}
     >
@@ -438,6 +444,7 @@ function GameCard({ game, lang }) {
 }
 
 export default function NBALiveTracker({ lang = 'es' }) {
+  const { C, isLeague } = useHexaTheme();
   const t = T[lang] || T.en;
   const { token } = useAuth();
   const [games, setGames]     = useState([]);
@@ -506,7 +513,7 @@ export default function NBALiveTracker({ lang = 'es' }) {
           display: 'flex', alignItems: 'center', gap: 1.2,
           px: 2, py: 1.2,
           border: `1px solid ${C.border}`,
-          background: 'rgba(0,0,0,0.4)',
+          background: isLeague ? C.surface : 'rgba(0,0,0,0.4)',
         }}
       >
         <Typography sx={{ fontFamily: BARLOW, fontSize: '0.92rem', fontWeight: 800, color: C.amber, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
@@ -550,7 +557,7 @@ export default function NBALiveTracker({ lang = 'es' }) {
         <Box
           sx={{
             p: 4, border: `1px solid ${C.border}`, textAlign: 'center',
-            background: 'linear-gradient(180deg, rgba(7,9,14,0.98), rgba(2,4,8,0.96))',
+            background: isLeague ? C.surface : 'linear-gradient(180deg, rgba(7,9,14,0.98), rgba(2,4,8,0.96))',
           }}
         >
           <Typography sx={{ fontFamily: BARLOW, fontSize: '1.1rem', fontWeight: 800, color: C.textPrimary, letterSpacing: '0.08em', textTransform: 'uppercase', mb: 0.8 }}>

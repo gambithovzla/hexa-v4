@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { C, MONO, BARLOW } from '../theme';
 import { useAuth } from '../store/authStore';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function StatCard({ label, value, sub, color }) {
+  const { C } = useHexaTheme();
   return (
     <Box sx={{ border: `1px solid ${color || C.cyanLine}`, p: '12px 16px', flex: 1, minWidth: '110px' }}>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', mb: '4px' }}>{label}</Typography>
@@ -16,6 +18,7 @@ function StatCard({ label, value, sub, color }) {
 }
 
 function CoverageBar({ label, count, total }) {
+  const { C } = useHexaTheme();
   const pct = total > 0 ? ((count / total) * 100).toFixed(0) : 0;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: '6px' }}>
@@ -68,6 +71,7 @@ function formatDayLabel(dayKey, lang = 'en') {
 }
 
 function MonthSelector({ options, selectedMonth, onSelect, lang }) {
+  const { C, isLeague } = useHexaTheme();
   if (!options.length) return null;
 
   return (
@@ -89,6 +93,7 @@ function MonthSelector({ options, selectedMonth, onSelect, lang }) {
               fontFamily: MONO,
               cursor: 'pointer',
               flexShrink: 0,
+              borderRadius: isLeague ? 0 : undefined,
             }}
           >
             <Typography sx={{ fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '0.08em', color: active ? C.accent : C.textPrimary }}>
@@ -108,6 +113,7 @@ function MonthSelector({ options, selectedMonth, onSelect, lang }) {
 }
 
 function DaySelector({ days, selectedDay, onSelect, lang }) {
+  const { C, isLeague } = useHexaTheme();
   if (!days.length) return null;
 
   return (
@@ -127,6 +133,7 @@ function DaySelector({ days, selectedDay, onSelect, lang }) {
               color: active ? C.cyan : C.textSecondary,
               cursor: 'pointer',
               minHeight: '72px',
+              borderRadius: isLeague ? 0 : undefined,
             }}
           >
             <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', letterSpacing: '0.08em', color: active ? C.cyan : C.textPrimary }}>
@@ -146,6 +153,7 @@ function DaySelector({ days, selectedDay, onSelect, lang }) {
 }
 
 export default function DatasetDashboard({ lang = 'en', onBack }) {
+  const { C, isLeague } = useHexaTheme();
   const { token } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -267,7 +275,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
   const activeMonthMeta = monthOptions.find((option) => option.month_key === selectedMonth) ?? null;
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#000', p: { xs: 2, sm: 3 }, maxWidth: '100vw', overflowX: 'hidden' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: isLeague ? C.bg : '#000', p: { xs: 2, sm: 3 }, maxWidth: '100vw', overflowX: 'hidden' }}>
       <Box component="button" onClick={onBack} sx={{
         background: 'transparent', border: `1px solid ${C.cyanLine}`, color: C.textMuted,
         fontFamily: MONO, fontSize: '0.65rem', letterSpacing: '2px', padding: '6px 14px',
@@ -281,7 +289,14 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
         FEATURE STORE & DATASET
       </Typography>
 
-      <Box sx={{ display: 'inline-flex', border: `1px solid ${C.cyanLine}`, mb: 3, overflow: 'hidden' }}>
+      <Box sx={{
+        display: 'inline-flex',
+        border: `1px solid ${C.cyanLine}`,
+        mb: 3,
+        overflow: 'hidden',
+        background: isLeague ? 'rgba(0,0,0,0.35)' : 'transparent',
+        p: isLeague ? '3px' : 0,
+      }}>
         {['mlb', 'nba'].map((s) => (
           <Box
             key={s}
@@ -290,11 +305,11 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
             sx={{
               px: '14px',
               py: '5px',
-              bgcolor: sport === s ? C.cyan : 'transparent',
-              color: sport === s ? '#0a0d14' : C.textMuted,
+              bgcolor: sport === s ? (isLeague ? 'var(--sport-accent)' : C.cyan) : 'transparent',
+              color: sport === s ? (isLeague ? 'var(--sport-accent-text, #0a0d14)' : '#0a0d14') : C.textMuted,
               border: 'none',
-              fontFamily: MONO,
-              fontSize: '0.65rem',
+              fontFamily: isLeague ? "'Oswald', sans-serif" : MONO,
+              fontSize: isLeague ? '0.75rem' : '0.65rem',
               fontWeight: 700,
               letterSpacing: '0.14em',
               cursor: 'pointer',

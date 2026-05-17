@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, LinearProgress } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import { useAuth } from '../store/authStore';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL      = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL = 30_000;
@@ -149,6 +150,7 @@ function getPickBarColor(pick) {
 // ── Diamond SVG ───────────────────────────────────────────────────────────────
 
 function DiamondSVG({ runners, size = 70 }) {
+  const { C } = useHexaTheme();
   const s  = size;
   const cx = s / 2, cy = s / 2;
   const d  = s * 0.3;
@@ -192,6 +194,7 @@ function DiamondSVG({ runners, size = 70 }) {
 // ── Outs display ──────────────────────────────────────────────────────────────
 
 function OutsDisplay({ outs, label }) {
+  const { C } = useHexaTheme();
   return (
     <Box sx={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.52rem', color: C.textMuted, mr: '4px', letterSpacing: '0.08em' }}>
@@ -213,6 +216,7 @@ function OutsDisplay({ outs, label }) {
 // ── Scoreboard ────────────────────────────────────────────────────────────────
 
 function Scoreboard({ game, lang }) {
+  const { C } = useHexaTheme();
   const { innings: gameInnings, away, home, situation } = game;
   if (!gameInnings && !away) return null;
 
@@ -323,6 +327,7 @@ function Scoreboard({ game, lang }) {
 // ── Recent plays feed ─────────────────────────────────────────────────────────
 
 function RecentPlaysFeed({ plays, lang }) {
+  const { C } = useHexaTheme();
   const t = T[lang] || T.en;
   if (!plays || plays.length === 0) return null;
 
@@ -392,6 +397,7 @@ function RecentPlaysFeed({ plays, lang }) {
 // ── Pick progress bars ────────────────────────────────────────────────────────
 
 function PickProgressBars({ picks, lang }) {
+  const { C } = useHexaTheme();
   const t = T[lang] || T.en;
   if (!picks || picks.length === 0) return null;
 
@@ -537,6 +543,7 @@ function PickProgressBars({ picks, lang }) {
 // ── Live game card ────────────────────────────────────────────────────────────
 
 function LiveGameCard({ game, picks, lang }) {
+  const { C, isLeague } = useHexaTheme();
   const [expanded, setExpanded] = useState(true);
   const t = T[lang] || T.en;
 
@@ -561,6 +568,8 @@ function LiveGameCard({ game, picks, lang }) {
       border:   `1px solid ${C.border}`,
       bgcolor:  C.surface,
       mb:       '12px',
+      borderRadius: isLeague ? 0 : undefined,
+      boxShadow: isLeague ? 'none' : undefined,
     }}>
       {/* Card header */}
       <Box
@@ -723,6 +732,7 @@ function LiveGameCard({ game, picks, lang }) {
 // ── Main LiveTracker component ────────────────────────────────────────────────
 
 export default function LiveTracker({ lang = 'en' }) {
+  const { C, isLeague } = useHexaTheme();
   const { token } = useAuth();
   const t         = T[lang] || T.en;
 
@@ -840,6 +850,9 @@ export default function LiveTracker({ lang = 'en' }) {
         mb:             '20px',
         pb:             '12px',
         borderBottom:   `1px solid ${C.border}`,
+        background:     isLeague ? 'rgba(0,0,0,0.22)' : 'transparent',
+        px:             isLeague ? 2 : 0,
+        pt:             isLeague ? 1.2 : 0,
         flexWrap:       'wrap',
         gap:            '10px',
       }}>
