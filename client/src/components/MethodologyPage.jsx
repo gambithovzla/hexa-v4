@@ -11,7 +11,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C as GC, BARLOW as GB, MONO as GM } from '../theme';
+import { BARLOW as GB, MONO as GM } from '../theme';
+import { PV as GC } from '../styles/pageCssVars';
 
 const METHODOLOGY_CSS = `
 @keyframes slideReveal { from { opacity:0; transform:translateY(24px) } to { opacity:1; transform:translateY(0) } }
@@ -519,10 +520,11 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
 
   return (
     <Box
+      className="hexa-themed-page"
       sx={{
         minHeight:       '100vh',
         width:           '100%',
-        backgroundColor: '#000000',
+        backgroundColor: C.bg,
         display:         'flex',
         flexDirection:   'column',
         position:        'relative',
@@ -591,7 +593,7 @@ export default function MethodologyPage({ lang = 'en', onBack, onToggleLang }) {
         {/* Logo */}
         <Box
           component="img"
-          src="/hexa-logo.png"
+          src="/logo-hexa.png"
           alt="H.E.X.A."
           sx={{
             height:    { xs: '32px', sm: '38px' },

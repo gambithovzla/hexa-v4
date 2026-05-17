@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import TeamLogo from './TeamLogo';
 import PlayoffBracket from './PlayoffBracket';
-import { C, BARLOW, MONO } from '../theme';
+import { BARLOW, MONO } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const STANDINGS_SELECTION_KEY = 'hexa_standings_selection';

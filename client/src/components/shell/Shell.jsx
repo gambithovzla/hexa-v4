@@ -29,6 +29,7 @@ export default function Shell({
   isAdmin = false,
   performancePublic = false,
   onOracleChat,
+  oracleChatOpen = false,
   onMethodology,
   onPerformance,
   disabled = false,
@@ -131,6 +132,7 @@ export default function Shell({
         onTabChange={handleTabChange}
         isAdmin={isAdmin}
         onOracleChat={onOracleChat}
+        oracleChatOpen={oracleChatOpen}
       />
 
       {creditPanelOpen && (

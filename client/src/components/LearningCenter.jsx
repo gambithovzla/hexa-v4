@@ -7,7 +7,8 @@
 
 import { useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C, BARLOW, MONO } from '../theme';
+import { BARLOW, MONO } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 import { CATEGORIES, LEARNING_ENTRIES } from '../data/hexaLearningCenter';
 
 const T = {

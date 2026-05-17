@@ -15,7 +15,8 @@ import ResultCard from './ResultCard';
 import AuthModal from './AuthModal';
 import NbaContextMetaBadge from './NbaContextMetaBadge';
 import { useAuth } from '../store/authStore';
-import { C, BARLOW, MONO, SANS } from '../theme';
+import { BARLOW, MONO, SANS } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 

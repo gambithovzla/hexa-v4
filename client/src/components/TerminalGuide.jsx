@@ -10,7 +10,8 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C, BARLOW, MONO, SANS } from '../theme';
+import { BARLOW, MONO, SANS } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 
 const ANIM_CSS = `
 @keyframes revealUp { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }

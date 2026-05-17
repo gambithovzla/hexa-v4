@@ -8,7 +8,8 @@ import OracleLoadingOverlay from '../components/OracleLoadingOverlay';
 import ParlayLegCard from '../components/ParlayLegCard';
 import ParlayArchitectHistory from '../components/ParlayArchitectHistory';
 import HexaLearnings from '../components/HexaLearnings';
-import { C, MONO, BARLOW } from '../theme';
+import { MONO, BARLOW } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 

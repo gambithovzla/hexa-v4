@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, LinearProgress, Typography } from '@mui/material';
-import { C, BARLOW, MONO } from '../theme';
+import { BARLOW, MONO } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL = 30_000;

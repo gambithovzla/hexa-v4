@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import useBankroll from "../hooks/useBankroll";
 import { useAuth } from "../store/authStore";
-import { C, BARLOW, MONO } from "../theme";
+import { BARLOW, MONO } from "../theme";
+import { PV as C } from '../styles/pageCssVars';
 import EquityComparePanel from "./EquityComparePanel";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 function getToken() {

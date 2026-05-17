@@ -8,35 +8,46 @@
  *   defaultTab — 'login' | 'register'  (optional)
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { useAuth } from '../store/authStore';
+import { useHexaTheme } from '../themeProvider';
 
-// ── Sci-Fi Design Tokens (aligned with Phase A global system) ─────────────────
-const NC = {
-  bg:          '#000000',
-  surface:     '#07090E',
-  cyan:        '#00D9FF',
-  cyanDim:     'rgba(0, 217, 255, 0.07)',
-  cyanLine:    'rgba(0, 217, 255, 0.25)',
-  cyanGlow:    '0 0 8px rgba(0,217,255,0.55), 0 0 20px rgba(0,217,255,0.2)',
-  orange:      '#FF6600',
-  orangeDim:   'rgba(255, 102, 0, 0.1)',
-  orangeLine:  'rgba(255, 102, 0, 0.3)',
-  orangeGlow:  '0 0 8px rgba(255,102,0,0.65), 0 0 20px rgba(255,102,0,0.25)',
-  green:       '#00FF88',
-  red:         '#FF2244',
-  redDim:      'rgba(255, 34, 68, 0.07)',
-  redLine:     'rgba(255, 34, 68, 0.25)',
-  textPrimary: '#E8F4FF',
-  textMuted:   'rgba(0, 217, 255, 0.5)',
-  textDim:     'rgba(0, 217, 255, 0.3)',
-};
+const MONO = "'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace";
 
-const MONO    = "'Share Tech Mono', 'JetBrains Mono', 'Courier New', monospace";
-const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
+const AuthColorsContext = createContext(null);
+
+function useAuthColors() {
+  const ctx = useContext(AuthColorsContext);
+  if (!ctx) throw new Error('useAuthColors must be used within AuthModal');
+  return ctx;
+}
+
+function buildAuthPalette(C, isLeague) {
+  const classicCyanGlow = '0 0 8px rgba(0,217,255,0.55), 0 0 20px rgba(0,217,255,0.2)';
+  const classicOrangeGlow = '0 0 8px rgba(255,102,0,0.65), 0 0 20px rgba(255,102,0,0.25)';
+  return {
+    bg:          C.bg,
+    surface:     C.surface ?? C.bg1 ?? C.bg,
+    cyan:        C.cyan,
+    cyanDim:     C.cyanDim,
+    cyanLine:    C.cyanLine,
+    cyanGlow:    isLeague || C.cyanGlow === 'none' ? 'none' : (C.cyanGlow || classicCyanGlow),
+    orange:      C.accent,
+    orangeDim:   C.accentDim,
+    orangeLine:  C.accentLine,
+    orangeGlow:  isLeague || C.accentGlow === 'none' ? 'none' : (C.accentGlow || classicOrangeGlow),
+    green:       C.green,
+    red:         C.red,
+    redDim:      C.redDim,
+    redLine:     C.redLine,
+    textPrimary: C.textPrimary,
+    textMuted:   C.textSecondary ?? C.textMuted,
+    textDim:     C.textMuted,
+  };
+}
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
@@ -138,12 +149,21 @@ const L = {
 
 // ── Boot sequence text component ──────────────────────────────────────────────
 function BootHeader({ lang }) {
+  const { NC, isLeague, displayFont } = useAuthColors();
   const isEs = lang === 'es';
   const line1 = isEs ? 'Estableciendo conexión segura…' : 'Establishing secure connection…';
   const line2 = isEs ? 'PORTAL DE ACCESO H.E.X.A.' : 'H.E.X.A. SECURE ACCESS PORTAL';
 
   return (
     <Box sx={{ mb: '24px' }}>
+      {isLeague && (
+        <Box
+          component="img"
+          src="/logo-hexa.png"
+          alt="H.E.X.A."
+          sx={{ height: '36px', width: 'auto', mb: '14px', display: 'block' }}
+        />
+      )}
       {/* Terminal ID line */}
       <Typography sx={{
         fontFamily:    MONO,
@@ -180,11 +200,12 @@ function BootHeader({ lang }) {
 
       {/* Main portal title — Orbitron */}
       <Typography sx={{
-        fontFamily:    DISPLAY,
-        fontSize:      '14px',
+        fontFamily:    displayFont,
+        fontSize:      isLeague ? '16px' : '14px',
         color:         NC.textPrimary,
-        letterSpacing: '3px',
-        textShadow:    `0 0 12px rgba(0,217,255,0.35)`,
+        letterSpacing: isLeague ? '0.12em' : '3px',
+        textTransform: isLeague ? 'uppercase' : 'none',
+        textShadow:    isLeague ? 'none' : `0 0 12px rgba(0,217,255,0.35)`,
         lineHeight:    1.2,
       }}>
         {line2}
@@ -195,6 +216,7 @@ function BootHeader({ lang }) {
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 function TabBar({ tab, setTab, t }) {
+  const { NC, isLeague } = useAuthColors();
   return (
     <Box sx={{
       display:      'flex',
@@ -213,16 +235,16 @@ function TabBar({ tab, setTab, t }) {
               flex:          1,
               py:            '10px',
               border:        'none',
-              borderBottom:  `2px solid ${active ? NC.cyan : 'transparent'}`,
-              bgcolor:       active ? NC.cyanDim : 'transparent',
-              color:         active ? NC.cyan : NC.textMuted,
-              fontFamily:    MONO,
+              borderBottom:  `2px solid ${active ? (isLeague ? 'var(--sport-accent)' : NC.cyan) : 'transparent'}`,
+              bgcolor:       active ? (isLeague ? 'rgba(230,57,70,0.12)' : NC.cyanDim) : 'transparent',
+              color:         active ? (isLeague ? 'var(--sport-accent)' : NC.cyan) : NC.textMuted,
+              fontFamily:    isLeague ? "'Oswald', sans-serif" : MONO,
               fontSize:      '9px',
               letterSpacing: '3px',
               textTransform: 'uppercase',
               cursor:        'pointer',
               transition:    'all 0.2s',
-              boxShadow:     active ? `0 2px 8px rgba(0,217,255,0.3)` : 'none',
+              boxShadow:     active && !isLeague ? `0 2px 8px rgba(0,217,255,0.3)` : 'none',
               '&:hover':     { color: active ? NC.cyan : NC.textPrimary },
             }}
           >
@@ -248,6 +270,7 @@ function InputField({
   autoFocus = false,
   showToggle = false,
 }) {
+  const { NC } = useAuthColors();
   const [focused,   setFocused]   = useState(false);
   const [showPass,  setShowPass]  = useState(false);
   const resolvedType = showToggle ? (showPass ? 'text' : 'password') : type;
@@ -331,6 +354,7 @@ function InputField({
 
 // ── 6-digit OTP input (mobile-friendly, auto-advance, paste support) ─────────
 function OTPInput({ value, onChange, length = 6, disabled, autoFocus }) {
+  const { NC } = useAuthColors();
   const refs = useRef([]);
   const digits = Array.from({ length }, (_, i) => value[i] ?? '');
 
@@ -436,6 +460,12 @@ function OTPInput({ value, onChange, length = 6, disabled, autoFocus }) {
 
 export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'login', initialView = null }) {
   const t = L[lang] ?? L.en;
+  const { C, isLeague } = useHexaTheme();
+  const NC = useMemo(() => buildAuthPalette(C, isLeague), [C, isLeague]);
+  const displayFont = isLeague
+    ? "'Oswald', 'Barlow Condensed', sans-serif"
+    : "'Orbitron', 'Share Tech Mono', monospace";
+  const authTheme = useMemo(() => ({ NC, isLeague, displayFont }), [NC, isLeague, displayFont]);
   const { login, register, logout, verifyEmail, resendCode, requestPasswordReset, resetPassword, user } = useAuth();
 
   const [tab,           setTab]           = useState(defaultTab);
@@ -616,7 +646,9 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
   const canResetSubmit = !loading && (resetEmail || email) && resetCode.length >= 6 && resetPassword_.length >= 6;
 
   return (
+    <AuthColorsContext.Provider value={authTheme}>
     <Box
+      className={isLeague ? 'hexa-themed-page' : undefined}
       onPointerDown={handleBackdropPointerDown}
       sx={{
         position:        'fixed',
@@ -626,13 +658,12 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
         display:         'flex',
         alignItems:      'center',
         justifyContent:  'center',
-        backgroundColor: 'rgba(0,0,0,0.88)',
-        backdropFilter:  'blur(4px)',
+        backgroundColor: isLeague ? 'rgba(6, 24, 39, 0.92)' : 'rgba(0,0,0,0.88)',
+        backdropFilter:  'blur(8px)',
         zIndex:          9999,
         px:              '16px',
       }}
     >
-      {/* ── Card ── */}
       <Box
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -644,12 +675,12 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
           maxHeight:    '90vh',
           overflowY:    'auto',
           bgcolor:      NC.surface,
-          border:       `1px solid ${NC.cyanLine}`,
+          border:       `1px solid ${isLeague ? 'var(--brand-rule-strong)' : NC.cyanLine}`,
           borderRadius: '0',
           p:            { xs: '24px 20px', sm: '32px 28px' },
-          boxShadow:    `0 0 40px rgba(0,0,0,0.9), 0 0 60px rgba(0,217,255,0.08)`,
+          boxShadow:    isLeague ? '0 12px 40px rgba(0,0,0,0.55)' : `0 0 40px rgba(0,0,0,0.9), 0 0 60px rgba(0,217,255,0.08)`,
+          clipPath:     isLeague ? 'polygon(0 0, 100% 0, calc(100% - 12px) 100%, 12px 100%)' : 'none',
 
-          /* Corner brackets */
           '&::before': {
             content:    '""',
             position:   'absolute',
@@ -657,8 +688,8 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
             left:       0,
             width:      '16px',
             height:     '16px',
-            borderTop:  `2px solid ${NC.cyan}`,
-            borderLeft: `2px solid ${NC.cyan}`,
+            borderTop:  `2px solid ${isLeague ? 'var(--sport-accent)' : NC.cyan}`,
+            borderLeft: `2px solid ${isLeague ? 'var(--sport-accent)' : NC.cyan}`,
           },
           '&::after': {
             content:      '""',
@@ -722,7 +753,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
               <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '6px' }}>
                 {t.verifyStepLabel}
               </Typography>
-              <Typography sx={{ fontFamily: DISPLAY, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
+              <Typography sx={{ fontFamily: displayFont, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
                 {verifySource === 'register' ? t.verifyCoachTitle : t.verifyTitle}
               </Typography>
               <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7, mb: '4px' }}>
@@ -842,7 +873,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
               <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '6px' }}>
                 {t.forgotStepLabel}
               </Typography>
-              <Typography sx={{ fontFamily: DISPLAY, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
+              <Typography sx={{ fontFamily: displayFont, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
                 {t.forgotTitle}
               </Typography>
               <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7 }}>
@@ -916,7 +947,7 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
               <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: NC.orange, letterSpacing: '2px', textTransform: 'uppercase', mb: '6px' }}>
                 {t.resetStepLabel}
               </Typography>
-              <Typography sx={{ fontFamily: DISPLAY, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
+              <Typography sx={{ fontFamily: displayFont, fontSize: '13px', color: NC.textPrimary, letterSpacing: '2px', textTransform: 'uppercase', mb: '8px' }}>
                 {t.resetTitle}
               </Typography>
               <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: NC.textMuted, lineHeight: 1.7, mb: '4px' }}>
@@ -1161,5 +1192,6 @@ export default function AuthModal({ open, onClose, lang = 'en', defaultTab = 'lo
         )}
       </Box>
     </Box>
+    </AuthColorsContext.Provider>
   );
 }

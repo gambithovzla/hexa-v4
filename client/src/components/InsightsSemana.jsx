@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../store/authStore';
-import { C, BARLOW, MONO } from '../theme';
+import { BARLOW, MONO } from '../theme';
+import { PV as C } from '../styles/pageCssVars';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-const G = '#00FF88';
-const GLINE = 'rgba(0,255,136,0.28)';
-const GDIM = 'rgba(0,255,136,0.08)';
-const GGLOW = 'rgba(0,255,136,0.15)';
-const CARD_BG = '#05080D';
+const G = C.green;
+const GLINE = C.greenLine;
+const GDIM = C.greenDim;
+const GGLOW = C.greenDim;
+const CARD_BG = C.bg;
 
 const COPY = {
   en: {
@@ -533,7 +534,7 @@ export default function InsightsSemana({ lang = 'es' }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '920px', margin: '0 auto', padding: '0 0 36px' }}>
+    <div className="hexa-themed-page" style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '920px', margin: '0 auto', padding: '0 0 36px' }}>
       <SemanaBanner
         weekLabel={weekLabel}
         isCurrentWeek={isCurrentWeek}

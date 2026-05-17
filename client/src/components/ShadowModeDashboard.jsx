@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import { C, MONO, BARLOW } from '../theme';
+import { MONO, BARLOW } from '../theme';
+import { useHexaTheme } from '../themeProvider';
 import { useAuth } from '../store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-function StatCard({ label, value, sub, color = C.cyan }) {
+function StatCard({ label, value, sub, color }) {
+  const { C } = useHexaTheme();
+  const accent = color ?? C.cyan;
   return (
-    <Box sx={{ border: `1px solid ${color}55`, p: '12px 16px', minWidth: '130px', flex: 1 }}>
+    <Box sx={{ border: `1px solid ${accent}55`, p: '12px 16px', minWidth: '130px', flex: 1 }}>
       <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', mb: '4px' }}>
         {label}
       </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, color }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, color: accent }}>
         {value ?? '—'}
       </Typography>
       {sub ? (
@@ -67,6 +70,7 @@ function renderShadowCell(row) {
 }
 
 export default function ShadowModeDashboard({ onBack }) {
+  const { C, isLeague } = useHexaTheme();
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,7 +116,7 @@ export default function ShadowModeDashboard({ onBack }) {
   const shadowCorrect = Number(summary.shadow_correct ?? 0);
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#000', p: { xs: 2, sm: 3 }, maxWidth: '100vw', overflowX: 'hidden' }}>
+    <Box className="hexa-themed-page" sx={{ minHeight: '100vh', bgcolor: isLeague ? C.bg : '#000', p: { xs: 2, sm: 3 }, maxWidth: '100vw', overflowX: 'hidden' }}>
       <Box
         component="button"
         onClick={onBack}
