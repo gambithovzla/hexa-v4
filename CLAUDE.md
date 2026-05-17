@@ -42,7 +42,7 @@ hexa-v4/
 - **No queue worker.** Background jobs son `setInterval` en [server/index.js](server/index.js) (Statcast warm-up cada 6h, line snapshots, pick resolver, closing line capture, content auto-publish).
 - **No feature flag system.** Solo env vars como toggles (`SHADOW_MODE_ENABLED`, `PARLAY_SYNERGY_ENABLED`, `X_AUTO_PUBLISH_ENABLED`).
 - **No Sentry / Datadog.** Solo `console.log/warn/error` con prefijos `[module-name]`.
-- **Tests con `node:test`** (builtin). Solo `server/services/parlayEngine/__tests__/` tiene cobertura hoy.
+- **Tests con `node:test`** (builtin). Cobertura en `server/services/parlayEngine/__tests__/`, `server/services/__tests__/pickAlignedMl.test.js`, `server/parsers/__tests__/pickParser.test.js`.
 
 ---
 
@@ -53,12 +53,14 @@ hexa-v4/
 - [server/context-builder.js](server/context-builder.js) — arma payload por partido. **FROZEN.**
 - [server/market-intelligence.js](server/market-intelligence.js) — `buildDeterministicSafePayload`, `buildValueBreakdown`. **FROZEN.**
 - [server/services/xgboostValidator.js](server/services/xgboostValidator.js) — validador determinístico (no es XGBoost real, es scoring con pesos hardcodeados). **FROZEN.**
-- [server/shadow-model.js](server/shadow-model.js) — runner del validator.
+- [server/shadow-model.js](server/shadow-model.js) — runner del validator + persistencia pick-aligned (`pick_market_type`, `python_pick_prob`, `pick_agree_python`, etc.).
+- [server/services/pickAlignedMl.js](server/services/pickAlignedMl.js) — parsea el pick Oracle, predice el **mismo mercado** en legacy/Python, expone `mlOpinion` (admin) y `shadowFields`. Usa [pickParser.js](server/parsers/pickParser.js) (incl. español: `Bajo 4.5 Ponches`).
 - [server/prompts/x-content-prompts.js](server/prompts/x-content-prompts.js) — prompts de content. **FROZEN** los existentes; añadir nuevos sí se puede.
 
 ### Pick lifecycle
 - [server/pick-tracker.js](server/pick-tracker.js) — progress tracking en vivo (MLB).
 - [server/pick-resolver.js](server/pick-resolver.js) — resolución post-game (MLB). Exporta `resolvePickFromFinalState` + `tokenMatchesTeam`, reutilizados por el resolver NBA.
+- [server/props-resolver.js](server/props-resolver.js) — resolución player props MLB vía boxscore GUMBO (`resolvePlayerProp`, `getGameBoxscore`).
 - [server/pick-resolver-nba.js](server/pick-resolver-nba.js) — resolución post-game NBA. Se ejecuta cada 30 min junto al resolver MLB cuando `NBA_ANALYSIS_ENABLED=true`.
 - [server/pick-postmortem.js](server/pick-postmortem.js) — análisis retrospectivo por LLM.
 - [server/closing-line-capture.js](server/closing-line-capture.js) — CLV.
@@ -100,6 +102,11 @@ hexa-v4/
 - [server/prompts/oracle-nba-prompts.js](server/prompts/oracle-nba-prompts.js) — Prompts NBA: `NBA_SYSTEM_PROMPT` (pick + JSON output) y `NBA_CHAT_PROMPT` (chat libre). Guardrail anti-hallucination: prohíbe explícitamente simular tool calls o web search.
 - [server/routes/nba.js](server/routes/nba.js) — `POST /api/nba/analyze/game` y `POST /api/nba/analyze/chat`. Feature-flagged por `NBA_ANALYSIS_ENABLED`. Admin-only. Resuelve `marketOdds` server-side vía [nba-odds.js](server/nba-odds.js) cuando el cliente no las envía y propaga `context_meta` + `oddsSource` en `meta` de la respuesta.
 
+### MLB Player Props (Sprint 5)
+- [server/routes/mlb-props.js](server/routes/mlb-props.js) — `GET /api/mlb/props/board` (auth). Odds API + Savant + ML batch; `oraclePropPicks` desde tabla `picks` por `game_date` / `game_pk`.
+- [server/services/propFeatureEnricher.js](server/services/propFeatureEnricher.js) — features Savant por jugador para props.
+- [client/src/pages/PlayerPropsPage.jsx](client/src/pages/PlayerPropsPage.jsx) — ruta `/props`.
+
 ### Routes principales
 - [server/routes/picks.js](server/routes/picks.js)
 - [server/routes/content.js](server/routes/content.js) — API key, read-only para consumidores externos.
@@ -112,7 +119,8 @@ hexa-v4/
 - [client/src/App.jsx](client/src/App.jsx) — root + routing. Tiene estado `sport` ('mlb'|'nba') que se pasa a GameSelector y AnalysisPanel en la tab de juego.
 - [client/src/components/SportSwitcher.jsx](client/src/components/SportSwitcher.jsx) — pill toggle MLB/NBA. Se renderiza dentro del header de GameSelector (modo single).
 - [client/src/components/GameSelector.jsx](client/src/components/GameSelector.jsx) — acepta `sport` prop. Cuando `sport='nba'` fetcha `/api/nba/games` y normaliza al shape MLB-compatible. Oculta la sección de pitchers para NBA.
-- [client/src/components/AnalysisPanel.jsx](client/src/components/AnalysisPanel.jsx) — acepta `sport` prop. Cuando `sport='nba'` usa `/api/nba/analyze/game`. Oculta betType, engine picker (grok/dual), webSearch toggle y lineup badges para NBA.
+- [client/src/components/AnalysisPanel.jsx](client/src/components/AnalysisPanel.jsx) — acepta `sport` prop. Cuando `sport='nba'` usa `/api/nba/analyze/game`. Oculta betType, engine picker (grok/dual), webSearch toggle y lineup badges para NBA. Admin MLB: muestra [AdminMlOpinionCard.jsx](client/src/components/AdminMlOpinionCard.jsx) con `mlOpinion` del analyze.
+- [client/src/theme/outcomeStyles.js](client/src/theme/outcomeStyles.js) — helpers W/L/P usando tokens CSS `--outcome-win|loss|pending` (League + Classic).
 - [client/src/pages/](client/src/pages/) — pages (PerformanceDashboard, ParlayArchitect, DevUIShowcase, MLCalibrationDashboard, AdminMLControlCenter).
 - [client/src/components/](client/src/components/) — componentes (AdminCreditPanel, AdminDbExplorerPanel, AdminEnsembleBadge, OracleChat, BankrollTracker, HexaBoard, LearningCenter, MethodologyPage, etc).
 
@@ -149,7 +157,7 @@ Estos archivos están congelados por el brief del Parlay Synergy Engine y por es
 - `server/context-builder.js`
 - `server/market-intelligence.js`
 - `server/services/xgboostValidator.js`
-- `server/shadow-model.js` ← ya se modificó en Sprint 3 para inyectar Python score; está estable
+- `server/shadow-model.js` ← modificado para Python score (Sprint 3) y pick-aligned (2026-05); estable salvo bugs explícitos
 - Prompts existentes dentro de `server/oracle.js`
 - `server/services/parlayEngine/*` (recién implementado, refactors solo con permiso)
 - `server/services/mlModelClient.js` ← cliente del sidecar Python, no tocar flujo del circuit breaker
@@ -276,6 +284,7 @@ npm run dev:all      # ambos en paralelo (concurrently)
 npm run audit        # diagnóstico del sistema (system-audit.js)
 npm run smoke:mlb    # release smoke MLB (games/teams/hexa-board)
 npm run test:parlay  # tests del Parlay Synergy Engine
+node --test server/services/__tests__/pickAlignedMl.test.js server/parsers/__tests__/pickParser.test.js
 npm start            # server en modo producción
 
 # Cliente
@@ -308,6 +317,8 @@ npm run preview      # preview del build
 - `X_AUTO_PUBLISH_ENABLED` — worker publica en X (default `0`)
 - `X_AUTO_PUBLISH_INTERVAL_MINUTES` — intervalo (default `5`)
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
+- `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
+- `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
 
 Lista completa en [.env.example](.env.example).
 
@@ -333,11 +344,14 @@ Estado del pipeline ML:
 - ✅ Sprint 2 — sidecar Python FastAPI + XGBoost real en `ml/`, desplegado en Railway como servicio separado.
 - ✅ Sprint 3 — integración Node↔Python (mlModelClient.js, circuit breaker), shadow_model_runs enriquecido, dashboard `/admin/ml-calibration`.
 - ✅ Sprint 4 — ensemble meta-learner (LogReg oracle+legacy+python), `/predict/ensemble`, `/admin/ml-ensemble-calibration`.
-- ✅ Sprint 5 UI — Admin ML Control Center (`/admin/ml-control`): HUD live, retrain on-demand por mercado + ensemble + RETRAIN ALL, per-pick ensemble breakdown badge en HistoryPanel, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Chat→Training pipeline con `source='oracle_chat'` aislado del training default. Observability runline/ensemble en HUD (`mlModelHealth.js`). ⏸️ Sprint 5 Player Props MLB **diferido** (banner "coming soon").
+- ✅ Sprint 5 UI — Admin ML Control Center (`/admin/ml-control`): HUD live, retrain on-demand por mercado + ensemble + RETRAIN ALL, per-pick ensemble breakdown badge en HistoryPanel, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Chat→Training pipeline con `source='oracle_chat'` aislado del training default. Observability runline/ensemble en HUD (`mlModelHealth.js`).
+- 🔄 Sprint 5 Player Props MLB — en progreso: Savant en feature store, `prop_*` en sidecar, `/props` + `mlb-props.js`, `props-resolver.js`, parser ES. Pendiente: resolver a escala en lifecycle + gate Brier por mercado.
+- ✅ Sprint 5b — Pick-aligned shadow + `mlOpinion` admin + tokens `--outcome-*` League (merge main 2026-05-17, PRs #345–#347).
 - ✅ Sprint 6 — equity/Sharpe/drawdown + comparativa bankroll (`userEquityCompare.js`, `GET /api/bankroll/equity-stats`); persistencia ML prod (6b).
 - ✅ Post-6 — parlay resolve/AUTO (`parlayResolver.js`, `parlayRunOutcome.js`); NBA team-map + output guard (`nba-team-map.js`, `nbaOutputGuard.js`).
+- ✅ Sprint 8a — Monte Carlo bankroll (`monteCarloBankroll.js`). ✅ Brand League × Kinetic v2.6 (skin alternable, dark-only).
 
-**Estado en producción (2026-05-14)**:
+**Estado en producción (2026-05-17)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
 - Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".
@@ -442,13 +456,14 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 - Historial, logos, resolver, jobs, dataset admin y shadow runs aislados por `sport`. ✅
 - Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
-**Rama activa: `feat/nba-go-live-gate`**
-- Validación E2E NBA en producción (analyze → historial → resolver).
-- Equity en bottom nav (6a menor).
-- Smoke Parlay AUTO post-deploy.
+**Foco docs / ops (2026-05-17)**:
+- Completar Sprint 5 props: resolver lifecycle + validación Brier; `MLB_PROPS_ML_PUBLIC_ENABLED` cuando pase el gate.
+- NBA: validación E2E en prod con `NBA_ANALYSIS_ENABLED`; equity en bottom nav (menor).
+- Brand: re-skin Admin ML / ParlayArchitect; assets PWA iOS.
 
-**Pendiente del bloque ML (diferido, no en curso)**:
-- Sprint 5 Player Props MLB — Savant per-batter + training sidecar por `prop_kind`.
+**Shadow dashboard — lectura de fechas**:
+- Columna **Hora Lima** = `pick_time_lima` / `created_at` (cuándo se corrió el análisis).
+- Sufijo `· juego DD mon` = `game_date` del partido cuando difiere del día del run.
 
 ---
 

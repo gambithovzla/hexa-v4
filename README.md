@@ -100,6 +100,10 @@ npm run dev:all
 | `HEXA_ML_INTERNAL_TOKEN` | No (con sidecar) | Token de autenticación Node→Python |
 | `CHAT_EXTRACTOR_HAIKU_FALLBACK` | No | `0` para deshabilitar fallback Haiku del extractor de chat (default `1`) |
 | `CHAT_EXTRACTOR_HAIKU_MODEL` | No | Override del modelo Haiku usado (default `claude-haiku-4-5-20251001`) |
+| `ML_ADMIN_TIMEOUT_MS` | No | Timeout extendido del sidecar en analyze admin (pick-aligned; default `2500`) |
+| `MLB_PROPS_SAVANT_ENRICH_ENABLED` | No | Enriquecimiento Savant en tablero props (default `1`) |
+| `MLB_PROPS_ML_PUBLIC_ENABLED` | No | Scores ML visibles para usuarios no-admin en `/props` (default `0`) |
+| `MLB_PROPS_ML_MIN_RESOLVED` | No | Mínimo de picks resueltos por `prop_kind` antes de habilitar mercado (default `100`) |
 
 Lista completa con descripciones en [.env.example](.env.example) y [docs/integrations.md](docs/integrations.md).
 
@@ -169,7 +173,9 @@ hexa-v4/
 │   ├── services/nbaShadow*.js  feature store + shadow NBA (sport='nba')
 │   ├── migrate.js          migraciones SQL embebidas
 │   ├── services/           xPublisher, contentDraftService, parlayEngine, etc.
-│   ├── routes/             picks, content, insights, oracle-history
+│   ├── routes/             picks, content, insights, oracle-history, mlb-props
+│   ├── props-resolver.js   resolución de player props MLB (boxscore GUMBO)
+│   ├── services/pickAlignedMl.js  opinión ML alineada al mercado del pick (shadow + admin)
 │   ├── middleware/         auth, content-api-key
 │   └── prompts/            x-content-prompts
 ├── ml/                     sidecar Python FastAPI + XGBoost (desplegado en Railway)
@@ -199,6 +205,7 @@ Todos bajo `/api`. Los protegidos requieren JWT (`🔒`); los admin requieren ro
 - **Análisis NBA** (`/nba/analyze/*`) 👑 (feature-flagged): game, chat.
 - **Picks** (`/picks/*`) 🔒: CRUD, postmortem, live-progress, clv-stats.
 - **Live** (`/games/:gamePk/*`): live, play-by-play, highlights-link.
+- **MLB Player Props** (`/mlb/*`) 🔒: `GET /mlb/props/board?date=YYYY-MM-DD&propKind=&minEdge=` — tablero del día (Odds API + Savant + scores ML admin; sección **Picks Oracle** desde tabla `picks`).
 - **Admin** (`/admin/*`) 👑: grant-credits, run-backtest, **shadow-model** (`?sport=mlb|nba`), **feature-store** (`?sport=mlb|nba&month=YYYY-MM`), db/tables, content/queue, parlay-synergy, **ml/status, ml/retrain, ml/retrain/ensemble, ml/retrain-log, ml/ensemble, ml/equity, ml/chat-picks-stats, picks/:id/ensemble-breakdown**.
 - **Pagos** (`/nowpayments/*`): checkout, webhook IPN HMAC-SHA512.
 - **Content API** (read-only, API key): `/content/v1/games`, `/board`, `/picks`, `/insights`, `/performance`.
@@ -213,7 +220,10 @@ Listado exhaustivo: [docs/architecture.md sección 6](docs/architecture.md#6-end
 [server/oracle.js](server/oracle.js) soporta tres motores seleccionables por request: `sonnet` (Claude Sonnet 4.6), `grok` (xAI), `dual` (ambos en paralelo con detección de divergencia). Modelos: Opus 4.7 (premium), Sonnet 4.6 (deep), Haiku 4.5 (content drafts). Detalle: [docs/ml-pipeline.md sección 2](docs/ml-pipeline.md#2-oracle--motor-llm-dual).
 
 ### Shadow validator + ML sidecar Python
-[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre el validador MLB (pesos hardcodeados). NBA usa módulo aparte [server/services/nbaShadowValidator.js](server/services/nbaShadowValidator.js) — misma idea, features de basketball. Runs en `shadow_model_runs` con `sport`. Admin: `ShadowModeDashboard` con toggle MLB/NBA. En paralelo, [server/services/mlModelClient.js](server/services/mlModelClient.js) consulta al sidecar Python (`ml/`) con XGBoost entrenado solo en MLB por default (`ml/hexa_ml/data.py` filtra `sport='mlb'`). Detalle: [docs/ml-pipeline.md](docs/ml-pipeline.md).
+[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre el validador MLB (pesos hardcodeados). NBA usa módulo aparte [server/services/nbaShadowValidator.js](server/services/nbaShadowValidator.js) — misma idea, features de basketball. Runs en `shadow_model_runs` con `sport`. Admin: `ShadowModeDashboard` con toggle MLB/NBA; columnas **pick-aligned** (`pick_market_type`, `python_pick_prob`, `pick_agree_python`, etc.) vía [server/services/pickAlignedMl.js](server/services/pickAlignedMl.js) — compara Oracle / legacy / Python en el **mismo mercado** del pick (ML, O/U, runline, props). En analyze admin, la respuesta incluye `mlOpinion` ([AdminMlOpinionCard](client/src/components/AdminMlOpinionCard.jsx)). En paralelo, [server/services/mlModelClient.js](server/services/mlModelClient.js) consulta al sidecar Python (`ml/`) con XGBoost entrenado solo en MLB por default (`ml/hexa_ml/data.py` filtra `sport='mlb'`); mercados `prop_*` en sidecar para Sprint 5 props. Detalle: [docs/ml-pipeline.md](docs/ml-pipeline.md).
+
+### Tablero Player Props MLB (`/props`)
+[client/src/pages/PlayerPropsPage.jsx](client/src/pages/PlayerPropsPage.jsx) consume `GET /api/mlb/props/board`: líneas del Odds API por juego del día, enriquecimiento Savant, edge vs implied (admin o `MLB_PROPS_ML_PUBLIC_ENABLED=1`), y bloque **Picks Oracle (guardados)** para props analizados antes de que existan líneas en el mercado. Parser español en [server/parsers/pickParser.js](server/parsers/pickParser.js) (`Bajo 4.5 Ponches`, etc.). Resolución post-game: [server/props-resolver.js](server/props-resolver.js).
 
 ### Closing Line Value (CLV)
 Captura líneas iniciales y de cierre por pick. Stats en `/api/picks/clv-stats`.
@@ -276,12 +286,13 @@ Estado:
 - ✅ **Sprint 3**: Integración Node↔Python activa (`ML_SIDECAR_ENABLED=true` en prod) con circuit breaker y fallback al validator legacy. Dashboard `/admin/ml-calibration` operativo.
 - ✅ **Sprint 4**: Ensemble meta-learner (LogReg sobre Oracle+Legacy+Python en logit space). Endpoints `/predict/ensemble` y `/calibration/ensemble`. Sólo se guarda artifact cuando supera a la mejor fuente individual.
 - ✅ **Sprint 5 UI**: Admin ML Control Center en `/admin/ml-control` — HUD live, retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Oracle Chat → Training pipeline (JSON tail + Haiku fallback, bucket `source='oracle_chat'`).
-- ⏸️ **Sprint 5 Player Props MLB** (diferido): hits / total_bases / strikeouts — bloque grande; requiere Savant per-batter + pipeline sidecar. No en curso.
+- 🔄 **Sprint 5 Player Props MLB** (en progreso): Savant snapshots en feature store ✅; mercados `prop_*` en sidecar ✅; tablero `/props` + `GET /api/mlb/props/board` ✅; pick-aligned shadow + `mlOpinion` admin ✅; parser ES (`Bajo/Ariba Ponches`) ✅. Pendiente: resolver props en pick lifecycle a escala, Brier ≥100 picks/mercado, rollout público (`MLB_PROPS_ML_PUBLIC_ENABLED`).
 - ✅ **Sprint 6** (cerrado): 6a equity/Sharpe/drawdown + comparativa bankroll; 6b persistencia ML en Railway Volume (`npm run verify:ml:persistence`).
 - ✅ **Post-6 hardening** (código): Parlay AUTO/`leg_results`, ML observability HUD, mapeo ESPN↔NBA Stats (`nba-team-map.js`), guardrails salida Oracle NBA (`nbaOutputGuard.js`).
-- ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, `/api/nba/*`, resolver post-game, sport shell. Feature-flag `NBA_ANALYSIS_ENABLED`. **Siguiente**: rama `feat/nba-go-live-gate` — E2E prod + equity en nav.
+- ✅ **Pick-aligned shadow + admin ML** (2026-05-17): `pickAlignedMl.js`, columnas en `shadow_model_runs`, `mlOpinion` en analyze game/safe, tokens `--outcome-*` para W/L/P en League mode (PRs #345–#347).
+- ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, `/api/nba/*`, resolver post-game, live tracker, sport shell. Feature-flag `NBA_ANALYSIS_ENABLED`. Go-live gate mergeado; validación E2E en prod según tráfico.
 
-### Estado NBA MVP (2026-05-15)
+### Estado NBA MVP (2026-05-17)
 
 Sprint 7 completado en su mayor parte; hardening de datos/salida añadido post-6:
 
