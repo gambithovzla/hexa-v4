@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import { useHexaTheme } from '../themeProvider';
+import { formatGameTimeLima } from '../utils/dateKeys.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+function getGameDisplayTime(game) {
+  if (game?.gameDate) return formatGameTimeLima(game.gameDate) ?? '';
+  return game?.gameTime || game?.time || '';
+}
 
 function genSessionKey() {
   return `oracle_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -627,7 +633,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                     {getMatchup(game)}
                   </span>
                   <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
-                    {game.gameTime || game.time || ''}
+                    {getGameDisplayTime(game)}
                   </span>
                 </div>
               ))}
@@ -694,7 +700,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                       </span>
                     </div>
                     <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
-                      {game.gameTime || game.time || ''}
+                      {getGameDisplayTime(game)}
                     </span>
                   </div>
                 );

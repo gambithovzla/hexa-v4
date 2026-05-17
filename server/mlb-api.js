@@ -9,6 +9,8 @@
  *   getTeamHittingStats(id)  — stats ofensivas de un equipo
  */
 
+import { formatGameTimeLima } from './utils/dateKeys.js';
+
 const MLB_BASE = 'https://statsapi.mlb.com/api/v1';
 const SEASON = new Date().getFullYear();
 
@@ -115,13 +117,7 @@ function normalizeGame(game) {
     officialDate: game.officialDate ?? null,
     game_date: game.officialDate ?? null,
     gameDate: game.gameDate,                         // ISO 8601 UTC
-    gameTime: game.gameDate
-      ? new Date(game.gameDate).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZoneName: 'short',
-        })
-      : null,
+    gameTime: game.gameDate ? formatGameTimeLima(game.gameDate) : null,
     status: {
       code: game.status?.statusCode ?? null,
       description: game.status?.detailedState ?? 'Unknown',

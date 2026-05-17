@@ -29,5 +29,8 @@ export const PV = {
   textPrimary: 'var(--text-primary)',
   textSecondary: 'var(--ink-1)',
   textMuted:   'var(--text-muted)',
+  textDim:     'var(--ink-3)',
+  surfaceAlt:  'var(--bg-2)',
+  accentGlow:  'var(--neon-orange-glow)',
   line:        'var(--line)',
 };

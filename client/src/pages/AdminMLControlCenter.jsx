@@ -26,8 +26,6 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { MONO, DISPLAY } from '../theme';
-import { useHexaTheme } from '../themeProvider';
-
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // ── Palette (CSS vars — follows classic + league-kinetic via index.css) ───────
@@ -960,7 +958,7 @@ function RetrainLog({ rows, T }) {
       {rows.map((r) => (
         <Box key={r.id} sx={{
           display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 0.7fr 0.7fr 0.7fr 0.7fr 1.5fr',
-          borderBottom: `1px solid ${C.line}`, px: '12px', py: '8px',
+          borderBottom: `1px solid ${BORDER}`, px: '12px', py: '8px',
           fontFamily: MONO, fontSize: '10px', color: INK1,
           '&:hover': { background: SURFACE2 },
         }}>
@@ -1006,7 +1004,6 @@ function Toast({ toast, onClose }) {
 // ── Main component ──────────────────────────────────────────────────────────
 
 export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
-  const { isLeague } = useHexaTheme();
   const T = { ...(STRINGS[lang] ?? STRINGS.es), lang };
 
   const [status, setStatus]         = useState(null);
