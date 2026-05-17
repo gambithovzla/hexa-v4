@@ -124,6 +124,39 @@ const STRINGS = {
     runlineGate:      'Runline gate',
     runlineSkippedNote: (min) => `Training skipped — need ≥${min} resolved runline picks`,
     runlineEarlyNote: (n) => `Early model — n_train=${n} (standard floor is 60)`,
+    help: {
+      page: 'Admin ops for the Python ML sidecar (Railway). Retrain models, read quality metrics, compare Legacy vs Python on shadow runs. Does not change Oracle picks or user history.',
+      hud: 'Live health of the ML sidecar. Refreshes every 10 seconds.',
+      sidecar: 'Can the Python API respond? DEGRADED = slow or partial; OFFLINE = ML_SIDECAR_ENABLED=false or unreachable.',
+      circuit: 'Circuit breaker after failed inference calls. OPEN = sidecar calls paused until cooldown.',
+      modelsHud: 'How many market .pkl files exist on disk vs loaded in RAM (e.g. 6/9).',
+      ensembleHud: 'Meta-learner that blends Oracle + Legacy + Python (moneyline only).',
+      latency: 'Last /health round-trip to the sidecar in milliseconds.',
+      inferencePanel: 'Per-market runtime: ARTEFACT = trained file on disk; IN RAM = loaded for predictions.',
+      perMarket: 'XGBoost models for team markets (ML, O/U, runline). Each card = one trained model + test metrics from the last retrain.',
+      marketCard: 'LIVE = model file exists and serves /predict. SIN MODELO = not enough resolved picks to train. REENTRENAR sends a job to the sidecar (see audit log).',
+      brier: 'Probability error on the hold-out test set. 0 = perfect, 0.25 ≈ coin flip. Lower is better; under ~0.20 is solid for binary picks.',
+      roiKelly: 'Simulated ROI on the test set betting Kelly at 25% stake from model edges. Not your real Hexa bankroll — only compares model quality.',
+      nTrain: 'Number of resolved pick_features rows used to fit the model (historical).',
+      nTest: 'Rows held out for evaluation (recent dates). Metrics shown are from this split.',
+      retrainBtn: 'Trains a new .pkl on the sidecar from pick_features (source=live by default). Safe to click; does not delete picks.',
+      reliability: 'When the model says “60%”, do those picks win ~60% of the time? Bars on the dashed line = well calibrated.',
+      rolling: 'Daily accuracy of who won the game (moneyline only), from shadow_model_runs after games finish. Not props or pick-aligned analysis.',
+      legacyLine: 'Yellow: legacy validator (xgboostValidator) — did its predicted game winner match the final score?',
+      pythonLine: 'Cyan: Python XGBoost home-win probability (≥50% = pick home). Sparse early days = Python scores added recently.',
+      baseline50: '50% = random guess on a two-team game.',
+      ensemble: 'Logistic regression combining Oracle, Legacy, and Python probabilities for moneyline. Needs ≥50 resolved shadow rows with all three sources.',
+      chatSection: 'Picks saved from Oracle Chat (source=oracle_chat). Excluded from default training unless you opt in — avoids hypothetical chat questions polluting live models.',
+      retrainLog: 'Audit trail of manual retrains: market, test Brier, sample size, duration, admin user.',
+      propsSection: 'Separate XGBoost models per prop type (K, hits, TB…). Public scores on /props unlock after Brier gate (~100 resolved per market).',
+      propsBoard: 'Daily prop lines + Savant + your saved Oracle prop picks. Open /props from the app menu.',
+      artifact: 'A .pkl file exists on the sidecar disk for this market.',
+      inMemory: 'Model is loaded in the sidecar process and can answer /predict now.',
+      logBrier: 'Brier score on the test split after this retrain run.',
+      logNTrain: 'Training rows used in that run.',
+      storage: 'VOLUME = models survive redeploy; EPHEMERAL = retrain after each deploy.',
+      helpHint: 'Tip: hover the ? icons for what each metric means.',
+    },
   },
   es: {
     dashboard:        'Panel de Operaciones ML',
@@ -191,6 +224,39 @@ const STRINGS = {
     runlineGate:      'Umbral runline',
     runlineSkippedNote: (min) => `Entrenamiento omitido — se necesitan ≥${min} picks runline resueltos`,
     runlineEarlyNote: (n) => `Modelo inicial — n_train=${n} (umbral estándar: 60)`,
+    help: {
+      page: 'Panel admin del sidecar Python (Railway). Reentrena modelos, lee métricas de calidad y compara Legacy vs Python en shadow. No modifica picks del Oracle ni el historial de usuarios.',
+      hud: 'Salud en vivo del sidecar ML. Se actualiza cada 10 segundos.',
+      sidecar: '¿Responde la API Python? DEGRADADO = lento o parcial; DESCONECTADO = ML_SIDECAR desactivado o inalcanzable.',
+      circuit: 'Circuit breaker tras fallos de inferencia. OPEN = pausa llamadas al sidecar hasta cooldown.',
+      modelsHud: 'Cuántos .pkl de mercado hay en disco vs cargados en RAM (ej. 6/9).',
+      ensembleHud: 'Meta-modelo que mezcla Oracle + Legacy + Python (solo moneyline).',
+      latency: 'Último round-trip a /health del sidecar en milisegundos.',
+      inferencePanel: 'Estado por mercado: ARTEFACTO = archivo entrenado en disco; EN RAM = listo para /predict.',
+      perMarket: 'Modelos XGBoost para mercados de equipo (ML, O/U, runline). Cada tarjeta = un modelo + métricas del último reentrenamiento.',
+      marketCard: 'LIVE = hay .pkl y sirve predicciones. SIN MODELO = faltan picks resueltos. REENTRENAR lanza train en el sidecar (ver historial).',
+      brier: 'Error de probabilidad en el test hold-out. 0 = perfecto, 0.25 ≈ moneda. Menor es mejor; bajo ~0.20 es sólido.',
+      roiKelly: 'ROI simulado en test apostando Kelly al 25% según el modelo. No es tu bankroll real en Hexa — solo compara calidad del modelo.',
+      nTrain: 'Filas de pick_features resueltas usadas para entrenar.',
+      nTest: 'Filas recientes reservadas para evaluar. Las métricas salen de este split.',
+      retrainBtn: 'Entrena un .pkl nuevo en el sidecar desde pick_features (source=live por defecto). No borra picks.',
+      reliability: 'Si el modelo dice “60%”, ¿gana ~60%? Barras en la línea punteada = bien calibrado.',
+      rolling: 'Aciertos diarios de quién ganó el partido (solo moneyline) en shadow_model_runs. No props ni análisis pick-aligned.',
+      legacyLine: 'Amarillo: validador legacy — ¿acertó el ganador del partido vs marcador final?',
+      pythonLine: 'Cyan: XGBoost Python (prob local ≥50% = pick local). Días vacíos = scores Python recientes.',
+      baseline50: '50% = azar en un partido de dos equipos.',
+      ensemble: 'Regresión logística que combina Oracle, Legacy y Python en moneyline. Requiere ≥50 filas shadow con las 3 fuentes.',
+      chatSection: 'Picks del Oracle Chat (source=oracle_chat). Excluidos del training por defecto — evita sesgar con preguntas hipotéticas.',
+      retrainLog: 'Historial de reentrenos manuales: mercado, Brier test, muestra, duración, admin.',
+      propsSection: 'Modelos XGBoost por tipo de prop (K, hits, TB…). Scores públicos en /props tras gate Brier (~100 resueltos por mercado).',
+      propsBoard: 'Líneas del día + Savant + picks Oracle guardados. Abre /props en el menú.',
+      artifact: 'Existe un .pkl en disco para este mercado.',
+      inMemory: 'Modelo cargado en el proceso sidecar; puede responder /predict.',
+      logBrier: 'Brier en el split de test de ese reentrenamiento.',
+      logNTrain: 'Filas de entrenamiento usadas en esa corrida.',
+      storage: 'VOLUME = modelos sobreviven deploy; EPHEMERAL = reentrenar tras cada deploy.',
+      helpHint: 'Pasa el cursor sobre los ? para ver qué significa cada métrica.',
+    },
   },
 };
 
@@ -265,6 +331,57 @@ function timeAgo(v) {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+function HelpTip({ title, sx = {} }) {
+  if (!title) return null;
+  return (
+    <Tooltip
+      title={(
+        <Typography
+          component="span"
+          sx={{
+            fontFamily: MONO,
+            fontSize: '11px',
+            lineHeight: 1.55,
+            display: 'block',
+            maxWidth: 360,
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {title}
+        </Typography>
+      )}
+      arrow
+      placement="top"
+    >
+      <Box
+        component="span"
+        role="img"
+        aria-label="help"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 14,
+          height: 14,
+          ml: 0.5,
+          border: `1px solid ${MUTED}`,
+          borderRadius: '50%',
+          color: MUTED,
+          fontFamily: MONO,
+          fontSize: '9px',
+          lineHeight: 1,
+          cursor: 'help',
+          flexShrink: 0,
+          '&:hover': { color: CYAN, borderColor: CYAN },
+          ...sx,
+        }}
+      >
+        ?
+      </Box>
+    </Tooltip>
+  );
 }
 
 // ── Corner-bracket decorator (reused everywhere) ─────────────────────────────
@@ -343,19 +460,23 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px' }}>
             HEXA.ML // CONTROL CENTER
           </Typography>
-          <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.05rem', fontWeight: 700, color: INK0, lineHeight: 1.1 }}>
-            {T.dashboard}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.05rem', fontWeight: 700, color: INK0, lineHeight: 1.1 }}>
+              {T.dashboard}
+            </Typography>
+            <HelpTip title={T.help?.page} />
+          </Box>
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 200 }} />
 
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <StatusPill label="Sidecar"  value={sidecarLabel} color={sidecarColor} pulse={!healthOk && enabled} />
-          <StatusPill label="Circuit"  value={String(circuit).toUpperCase()} color={circuitColor} pulse={circuit === 'half-open'} />
-          <StatusPill label="Models"   value={T.modelsHud(modelsLoaded, modelsAvailable)} color={modelsColor} />
-          <StatusPill label="Ensemble" value={ensHudLabel} color={ensHudColor} />
-          <StatusPill label="Latency"  value={fmtMs(latency)} color={latency != null && latency < 800 ? GREEN : latency != null ? AMBER : MUTED} />
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <HelpTip title={T.help?.hud} sx={{ mr: 0.5 }} />
+          <StatusPill label="Sidecar"  value={sidecarLabel} color={sidecarColor} pulse={!healthOk && enabled} tip={T.help?.sidecar} />
+          <StatusPill label="Circuit"  value={String(circuit).toUpperCase()} color={circuitColor} pulse={circuit === 'half-open'} tip={T.help?.circuit} />
+          <StatusPill label="Models"   value={T.modelsHud(modelsLoaded, modelsAvailable)} color={modelsColor} tip={T.help?.modelsHud} />
+          <StatusPill label="Ensemble" value={ensHudLabel} color={ensHudColor} tip={T.help?.ensembleHud} />
+          <StatusPill label="Latency"  value={fmtMs(latency)} color={latency != null && latency < 800 ? GREEN : latency != null ? AMBER : MUTED} tip={T.help?.latency} />
         </Box>
 
         <Tooltip title={T.refreshTip}>
@@ -380,14 +501,16 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
           {lastRetrain ? `${lastRetrain.market} → ${lastRetrain.status} · ${timeAgo(lastRetrain.created_at)}` : T.never}
         </span></span>
         {artifactsDir && (
-          <span>
-            STORAGE:{' '}
-            <span style={{ color: artifactsPersistent ? GREEN : AMBER }}>
-              {artifactsPersistent ? '● VOLUME' : '⚠ EPHEMERAL'}
+          <Tooltip title={T.help?.storage ?? ''}>
+            <span style={{ cursor: 'help' }}>
+              STORAGE:{' '}
+              <span style={{ color: artifactsPersistent ? GREEN : AMBER }}>
+                {artifactsPersistent ? '● VOLUME' : '⚠ EPHEMERAL'}
+              </span>
+              {' '}
+              <span style={{ color: MUTED, fontSize: '9px' }}>{artifactsDir}</span>
             </span>
-            {' '}
-            <span style={{ color: MUTED, fontSize: '9px' }}>{artifactsDir}</span>
-          </span>
+          </Tooltip>
         )}
       </Box>
     </Box>
@@ -403,9 +526,12 @@ function MlInferencePanel({ observability, T }) {
       p: '14px 16px', mb: 2, overflow: 'hidden',
     }}>
       <CornerBrackets color={CYAN} size={10} />
-      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px', mb: 1.5 }}>
-        {T.inferencePanel.toUpperCase()}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px' }}>
+          {T.inferencePanel.toUpperCase()}
+        </Typography>
+        <HelpTip title={T.help?.inferencePanel} />
+      </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {observability.markets.map((row) => {
           const inf = inferenceMeta(row.inference, T.lang);
@@ -425,8 +551,8 @@ function MlInferencePanel({ observability, T }) {
                 {MARKET_LABELS[row.market] ?? row.market}
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', fontFamily: MONO, fontSize: '9px' }}>
-                <InferenceChip label={T.artifactYes} active={row.artifact} />
-                <InferenceChip label={T.inMemoryYes} active={row.loaded} />
+                <InferenceChip label={T.artifactYes} active={row.artifact} tip={T.help?.artifact} />
+                <InferenceChip label={T.inMemoryYes} active={row.loaded} tip={T.help?.inMemory} />
                 {row.market === 'runline' && row.runlineNote?.kind === 'skipped' && (
                   <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: AMBER, alignSelf: 'center' }}>
                     {T.runlineSkippedNote(row.runlineNote.minTrainSize)}
@@ -459,8 +585,8 @@ function MlInferencePanel({ observability, T }) {
             Ensemble
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <InferenceChip label={T.artifactYes} active={observability.ensemble?.artifact} />
-            <InferenceChip label={T.inMemoryYes} active={observability.ensemble?.loaded} />
+            <InferenceChip label={T.artifactYes} active={observability.ensemble?.artifact} tip={T.help?.artifact} />
+            <InferenceChip label={T.inMemoryYes} active={observability.ensemble?.loaded} tip={T.help?.inMemory} />
             {!observability.ensemble?.flag_enabled && (
               <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>ENSEMBLE_ENABLED=false</Typography>
             )}
@@ -481,32 +607,46 @@ function MlInferencePanel({ observability, T }) {
   );
 }
 
-function InferenceChip({ label, active }) {
+function InferenceChip({ label, active, tip }) {
   const c = active ? GREEN : MUTED;
-  return (
+  const chip = (
     <Box sx={{
       px: '6px', py: '2px', border: `1px solid ${c}`,
       opacity: active ? 1 : 0.45,
+      cursor: tip ? 'help' : 'default',
     }}>
       <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: c, letterSpacing: '1px' }}>
         {label}
       </Typography>
     </Box>
   );
+  if (!tip) return chip;
+  return (
+    <Tooltip title={<Typography component="span" sx={{ fontFamily: MONO, fontSize: '11px', lineHeight: 1.55, maxWidth: 300 }}>{tip}</Typography>} arrow>
+      {chip}
+    </Tooltip>
+  );
 }
 
-function StatusPill({ label, value, color, pulse = false }) {
-  return (
+function StatusPill({ label, value, color, pulse = false, tip }) {
+  const pill = (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: '6px',
       px: '8px', py: '4px', border: `1px solid ${color}`,
       background: 'rgba(0,0,0,0.35)',
       animation: pulse ? 'amlc-pulse 1.5s ease-in-out infinite' : 'none',
+      cursor: tip ? 'help' : 'default',
     }}>
       <Box sx={{ width: 6, height: 6, background: color, borderRadius: '50%', boxShadow: `0 0 6px ${color}` }} />
       <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '1.5px' }}>{label}</Typography>
       <Typography sx={{ fontFamily: MONO, fontSize: '10px', color, fontWeight: 700, letterSpacing: '1px' }}>{value}</Typography>
     </Box>
+  );
+  if (!tip) return pill;
+  return (
+    <Tooltip title={<Typography component="span" sx={{ fontFamily: MONO, fontSize: '11px', lineHeight: 1.55, maxWidth: 320 }}>{tip}</Typography>} arrow>
+      {pill}
+    </Tooltip>
   );
 }
 
@@ -539,9 +679,12 @@ function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px', textTransform: 'uppercase' }}>
             MARKET // {market}
           </Typography>
-          <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.15rem', fontWeight: 700, color: tint, mt: '2px', lineHeight: 1.1 }}>
-            {MARKET_LABELS[market]}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: '2px' }}>
+            <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.15rem', fontWeight: 700, color: tint, lineHeight: 1.1 }}>
+              {MARKET_LABELS[market]}
+            </Typography>
+            <HelpTip title={T.help?.marketCard} />
+          </Box>
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
           {infMeta && (
@@ -574,10 +717,10 @@ function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T
       )}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mt: 2 }}>
-        <Metric label="BRIER" value={fmtBrier(brier)} color={brier != null && brier < 0.22 ? GREEN : brier != null ? AMBER : MUTED} />
-        <Metric label="ROI KELLY 25%" value={fmtROI(roi)} color={roi != null && roi > 0 ? GREEN : roi != null ? RED : MUTED} />
-        <Metric label="N TRAIN" value={nTrain ?? '—'} color={INK1} />
-        <Metric label="N TEST"  value={data?.n_test ?? '—'} color={INK1} />
+        <Metric label="BRIER" value={fmtBrier(brier)} color={brier != null && brier < 0.22 ? GREEN : brier != null ? AMBER : MUTED} tip={T.help?.brier} />
+        <Metric label="ROI KELLY 25%" value={fmtROI(roi)} color={roi != null && roi > 0 ? GREEN : roi != null ? RED : MUTED} tip={T.help?.roiKelly} />
+        <Metric label="N TRAIN" value={nTrain ?? '—'} color={INK1} tip={T.help?.nTrain} />
+        <Metric label="N TEST"  value={data?.n_test ?? '—'} color={INK1} tip={T.help?.nTest} />
       </Box>
 
       <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 2 }}>
@@ -594,29 +737,35 @@ function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T
         </Typography>
       )}
 
-      <Button
-        onClick={() => onRetrain(market)}
-        disabled={busy}
-        sx={{
-          mt: 2, width: '100%', py: '8px',
-          border: `1px solid ${tint}`, color: tint, background: 'transparent',
-          fontFamily: MONO, fontSize: '10px', letterSpacing: '2px',
-          '&:hover': { background: `${tint}1A`, boxShadow: `0 0 14px ${tint}40` },
-          '&:disabled': { opacity: 0.4, borderColor: MUTED, color: MUTED },
-        }}
-      >
-        {busy ? T.training : T.retrainMkt(market)}
-      </Button>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 2 }}>
+        <Button
+          onClick={() => onRetrain(market)}
+          disabled={busy}
+          sx={{
+            flex: 1, py: '8px',
+            border: `1px solid ${tint}`, color: tint, background: 'transparent',
+            fontFamily: MONO, fontSize: '10px', letterSpacing: '2px',
+            '&:hover': { background: `${tint}1A`, boxShadow: `0 0 14px ${tint}40` },
+            '&:disabled': { opacity: 0.4, borderColor: MUTED, color: MUTED },
+          }}
+        >
+          {busy ? T.training : T.retrainMkt(market)}
+        </Button>
+        <HelpTip title={T.help?.retrainBtn} />
+      </Box>
     </Box>
   );
 }
 
-function Metric({ label, value, color = INK0 }) {
+function Metric({ label, value, color = INK0, tip }) {
   return (
     <Box>
-      <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: MUTED, letterSpacing: '2px', mb: '2px' }}>
-        {label}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: '2px' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: MUTED, letterSpacing: '2px' }}>
+          {label}
+        </Typography>
+        <HelpTip title={tip} />
+      </Box>
       <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.1rem', fontWeight: 700, color, lineHeight: 1.1 }}>
         {value}
       </Typography>
@@ -677,6 +826,23 @@ function Rolling30dChart({ rolling, T }) {
     python: r.resolved > 0 ? Number(pct(r.python_hits, r.resolved)) : null,
   }));
   return (
+    <>
+    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 1, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Box sx={{ width: 14, height: 2, bgcolor: AMBER, mr: 0.5 }} />
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>{T.legacyValidator}</Typography>
+        <HelpTip title={T.help?.legacyLine} />
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Box sx={{ width: 14, height: 2, bgcolor: CYAN, mr: 0.5 }} />
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>Python XGBoost</Typography>
+        <HelpTip title={T.help?.pythonLine} />
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>— 50%</Typography>
+        <HelpTip title={T.help?.baseline50} />
+      </Box>
+    </Box>
     <ResponsiveContainer width="100%" height={220}>
       <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
         <XAxis dataKey="day" tick={{ fontFamily: MONO, fontSize: 10, fill: MUTED }} />
@@ -688,6 +854,7 @@ function Rolling30dChart({ rolling, T }) {
         <Line type="monotone" dataKey="python" stroke={CYAN}  strokeWidth={2.2} dot={false} name="Python XGBoost"    connectNulls />
       </LineChart>
     </ResponsiveContainer>
+    </>
   );
 }
 
@@ -709,9 +876,12 @@ function EnsemblePanel({ ensemble, ensembleObs, onRetrain, busy, T }) {
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px' }}>
             META-LEARNER // SPRINT 4
           </Typography>
-          <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.2rem', fontWeight: 700, color: GREEN, lineHeight: 1.1 }}>
-            {T.ensembleCombiner}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.2rem', fontWeight: 700, color: GREEN, lineHeight: 1.1 }}>
+              {T.ensembleCombiner}
+            </Typography>
+            <HelpTip title={T.help?.ensemble} />
+          </Box>
           {ensInf && (
             <Box sx={{ display: 'flex', gap: 1, mt: 0.75, flexWrap: 'wrap' }}>
               <Chip
@@ -723,8 +893,8 @@ function EnsemblePanel({ ensemble, ensembleObs, onRetrain, busy, T }) {
                   height: 18, letterSpacing: '1.5px',
                 }}
               />
-              <InferenceChip label={T.artifactYes} active={ensembleObs?.artifact} />
-              <InferenceChip label={T.inMemoryYes} active={ensembleObs?.loaded} />
+              <InferenceChip label={T.artifactYes} active={ensembleObs?.artifact} tip={T.help?.artifact} />
+              <InferenceChip label={T.inMemoryYes} active={ensembleObs?.loaded} tip={T.help?.inMemory} />
             </Box>
           )}
         </Box>
@@ -863,9 +1033,12 @@ function ChatPicksSection({ stats, T }) {
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '3px' }}>
             ORACLE CHAT // TRAINING BUCKET
           </Typography>
-          <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.15rem', fontWeight: 700, color: ACCENT, lineHeight: 1.1 }}>
-            {T.chatTitle}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.15rem', fontWeight: 700, color: ACCENT, lineHeight: 1.1 }}>
+              {T.chatTitle}
+            </Typography>
+            <HelpTip title={T.help?.chatSection} />
+          </Box>
         </Box>
       </Box>
 
@@ -1224,7 +1397,7 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
       <MlInferencePanel observability={status?.observability} T={T} />
 
       {/* Per-market cards */}
-      <SectionTitle>{T.perMarketModels}</SectionTitle>
+      <SectionTitle help={T.help?.perMarket}>{T.perMarketModels}</SectionTitle>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
         {MARKETS.map((m, i) => (
           <MarketCard
@@ -1245,7 +1418,7 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
         <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '16px 14px' }}>
           <CornerBrackets color={CYAN} />
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
-            <SectionTitle inline>{T.reliabilityDiagram}</SectionTitle>
+            <SectionTitle inline help={T.help?.reliability}>{T.reliabilityDiagram}</SectionTitle>
             <ToggleButtonGroup
               value={activeMarket}
               exclusive
@@ -1272,7 +1445,7 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
 
         <Box sx={{ position: 'relative', background: SURFACE, border: `1px solid ${BORDER}`, p: '16px 14px' }}>
           <CornerBrackets color={AMBER} />
-          <SectionTitle>{T.rolling30d}</SectionTitle>
+          <SectionTitle help={T.help?.rolling}>{T.rolling30d}</SectionTitle>
           <Rolling30dChart rolling={rolling} T={T} />
           <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 1 }}>
             {T.rollingNote}
@@ -1293,20 +1466,23 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
       <ChatPicksSection stats={chatStats} T={T} />
 
       {/* Retrain audit log */}
-      <SectionTitle>{T.retrainLog}</SectionTitle>
+      <SectionTitle help={T.help?.retrainLog}>{T.retrainLog}</SectionTitle>
       <RetrainLog rows={logRows} T={T} />
 
-      <SectionTitle>{T.playerPropsTitle}</SectionTitle>
+      <SectionTitle help={T.help?.propsSection}>{T.playerPropsTitle}</SectionTitle>
       <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, mb: 1.5, maxWidth: 720 }}>
         {T.propsDesc}
       </Typography>
-      <Typography
-        component="a"
-        href="/props"
-        sx={{ fontFamily: MONO, fontSize: '10px', color: ACCENT, display: 'block', mb: 2, textDecoration: 'none' }}
-      >
-        {T.propsBoardLink}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography
+          component="a"
+          href="/props"
+          sx={{ fontFamily: MONO, fontSize: '10px', color: ACCENT, textDecoration: 'none' }}
+        >
+          {T.propsBoardLink}
+        </Typography>
+        <HelpTip title={T.help?.propsBoard} />
+      </Box>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
         {PROP_MARKETS.map((m, i) => (
           <MarketCard
@@ -1324,19 +1500,30 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
 
       <Box sx={{ mt: 3, textAlign: 'center', fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '2px' }}>
         HEXA.ML CONTROL CENTER · POLL INTERVAL 10s · LIVE
+        <Box component="span" sx={{ display: 'block', mt: 0.5, color: CYAN, opacity: 0.85 }}>
+          {T.help?.helpHint}
+        </Box>
       </Box>
     </Box>
   );
 }
 
-function SectionTitle({ children, inline = false }) {
+function SectionTitle({ children, inline = false, help }) {
   return (
-    <Typography sx={{
-      fontFamily: MONO, fontSize: '10px', letterSpacing: '3px',
-      color: MUTED, textTransform: 'uppercase',
-      mb: inline ? 0 : 1.5, mt: inline ? 0 : 1,
+    <Box sx={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 0.25,
+      mb: inline ? 0 : 1.5,
+      mt: inline ? 0 : 1,
     }}>
-      // {children}
-    </Typography>
+      <Typography sx={{
+        fontFamily: MONO, fontSize: '10px', letterSpacing: '3px',
+        color: MUTED, textTransform: 'uppercase',
+      }}>
+        // {children}
+      </Typography>
+      <HelpTip title={help} />
+    </Box>
   );
 }

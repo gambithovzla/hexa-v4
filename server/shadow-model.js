@@ -212,6 +212,26 @@ export function getShadowModeConfig() {
   };
 }
 
+export async function linkShadowRunToPick({ pickId, gamePk, userId = null }) {
+  if (pickId == null || gamePk == null) return false;
+  const result = await pool.query(
+    `UPDATE shadow_model_runs
+     SET pick_id = $1, updated_at = NOW()
+     WHERE id = (
+       SELECT id FROM shadow_model_runs
+       WHERE pick_id IS NULL
+         AND game_pk = $2
+         AND model_key = $3
+         AND ($4::text IS NULL OR user_id = $4)
+       ORDER BY created_at DESC
+       LIMIT 1
+     )
+     RETURNING id`,
+    [pickId, gamePk, SHADOW_MODE_MODEL_KEY, userId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 /**
  * Fire-and-forget: call the Python ML sidecar and update the shadow_model_runs
  * row with the result. Errors are caught and logged — never propagate up.

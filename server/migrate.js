@@ -97,6 +97,7 @@ export async function runMigrations() {
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem_generated_at TIMESTAMP`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS postmortem_requested_at TIMESTAMP`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS ml_opinion JSONB`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS value_breakdown JSONB`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS safe_candidates JSONB`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS safe_scope TEXT`);
@@ -419,6 +420,15 @@ export async function runMigrations() {
     await pool.query("UPDATE picks SET result = 'win' WHERE result = 'won'");
     await pool.query("UPDATE picks SET result = 'loss' WHERE result = 'lost'");
     console.log('[migrate] Normalized pick results (won→win, lost→loss)');
+
+    await pool.query(`
+      UPDATE picks SET user_email = 'Oraclechat'
+      WHERE source = 'oracle_chat' AND (user_email IS NULL OR BTRIM(user_email) = '')
+    `);
+    await pool.query(`
+      UPDATE pick_features SET user_email = 'Oraclechat'
+      WHERE source = 'oracle_chat' AND (user_email IS NULL OR BTRIM(user_email) = '')
+    `);
 
     console.log('[H.E.X.A.] Database migrations applied successfully');
   } catch (err) {
