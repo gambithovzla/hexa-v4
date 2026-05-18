@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { MONO, BARLOW } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
+import { formatDateKeyShort } from '../utils/dateKeys.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -52,9 +53,7 @@ function fmtUnits(n) {
 }
 
 function shortDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatDateKeyShort(dateStr);
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────

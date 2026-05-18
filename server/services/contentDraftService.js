@@ -5,6 +5,7 @@ import { buildHexaBoard } from './hexaBoardService.js';
 import { computePublicStats } from './public-stats.js';
 import { toInsightDTO, toPickDTO, toPostmortemDTO } from '../routes/content-dto.js';
 import { CONTENT_DRAFT_SYSTEM_PROMPT, buildContentDraftUserPrompt } from '../prompts/x-content-prompts.js';
+import { getLimaWeekStart } from '../utils/dateKeys.js';
 
 dotenv.config();
 
@@ -45,13 +46,6 @@ function normalizeType(value) {
   return normalized;
 }
 
-function getWeekStart(isoDate) {
-  const d = new Date(`${isoDate}T12:00:00Z`);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
 
 function cleanText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -416,7 +410,7 @@ function buildFallbackDraft({ type, lang, snapshot, warnings }) {
 
 async function buildSourceSnapshot({ type, date, lang, pickId = null }) {
   const warnings = [];
-  const weekStart = getWeekStart(date);
+  const weekStart = getLimaWeekStart(date);
   const [board, performance7d, performance30d, picksToday, latestInsights] = await Promise.all([
     buildHexaBoard({ date }).catch(() => null),
     computePublicStats('7').catch(() => null),

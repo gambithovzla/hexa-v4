@@ -1,24 +1,10 @@
 import pool from '../db.js';
+import { getLimaWeekStart, normalizeDateKey } from '../utils/dateKeys.js';
 
 const AUTO_EXPLANATION = 'AUTO_PUBLISHED_WIN';
 
-function normalizeDateKey(value) {
-  if (!value) return null;
-  const raw = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
-}
-
 export function getWeekStart(value = new Date()) {
-  const dateKey = normalizeDateKey(value) ?? new Date().toISOString().slice(0, 10);
-  const d = new Date(`${dateKey}T12:00:00Z`);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
+  return getLimaWeekStart(value);
 }
 
 function parseJsonMaybe(value, fallback = null) {

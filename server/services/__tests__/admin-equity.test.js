@@ -4,9 +4,9 @@ import { buildRollingSharpe30d, computeAdminEquityFromRows } from '../admin-equi
 
 test('computeAdminEquityFromRows returns summary and drawdown metrics', () => {
   const rows = [
-    { result: 'win', odds_at_pick: 100, created_at: '2026-05-01T10:00:00Z', sport: 'mlb', pick: 'A', matchup: 'A @ B' },
-    { result: 'loss', odds_at_pick: -110, created_at: '2026-05-02T10:00:00Z', sport: 'mlb', pick: 'C', matchup: 'C @ D' },
-    { result: 'win', odds_at_pick: -110, created_at: '2026-05-03T10:00:00Z', sport: 'mlb', pick: 'E', matchup: 'E @ F' },
+    { result: 'win', odds_at_pick: 100, created_at: '2026-05-01T10:00:00Z', game_date: '2026-05-01', sport: 'mlb', pick: 'A', matchup: 'A @ B' },
+    { result: 'loss', odds_at_pick: -110, created_at: '2026-05-02T10:00:00Z', game_date: '2026-05-02', sport: 'mlb', pick: 'C', matchup: 'C @ D' },
+    { result: 'win', odds_at_pick: -110, created_at: '2026-05-03T10:00:00Z', game_date: '2026-05-03', sport: 'mlb', pick: 'E', matchup: 'E @ F' },
   ];
 
   const out = computeAdminEquityFromRows(rows);

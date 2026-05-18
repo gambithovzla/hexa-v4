@@ -41,6 +41,21 @@ export function formatGameTimeLima(value, { hour12 = true, label = true } = {}) 
   return label ? `${time} LIM` : time;
 }
 
+export function getWeekStartFromDateKey(dateKey) {
+  const d = new Date(`${dateKey}T12:00:00Z`);
+  const day = d.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Monday (ISO week) for the Lima calendar day of `value`. */
+export function getLimaWeekStart(value = new Date()) {
+  const dateKey = normalizeDateKey(value) ?? getLimaDateString(value);
+  if (!dateKey) return getWeekStartFromDateKey(getLimaDateString(new Date()));
+  return getWeekStartFromDateKey(dateKey);
+}
+
 export function resolveGameCalendarDate(gameData, fallbackDate = null) {
   const official = normalizeDateKey(gameData?.officialDate);
   if (official) return official;
