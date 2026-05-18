@@ -627,6 +627,26 @@
   border-bottom-color: var(--brand-lava) !important;
 }
 
+.league-history-panel .history-period-pill {
+  font-family: 'Oswald', 'Barlow Condensed', sans-serif !important;
+  letter-spacing: 0.16em !important;
+}
+
+.league-history-panel .history-period-pill-active {
+  color: var(--brand-volt) !important;
+  border-color: var(--brand-lava) !important;
+  background: rgba(230, 57, 70, 0.12) !important;
+}
+
+.league-history-panel .history-period-block::before {
+  border-color: var(--brand-bronze) !important;
+}
+
+.league-history-panel .history-period-block {
+  border-color: var(--brand-rule);
+  background: rgba(0, 0, 0, 0.22);
+}
+
 .league-history-panel .history-pick-card {
   background: rgba(0, 0, 0, 0.28);
   border-color: var(--brand-rule);
