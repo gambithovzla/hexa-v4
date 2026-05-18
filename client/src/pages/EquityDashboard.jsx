@@ -56,6 +56,18 @@ function shortDate(dateStr) {
   return formatDateKeyShort(dateStr);
 }
 
+function parseBoundedInt(raw, min, max, fallback) {
+  const n = parseInt(String(raw).trim(), 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function parseBoundedFloat(raw, min, max, fallback) {
+  const n = parseFloat(String(raw).trim());
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color = CYAN, sub, small }) {
@@ -282,12 +294,12 @@ function FanTooltip({ active, payload }) {
 }
 
 function MonteCarloPanel({ token, sport, startDate, endDate, sampleSize }) {
-  const [horizon,       setHorizon]       = useState(162);
+  const [horizonDraft,    setHorizonDraft]    = useState('162');
+  const [bankrollDraft,   setBankrollDraft]   = useState('1000');
+  const [flatStakeDraft,  setFlatStakeDraft]  = useState('10');
+  const [percentStakeDraft, setPercentStakeDraft] = useState('2');
   const [nSims,         setNSims]         = useState(5_000);
-  const [bankroll,      setBankroll]      = useState(1_000);
   const [strategy,      setStrategy]      = useState('flat');
-  const [flatStake,     setFlatStake]     = useState(10);
-  const [percentStake,  setPercentStake]  = useState(2);
   const [result,        setResult]        = useState(null);
   const [running,       setRunning]       = useState(false);
   const [error,         setError]         = useState(null);
@@ -295,18 +307,48 @@ function MonteCarloPanel({ token, sport, startDate, endDate, sampleSize }) {
 
   const canRun = (sampleSize ?? 0) >= 10;
 
+  const horizon = parseBoundedInt(horizonDraft, 10, 2000, 162);
+  const bankroll = parseBoundedInt(bankrollDraft, 100, 10_000_000, 1_000);
+  const flatStake = parseBoundedInt(flatStakeDraft, 1, 1_000_000, 10);
+  const percentStake = parseBoundedFloat(percentStakeDraft, 0.1, 20, 2);
+
+  const commitHorizon = () => {
+    const t = horizonDraft.trim();
+    setHorizonDraft(t === '' ? '10' : String(parseBoundedInt(t, 10, 2000, 162)));
+  };
+  const commitBankroll = () => {
+    const t = bankrollDraft.trim();
+    setBankrollDraft(t === '' ? '100' : String(parseBoundedInt(t, 100, 10_000_000, 1_000)));
+  };
+  const commitFlatStake = () => {
+    const t = flatStakeDraft.trim();
+    setFlatStakeDraft(t === '' ? '1' : String(parseBoundedInt(t, 1, 1_000_000, 10)));
+  };
+  const commitPercentStake = () => {
+    const t = percentStakeDraft.trim();
+    setPercentStakeDraft(t === '' ? '2' : String(parseBoundedFloat(t, 0.1, 20, 2)));
+  };
+
   const run = useCallback(async () => {
     setRunning(true);
     setError(null);
+    const h = parseBoundedInt(horizonDraft, 10, 2000, 162);
+    const br = parseBoundedInt(bankrollDraft, 100, 10_000_000, 1_000);
+    const fs = parseBoundedInt(flatStakeDraft, 1, 1_000_000, 10);
+    const ps = parseBoundedFloat(percentStakeDraft, 0.1, 20, 2);
+    setHorizonDraft(String(h));
+    setBankrollDraft(String(br));
+    setFlatStakeDraft(String(fs));
+    setPercentStakeDraft(String(ps));
     try {
       const body = {
         sport, startDate, endDate,
-        horizonPicks:     horizon,
+        horizonPicks:     h,
         nSims,
-        startingBankroll: bankroll,
+        startingBankroll: br,
         stakeStrategy:    strategy,
-        flatStake:        Number(flatStake),
-        percentStake:     Number(percentStake) / 100,
+        flatStake:        fs,
+        percentStake:     ps / 100,
       };
       const res = await fetch(`${API_URL}/api/admin/ml/equity/simulate`, {
         method:  'POST',
@@ -322,7 +364,7 @@ function MonteCarloPanel({ token, sport, startDate, endDate, sampleSize }) {
     } finally {
       setRunning(false);
     }
-  }, [token, sport, startDate, endDate, horizon, nSims, bankroll, strategy, flatStake, percentStake]);
+  }, [token, sport, startDate, endDate, horizonDraft, bankrollDraft, flatStakeDraft, percentStakeDraft, nSims, strategy]);
 
   const fanData = useMemo(() => {
     if (!result) return [];
@@ -367,9 +409,14 @@ function MonteCarloPanel({ token, sport, startDate, endDate, sampleSize }) {
       <Box sx={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'flex-end', mb: '16px' }}>
         <Box>
           <Box sx={controlLabel}>Horizon (picks)</Box>
-          <input type="number" min={10} max={2000} step={10} value={horizon}
-            onChange={(e) => setHorizon(Math.max(10, Math.min(2000, Number(e.target.value) || 0)))}
-            style={controlInput} />
+          <input
+            type="text"
+            inputMode="numeric"
+            value={horizonDraft}
+            onChange={(e) => setHorizonDraft(e.target.value.replace(/[^\d]/g, ''))}
+            onBlur={commitHorizon}
+            style={controlInput}
+          />
         </Box>
         <Box>
           <Box sx={controlLabel}>Simulations</Box>
@@ -383,9 +430,14 @@ function MonteCarloPanel({ token, sport, startDate, endDate, sampleSize }) {
         </Box>
         <Box>
           <Box sx={controlLabel}>Bankroll (USD)</Box>
-          <input type="number" min={100} step={100} value={bankroll}
-            onChange={(e) => setBankroll(Math.max(100, Number(e.target.value) || 100))}
-            style={controlInput} />
+          <input
+            type="text"
+            inputMode="numeric"
+            value={bankrollDraft}
+            onChange={(e) => setBankrollDraft(e.target.value.replace(/[^\d]/g, ''))}
+            onBlur={commitBankroll}
+            style={controlInput}
+          />
         </Box>
         <Box>
           <Box sx={controlLabel}>Strategy</Box>
@@ -398,16 +450,26 @@ function MonteCarloPanel({ token, sport, startDate, endDate, sampleSize }) {
         {strategy === 'flat' ? (
           <Box>
             <Box sx={controlLabel}>Stake / pick (USD)</Box>
-            <input type="number" min={1} step={1} value={flatStake}
-              onChange={(e) => setFlatStake(Math.max(1, Number(e.target.value) || 1))}
-              style={controlInput} />
+            <input
+              type="text"
+              inputMode="numeric"
+              value={flatStakeDraft}
+              onChange={(e) => setFlatStakeDraft(e.target.value.replace(/[^\d]/g, ''))}
+              onBlur={commitFlatStake}
+              style={controlInput}
+            />
           </Box>
         ) : (
           <Box>
             <Box sx={controlLabel}>% of bankroll</Box>
-            <input type="number" min={0.1} max={20} step={0.1} value={percentStake}
-              onChange={(e) => setPercentStake(Math.max(0.1, Math.min(20, Number(e.target.value) || 0.1)))}
-              style={controlInput} />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={percentStakeDraft}
+              onChange={(e) => setPercentStakeDraft(e.target.value.replace(/[^\d.]/g, ''))}
+              onBlur={commitPercentStake}
+              style={controlInput}
+            />
           </Box>
         )}
         <Box
