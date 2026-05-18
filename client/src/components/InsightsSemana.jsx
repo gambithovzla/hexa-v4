@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../store/authStore';
 import { BARLOW, MONO } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
+import { getLimaWeekStart } from '../utils/dateKeys.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -62,15 +63,6 @@ const MLB_TEAM_IDS = {
   SD: 135, SDP: 135, TB: 139, TBR: 139, TOR: 141,
   BAL: 110,
 };
-
-function getWeekStart(date = new Date()) {
-  const utcDate = (date instanceof Date ? date : new Date(date)).toISOString().slice(0, 10);
-  const d = new Date(`${utcDate}T12:00:00Z`);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
 
 function shiftWeek(weekStart, delta) {
   const d = new Date(`${weekStart}T12:00:00Z`);
@@ -489,11 +481,11 @@ export default function InsightsSemana({ lang = 'es' }) {
   const { token, user } = useAuth();
   const isAdmin = user?.is_admin === true;
 
-  const [weekStart, setWeekStart] = useState(getWeekStart());
+  const [weekStart, setWeekStart] = useState(getLimaWeekStart());
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const thisWeek = getWeekStart();
+  const thisWeek = getLimaWeekStart();
   const isCurrentWeek = weekStart === thisWeek;
   const weekLabel = useMemo(() => formatWeekLabel(weekStart, lang), [weekStart, lang]);
 

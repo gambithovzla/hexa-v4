@@ -11,6 +11,7 @@
  */
 
 import pool from '../db.js';
+import { normalizeDateKey } from '../utils/dateKeys.js';
 
 function calcUnits(result, odds) {
   const r = String(result ?? '').toLowerCase();
@@ -31,7 +32,7 @@ function monthKey(date) {
 }
 
 function dayKey(date) {
-  return new Date(date).toISOString().slice(0, 10);
+  return normalizeDateKey(date) ?? new Date(date).toISOString().slice(0, 10);
 }
 
 function calcSharpe(values) {
@@ -109,7 +110,7 @@ export function computeAdminEquityFromRows(rows = []) {
     perPickReturns.push(units);
 
     series.push({
-      date: row.created_at,
+      date: normalizeDateKey(row.game_date) ?? normalizeDateKey(row.created_at) ?? row.created_at,
       pick: row.pick ?? '',
       matchup: row.matchup ?? '',
       result: isWin ? 'win' : isLoss ? 'loss' : 'push',
@@ -211,17 +212,17 @@ export async function computeAdminEquity({ sport = 'all', startDate, endDate } =
   }
   if (startDate) {
     params.push(startDate);
-    conditions.push(`created_at >= $${params.length}::date`);
+    conditions.push(`game_date >= $${params.length}::date`);
   }
   if (endDate) {
     params.push(endDate);
-    conditions.push(`created_at < ($${params.length}::date + INTERVAL '1 day')`);
+    conditions.push(`game_date <= $${params.length}::date`);
   }
 
   const where = conditions.join(' AND ');
 
   const { rows } = await pool.query(
-    `SELECT id, pick, matchup, result, odds_at_pick, created_at,
+    `SELECT id, pick, matchup, result, odds_at_pick, created_at, game_date,
             COALESCE(sport, 'mlb') AS sport, type, oracle_confidence
      FROM   picks
      WHERE  ${where}
