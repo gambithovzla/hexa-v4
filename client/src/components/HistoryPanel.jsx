@@ -8,7 +8,7 @@
  *   lang — 'en' | 'es'
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import useHistory from '../hooks/useHistory';
 import useBankroll from '../hooks/useBankroll';
@@ -29,6 +29,7 @@ import InsightsSemana from './InsightsSemana';
 import AdminEnsembleBadge from './AdminEnsembleBadge';
 import AdminMlOpinionCard from './AdminMlOpinionCard';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
+import { groupHistoryByPeriod } from '../utils/historyPeriodStats.js';
 
 const TRANSLATIONS = { en, es };
 
@@ -124,6 +125,137 @@ function SectionLabel({ children }) {
       {children}
       <span className="history-section-bracket" style={{ color: C.cyan, opacity: 0.7 }}> ]</span>
     </Typography>
+  );
+}
+
+const STATS_VIEW_MODES = [
+  { key: 'total', labelKey: 'statsViewTotal' },
+  { key: 'day', labelKey: 'statsViewDay' },
+  { key: 'week', labelKey: 'statsViewWeek' },
+  { key: 'month', labelKey: 'statsViewMonth' },
+];
+
+function HistoryStatsGrid({ stats, t }) {
+  return (
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(6, 1fr)' }, gap: '8px' }}>
+      <StatCard value={stats.total} label={t.history.totalPicks} color={C.textPrimary} />
+      <StatCard value={stats.wins} label={t.history.wins} color={C.outcomeWin} />
+      <StatCard value={stats.losses} label={t.history.losses} color={C.outcomeLoss} />
+      <StatCard value={stats.pushes ?? 0} label={t.history.pushes} color={C.outcomePush} />
+      <StatCard value={stats.pending} label={t.history.pending} color={C.amber} />
+      <StatCard value={`${stats.winRate}%`} label={t.history.winRate} color={C.accent} />
+    </Box>
+  );
+}
+
+function HistoryStatsViewBar({ mode, onModeChange, t }) {
+  return (
+    <Box
+      className="history-stats-view-bar"
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '6px',
+        mb: '10px',
+        alignItems: 'center',
+      }}
+    >
+      <Typography
+        sx={{
+          fontFamily: MONO,
+          fontSize: '7px',
+          color: C.textDim,
+          letterSpacing: '2px',
+          textTransform: 'uppercase',
+          mr: { xs: 0, sm: '6px' },
+          width: { xs: '100%', sm: 'auto' },
+        }}
+      >
+        {t.history.statsPeriodTitle}
+      </Typography>
+      {STATS_VIEW_MODES.map((item) => {
+        const active = mode === item.key;
+        return (
+          <Box
+            key={item.key}
+            component="button"
+            type="button"
+            className={active ? 'history-period-pill history-period-pill-active' : 'history-period-pill'}
+            onClick={() => onModeChange(item.key)}
+            sx={{
+              px: '12px',
+              py: '5px',
+              fontFamily: MONO,
+              fontSize: '9px',
+              letterSpacing: '1.5px',
+              textTransform: 'uppercase',
+              fontWeight: active ? 700 : 400,
+              color: active ? C.accent : C.textMuted,
+              bgcolor: active ? C.accentDim : 'transparent',
+              border: `1px solid ${active ? C.accentLine : C.border}`,
+              borderRadius: 0,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              '&:hover': { color: active ? C.accent : C.textSecondary, borderColor: C.borderLight },
+            }}
+          >
+            {t.history[item.labelKey]}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function HistoryPeriodBreakdown({ periods, t }) {
+  if (!periods.length) {
+    return (
+      <Typography sx={{ fontFamily: SANS, fontSize: '0.8rem', color: C.textMuted, py: 2, textAlign: 'center' }}>
+        {t.history.empty}
+      </Typography>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {periods.map((period) => (
+        <Box
+          key={period.key}
+          className="history-period-block"
+          sx={{
+            bgcolor: C.surface,
+            border: `1px solid ${C.border}`,
+            p: { xs: '10px', sm: '12px' },
+            position: 'relative',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '6px',
+              height: '6px',
+              borderTop: `1px solid ${C.cyan}`,
+              borderLeft: `1px solid ${C.cyan}`,
+            },
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily: BARLOW,
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              color: C.textPrimary,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              mb: '10px',
+            }}
+          >
+            {period.label}
+          </Typography>
+          <HistoryStatsGrid stats={period.stats} t={t} />
+        </Box>
+      ))}
+    </Box>
   );
 }
 
@@ -725,6 +857,11 @@ function AnalisisTab({ lang, sport = 'all' }) {
   const { history, markResult, deletePick, clearHistory, getStats, loadHistory, requestPostmortem } = useHistory({ sport });
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   const stats = getStats();
+  const [statsView, setStatsView] = useState('total');
+  const periodBreakdown = useMemo(
+    () => groupHistoryByPeriod(history, statsView, lang),
+    [history, statsView, lang],
+  );
   const [confirming, setConfirming] = useState(false);
   const confirmTimeout = useRef(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -768,15 +905,12 @@ function AnalisisTab({ lang, sport = 'all' }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Stats */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(6, 1fr)' }, gap: '8px' }}>
-        <StatCard value={stats.total}          label={t.history.totalPicks} color={C.textPrimary} />
-        <StatCard value={stats.wins}           label={t.history.wins}       color={C.outcomeWin}  />
-        <StatCard value={stats.losses}         label={t.history.losses}     color={C.outcomeLoss} />
-        <StatCard value={stats.pushes ?? 0}    label={t.history.pushes}     color={C.outcomePush} />
-        <StatCard value={stats.pending}        label={t.history.pending}    color={C.amber}       />
-        <StatCard value={`${stats.winRate}%`}  label={t.history.winRate}    color={C.accent}      />
-      </Box>
+      <HistoryStatsViewBar mode={statsView} onModeChange={setStatsView} t={t} />
+      {statsView === 'total' ? (
+        <HistoryStatsGrid stats={stats} t={t} />
+      ) : (
+        <HistoryPeriodBreakdown periods={periodBreakdown} t={t} />
+      )}
 
       {stats.hasMore && (
         <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textMuted }}>

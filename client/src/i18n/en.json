@@ -62,6 +62,11 @@
     "markLoss": "Loss",
     "markPush": "Push",
     "pushes": "Pushes",
+    "statsViewTotal": "Total",
+    "statsViewDay": "By day",
+    "statsViewWeek": "By week",
+    "statsViewMonth": "By month",
+    "statsPeriodTitle": "Period breakdown",
     "clearHistory": "Clear History",
     "confirmClear": "Confirm? Click again",
     "mode": {
