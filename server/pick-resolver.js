@@ -261,41 +261,48 @@ export function parsePick(pickStr) {
 
   {
   // Totals with common sportsbook wording: "Under 9 Total Runs", "O 8.5 runs".
-  let m = cleaned.match(new RegExp(`^(?:Over|O|Mas\\s+de|M[aá]s\\s+de)\\s+${lineNumber}${totalSuffix}$`, 'i'));
+  let m = cleaned.match(new RegExp(`^(?:Over|O|Mas\\s+de|M[aá]s\\s+de|Alto)\\s+${lineNumber}${totalSuffix}$`, 'i'));
   if (m) return { type: 'over', team: null, line: parseFloat(m[1]) };
 
-  m = cleaned.match(new RegExp(`^(?:Under|U|Menos\\s+de)\\s+${lineNumber}${totalSuffix}$`, 'i'));
+  m = cleaned.match(new RegExp(`^(?:Under|U|Menos\\s+de|Bajo)\\s+${lineNumber}${totalSuffix}$`, 'i'));
   if (m) return { type: 'under', team: null, line: parseFloat(m[1]) };
 
   // Player props, direction before stat: "Jack Flaherty Over 4.5 Strikeouts".
-  m = cleaned.match(new RegExp(`^(.+?)\\s*(?:[-–—:]\\s*)?(Over|Under|Mas\\s+de|M[aá]s\\s+de|Menos\\s+de)\\s+${lineNumber}\\s+(${statPhrase})(?:\\s+.*)?$`, 'i'));
+  m = cleaned.match(new RegExp(`^(.+?)\\s*(?:[-–—:]\\s*)?(Over|Under|Mas\\s+de|M[aá]s\\s+de|Menos\\s+de|Bajo|Alto)\\s+${lineNumber}\\s+(${statPhrase})(?:\\s+.*)?$`, 'i'));
   if (m) {
-    const direction = /^(?:over|mas|más)/i.test(m[2]) ? 'over' : 'under';
+    const direction = /^(?:over|mas|más|alto)/i.test(m[2]) ? 'over' : 'under';
     return { type: 'player_prop', direction, player: m[1].trim(), line: parseFloat(m[3]), stat: normalizeStat(m[4].trim()) };
   }
 
   // Player props, stat before direction: "Jack Flaherty Strikeouts Over 4.5".
-  m = cleaned.match(new RegExp(`^(.+?)\\s+(${statPhrase})\\s*(?:[-–—:]\\s*)?(Over|Under|Mas\\s+de|M[aá]s\\s+de|Menos\\s+de)\\s+${lineNumber}(?:\\s+.*)?$`, 'i'));
+  m = cleaned.match(new RegExp(`^(.+?)\\s+(${statPhrase})\\s*(?:[-–—:]\\s*)?(Over|Under|Mas\\s+de|M[aá]s\\s+de|Menos\\s+de|Bajo|Alto)\\s+${lineNumber}(?:\\s+.*)?$`, 'i'));
   if (m) {
-    const direction = /^(?:over|mas|más)/i.test(m[3]) ? 'over' : 'under';
+    const direction = /^(?:over|mas|más|alto)/i.test(m[3]) ? 'over' : 'under';
     return { type: 'player_prop', direction, player: m[1].trim(), line: parseFloat(m[4]), stat: normalizeStat(m[2].trim()) };
   }
+
+  // Spanish line-last: "Drew Rasmussen Bajo 4.5 Ponches".
+  m = cleaned.match(new RegExp(`^(.+?)\\s+(Bajo|Alto|Menos\\s+de|M[aá]s\\s+de)\\s+${lineNumber}\\s+(${statPhrase})$`, 'i'));
+  if (m) {
+    const direction = /^(?:bajo|menos)/i.test(m[2]) ? 'under' : 'over';
+    return { type: 'player_prop', direction, player: m[1].trim(), line: parseFloat(m[3]), stat: normalizeStat(m[4].trim()) };
+  }
   }
 
-  // Over — standalone: "Over 8.5", "O 8.5", "Más de 8.5", "Mas de 8.5"
-  let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
+  // Over — standalone: "Over 8.5", "O 8.5", "Más de 8.5", "Alto 8.5"
+  let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de|Alto)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
   if (m) return { type: 'over', team: null, line: parseFloat(m[1]) };
 
-  // Under — standalone: "Under 8.5", "U 8.5", "Menos de 8.5"
-  m = cleaned.match(/^(?:Under|U|Menos\s+de)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
+  // Under — standalone: "Under 8.5", "U 8.5", "Menos de 8.5", "Bajo 8.5"
+  m = cleaned.match(/^(?:Under|U|Menos\s+de|Bajo)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
   if (m) return { type: 'under', team: null, line: parseFloat(m[1]) };
 
   // Over with team prefix — "NYY Alta 8.5"
-  m = cleaned.match(/^(.+?)\s+Alta\s+(\d+\.?\d*)$/i);
+  m = cleaned.match(/^(.+?)\s+(?:Alta|Alto)\s+(\d+\.?\d*)$/i);
   if (m) return { type: 'over', team: m[1].trim(), line: parseFloat(m[2]) };
 
   // Under with team prefix — "NYY Baja 8.5"
-  m = cleaned.match(/^(.+?)\s+Baja\s+(\d+\.?\d*)$/i);
+  m = cleaned.match(/^(.+?)\s+(?:Baja|Bajo)\s+(\d+\.?\d*)$/i);
   if (m) return { type: 'under', team: m[1].trim(), line: parseFloat(m[2]) };
 
   // TEAM Moneyline — "NYY Moneyline", "NYY ML", "NYY A ganar", "NYY Dinero"
@@ -315,10 +322,10 @@ export function parsePick(pickStr) {
 
   // Player prop: "Player Name — Over/Más de X.X hits/HR/strikeouts/etc (-odds)"
   // Also: "Player Name — Under/Menos de X.X hits (-odds)"
-  m = cleaned.match(/^(.+?)\s*[—–-]\s*(?:Over|M[aá]s\s+de)\s+(\d+\.?\d*)\s+(.+)$/i);
+  m = cleaned.match(/^(.+?)\s*[—–-]\s*(?:Over|M[aá]s\s+de|Alto)\s+(\d+\.?\d*)\s+(.+)$/i);
   if (m) return { type: 'player_prop', direction: 'over', player: m[1].trim(), line: parseFloat(m[2]), stat: normalizeStat(m[3].trim()) };
 
-  m = cleaned.match(/^(.+?)\s*[—–-]\s*(?:Under|Menos\s+de)\s+(\d+\.?\d*)\s+(.+)$/i);
+  m = cleaned.match(/^(.+?)\s*[—–-]\s*(?:Under|Menos\s+de|Bajo)\s+(\d+\.?\d*)\s+(.+)$/i);
   if (m) return { type: 'player_prop', direction: 'under', player: m[1].trim(), line: parseFloat(m[2]), stat: normalizeStat(m[3].trim()) };
 
   return null;
@@ -433,9 +440,9 @@ export function resolvePickFromFinalState(pickText, game, playerStats = null) {
 
   let result = parsed ? resolvePickResult(parsed, game) : null;
 
-  const ouMatch = pickStr.match(/^(over|under|más\s+de|mas\s+de|menos\s+de)\s+(\d+\.?\d*)/i);
+  const ouMatch = pickStr.match(/^(over|under|más\s+de|mas\s+de|menos\s+de|bajo|alto)\s+(\d+\.?\d*)/i);
   if (!result && ouMatch) {
-    const dir = /^(?:over|m[aá]s)/i.test(ouMatch[1]) ? 'over' : 'under';
+    const dir = /^(?:over|m[aá]s|alto)/i.test(ouMatch[1]) ? 'over' : 'under';
     const line = parseFloat(ouMatch[2]);
     if (dir === 'over') result = totalRuns > line ? 'win' : totalRuns < line ? 'loss' : 'push';
     else result = totalRuns < line ? 'win' : totalRuns > line ? 'loss' : 'push';

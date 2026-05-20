@@ -86,6 +86,10 @@ import {
   predictEnsemble as predictMlEnsemble,
 } from './services/mlModelClient.js';
 import { normalizePickSport, validatePickSavePayload } from './services/picksPayloadGuardrails.js';
+import {
+  canonicalizePickTextForResolver,
+  canonicalizeAnalysisDataPicks,
+} from './services/pickTextCanonicalizer.js';
 import { KNOWN_SPORTS, normalizeSportFilter as normalizeKnownSportFilter } from './sports.js';
 
 dotenv.config();
@@ -304,12 +308,14 @@ function annotateAnalysisData(data, features = {}, gameData = null) {
     }
   }
 
-  return {
+  const canonicalized = canonicalizeAnalysisDataPicks({
     ...data,
     alert_flags: alertFlags,
     analysis_meta: analysisMeta,
     value_breakdown: valueBreakdown ?? data.value_breakdown ?? null,
-  };
+  }, gameData);
+
+  return canonicalized;
 }
 
 async function saveFeatureStoreForGame({
@@ -384,7 +390,14 @@ async function persistAnalysisPick({
 
   const mp = analysisData.master_prediction ?? analysisData.safe_pick ?? {};
   const bp = analysisData.best_pick ?? {};
-  const pickText = mp.pick ?? bp.detail ?? null;
+  const pickCtx = {
+    homeAbbr: featureStore?.features?.homeAbbr ?? null,
+    awayAbbr: featureStore?.features?.awayAbbr ?? null,
+  };
+  const rawPickText = mp.pick ?? bp.detail ?? null;
+  const pickText = rawPickText
+    ? canonicalizePickTextForResolver(rawPickText, pickCtx)
+    : null;
   const oracleConfidence = normalizeOracleConfidence(mp.oracle_confidence ?? mp.hit_probability ?? null);
   const oddsAtPick = analysisData.value_breakdown?.odds ?? null;
   const impliedProbAtPick = oddsAtPick != null
@@ -2768,6 +2781,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
     const parsedFeatureStore = parseJsonMaybe(feature_store ?? featureStore);
 
     const normalizedSport = normalizePickSport(sport);
+    const canonicalPick = canonicalizePickTextForResolver(pick);
 
     const { rows } = await pool.query(
       `INSERT INTO picks (
@@ -2779,7 +2793,7 @@ app.post('/api/picks', verifyToken, requireVerifiedEmail, async (req, res) => {
        )
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP) RETURNING *`,
       [
-        req.user.id, type, matchup, pick, normalizeOracleConfidence(oracle_confidence), bet_value, model_risk,
+        req.user.id, type, matchup, canonicalPick, normalizeOracleConfidence(oracle_confidence), bet_value, model_risk,
         oracle_report, hexa_hunch,
         JSON.stringify(alert_flags ?? []), JSON.stringify(probability_model ?? {}),
         JSON.stringify(best_pick ?? {}), model, language,
