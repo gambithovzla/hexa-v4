@@ -38,3 +38,13 @@ test('resolvePickFromFinalState resolves totals correctly', () => {
   assert.equal(under.result, 'loss');
 });
 
+test('parsePick parses Spanish Bajo totals and line-last props', () => {
+  assert.deepEqual(parsePick('Bajo 8.5'), { type: 'under', team: null, line: 8.5 });
+  const prop = parsePick('Drew Rasmussen Bajo 4.5 Ponches');
+  assert.equal(prop?.type, 'player_prop');
+  assert.equal(prop?.direction, 'under');
+  assert.equal(prop?.line, 4.5);
+  assert.equal(prop?.stat, 'strikeOuts');
+  assert.equal(prop?.player, 'Drew Rasmussen');
+});
+
