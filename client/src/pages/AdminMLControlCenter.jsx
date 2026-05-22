@@ -25,6 +25,7 @@ import {
   XAxis, YAxis, ReferenceLine, Tooltip as RTooltip, Legend,
   ResponsiveContainer,
 } from 'recharts';
+import HelpTip from '../components/HelpTip';
 import { MONO, DISPLAY } from '../theme';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -155,7 +156,7 @@ const STRINGS = {
       logBrier: 'Brier score on the test split after this retrain run.',
       logNTrain: 'Training rows used in that run.',
       storage: 'VOLUME = models survive redeploy; EPHEMERAL = retrain after each deploy.',
-      helpHint: 'Tip: hover the ? icons for what each metric means.',
+      helpHint: 'Tip: tap the ? icons for what each metric means.',
     },
   },
   es: {
@@ -255,7 +256,7 @@ const STRINGS = {
       logBrier: 'Brier en el split de test de ese reentrenamiento.',
       logNTrain: 'Filas de entrenamiento usadas en esa corrida.',
       storage: 'VOLUME = modelos sobreviven deploy; EPHEMERAL = reentrenar tras cada deploy.',
-      helpHint: 'Pasa el cursor sobre los ? para ver qué significa cada métrica.',
+      helpHint: 'Toca los ? para ver qué significa cada métrica.',
     },
   },
 };
@@ -331,57 +332,6 @@ function timeAgo(v) {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
-}
-
-function HelpTip({ title, sx = {} }) {
-  if (!title) return null;
-  return (
-    <Tooltip
-      title={(
-        <Typography
-          component="span"
-          sx={{
-            fontFamily: MONO,
-            fontSize: '11px',
-            lineHeight: 1.55,
-            display: 'block',
-            maxWidth: 360,
-            whiteSpace: 'pre-wrap',
-          }}
-        >
-          {title}
-        </Typography>
-      )}
-      arrow
-      placement="top"
-    >
-      <Box
-        component="span"
-        role="img"
-        aria-label="help"
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 14,
-          height: 14,
-          ml: 0.5,
-          border: `1px solid ${MUTED}`,
-          borderRadius: '50%',
-          color: MUTED,
-          fontFamily: MONO,
-          fontSize: '9px',
-          lineHeight: 1,
-          cursor: 'help',
-          flexShrink: 0,
-          '&:hover': { color: CYAN, borderColor: CYAN },
-          ...sx,
-        }}
-      >
-        ?
-      </Box>
-    </Tooltip>
-  );
 }
 
 // ── Corner-bracket decorator (reused everywhere) ─────────────────────────────

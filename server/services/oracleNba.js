@@ -17,14 +17,12 @@
  * serialising it into the deterministic text block the LLM consumes.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
 import { NBA_CHAT_PROMPT, NBA_SYSTEM_PROMPT } from '../prompts/oracle-nba-prompts.js';
+import { withAnthropicFailover } from './anthropicClient.js';
 
 dotenv.config();
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const NBA_MODELS = {
   deep:    { id: 'claude-sonnet-4-6',         maxTokens: 8000 },
@@ -292,14 +290,16 @@ export async function analyzeNbaGame({
   const cfg = NBA_MODELS[engine] ?? NBA_MODELS.deep;
   const modelId = model || cfg.id;
 
-  const response = await anthropic.messages.create(
-    {
-      model: modelId,
-      max_tokens: cfg.maxTokens,
-      system: NBA_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    },
-    { timeout: timeoutMs },
+  const response = await withAnthropicFailover((anthropic) =>
+    anthropic.messages.create(
+      {
+        model: modelId,
+        max_tokens: cfg.maxTokens,
+        system: NBA_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      },
+      { timeout: timeoutMs },
+    ),
   );
 
   const rawText = response.content
@@ -346,14 +346,16 @@ export async function analyzeNbaChat({
   const currentMessage = buildChatUserMessage({ gameDescription, question, contextText, lang });
   messages.push({ role: 'user', content: currentMessage });
 
-  const response = await anthropic.messages.create(
-    {
-      model: modelId,
-      max_tokens: 1200,
-      system: NBA_CHAT_PROMPT,
-      messages,
-    },
-    { timeout: timeoutMs },
+  const response = await withAnthropicFailover((anthropic) =>
+    anthropic.messages.create(
+      {
+        model: modelId,
+        max_tokens: 1200,
+        system: NBA_CHAT_PROMPT,
+        messages,
+      },
+      { timeout: timeoutMs },
+    ),
   );
 
   const text = response.content

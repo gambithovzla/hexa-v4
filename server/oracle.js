@@ -8,21 +8,13 @@
  *   analyzeFullDay(contexts, date, language, opts) — wrapper para index.js
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
+import { withAnthropicFailover } from './services/anthropicClient.js';
 import { calculateParallelScore } from './services/xgboostValidator.js';
 import { createXaiChatCompletion, getXaiModelId } from './services/xaiClient.js';
 import { marketFocusInstruction, normalizeMarketFocus } from './market-focus.js';
 
 dotenv.config();
-
-// ---------------------------------------------------------------------------
-// Cliente
-// ---------------------------------------------------------------------------
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
 
 const MODELS = {
   deep:    { id: 'claude-sonnet-4-6',         maxTokens: 8000  },
@@ -38,15 +30,17 @@ function normalizeEngine(engine) {
 }
 
 async function runAnthropicOracleRequest({ requestBody, timeoutMs = null }) {
-  const streamPromise = anthropic.messages.stream(requestBody).finalMessage();
-  const message = await (timeoutMs
-    ? Promise.race([
-        streamPromise,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
-        ),
-      ])
-    : streamPromise);
+  const message = await withAnthropicFailover(async (anthropic) => {
+    const streamPromise = anthropic.messages.stream(requestBody).finalMessage();
+    return timeoutMs
+      ? Promise.race([
+          streamPromise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+          ),
+        ])
+      : streamPromise;
+  });
 
   const rawText = extractRawText(message);
   const { data, parseError } = parseResponse(rawText);
@@ -953,23 +947,25 @@ export async function analyzeSafe({ contextString, lang = 'en', engine = 'sonnet
     : `Analyze this game for the objective Safe Pick engine. Summarize the matchup, risk, and notes by supported market family, including player props when enough lines and player data are available. Do not choose the final pick: the backend ranks it.\n\nData:\n${contextString}`;
 
   const runAnthropicSafe = async () => {
-    const request = anthropic.messages.create({
-      model:      modelConfig.id,
-      max_tokens: modelConfig.maxTokens,
-      temperature: 0,
-      system: [
-        { type: 'text', text: SAFE_PICK_PROMPT, cache_control: { type: 'ephemeral' } },
-      ],
-      messages:   [{ role: 'user', content: userMessage }],
+    const response = await withAnthropicFailover(async (anthropic) => {
+      const request = anthropic.messages.create({
+        model:      modelConfig.id,
+        max_tokens: modelConfig.maxTokens,
+        temperature: 0,
+        system: [
+          { type: 'text', text: SAFE_PICK_PROMPT, cache_control: { type: 'ephemeral' } },
+        ],
+        messages:   [{ role: 'user', content: userMessage }],
+      });
+      return timeoutMs
+        ? Promise.race([
+            request,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+            ),
+          ])
+        : request;
     });
-    const response = await (timeoutMs
-      ? Promise.race([
-          request,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
-          ),
-        ])
-      : request);
 
     const raw = response.content?.[0]?.text ?? '';
     const { data, parseError } = parseResponse(raw);
@@ -1077,14 +1073,16 @@ export async function analyzeChat({ contextString, question, conversationHistory
 
   messages.push({ role: 'user', content: currentMessage });
 
-  const response = await anthropic.messages.create({
-    model: modelConfig.id,
-    max_tokens: 2000,
-    system: [
-      { type: 'text', text: CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
-    ],
-    messages,
-  });
+  const response = await withAnthropicFailover((anthropic) =>
+    anthropic.messages.create({
+      model: modelConfig.id,
+      max_tokens: 2000,
+      system: [
+        { type: 'text', text: CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
+      messages,
+    }),
+  );
 
   return response.content?.[0]?.text ?? 'No response generated.';
 }
@@ -1172,14 +1170,16 @@ export async function summarizeGameBrief({ contextString, matchup, lang = 'en' }
     ? `Comprime el siguiente contexto del partido "${matchup}" en un brief estructurado:\n\n${contextString}`
     : `Compress the following game context for "${matchup}" into a structured brief:\n\n${contextString}`;
 
-  const response = await anthropic.messages.create({
-    model: model.id,
-    max_tokens: model.maxTokens,
-    system: [
-      { type: 'text', text: JORNADA_BRIEF_PROMPT, cache_control: { type: 'ephemeral' } },
-    ],
-    messages: [{ role: 'user', content: userMessage }],
-  });
+  const response = await withAnthropicFailover((anthropic) =>
+    anthropic.messages.create({
+      model: model.id,
+      max_tokens: model.maxTokens,
+      system: [
+        { type: 'text', text: JORNADA_BRIEF_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  );
 
   return response.content?.[0]?.text ?? `[Brief unavailable for ${matchup}]`;
 }
@@ -1212,14 +1212,16 @@ export async function analyzeChatJornada({ gameBriefs, question, conversationHis
 
   messages.push({ role: 'user', content: currentMessage });
 
-  const response = await anthropic.messages.create({
-    model: modelConfig.id,
-    max_tokens: 2000,
-    system: [
-      { type: 'text', text: JORNADA_CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
-    ],
-    messages,
-  });
+  const response = await withAnthropicFailover((anthropic) =>
+    anthropic.messages.create({
+      model: modelConfig.id,
+      max_tokens: 2000,
+      system: [
+        { type: 'text', text: JORNADA_CHAT_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
+      messages,
+    }),
+  );
 
   return response.content?.[0]?.text ?? 'No response generated.';
 }

@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
+import { withAnthropicFailover } from '../anthropicClient.js';
 
 dotenv.config();
 
@@ -98,15 +98,16 @@ export function assertArchitectProviderConfigured(provider) {
 
 async function callAnthropicArchitect({ systemPrompt, userPrompt, model, timeoutMs, maxTokens }) {
   assertArchitectProviderConfigured('anthropic');
-  const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const response = await anthropicClient.messages.create(
-    {
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    },
-    { timeout: timeoutMs },
+  const response = await withAnthropicFailover((anthropicClient) =>
+    anthropicClient.messages.create(
+      {
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      },
+      { timeout: timeoutMs },
+    ),
   );
 
   return response.content
