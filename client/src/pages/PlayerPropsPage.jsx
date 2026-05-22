@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Button, CircularProgress, MenuItem, Select, FormControl, InputLabel, Tooltip,
+  Box, Typography, Button, CircularProgress, MenuItem, Select, FormControl, InputLabel,
 } from '@mui/material';
+import HelpTip from '../components/HelpTip';
 import { MONO, BARLOW } from '../theme';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -96,56 +97,6 @@ const STRINGS = {
     },
   },
 };
-
-function HelpTip({ title }) {
-  if (!title) return null;
-  return (
-    <Tooltip
-      title={(
-        <Typography
-          component="span"
-          sx={{
-            fontFamily: MONO,
-            fontSize: '11px',
-            lineHeight: 1.55,
-            display: 'block',
-            maxWidth: 340,
-            whiteSpace: 'pre-wrap',
-          }}
-        >
-          {title}
-        </Typography>
-      )}
-      arrow
-      placement="top"
-    >
-      <Box
-        component="span"
-        role="img"
-        aria-label="help"
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 14,
-          height: 14,
-          ml: 0.5,
-          border: `1px solid ${MUTED}`,
-          borderRadius: '50%',
-          color: MUTED,
-          fontFamily: MONO,
-          fontSize: '9px',
-          lineHeight: 1,
-          cursor: 'help',
-          flexShrink: 0,
-          '&:hover': { color: CYAN, borderColor: CYAN },
-        }}
-      >
-        ?
-      </Box>
-    </Tooltip>
-  );
-}
 
 function SectionHeading({ title, subtitle, help }) {
   return (
