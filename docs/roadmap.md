@@ -48,6 +48,8 @@ Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js)
 
 **Explícitamente fuera de esta fase**: Sprint 7e NBA ML sidecar (waiting for ~500 NBA picks resolved); Sprint 7a basketball-reference scraper + tablas dedicadas NBA.
 
+**Siguiente deporte — NFL (📋 planning, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Datos ESPN + The Odds API + nflverse. Spec maestra en [nfl-architecture.md](nfl-architecture.md) y roadmap por sprints en [nfl-roadmap.md](nfl-roadmap.md). Arranque sugerido: verano 2026 (off-season NFL) → MVP admin-only en kickoff de septiembre.
+
 ### El trade-off explícito
 
 Si se queda solo en MLB y se profundiza (player props, equity, mobile), crece LTV por usuario pero no resuelve la estacionalidad — y un competidor cross-sport come el flanco. Si se salta a NBA sin la equity dashboard, los usuarios nuevos no van a entender por qué Hexa es distinto a 50 servicios de picks de NBA.
