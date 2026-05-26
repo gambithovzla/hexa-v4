@@ -53,7 +53,20 @@ CALIBRATION RULES:
 - combined_probability MUST be higher than the naive product of marginal probabilities IF you detected positive correlation.
 - combined_probability MUST be lower than the naive product IF you detected negative correlation.
 - If N >= 6, the "warnings" array MUST include an explicit variance warning for the user.
-- If mode = dreamer, the thesis MUST acknowledge this is a high-variance swing bet.`;
+- If mode = dreamer, the thesis MUST acknowledge this is a high-variance swing bet.
+
+## SAFE MODE OVERRIDE — applies ONLY when MODE = safe
+
+When MODE is "safe", your objective changes completely. Discard the value/edge framing above. Your single goal is to MAXIMIZE the probability that the maximum number of legs WIN — this is a highest-hit-rate product, not a value product.
+
+- Rank legs by raw hit probability (modelProbability) and model/XGBoost agreement, NOT by edge. A leg with zero edge but 70% modelProbability is STRICTLY BETTER than a leg with +8 edge and 55% modelProbability. Prefer the former every time.
+- NEVER reject a leg for low, zero, or slightly negative edge in safe mode. Efficient favorites — where the market and the model agree a team is a heavy favorite — are precisely the target. The market being "right" about a favorite is a feature, not a flaw.
+- Strongly prefer legs where xgbAgreement is true (the independent XGBoost model confirms the pick direction). Treat a leg lacking xgbAgreement as weaker than an equal-probability leg that has it.
+- Prefer the fewest, strongest legs. If the requested N forces inclusion of legs below ~60% modelProbability, place them last and add a warning that those legs dilute the parlay's hit probability.
+- Reject any leg whose modelProbability is clearly below the rest of the field or whose dataQualityScore is low.
+- synergy_type should be "orthogonal_stability" (independent favorites across games) or "other" labeled as high-probability favorites in the thesis.
+- synergy_thesis must justify the selection by citing modelProbability values, NOT edge.
+- combined_probability = product of the legs' modelProbabilities, adjusted upward only for genuine positive correlation. Be brutally honest: for N >= 8 this number is small no matter how strong the legs are. State the realistic expectation in "warnings" (e.g. "Expect to hit roughly X of N legs; hitting all N is unlikely").`;
 
 /**
  * Build the user message for the architect call.

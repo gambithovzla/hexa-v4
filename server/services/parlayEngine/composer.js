@@ -18,11 +18,18 @@ function comboKey(legs) {
 // ── Scoring ───────────────────────────────────────────────────────────────
 
 const MODE_MULTIPLIERS = {
+  safe:         { corr: 1.0, risk: 0.0, length: 2.0 },
   conservative: { corr: 1.3, risk: 1.0, length: 1.5 },
   balanced:     { corr: 1.0, risk: 1.2, length: 1.0 },
   aggressive:   { corr: 0.8, risk: 1.5, length: 0.7 },
   dreamer:      { corr: 0.5, risk: 1.8, length: 0.5 },
 };
+
+// Safe mode tuning. Joint log-probability is the dominant objective; XGBoost
+// agreement is a secondary tiebreak (worth roughly a +6pt probability bump),
+// never enough to outrank a genuinely higher-probability leg.
+const SAFE_JOINT_WEIGHT = 3;
+const SAFE_XGB_AGREEMENT_BONUS = 0.3;
 
 /**
  * Score a parlay combination.
@@ -80,6 +87,37 @@ function scoreParlay(legs, correlations, riskDistances, mode, N) {
     if (leg.odds == null) nullOddsPenalty += 1.5;
   }
 
+  // SAFE MODE: optimize for the probability that ALL legs hit, not market edge.
+  // Maximizing Σ log(modelProbability) maximizes the joint hit probability, so the
+  // greedy/local-search builders end up selecting the strongest favorites. Edge is
+  // intentionally ignored — efficient favorites (edge ≈ 0) are exactly the target.
+  if (mode === 'safe') {
+    let jointLogProb = 0;
+    let xgbBonus = 0;
+    for (const leg of legs) {
+      const p = Math.min(0.99, Math.max(0.01, (leg.modelProbability ?? 0) / 100));
+      jointLogProb += Math.log(p);
+      if (leg.xgbAgreement) xgbBonus += SAFE_XGB_AGREEMENT_BONUS;
+    }
+    const safeTotal =
+      jointLogProb * SAFE_JOINT_WEIGHT
+      + xgbBonus
+      - negCorrPenalty
+      - dqPenalty * 2
+      - nullOddsPenalty;
+    return {
+      total: safeTotal,
+      breakdown: {
+        joint_log_prob:    jointLogProb,
+        xgb_bonus:         xgbBonus,
+        neg_corr_penalty:  negCorrPenalty,
+        dq_penalty:        dqPenalty,
+        null_odds_penalty: nullOddsPenalty,
+        edge_sum:          edgeSum,
+      },
+    };
+  }
+
   const total =
     edgeSum
     + corrBonus      * mm.corr
@@ -107,14 +145,16 @@ function scoreParlay(legs, correlations, riskDistances, mode, N) {
 
 // ── Validity rules (no-go) ────────────────────────────────────────────────
 
-const MIN_EDGE_BY_MODE = { conservative: 3, balanced: 2, aggressive: 2, dreamer: 1.5 };
+// Safe mode requires NO edge floor — efficient favorites priced correctly by the
+// market have edge ≈ 0 (or slightly negative) yet are the highest-probability legs.
+const MIN_EDGE_BY_MODE = { safe: 0, conservative: 3, balanced: 2, aggressive: 2, dreamer: 1.5 };
 
 // Max legs allowed from a single game per mode
-const MAX_LEGS_PER_GAME = { conservative: 2, balanced: 3, aggressive: 4, dreamer: 5 };
+const MAX_LEGS_PER_GAME = { safe: 2, conservative: 2, balanced: 3, aggressive: 4, dreamer: 5 };
 
 // Minimum pairwise correlation required between legs from the same game per mode.
 // More lenient modes allow independent player props (hits, Ks, bases) to coexist.
-const SGP_MIN_CORR = { conservative: 0.15, balanced: 0.0, aggressive: -0.2, dreamer: -0.3 };
+const SGP_MIN_CORR = { safe: 0.15, conservative: 0.15, balanced: 0.0, aggressive: -0.2, dreamer: -0.3 };
 
 /**
  * Check whether a set of legs is a valid parlay under the given mode.
@@ -163,8 +203,9 @@ export function isParlayValid(
     return { valid: false, reason: 'high_risk_leg_in_conservative_mode' };
   }
 
-  // 4. Minimum edge per leg for the mode
-  if (legs.some(l => {
+  // 4. Minimum edge per leg for the mode. Safe mode skips this entirely —
+  //    selection is by hit probability, not edge.
+  if (mode !== 'safe' && legs.some(l => {
     if (l.edge == null) return !allowNullEdge;
     return l.edge < minEdge;
   })) {
@@ -287,10 +328,11 @@ export function composeParlays({
   mode = 'balanced',
   filters = {},
 }) {
+  const isSafe = mode === 'safe';
   const {
     minEdge       = MIN_EDGE_BY_MODE[mode] ?? 2,
-    minConfidence = 55,
-    minDataQuality = 50,
+    minConfidence = isSafe ? 62 : 55,
+    minDataQuality = isSafe ? 60 : 50,
     allowSGP      = true,
     allowNullEdge = mode !== 'conservative',
     allowHighRisk = false,
@@ -304,7 +346,8 @@ export function composeParlays({
   // accept them on model probability alone so the full prop market is available.
   const eligible = candidates.filter(c => {
     const hasEdge = c.edge !== null && c.edge !== undefined;
-    const edgeOk  = hasEdge ? c.edge >= minEdge : allowNullEdge;
+    // Safe mode ignores edge entirely — efficient favorites (edge ≤ 0) are the target.
+    const edgeOk  = isSafe ? true : (hasEdge ? c.edge >= minEdge : allowNullEdge);
     return edgeOk
       && c.modelProbability >= minConfidence
       && (c.dataQualityScore ?? 0) >= minDataQuality;
@@ -323,8 +366,15 @@ export function composeParlays({
     console.warn(`[parlay-synergy] composer: pool has ${eligible.length} eligible, clamping N from ${N} to ${effectiveN}`);
   }
 
-  // --- Step 2: sort seeds by edge adjusted for xgb agreement
+  // --- Step 2: sort seeds.
+  // Safe mode seeds by raw model probability (favorites first), with XGBoost
+  // agreement as a tiebreak. Value modes seed by edge × xgb agreement.
   const sorted = [...eligible].sort((a, b) => {
+    if (isSafe) {
+      const pa = (a.modelProbability ?? 0) + (a.xgbAgreement ? 3 : 0);
+      const pb = (b.modelProbability ?? 0) + (b.xgbAgreement ? 3 : 0);
+      return pb - pa;
+    }
     const scoreA = (a.edge ?? 0) * (a.xgbAgreement ? 1.1 : 1.0);
     const scoreB = (b.edge ?? 0) * (b.xgbAgreement ? 1.1 : 1.0);
     return scoreB - scoreA;
@@ -378,13 +428,24 @@ export function composeParlays({
   results.forEach((p, i) => { p.index = i; });
 
   for (const p of results) {
-    console.log(
-      `[parlay-synergy] composer parlay #${p.index}: score=${p.score.toFixed(2)}`,
-      `edge_sum=${p.scoreBreakdown.edge_sum.toFixed(2)}`,
-      `corr_bonus=${p.scoreBreakdown.corr_bonus.toFixed(2)}`,
-      `risk_div=${p.scoreBreakdown.risk_div_bonus.toFixed(2)}`,
-      `len_penalty=${p.scoreBreakdown.length_penalty.toFixed(2)}`,
-    );
+    const bd = p.scoreBreakdown;
+    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : 'n/a');
+    if (isSafe) {
+      console.log(
+        `[parlay-synergy] composer parlay #${p.index} (safe): score=${p.score.toFixed(2)}`,
+        `joint_log_prob=${fmt(bd.joint_log_prob)}`,
+        `xgb_bonus=${fmt(bd.xgb_bonus)}`,
+        `dq_penalty=${fmt(bd.dq_penalty)}`,
+      );
+    } else {
+      console.log(
+        `[parlay-synergy] composer parlay #${p.index}: score=${p.score.toFixed(2)}`,
+        `edge_sum=${fmt(bd.edge_sum)}`,
+        `corr_bonus=${fmt(bd.corr_bonus)}`,
+        `risk_div=${fmt(bd.risk_div_bonus)}`,
+        `len_penalty=${fmt(bd.length_penalty)}`,
+      );
+    }
   }
 
   return {
