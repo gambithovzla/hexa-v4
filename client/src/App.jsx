@@ -44,6 +44,7 @@ import MLCalibrationDashboard from './pages/MLCalibrationDashboard';
 import AdminMLControlCenter   from './pages/AdminMLControlCenter';
 import PlayerPropsPage        from './pages/PlayerPropsPage';
 import EquityDashboard        from './pages/EquityDashboard';
+import ImperdiblePage         from './pages/ImperdiblePage';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
@@ -509,6 +510,10 @@ export default function App() {
   if (window.location.pathname === '/admin/equity') {
     const token = localStorage.getItem('hexa_token');
     return <EquityDashboard token={token} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/imperdible') {
+    const token = localStorage.getItem('hexa_token');
+    return <ImperdiblePage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
   if (window.location.pathname === '/props') {
     const token = localStorage.getItem('hexa_token');

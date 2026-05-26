@@ -859,3 +859,49 @@ export async function runPickAlignedShadowMigrations() {
     client.release();
   }
 }
+
+// Pick Imperdible — admin-only "lock of the slate" mode.
+// One row per analysis run (the full analyzed slate = dataset for the future
+// conviction model). The selected lock itself lives in `picks` with
+// type='imperdible' / source='imperdible' so it reuses resolver + equity but
+// stays isolated from default training (sidecar filters source='live').
+export async function runImperdibleMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS imperdible_runs (
+        id                    BIGSERIAL    PRIMARY KEY,
+        user_id               TEXT         REFERENCES users(id) ON DELETE SET NULL,
+        sport                 VARCHAR(10)  DEFAULT 'mlb',
+        lang                  VARCHAR(5)   DEFAULT 'en',
+        game_pks              INTEGER[]    DEFAULT '{}',
+        slate_size            INTEGER      DEFAULT 0,
+        verdict               VARCHAR(12)  NOT NULL,
+        reason                VARCHAR(40),
+        selected_pick_id      INTEGER      REFERENCES picks(id) ON DELETE SET NULL,
+        selected_candidate_id VARCHAR(80),
+        conviction            DECIMAL(5,1),
+        consensus_prob        DECIMAL(5,1),
+        arbiter_confidence    DECIMAL(5,1),
+        headline              TEXT,
+        rationale             TEXT,
+        candidates            JSONB,
+        arbiter               JSONB,
+        excluded              JSONB,
+        created_at            TIMESTAMP    DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_imperdible_runs_created ON imperdible_runs(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_imperdible_runs_verdict ON imperdible_runs(verdict)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_imperdible_runs_pick ON imperdible_runs(selected_pick_id)`);
+    await client.query('COMMIT');
+    console.log('[migrate] imperdible_runs table ready');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] imperdible migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
