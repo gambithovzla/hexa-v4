@@ -90,6 +90,8 @@ hexa-v4/
 ### Parlay Synergy (nuevo)
 - [server/services/parlayEngine/](server/services/parlayEngine/) — pool, risk, correl, composer, architect.
 - Brief técnico maestro: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
+- **Modos**: `safe`, `conservative`, `balanced`, `aggressive`, `dreamer`. Los modos value (conservative→dreamer) optimizan por **edge** (valor vs mercado). El modo **`safe` (Máx. Acierto)** optimiza por **probabilidad de que peguen las patas**, no por edge: `composer.js` usa scoring por probabilidad conjunta (`Σ log(modelProbability)`), ordena semillas por probabilidad cruda, usa el acuerdo del XGBoost como desempate, **elimina el piso de edge** (admite favoritos eficientes con edge ≤ 0) y sube el piso de confianza a 62% y data-quality a 60%. El override de safe vive en `prompts.js` (`SAFE MODE OVERRIDE`, condicional a `MODE=safe` en el user message — no reescribe el prompt de los modos value).
+- [server/services/parlayEngine/hitMath.js](server/services/parlayEngine/hitMath.js) — distribución Poisson-binomial (`computeHitDistribution`): patas esperadas, P(pegan todas), P(≥N-1). Expuesta en `chosen_parlay.hit_distribution` y como warning honesto para N≥6 (la matemática que ningún prompt vence).
 
 ### Admin
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
