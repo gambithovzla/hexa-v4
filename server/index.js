@@ -52,6 +52,7 @@ import contentRouter from './routes/content.js';
 import contentAdminRouter from './routes/content-admin.js';
 import adminMlRouter from './routes/admin-ml.js';
 import mlbPropsRouter from './routes/mlb-props.js';
+import imperdibleRouter from './routes/imperdible.js';
 import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames } from './services/chatPickExtractor.js';
 import { processScheduledContentQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
@@ -69,7 +70,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations } from './migrate.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -539,6 +540,7 @@ app.use('/api/oracle',       oracleHistoryRouter);
 app.use('/api/insights',     insightsRouter);
 app.use('/api/nba',          nbaRouter);
 app.use('/api/mlb',          mlbPropsRouter);
+app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
 app.use('/api/admin', adminMlRouter);
 app.post('/api/nowpayments/webhook', handleNowPaymentsWebhook);
@@ -4225,6 +4227,7 @@ runMigrations()
   .then(() => runNbaScaffoldingMigrations())
   .then(() => runNbaDatasetMigrations())
   .then(() => runPickAlignedShadowMigrations())
+  .then(() => runImperdibleMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
