@@ -91,6 +91,14 @@ hexa-v4/
 - [server/services/parlayEngine/](server/services/parlayEngine/) — pool, risk, correl, composer, architect.
 - Brief técnico maestro: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 
+### Pick Imperdible (admin-only, MLB)
+"Lock of the slate": analiza 1..N juegos con lineup confirmado y devuelve **un solo** pick de máxima convicción (o PASS). **Invierte la lógica de value/edge a propósito**: la convicción premia el ACUERDO entre el modelo determinístico, el mercado y el sidecar ML, penaliza varianza de mercado y exige lineup confirmado — el edge nunca es input positivo. Un gate duro fuerza PASS si ningún candidato es near-certain; un árbitro Opus audita los finalistas y confirma o vetea.
+- [server/services/imperdibleSelector.js](server/services/imperdibleSelector.js) — scorer puro de convicción + gate + ranking (unit-tested). `MARKET_VARIANCE` + `DEFAULT_THRESHOLDS`.
+- [server/services/imperdibleArbiter.js](server/services/imperdibleArbiter.js) + [server/prompts/imperdible-prompts.js](server/prompts/imperdible-prompts.js) — auditor LLM de riesgo (modelo override `IMPERDIBLE_ARBITER_MODEL`).
+- [server/services/imperdibleEngine.js](server/services/imperdibleEngine.js) — orquestación: reusa el pipeline frozen (Oracle/market/sidecar) **solo por import**, persiste el lock en `picks` (`type='imperdible'`, `source='imperdible'`) — reusa resolver + equity pero aislado del training default — y una fila completa en `imperdible_runs` (dataset de slate para un futuro modelo).
+- [server/routes/imperdible.js](server/routes/imperdible.js) — `POST /api/imperdible/analyze`, `GET /api/imperdible/games`, `GET /api/imperdible/history`. Admin + feature-flag `IMPERDIBLE_ENABLED`.
+- [client/src/pages/ImperdiblePage.jsx](client/src/pages/ImperdiblePage.jsx) — ruta `/admin/imperdible` + link en sidebar.
+
 ### Admin
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
 - Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
@@ -319,6 +327,7 @@ npm run preview      # preview del build
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
 - `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
+- `IMPERDIBLE_ENABLED` — habilita Pick Imperdible (admin-only, MLB; default `false`). Opcionales: `IMPERDIBLE_ARBITER_MODEL` (default Opus), `IMPERDIBLE_TOP_K` (default `5`)
 
 Lista completa en [.env.example](.env.example).
 
