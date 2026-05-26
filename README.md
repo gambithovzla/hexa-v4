@@ -94,6 +94,7 @@ npm run dev:all
 | `PARLAY_SYNERGY_ENABLED` | No | Motor parlay nuevo (default `false`) |
 | `NBA_ANALYSIS_ENABLED` | No | `true` para habilitar Oracle NBA y resolver automático (default `false`) |
 | `X_AUTO_PUBLISH_ENABLED` | No | `0`/`1` — habilita worker de publicación X |
+| `IMPERDIBLE_ENABLED` | No | `true` para habilitar Pick Imperdible (admin-only, MLB). Opcionales: `IMPERDIBLE_ARBITER_MODEL`, `IMPERDIBLE_TOP_K` |
 | `ML_SIDECAR_ENABLED` | No | `true` para activar llamadas al sidecar Python XGBoost |
 | `ENSEMBLE_ENABLED` | No | `true` para habilitar el meta-learner ensemble |
 | `HEXA_ML_API_URL` | No (con sidecar) | URL base del sidecar Python Railway |
@@ -234,6 +235,9 @@ Cada pick persiste sus features (Statcast, odds, clima, lineups) en tabla `pick_
 ### Parlay Synergy Engine
 Motor combinatorial para parlays (correlación, ortogonalidad de riesgo, coherencia de game script). LLM como arquitecto-validador, no selector ciego. Admin-only en beta. Brief técnico: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 
+### Pick Imperdible (`/admin/imperdible`)
+Modo admin-only "lock of the slate" (MLB): analiza 1..N juegos con lineup confirmado y devuelve **un solo** pick de máxima convicción (o PASS). La selección **invierte la lógica de value/edge**: premia el acuerdo entre el modelo determinístico, el mercado y el sidecar ML, penaliza varianza de mercado y exige lineup confirmado — el edge nunca es input positivo. Un gate duro fuerza PASS si nada es near-certain y un árbitro Opus audita los finalistas. Reusa el pipeline frozen solo por import; persiste el lock en `picks` (`type/source='imperdible'`, reusa resolver + equity, aislado del training) y una fila en `imperdible_runs`. Servicios: [imperdibleSelector.js](server/services/imperdibleSelector.js), [imperdibleArbiter.js](server/services/imperdibleArbiter.js), [imperdibleEngine.js](server/services/imperdibleEngine.js). Endpoints: `POST /api/imperdible/analyze`, `GET /api/imperdible/games`, `GET /api/imperdible/history`. Feature-flag `IMPERDIBLE_ENABLED`.
+
 ### Content pipeline X
 Genera drafts editoriales con Claude Haiku, los encola, y los publica en X (Twitter) vía OAuth 1.0a HMAC-SHA1. Detalle: [docs/content-pipeline.md](docs/content-pipeline.md).
 
@@ -291,6 +295,7 @@ Estado:
 - ✅ **Post-6 hardening** (código): Parlay AUTO/`leg_results`, ML observability HUD, mapeo ESPN↔NBA Stats (`nba-team-map.js`), guardrails salida Oracle NBA (`nbaOutputGuard.js`).
 - ✅ **Pick-aligned shadow + admin ML** (2026-05-17): `pickAlignedMl.js`, columnas en `shadow_model_runs`, `mlOpinion` en analyze game/safe, tokens `--outcome-*` para W/L/P en League mode (PRs #345–#347).
 - ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, `/api/nba/*`, resolver post-game, live tracker, sport shell. Feature-flag `NBA_ANALYSIS_ENABLED`. Go-live gate mergeado; validación E2E en prod según tráfico.
+- ✅ **Pick Imperdible** (2026-05-26): modo admin-only "lock of the slate" (MLB). Scorer de convicción (acuerdo modelo+mercado+ML, anti-varianza), gate duro con PASS, árbitro Opus, tabla `imperdible_runs`, página `/admin/imperdible`. Feature-flag `IMPERDIBLE_ENABLED`. Aislado del training default (`source='imperdible'`).
 
 ### Estado NBA MVP (2026-05-17)
 
