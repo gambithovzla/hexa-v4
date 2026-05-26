@@ -129,6 +129,13 @@ hexa-v4/
 - [client/src/components/AdminEnsembleBadge.jsx](client/src/components/AdminEnsembleBadge.jsx) — chip lazy-loaded que aparece bajo cada PickCard (admin-only) y muestra Oracle/Legacy/Python/Ensemble probs por pick.
 - [server/services/chatPickExtractor.js](server/services/chatPickExtractor.js) — captura picks de Oracle Chat con JSON tail + Haiku fallback, persiste en `picks` con `source='oracle_chat'`.
 
+### Pick Imperdible (Sprint 8b)
+- [server/routes/imperdible.js](server/routes/imperdible.js) — endpoints admin-only: `POST /api/imperdible/analyze`, `GET /api/imperdible/games`, `GET /api/imperdible/history`. Feature-flagged por `IMPERDIBLE_ENABLED`.
+- [server/services/imperdibleEngine.js](server/services/imperdibleEngine.js) — pipeline 7-fases: build candidates por game → Stage-1 conviction (xgboost + market + variance) → top-K → ML sidecar pick-aligned → hard gate → LLM arbiter → persist. Devuelve `verdict: 'LOCK' | 'PASS'`.
+- [server/services/imperdibleArbiter.js](server/services/imperdibleArbiter.js) — LLM arbiter que audita los candidatos sobrevivientes y confirma/veta el lock. Instancia Anthropic SDK propia (no toca oracle.js).
+- [server/services/imperdibleSelector.js](server/services/imperdibleSelector.js) — `computeConviction`, `evaluateGate`, `rankCandidates`, `mlProbForPick`, `DEFAULT_THRESHOLDS`. La lógica de gate y ranking es determinística; el LLM arbiter es la capa final de veto.
+- Picks `type='imperdible'` en tabla `picks`. Tabla `imperdible_runs` guarda el slate completo + decisión para backtesting futuro.
+
 ### ML sidecar Python
 - [ml/hexa_ml/serve.py](ml/hexa_ml/serve.py) — FastAPI app (endpoints: /health, /predict/\*, /calibration, /retrain, /retrain/ensemble).
 - [ml/hexa_ml/train.py](ml/hexa_ml/train.py) — pipeline de entrenamiento XGBoost (temporal split, Brier eval).
@@ -319,6 +326,8 @@ npm run preview      # preview del build
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
 - `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
+- `IMPERDIBLE_ENABLED` — Pick Imperdible mode (admin-only lock-of-the-slate, default `false`)
+- `IMPERDIBLE_TOP_K` — candidatos que pasan al LLM arbiter (default `5`)
 
 Lista completa en [.env.example](.env.example).
 
@@ -350,8 +359,9 @@ Estado del pipeline ML:
 - ✅ Sprint 6 — equity/Sharpe/drawdown + comparativa bankroll (`userEquityCompare.js`, `GET /api/bankroll/equity-stats`); persistencia ML prod (6b).
 - ✅ Post-6 — parlay resolve/AUTO (`parlayResolver.js`, `parlayRunOutcome.js`); NBA team-map + output guard (`nba-team-map.js`, `nbaOutputGuard.js`).
 - ✅ Sprint 8a — Monte Carlo bankroll (`monteCarloBankroll.js`). ✅ Brand League × Kinetic v2.6 (skin alternable, dark-only).
+- ✅ Sprint 8b — **Pick Imperdible** (PR #355, 2026-05-26): lock-of-the-slate mode, admin-only, MLB. Pipeline de 7 fases: context + features → convicción Stage-1 (model + market + variance + data quality) → top-K candidates → ML sidecar alineado al pick → hard gate → LLM arbiter → persistencia `type='imperdible'` + tabla `imperdible_runs`. Feature-flagged por `IMPERDIBLE_ENABLED`. Equity summary en `/api/imperdible/history`. Herramientas: `server/routes/imperdible.js`, `server/services/imperdibleEngine.js`, `server/services/imperdibleArbiter.js`, `server/services/imperdibleSelector.js`.
 
-**Estado en producción (2026-05-17)**:
+**Estado en producción (2026-05-26)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
 - Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".
