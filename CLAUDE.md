@@ -112,6 +112,15 @@ hexa-v4/
 - [server/prompts/oracle-nba-prompts.js](server/prompts/oracle-nba-prompts.js) — Prompts NBA: `NBA_SYSTEM_PROMPT` (pick + JSON output) y `NBA_CHAT_PROMPT` (chat libre). Guardrail anti-hallucination: prohíbe explícitamente simular tool calls o web search.
 - [server/routes/nba.js](server/routes/nba.js) — `POST /api/nba/analyze/game` y `POST /api/nba/analyze/chat`. Feature-flagged por `NBA_ANALYSIS_ENABLED`. Admin-only. Resuelve `marketOdds` server-side vía [nba-odds.js](server/nba-odds.js) cuando el cliente no las envía y propaga `context_meta` + `oddsSource` en `meta` de la respuesta.
 
+### NFL (📋 planning — tercer deporte)
+Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos que importan los frozen, `sport='nfl'` en toda persistencia, cero ediciones a frozen. `nfl` ya está registrado como deporte **conocido pero inactivo** (`SPORT_META.nfl.active=false` en [client/src/config/sports.js](client/src/config/sports.js); no está en `ACTIVE_SPORTS`).
+- **Spec maestra**: [docs/nfl-architecture.md](docs/nfl-architecture.md) — data sources, mapeo live tipo GUMBO, diseño del Oracle prompt, parlay, imperdible, ML sidecar.
+- **Roadmap por sprints**: [docs/nfl-roadmap.md](docs/nfl-roadmap.md) (serie Sprint 9, espejo de la serie 7 NBA).
+- **Datos** (decidido): ESPN hidden API (gratis, sin key — como NBA) para juegos/scores/drives/plays/injuries/rosters; The Odds API `americanfootball_nfl` (dual key) para líneas; **nflverse / nfl_data_py** para stats avanzadas (EPA, success rate, PROE) — el análogo a Statcast/Savant.
+- **Diferencias estructurales clave vs NBA** (NO es copy-paste): cadencia **semanal** (selector por `seasontype`+`week`, no por fecha); **spread es el mercado primario** con **key numbers 3 y 7**; cap de confianza **≈72%** (mercado más eficiente + varianza más alta de los tres deportes); **QB titular confirmado** = el gate de disponibilidad (análogo del "lineup confirmado" MLB); jobs **game-time-aware** (solo pollean ventanas Thu/Sun/Mon); **push** frecuente en resolución (spread/total en entero); weather pesa (viento/frío); el sidecar ML puede **pre-entrenarse con histórico nflverse** (>20 temporadas) en vez de esperar 500 picks resueltos.
+- **Live mapping (análogo GUMBO)**: ESPN core API `drives` + `plays` + `summary?event` con `winprobability`. No hay feed oficial profundo como GUMBO; se compone desde ESPN con polling game-time-aware.
+- **Archivos a crear** (todos nuevos, espejo NBA): `server/nfl-api.js`, `server/nfl-odds.js`, `server/nfl-team-map.js`, `server/nfl-context-builder.js`, `server/prompts/oracle-nfl-prompts.js`, `server/services/oracleNfl.js`, `server/services/nflOutputGuard.js`, `server/services/nflShadowValidator.js`, `server/services/nflShadowPersistence.js`, `server/pick-resolver-nfl.js`, `server/pick-tracker-nfl.js`, `server/services/hexaNflBoardService.js`, `server/routes/nfl.js`. Migraciones `runNflScaffoldingMigrations()` + `runNflDatasetMigrations()` en [server/migrate.js](server/migrate.js).
+
 ### MLB Player Props (Sprint 5)
 - [server/routes/mlb-props.js](server/routes/mlb-props.js) — `GET /api/mlb/props/board` (auth). Odds API + Savant + ML batch; `oraclePropPicks` desde tabla `picks` por `game_date` / `game_pk`.
 - [server/services/propFeatureEnricher.js](server/services/propFeatureEnricher.js) — features Savant por jugador para props.
@@ -327,6 +336,7 @@ npm run preview      # preview del build
 - `X_AUTO_PUBLISH_ENABLED` — worker publica en X (default `0`)
 - `X_AUTO_PUBLISH_INTERVAL_MINUTES` — intervalo (default `5`)
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
+- `NFL_ANALYSIS_ENABLED` — (📋 planning) habilita Oracle NFL + resolver NFL (default `false`). Opcionales planificados: `NFL_LIVE_TRACKER_ENABLED`, `NFL_PROPS_ENABLED`, `IMPERDIBLE_NFL_ENABLED`. Ver [docs/nfl-roadmap.md](docs/nfl-roadmap.md).
 - `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
 - `IMPERDIBLE_ENABLED` — habilita Pick Imperdible (admin-only, MLB; default `false`). Opcionales: `IMPERDIBLE_ARBITER_MODEL` (default Opus), `IMPERDIBLE_TOP_K` (default `5`)
@@ -348,6 +358,8 @@ Lista completa en [.env.example](.env.example).
 ## Roadmap activo
 
 El pipeline de ML propio está **completo y en producción**. Los modelos XGBoost están entrenados y sirviendo predicciones en tiempo real. Backlog en [docs/roadmap.md](docs/roadmap.md).
+
+**Próximo deporte — NFL (📋 planning, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Spec maestra en [docs/nfl-architecture.md](docs/nfl-architecture.md), roadmap por sprints en [docs/nfl-roadmap.md](docs/nfl-roadmap.md). Datos: ESPN + The Odds API + nflverse. Sin código aún.
 
 Estado del pipeline ML:
 - ✅ Sprint 0 — documentación viva (este archivo + `/docs/`).

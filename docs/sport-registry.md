@@ -74,9 +74,10 @@ Ejemplos actuales:
 - Pruebas de no mezcla (filtros y capability gates).
 - Smoke del flujo create -> resolve -> history para el nuevo deporte.
 
-## Estado actual (2026-05-15)
+## Estado actual (2026-05-26)
 
 - Base multi-deporte implementada con Sport Shell global.
 - Historial y performance filtrables por deporte.
 - Módulos no soportados usan bloqueo consistente (`Coming Soon`).
 - MLB y NBA aislados en dataset/shadow/training default MLB-first.
+- **NFL** registrado como deporte conocido (`SPORT_META.nfl.active=false`), 📋 en planning. Spec en [nfl-architecture.md](nfl-architecture.md), roadmap en [nfl-roadmap.md](nfl-roadmap.md).
