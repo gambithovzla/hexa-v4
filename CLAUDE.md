@@ -90,6 +90,8 @@ hexa-v4/
 ### Parlay Synergy (nuevo)
 - [server/services/parlayEngine/](server/services/parlayEngine/) — pool, risk, correl, composer, architect.
 - Brief técnico maestro: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
+- **Modos**: `safe`, `conservative`, `balanced`, `aggressive`, `dreamer`. Los modos value (conservative→dreamer) optimizan por **edge** (valor vs mercado). El modo **`safe` (Máx. Acierto)** optimiza por **probabilidad de que peguen las patas**, no por edge: `composer.js` usa scoring por probabilidad conjunta (`Σ log(modelProbability)`), ordena semillas por probabilidad cruda, usa el acuerdo del XGBoost como desempate, **elimina el piso de edge** (admite favoritos eficientes con edge ≤ 0) y sube el piso de confianza a 62% y data-quality a 60%. El override de safe vive en `prompts.js` (`SAFE MODE OVERRIDE`, condicional a `MODE=safe` en el user message — no reescribe el prompt de los modos value).
+- [server/services/parlayEngine/hitMath.js](server/services/parlayEngine/hitMath.js) — distribución Poisson-binomial (`computeHitDistribution`): patas esperadas, P(pegan todas), P(≥N-1). Expuesta en `chosen_parlay.hit_distribution` y como warning honesto para N≥6 (la matemática que ningún prompt vence).
 
 ### Pick Imperdible (admin-only, MLB)
 "Lock of the slate": analiza 1..N juegos con lineup confirmado y devuelve **un solo** pick de máxima convicción (o PASS). **Invierte la lógica de value/edge a propósito**: la convicción premia el ACUERDO entre el modelo determinístico, el mercado y el sidecar ML, penaliza varianza de mercado y exige lineup confirmado — el edge nunca es input positivo. Un gate duro fuerza PASS si ningún candidato es near-certain; un árbitro Opus audita los finalistas y confirma o vetea.
@@ -359,8 +361,9 @@ Estado del pipeline ML:
 - ✅ Sprint 6 — equity/Sharpe/drawdown + comparativa bankroll (`userEquityCompare.js`, `GET /api/bankroll/equity-stats`); persistencia ML prod (6b).
 - ✅ Post-6 — parlay resolve/AUTO (`parlayResolver.js`, `parlayRunOutcome.js`); NBA team-map + output guard (`nba-team-map.js`, `nbaOutputGuard.js`).
 - ✅ Sprint 8a — Monte Carlo bankroll (`monteCarloBankroll.js`). ✅ Brand League × Kinetic v2.6 (skin alternable, dark-only).
+- ✅ Sprint 8b — **Pick Imperdible** (PR #355, 2026-05-26): lock-of-the-slate mode, admin-only, MLB. Pipeline de 7 fases: context + features → convicción Stage-1 (model + market + variance + data quality) → top-K candidates → ML sidecar alineado al pick → hard gate → LLM arbiter → persistencia `type='imperdible'` + tabla `imperdible_runs`. Feature-flagged por `IMPERDIBLE_ENABLED`. Equity summary en `/api/imperdible/history`. Herramientas: `server/routes/imperdible.js`, `server/services/imperdibleEngine.js`, `server/services/imperdibleArbiter.js`, `server/services/imperdibleSelector.js`.
 
-**Estado en producción (2026-05-17)**:
+**Estado en producción (2026-05-26)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
 - Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".

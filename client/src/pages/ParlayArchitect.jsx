@@ -25,12 +25,14 @@ const L = {
     selected: 'selected',
     mode: 'MODE',
     modes: {
+      safe:         'Safe (Max Hit-Rate)',
       conservative: 'Conservative',
       balanced:     'Balanced',
       aggressive:   'Aggressive',
       dreamer:      'Dreamer',
     },
     modeDesc: {
+      safe:         'Highest-probability favorites — ignores edge, maximizes legs that hit',
       conservative: 'Low risk, high data quality',
       balanced:     'Balanced edge + correlation',
       aggressive:   'Max risk diversity',
@@ -54,6 +56,11 @@ const L = {
     combinedProb: 'Combined Prob',
     decimalOdds: 'Decimal Odds',
     edgeScore: 'Edge Score',
+    hitMath: 'EXPECTED HITS',
+    expectedHits: 'Expected to hit',
+    pAll: 'P(all legs hit)',
+    pAtLeast: 'P(at least',
+    ofLegs: 'of',
     synergyType: 'Synergy Type',
     thesis: 'SYNERGY THESIS',
     warnings: 'WARNINGS',
@@ -102,12 +109,14 @@ const L = {
     selected: 'seleccionado(s)',
     mode: 'MODO',
     modes: {
+      safe:         'Seguro (Máx. Acierto)',
       conservative: 'Conservador',
       balanced:     'Balanceado',
       aggressive:   'Agresivo',
       dreamer:      'Soñador',
     },
     modeDesc: {
+      safe:         'Favoritos de mayor probabilidad — ignora el edge, maximiza patas que pegan',
       conservative: 'Bajo riesgo, alta calidad de datos',
       balanced:     'Edge y correlación balanceados',
       aggressive:   'Máxima diversidad de riesgo',
@@ -131,6 +140,11 @@ const L = {
     combinedProb: 'Prob. Combinada',
     decimalOdds: 'Momios Decimales',
     edgeScore: 'Edge Total',
+    hitMath: 'ACIERTOS ESPERADOS',
+    expectedHits: 'Esperas acertar',
+    pAll: 'P(pegan todas)',
+    pAtLeast: 'P(al menos',
+    ofLegs: 'de',
     synergyType: 'Tipo de Sinergia',
     thesis: 'TESIS SINÉRGICA',
     warnings: 'ADVERTENCIAS',
@@ -170,7 +184,7 @@ const L = {
   },
 };
 
-const MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
+const MODES = ['safe', 'conservative', 'balanced', 'aggressive', 'dreamer'];
 const BET_TYPES = ['all', 'moneyline', 'runline', 'totals', 'props', 'pitcher_props', 'batter_props'];
 
 const LLM_ENGINES = [
@@ -344,6 +358,36 @@ function ResultPanel({ result, t, lang, expandedAlt, setExpandedAlt }) {
             </Box>
           ))}
         </Box>
+
+        {/* Hit distribution — the honest math of how many legs should hit */}
+        {chosen_parlay.hit_distribution?.n >= 2 && (() => {
+          const hd = chosen_parlay.hit_distribution;
+          const atLeastKey = hd.n - 1;
+          const pAtLeast = hd.p_at_least?.[atLeastKey];
+          return (
+            <Box sx={{ px: '14px', py: '10px', borderBottom: `1px solid ${C.borderLight}`, background: 'rgba(0,255,160,0.03)' }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.1em', mb: '6px' }}>
+                {t.hitMath}
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                <Box>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, textTransform: 'uppercase' }}>{t.expectedHits}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.95rem', color: C.green, fontWeight: 700 }}>{hd.expected_hits} / {hd.n}</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, textTransform: 'uppercase' }}>{t.pAll}</Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: '0.95rem', color: C.cyan, fontWeight: 700 }}>{fmtPct(hd.p_all)}</Typography>
+                </Box>
+                {pAtLeast != null && (
+                  <Box>
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.textMuted, textTransform: 'uppercase' }}>{t.pAtLeast} {atLeastKey} {t.ofLegs} {hd.n})</Typography>
+                    <Typography sx={{ fontFamily: MONO, fontSize: '0.95rem', color: C.amber, fontWeight: 700 }}>{fmtPct(pAtLeast)}</Typography>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          );
+        })()}
 
         {/* Synergy type + thesis */}
         {chosen_parlay.synergy_type && (

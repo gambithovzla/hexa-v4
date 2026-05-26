@@ -64,6 +64,7 @@ import {
   enrichPoolWithRiskVectors,
   buildCorrelationMatrix,
   composeParlays,
+  computeHitDistribution,
   askArchitect,
   resolveLegs,
   assertArchitectProviderConfigured,
@@ -1199,7 +1200,6 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     requestedLegs  = 3,
     mode           = 'balanced',
     minEdge,
-    minConfidence  = 55,
     allowSGP       = true,
     lang           = 'en',
     engine         = 'anthropic',
@@ -1225,10 +1225,12 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
   if (requestedLegs < 2 || requestedLegs > 30) {
     return res.status(400).json({ success: false, error: 'requestedLegs must be between 2 and 30' });
   }
-  const VALID_MODES = ['conservative', 'balanced', 'aggressive', 'dreamer'];
+  const VALID_MODES = ['safe', 'conservative', 'balanced', 'aggressive', 'dreamer'];
   if (!VALID_MODES.includes(mode)) {
     return res.status(400).json({ success: false, error: `Invalid mode. Must be one of: ${VALID_MODES.join(', ')}` });
   }
+  // Safe mode raises the per-leg probability floor; value modes keep the 55% coin-flip floor.
+  const effectiveMinConfidence = req.body.minConfidence ?? (mode === 'safe' ? 62 : 55);
   if (model && !['fast', 'deep'].includes(model)) {
     return res.status(400).json({ success: false, error: 'Invalid model' });
   }
@@ -1341,13 +1343,13 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
 
     // ── Step 5: Compose top-3 parlays ────────────────────────────────────
     const composerStart = Date.now();
-    const effectiveMinEdge = minEdge ?? { conservative: 3, balanced: 2, aggressive: 2, dreamer: 1.5 }[mode] ?? 2;
+    const effectiveMinEdge = minEdge ?? { safe: 0, conservative: 3, balanced: 2, aggressive: 2, dreamer: 1.5 }[mode] ?? 2;
     let { parlays: composedParlays, meta: composerMeta } = composeParlays({
       candidates: enriched,
       correlationMatrix,
       N: requestedLegs,
       mode,
-      filters: { minEdge: effectiveMinEdge, minConfidence, allowSGP },
+      filters: { minEdge: effectiveMinEdge, minConfidence: effectiveMinConfidence, allowSGP },
     });
 
     if (composedParlays.length === 0 && mode === 'conservative' && effectiveMinEdge > 0) {
@@ -1357,7 +1359,7 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
         correlationMatrix,
         N: requestedLegs,
         mode,
-        filters: { minEdge: 0, minConfidence, allowSGP, allowNullEdge: true, allowHighRisk: true },
+        filters: { minEdge: 0, minConfidence: effectiveMinConfidence, allowSGP, allowNullEdge: true, allowHighRisk: true },
       });
       composedParlays = relaxed.parlays;
       composerMeta = {
@@ -1413,6 +1415,19 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
     const overrodeComposer =
       architectDecision.decision !== 'confirm' || architectDecision.chosen_index !== 0;
 
+    // ── Hit distribution — the honest math of "how many legs should hit" ──
+    const hitDistribution = computeHitDistribution(
+      finalLegs.map(l => (l.modelProbability ?? 0) / 100),
+    );
+    const hitMathWarnings = [];
+    if (hitDistribution.n >= 6) {
+      const pAllPct = (hitDistribution.p_all * 100).toFixed(1);
+      const expected = hitDistribution.expected_hits;
+      hitMathWarnings.push(resolvedLang === 'es'
+        ? `Realidad estadística: con estas patas esperas acertar ~${expected} de ${hitDistribution.n}. Pegar las ${hitDistribution.n} tiene ~${pAllPct}% de probabilidad. Para mejor chance de cobrar, considera 4-6 patas.`
+        : `Statistical reality: with these legs you should expect ~${expected} of ${hitDistribution.n} to hit. Hitting all ${hitDistribution.n} is ~${pAllPct}% likely. For a better shot at cashing, consider 4-6 legs.`);
+    }
+
     const legSummary = legs => legs.map(l => ({
       candidateId:      l.candidateId,
       gamePk:           l.gamePk,
@@ -1449,10 +1464,12 @@ app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, a
           combined_probability:  architectDecision.combined_probability,
           combined_decimal_odds: architectDecision.combined_decimal_odds,
           combined_edge_score:   finalLegs.reduce((s, l) => s + (l.edge ?? 0), 0),
+          hit_distribution:      hitDistribution,
           synergy_type:          architectDecision.synergy_type,
           synergy_thesis:        architectDecision.synergy_thesis,
           warnings:              [
             ...oddsWarnings,
+            ...hitMathWarnings,
             ...(architectDecision.warnings ?? []),
             ...(composerMeta.relaxed_min_edge
               ? [resolvedLang === 'es'

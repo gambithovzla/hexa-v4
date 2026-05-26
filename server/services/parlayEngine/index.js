@@ -4,6 +4,7 @@ export { buildCandidatePool, createPoolBuilder, clearPoolCache, filterCandidates
 export { enrichWithRiskVector, enrichPoolWithRiskVectors } from './risk.js';
 export { buildCorrelationMatrix, getCorrelation, getRiskDistance, pairKey } from './correl.js';
 export { composeParlays, isParlayValid } from './composer.js';
+export { computeHitDistribution, poissonBinomialPmf } from './hitMath.js';
 export { askArchitect, createArchitect, resolveLegs } from './architect.js';
 export { PARLAY_ARCHITECT_SYSTEM, buildArchitectUserMessage } from './prompts.js';
 export {

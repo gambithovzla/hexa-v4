@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-17 — Pick-aligned shadow + `mlOpinion` admin + tablero `/props` (fixes PR #347); Sprint 5 Player Props MLB en progreso; Brand League × Kinetic v2.6 en main; NBA go-live gate mergeado. Rama docs: `docs/update-readme-claude-roadmap-may-2026`.
+**Última actualización**: 2026-05-26 — Pick Imperdible (Sprint 8b, PR #355) en main; Parlay Architect modo `safe` (Máx. Acierto) + distribución Poisson-binomial de aciertos. Sprint 5 Player Props MLB en progreso; Brand League × Kinetic v2.6 en main; NBA go-live gate mergeado.
 
 ---
 
@@ -308,6 +308,25 @@ Solo se construye **después** de acumular ~500 picks NBA resueltos. Probablemen
 
 ---
 
+### ✅ Parlay Architect — modo Safe (Máx. Acierto) (Q2 2026)
+
+**Status**: ✅ **cerrado** (2026-05-26).
+
+**Problema que resolvía**: el arquitecto optimizaba por **edge** (valor vs mercado), no por **probabilidad de que las patas peguen**. Resultado: seleccionaba sistemáticamente underdogs/posiciones contrarias (edge alto, ~55% prob) y rechazaba favoritos eficientes (edge ≈ 0 porque el mercado los precia bien). Filosofía value-betting de alta varianza — opuesta a "que peguen la mayoría de las patas". Eso explica el swing de 15/16 (suerte) a ~2/10 (regresión de la estrategia contraria).
+
+**Entregables**:
+- Modo `safe` en [composer.js](../server/services/parlayEngine/composer.js): scoring por probabilidad conjunta (`Σ log(modelProbability)`), semillas ordenadas por probabilidad cruda, acuerdo XGBoost como desempate, **sin piso de edge** (admite favoritos con edge ≤ 0), piso de confianza 62% + data-quality 60%.
+- `SAFE MODE OVERRIDE` en [prompts.js](../server/services/parlayEngine/prompts.js) — condicional a `MODE=safe`, no toca el prompt de los modos value.
+- [hitMath.js](../server/services/parlayEngine/hitMath.js) — distribución Poisson-binomial: patas esperadas, P(pegan todas), P(≥N-1). Expuesta en la respuesta + warning honesto para N≥6.
+- UI: opción "Seguro (Máx. Acierto)" + panel "Aciertos Esperados" en [ParlayArchitect.jsx](../client/src/pages/ParlayArchitect.jsx).
+- Tests: `composer.test.js` (selección safe) + `hitMath.test.js` (Poisson-binomial).
+
+**Realidad estadística asumida**: aun con favoritos del 65%, un parlay de 10 patas pega entero ~1.3% de las veces (esperas ~6.5/10). El modo no vence esa matemática — pero elige las patas correctas y muestra la expectativa real para que el usuario calibre (sugiere 4-6 patas).
+
+**Refactor autorizado** del parlayEngine (normalmente frozen).
+
+---
+
 ### ✅ Sprint 8a — Monte Carlo forward bankroll simulation (Q3 2026)
 
 **Status**: ✅ **cerrado** (2026-05-15) — commit `27a9ee0`.
@@ -383,7 +402,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | A6 | **Migrar a node-pg-migrate o Drizzle** | ~1 semana | Versionado real de schema, rollback, diff. Más limpio que IF NOT EXISTS embebido. |
 | A7 | **Backtest con CSV upload** | ~1 semana | Admin sube CSV con picks históricos, el modelo los evalúa. Útil para A/B test de prompts. |
 | A8 | **Beat reporters scraper + injury classifier** (Haiku) | ~1 semana | Lista curada de beat reporters X. Cada hora scrapeo tweets + clasifica con Haiku (juega / dudoso / out). Featurea más fino que `injuryStatus` de MLB API. |
-| A9 | **Parlay Synergy feature flag → public beta** | 3 días | Hoy admin-only. Validar métricas de Sprint 3 del brief de parlay; si hit rate es bueno, abrir a usuarios paid. |
+| A9 | **Parlay Synergy feature flag → public beta** | 3 días | Hoy admin-only. Validar métricas de Sprint 3 del brief de parlay; si hit rate es bueno, abrir a usuarios paid. **Update 2026-05-26**: añadido modo `safe` (Máx. Acierto) que optimiza por probabilidad de acierto en vez de edge — recomendado como modo default para el público antes de abrir. Validar hit rate del modo safe sobre N≥4 patas. |
 
 ### Tier B — Alta señal pero esfuerzo alto o dependencia externa
 

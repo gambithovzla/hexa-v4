@@ -375,3 +375,69 @@ describe('composeParlays', () => {
     }
   });
 });
+
+// ── Safe mode (max hit-rate objective) ─────────────────────────────────────
+
+describe('composeParlays — safe mode', () => {
+  function buildMatrix(cands) {
+    return buildCorrelationMatrix(cands);
+  }
+
+  it('prefers high-probability favorites over high-edge longshots', () => {
+    // Two pools of legs: favorites (high prob, ~0 edge) vs longshots (low prob, high edge).
+    const favorites = Array.from({ length: 5 }, (_, i) => cand({
+      id: `fav_${i}`, gamePk: 200 + i,
+      modelProbability: 70 + i, edge: 0, odds: -250, xgbAgreement: true,
+      dataQualityScore: 80,
+    }));
+    const longshots = Array.from({ length: 5 }, (_, i) => cand({
+      id: `long_${i}`, gamePk: 300 + i,
+      modelProbability: 56, edge: 9, odds: +180, xgbAgreement: false,
+      dataQualityScore: 80,
+    }));
+    const all = [...favorites, ...longshots];
+    const matrix = buildMatrix(all);
+
+    const { parlays } = composeParlays({
+      candidates: all, correlationMatrix: matrix, N: 4, mode: 'safe',
+    });
+
+    assert.ok(parlays.length > 0, 'safe mode should produce a parlay');
+    const legIds = parlays[0].legs.map(l => l.candidateId);
+    const longshotLegs = legIds.filter(id => id.startsWith('long_'));
+    assert.strictEqual(longshotLegs.length, 0,
+      `safe mode picked high-edge longshots: ${longshotLegs.join(', ')}`);
+  });
+
+  it('admits efficient favorites with zero or negative edge', () => {
+    // Heavy favorites the market prices correctly: edge null/negative, high prob.
+    const cands = Array.from({ length: 4 }, (_, i) => cand({
+      id: `eff_${i}`, gamePk: 400 + i,
+      modelProbability: 68 + i, edge: i === 0 ? null : -1, odds: -220,
+      xgbAgreement: true, dataQualityScore: 78,
+    }));
+    const matrix = buildMatrix(cands);
+
+    const { parlays } = composeParlays({
+      candidates: cands, correlationMatrix: matrix, N: 3, mode: 'safe',
+    });
+
+    assert.ok(parlays.length > 0, 'efficient favorites must not be filtered out in safe mode');
+    assert.strictEqual(parlays[0].legs.length, 3);
+  });
+
+  it('rejects sub-floor probability legs (below 62%)', () => {
+    const cands = Array.from({ length: 4 }, (_, i) => cand({
+      id: `low_${i}`, gamePk: 500 + i,
+      modelProbability: 57, edge: 1, odds: -120, dataQualityScore: 75,
+    }));
+    const matrix = buildMatrix(cands);
+
+    const { parlays, meta } = composeParlays({
+      candidates: cands, correlationMatrix: matrix, N: 3, mode: 'safe',
+    });
+
+    assert.strictEqual(meta.eligibleCount, 0, 'sub-62% legs should be ineligible in safe mode');
+    assert.strictEqual(parlays.length, 0);
+  });
+});
