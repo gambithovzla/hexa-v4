@@ -93,6 +93,14 @@ hexa-v4/
 - **Modos**: `safe`, `conservative`, `balanced`, `aggressive`, `dreamer`. Los modos value (conservative→dreamer) optimizan por **edge** (valor vs mercado). El modo **`safe` (Máx. Acierto)** optimiza por **probabilidad de que peguen las patas**, no por edge: `composer.js` usa scoring por probabilidad conjunta (`Σ log(modelProbability)`), ordena semillas por probabilidad cruda, usa el acuerdo del XGBoost como desempate, **elimina el piso de edge** (admite favoritos eficientes con edge ≤ 0) y sube el piso de confianza a 62% y data-quality a 60%. El override de safe vive en `prompts.js` (`SAFE MODE OVERRIDE`, condicional a `MODE=safe` en el user message — no reescribe el prompt de los modos value).
 - [server/services/parlayEngine/hitMath.js](server/services/parlayEngine/hitMath.js) — distribución Poisson-binomial (`computeHitDistribution`): patas esperadas, P(pegan todas), P(≥N-1). Expuesta en `chosen_parlay.hit_distribution` y como warning honesto para N≥6 (la matemática que ningún prompt vence).
 
+### Pick Imperdible (admin-only, MLB)
+"Lock of the slate": analiza 1..N juegos con lineup confirmado y devuelve **un solo** pick de máxima convicción (o PASS). **Invierte la lógica de value/edge a propósito**: la convicción premia el ACUERDO entre el modelo determinístico, el mercado y el sidecar ML, penaliza varianza de mercado y exige lineup confirmado — el edge nunca es input positivo. Un gate duro fuerza PASS si ningún candidato es near-certain; un árbitro Opus audita los finalistas y confirma o vetea.
+- [server/services/imperdibleSelector.js](server/services/imperdibleSelector.js) — scorer puro de convicción + gate + ranking (unit-tested). `MARKET_VARIANCE` + `DEFAULT_THRESHOLDS`.
+- [server/services/imperdibleArbiter.js](server/services/imperdibleArbiter.js) + [server/prompts/imperdible-prompts.js](server/prompts/imperdible-prompts.js) — auditor LLM de riesgo (modelo override `IMPERDIBLE_ARBITER_MODEL`).
+- [server/services/imperdibleEngine.js](server/services/imperdibleEngine.js) — orquestación: reusa el pipeline frozen (Oracle/market/sidecar) **solo por import**, persiste el lock en `picks` (`type='imperdible'`, `source='imperdible'`) — reusa resolver + equity pero aislado del training default — y una fila completa en `imperdible_runs` (dataset de slate para un futuro modelo).
+- [server/routes/imperdible.js](server/routes/imperdible.js) — `POST /api/imperdible/analyze`, `GET /api/imperdible/games`, `GET /api/imperdible/history`. Admin + feature-flag `IMPERDIBLE_ENABLED`.
+- [client/src/pages/ImperdiblePage.jsx](client/src/pages/ImperdiblePage.jsx) — ruta `/admin/imperdible` + link en sidebar.
+
 ### Admin
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
 - Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
@@ -130,13 +138,6 @@ hexa-v4/
 - [client/src/pages/AdminMLControlCenter.jsx](client/src/pages/AdminMLControlCenter.jsx) — página `/admin/ml-control` con HUD de circuit breaker, cards por mercado, retrain on-demand, ensemble panel, chat-picks bucket stats, retrain audit log.
 - [client/src/components/AdminEnsembleBadge.jsx](client/src/components/AdminEnsembleBadge.jsx) — chip lazy-loaded que aparece bajo cada PickCard (admin-only) y muestra Oracle/Legacy/Python/Ensemble probs por pick.
 - [server/services/chatPickExtractor.js](server/services/chatPickExtractor.js) — captura picks de Oracle Chat con JSON tail + Haiku fallback, persiste en `picks` con `source='oracle_chat'`.
-
-### Pick Imperdible (Sprint 8b)
-- [server/routes/imperdible.js](server/routes/imperdible.js) — endpoints admin-only: `POST /api/imperdible/analyze`, `GET /api/imperdible/games`, `GET /api/imperdible/history`. Feature-flagged por `IMPERDIBLE_ENABLED`.
-- [server/services/imperdibleEngine.js](server/services/imperdibleEngine.js) — pipeline 7-fases: build candidates por game → Stage-1 conviction (xgboost + market + variance) → top-K → ML sidecar pick-aligned → hard gate → LLM arbiter → persist. Devuelve `verdict: 'LOCK' | 'PASS'`.
-- [server/services/imperdibleArbiter.js](server/services/imperdibleArbiter.js) — LLM arbiter que audita los candidatos sobrevivientes y confirma/veta el lock. Instancia Anthropic SDK propia (no toca oracle.js).
-- [server/services/imperdibleSelector.js](server/services/imperdibleSelector.js) — `computeConviction`, `evaluateGate`, `rankCandidates`, `mlProbForPick`, `DEFAULT_THRESHOLDS`. La lógica de gate y ranking es determinística; el LLM arbiter es la capa final de veto.
-- Picks `type='imperdible'` en tabla `picks`. Tabla `imperdible_runs` guarda el slate completo + decisión para backtesting futuro.
 
 ### ML sidecar Python
 - [ml/hexa_ml/serve.py](ml/hexa_ml/serve.py) — FastAPI app (endpoints: /health, /predict/\*, /calibration, /retrain, /retrain/ensemble).
@@ -328,8 +329,7 @@ npm run preview      # preview del build
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
 - `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
-- `IMPERDIBLE_ENABLED` — Pick Imperdible mode (admin-only lock-of-the-slate, default `false`)
-- `IMPERDIBLE_TOP_K` — candidatos que pasan al LLM arbiter (default `5`)
+- `IMPERDIBLE_ENABLED` — habilita Pick Imperdible (admin-only, MLB; default `false`). Opcionales: `IMPERDIBLE_ARBITER_MODEL` (default Opus), `IMPERDIBLE_TOP_K` (default `5`)
 
 Lista completa en [.env.example](.env.example).
 
