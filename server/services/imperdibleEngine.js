@@ -190,6 +190,7 @@ function scoreStage1(candidate) {
     marketType: candidate.marketType,
     propKind: candidate.propKind,
     lineupConfirmed: candidate.lineupConfirmed,
+    marketSource: candidate.marketSource,
   });
   return { ...candidate, ...score };
 }
@@ -225,6 +226,7 @@ function scoreStage2(candidate, mlProb) {
     marketType: candidate.marketType,
     propKind: candidate.propKind,
     lineupConfirmed: candidate.lineupConfirmed,
+    marketSource: candidate.marketSource,
   });
   return { ...candidate, ...score };
 }
@@ -234,7 +236,11 @@ function scoreStage2(candidate, mlProb) {
  */
 export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds = {} }) {
   const resolvedDate = date || new Date().toISOString().split('T')[0];
-  const gate = { ...DEFAULT_THRESHOLDS, ...thresholds };
+  // Caller-supplied thresholds are partial overrides — evaluateGate auto-
+  // selects the right profile per candidate (main vs extended) and merges
+  // these on top. So we pass `thresholds` as-is rather than pre-merging
+  // with DEFAULT_THRESHOLDS (which would clobber the extended profile).
+  const gateOverrides = thresholds && typeof thresholds === 'object' ? thresholds : {};
 
   let games = await getTodayGames(resolvedDate);
   if (!games.length) {
@@ -285,9 +291,16 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
   const stage1 = rankCandidates(allCandidates.map(scoreStage1));
   const topK = stage1.slice(0, TOP_K);
 
-  // Stage 2: ML-aligned conviction for the survivors only.
+  // Stage 2: ML-aligned conviction for the survivors only. Skip for
+  // extended candidates — the Python sidecar was trained on main markets,
+  // so applying its prob to ATL +5.5 or Under 13.5 produces noise that
+  // gets mis-read as model/market disagreement.
   const stage2 = [];
   for (const candidate of topK) {
+    if (candidate.marketSource === 'extended') {
+      stage2.push({ ...scoreStage2(candidate, null), mlOpinion: null });
+      continue;
+    }
     const bundle = bundleByGamePk.get(String(candidate.gamePk));
     const { mlProb, mlOpinion } = await attachMlSignal(candidate, bundle);
     stage2.push({ ...scoreStage2(candidate, mlProb), mlOpinion });
@@ -298,7 +311,7 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
   // automatically yet (e.g. team_total) — they remain in the slate dataset
   // for the future model but cannot become the final lock.
   const gated = ranked.map((c) => {
-    const baseGate = evaluateGate(c, gate);
+    const baseGate = evaluateGate(c, gateOverrides);
     const failed = [...baseGate.failedReasons];
     if (c.autoResolvable === false) failed.push('market_not_auto_resolvable');
     return { ...c, gate: { pass: failed.length === 0, failedReasons: failed } };
