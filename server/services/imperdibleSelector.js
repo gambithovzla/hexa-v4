@@ -52,6 +52,27 @@ export const DEFAULT_THRESHOLDS = {
   requireImpliedProb: false,
 };
 
+/**
+ * Threshold profile for candidates with `marketSource='extended'` (alt RLs,
+ * alt totals, team totals). The Python ML sidecar was trained on MAIN
+ * markets only — its opinion on ATL +5.5 is just its opinion on ATL ML (an
+ * adjacent but different bet) and gets mis-applied as "ml against pick"
+ * disagreement. So for extended picks we:
+ *   1. Do not require an ML probability (the ML signal is excluded upstream
+ *      in computeConviction when marketSource='extended').
+ *   2. Lower the conviction floor to 62 — alt-lines win with model + lineup,
+ *      not with three signals agreeing.
+ *   3. Drop minImpliedProb (these often have no market price at all).
+ */
+export const EXTENDED_THRESHOLDS = {
+  ...DEFAULT_THRESHOLDS,
+  minModelProb: 75,         // higher bar on the model alone
+  minConsensusProb: 75,
+  minImpliedProb: 0,         // implied is optional / missing on alts
+  minMlProb: 0,              // ML signal is excluded for these
+  minConviction: 62,
+};
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -112,6 +133,7 @@ export function computeConviction({
   marketType,
   propKind = null,
   lineupConfirmed = false,
+  marketSource = 'main',
 }) {
   const model = toNum(modelProb);
   if (model == null) {
@@ -119,7 +141,12 @@ export function computeConviction({
   }
 
   const implied = toNum(impliedProb);
-  const ml = toNum(mlProb);
+  // Exclude the ML sidecar opinion for extended-market candidates: the model
+  // was trained on main markets (ML / RL ±1.5 / total at posted line) so its
+  // signal is not informative for alt-line picks, and folding it in produces
+  // a fake "agreement penalty" that collapses high-probability picks.
+  const useMl = marketSource !== 'extended';
+  const ml = useMl ? toNum(mlProb) : null;
   const quality = clamp(toNum(dataQuality) ?? 50, 0, 100);
 
   const signals = [{ value: model, weight: 0.45 }];
@@ -152,8 +179,20 @@ export function computeConviction({
       dataQuality: round(quality, 1),
       qualityFactor: round(qualityFactor, 3),
       varianceKey: vKey,
+      marketSource,
+      mlExcluded: !useMl,
     },
   };
+}
+
+/**
+ * Pick the right threshold profile for a scored candidate based on its
+ * market source. Extended candidates use a separate profile that does not
+ * require an ML signal and uses a softer conviction floor.
+ */
+export function thresholdsForCandidate(scored) {
+  const source = scored?.marketSource ?? scored?.components?.marketSource ?? 'main';
+  return source === 'extended' ? EXTENDED_THRESHOLDS : DEFAULT_THRESHOLDS;
 }
 
 /**
@@ -168,8 +207,12 @@ function decimalFromAmerican(american) {
   return n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
 }
 
-export function evaluateGate(scored, thresholds = DEFAULT_THRESHOLDS) {
-  const t = { ...DEFAULT_THRESHOLDS, ...thresholds };
+export function evaluateGate(scored, thresholds = null) {
+  // Auto-select threshold profile from the candidate's market_source unless
+  // the caller passed an explicit override. Caller can still pass partial
+  // overrides — they layer on top of the profile.
+  const profile = thresholdsForCandidate(scored);
+  const t = { ...profile, ...(thresholds ?? {}) };
   const failed = [];
 
   if (t.requireLineupConfirmed && !scored.lineupConfirmed) failed.push('lineup_not_confirmed');

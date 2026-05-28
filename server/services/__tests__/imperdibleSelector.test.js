@@ -167,3 +167,58 @@ test('payout floor: candidate at +120 passes with floor of 1.10', () => {
   );
   assert.equal(gate.pass, true);
 });
+
+test('extended candidate: ML signal is excluded from consensus', () => {
+  // Main-line equivalent: heavy disagreement between model (90) and ML (36)
+  // pulls consensus down and applies an agreement penalty.
+  const main = computeConviction({
+    modelProb: 90, impliedProb: null, mlProb: 36, dataQuality: 90,
+    marketType: 'runline', lineupConfirmed: true, marketSource: 'main',
+  });
+  // Same numbers but extended: ML is dropped from signals entirely.
+  const extended = computeConviction({
+    modelProb: 90, impliedProb: null, mlProb: 36, dataQuality: 90,
+    marketType: 'runline', lineupConfirmed: true, marketSource: 'extended',
+  });
+  assert.ok(extended.consensusProb > main.consensusProb + 15,
+    `extended consensus (${extended.consensusProb}) should be much higher than main (${main.consensusProb})`);
+  assert.equal(extended.components.mlExcluded, true);
+  assert.equal(extended.components.mlProb, null, 'ML prob is null in components when excluded');
+  assert.ok(extended.conviction > main.conviction + 20,
+    `extended conviction (${extended.conviction}) should beat main (${main.conviction})`);
+});
+
+test('extended candidate: uses softer conviction threshold (62 vs 72)', () => {
+  // A pick that scores ~70 conviction passes for extended but fails for main.
+  const candidate = computeConviction({
+    modelProb: 88, impliedProb: null, mlProb: null, dataQuality: 90,
+    marketType: 'runline', lineupConfirmed: true, marketSource: 'extended',
+  });
+  const gate = evaluateGate({ ...candidate, lineupConfirmed: true, marketSource: 'extended' });
+  assert.equal(gate.pass, true, `extended gate should pass; got ${JSON.stringify(gate)}`);
+
+  // Same candidate as main-line would fail because main requires conviction>=72
+  // AND the ML signal: here we score it as main with the same inputs.
+  const asMain = computeConviction({
+    modelProb: 88, impliedProb: null, mlProb: null, dataQuality: 90,
+    marketType: 'runline', lineupConfirmed: true, marketSource: 'main',
+  });
+  // Score is the same when mlProb is null, but threshold differs.
+  const mainGate = evaluateGate({ ...asMain, lineupConfirmed: true, marketSource: 'main' });
+  if (asMain.conviction < 72) {
+    assert.equal(mainGate.pass, false, 'main gate is stricter');
+  }
+});
+
+test('extended candidate: model_prob 90 + null implied + no ML → high conviction', () => {
+  // This mirrors the user's screenshot: Parlay shows 93% for ATL +5.5, but
+  // Imperdible used to gate it at 49%. After the fix it should sail through.
+  const score = computeConviction({
+    modelProb: 93, impliedProb: null, mlProb: null, dataQuality: 88,
+    marketType: 'runline', lineupConfirmed: true, marketSource: 'extended',
+  });
+  const gate = evaluateGate({ ...score, lineupConfirmed: true, marketSource: 'extended' });
+  assert.ok(score.conviction > 75,
+    `conviction should reflect the 93% model prob, got ${score.conviction}`);
+  assert.equal(gate.pass, true, `gate should pass for a 93% alt-line pick; got ${JSON.stringify(gate)}`);
+});
