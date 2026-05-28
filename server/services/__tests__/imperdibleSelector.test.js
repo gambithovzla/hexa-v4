@@ -112,3 +112,58 @@ test('rankCandidates orders by conviction, never by edge', () => {
   assert.equal(ranked[1].candidateId, 'b');
   assert.equal(ranked[2].candidateId, 'a');
 });
+
+test('null impliedProb is handled: conviction still computed via reweighting', () => {
+  const score = computeConviction({
+    modelProb: 85, impliedProb: null, mlProb: 78, dataQuality: 90,
+    marketType: 'runline', lineupConfirmed: true,
+  });
+  // model 0.45 + ml 0.25 = 0.70 total weight; consensus = (85*0.45 + 78*0.25)/0.70 = ~82.5
+  assert.ok(score.consensusProb > 80 && score.consensusProb < 84, `consensus ~82.5, got ${score.consensusProb}`);
+  assert.equal(score.components.impliedProb, null);
+});
+
+test('gate passes when implied is null by default (skipped check)', () => {
+  const score = computeConviction({
+    modelProb: 80, impliedProb: null, mlProb: 75, dataQuality: 85,
+    marketType: 'runline', lineupConfirmed: true,
+  });
+  const gate = evaluateGate({ ...score, lineupConfirmed: true });
+  assert.equal(gate.pass, true, JSON.stringify({ score, gate }));
+});
+
+test('gate fails when requireImpliedProb is true and implied is null', () => {
+  const score = computeConviction({
+    modelProb: 80, impliedProb: null, mlProb: 75, dataQuality: 85,
+    marketType: 'runline', lineupConfirmed: true,
+  });
+  const gate = evaluateGate({ ...score, lineupConfirmed: true }, { requireImpliedProb: true });
+  assert.equal(gate.pass, false);
+  assert.ok(gate.failedReasons.includes('market_price_missing'));
+});
+
+test('payout floor: candidate with deep favorite odds fails when floor is set', () => {
+  const score = computeConviction({
+    modelProb: 88, impliedProb: 85, mlProb: 84, dataQuality: 92,
+    marketType: 'runline', lineupConfirmed: true,
+  });
+  // -1500 odds = decimal 1.067 (below 1.10 floor)
+  const gate = evaluateGate(
+    { ...score, lineupConfirmed: true, odds: -1500 },
+    { minPayoutDecimal: 1.10 },
+  );
+  assert.equal(gate.pass, false);
+  assert.ok(gate.failedReasons.includes('payout_below_floor'));
+});
+
+test('payout floor: candidate at +120 passes with floor of 1.10', () => {
+  const score = computeConviction({
+    modelProb: 72, impliedProb: 70, mlProb: 71, dataQuality: 90,
+    marketType: 'moneyline', lineupConfirmed: true,
+  });
+  const gate = evaluateGate(
+    { ...score, lineupConfirmed: true, odds: 120 },
+    { minPayoutDecimal: 1.10 },
+  );
+  assert.equal(gate.pass, true);
+});

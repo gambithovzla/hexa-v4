@@ -8,7 +8,9 @@ import path from 'path';
 import { getMlbStandings, getMlbPlayoffBracket, getTeams, getTodayGames } from './mlb-api.js';
 import { buildContext, buildContextById } from './context-builder.js';
 import { analyzeGame, analyzeParlay, analyzeSafe, analyzeChat, summarizeGameBrief, analyzeChatJornada } from './oracle.js';
-import { getGameOdds, matchOddsToGame, calculateImpliedProbability, getOddsApiStatus } from './odds-api.js';
+import { getGameOdds, matchOddsToGame, calculateImpliedProbability, getOddsApiStatus, getEventAlternates } from './odds-api.js';
+import { buildExtendedCandidates, formatExtendedMenuForLLM } from './services/extendedMarketCandidates.js';
+import { pruneExpiredOddsCache, getOddsCacheStats } from './odds-cache.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
 import { verifyToken, requireVerifiedEmail } from './middleware/auth-middleware.js';
@@ -71,7 +73,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations } from './migrate.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -1786,6 +1788,28 @@ app.post('/api/analyze/safe', analysisLimiter, verifyToken, async (req, res) => 
             marketFocus: resolvedMarketFocus,
           });
 
+          // Augment with alt-line / team-total candidates. Cached menu from
+          // Postgres (6h TTL) — first hit of the day pays the API quota.
+          let altMenu = null;
+          if (matchedOdds?.eventId) {
+            try { altMenu = await getEventAlternates(matchedOdds.eventId); }
+            catch (err) { console.warn(`[analyze/safe] alt fetch failed: ${err.message}`); }
+          }
+          const extendedCandidates = buildExtendedCandidates({
+            gameData,
+            features: shadowFeatures,
+            mainCandidates: deterministicSafe?.safe_candidates ?? [],
+            alternates: altMenu,
+            lang,
+          });
+          if (deterministicSafe && extendedCandidates.length > 0) {
+            deterministicSafe.safe_candidates = [
+              ...(deterministicSafe.safe_candidates ?? []).map((c) => ({ ...c, market_source: c.market_source ?? 'main' })),
+              ...extendedCandidates,
+            ];
+            deterministicSafe.extended_candidates = extendedCandidates;
+          }
+
           const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
           const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
 
@@ -2211,7 +2235,44 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
     } catch { /* odds are optional */ }
 
     const contextBuildResult3 = await buildContext(gameData, matchedOdds);
-    const contextString = contextBuildResult3.context ?? contextBuildResult3;
+    const baseContextString = contextBuildResult3.context ?? contextBuildResult3;
+    const chatFeatures = contextBuildResult3._features ?? {};
+
+    // Append the extended-market menu (alt RLs, alt totals, team totals)
+    // to the context so the Oracle is aware of options beyond the main
+    // moneyline / RL ±1.5 / total when the user asks for SAFE / LOCK picks.
+    let extendedMenuString = '';
+    try {
+      const xgbResult = (() => {
+        try { return calculateParallelScore(buildShadowStatcastData(chatFeatures), gameData); }
+        catch { return null; }
+      })();
+      const safePayloadForMenu = buildDeterministicSafePayload({
+        gameData,
+        features: chatFeatures,
+        oddsData: matchedOdds ?? chatFeatures?.oddsData ?? null,
+        xgboostResult: xgbResult,
+        lang,
+        llmData: null,
+        marketFocus: 'all',
+      });
+      let altMenuChat = null;
+      if (matchedOdds?.eventId) {
+        try { altMenuChat = await getEventAlternates(matchedOdds.eventId); }
+        catch { /* optional */ }
+      }
+      const extendedForChat = buildExtendedCandidates({
+        gameData,
+        features: chatFeatures,
+        mainCandidates: safePayloadForMenu?.safe_candidates ?? [],
+        alternates: altMenuChat,
+        lang,
+      });
+      extendedMenuString = formatExtendedMenuForLLM(extendedForChat, lang, 15);
+    } catch (err) {
+      console.warn(`[Oracle Chat] extended menu prep failed: ${err.message}`);
+    }
+    const contextString = `${baseContextString}${extendedMenuString}`;
 
     // Inject the JSON-tail extraction instruction into the user turn so the
     // Oracle's structured pick (if any) lands in a parseable trailing block.
@@ -4245,6 +4306,7 @@ runMigrations()
   .then(() => runNbaDatasetMigrations())
   .then(() => runPickAlignedShadowMigrations())
   .then(() => runImperdibleMigrations())
+  .then(() => runOddsCacheMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -4346,6 +4408,56 @@ runMigrations()
           });
         }
       }, TWO_HOURS).unref();
+
+      // ── Odds cache warm-up: once a day at 10am ET, refresh alt-line
+      //     menu for every game of the day so Imperdible / Safe / Parlay /
+      //     Oracle Chat read from cache instead of hitting The Odds API.
+      //     Also prunes expired rows. Runs hourly between 10am-7pm ET; only
+      //     does work when within the warm window or when prune is due.
+      const ONE_HOUR = 60 * 60 * 1000;
+      const oddsCacheState = { lastWarmDate: null };
+      setInterval(() => {
+        const etHour = parseInt(
+          new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric', hour12: false, timeZone: 'America/New_York',
+          }).format(new Date()),
+          10
+        );
+        // Prune expired entries hourly (cheap).
+        pruneExpiredOddsCache().catch(() => {});
+        // Warm window: 10am-12pm ET. Only run once per ET-day.
+        if (etHour < 10 || etHour > 12) return;
+        const etDate = new Intl.DateTimeFormat('en-CA', {
+          year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/New_York',
+        }).format(new Date());
+        if (oddsCacheState.lastWarmDate === etDate) return;
+        oddsCacheState.lastWarmDate = etDate;
+        (async () => {
+          try {
+            console.log(`[odds-cache] warm-up starting for ${etDate}`);
+            const games = await getGameOdds({ date: etDate });
+            if (!Array.isArray(games) || games.length === 0) {
+              console.log('[odds-cache] warm-up: no games returned, skipping alt fetch');
+              return;
+            }
+            let warmedCount = 0;
+            for (const game of games) {
+              if (!game?.eventId) continue;
+              try {
+                const result = await getEventAlternates(game.eventId);
+                if (result) warmedCount++;
+                // Throttle to ~1 req/sec to be polite with the Odds API.
+                await new Promise((r) => setTimeout(r, 1100));
+              } catch (err) {
+                console.warn(`[odds-cache] warm-up alt fetch failed for ${game.eventId}: ${err.message}`);
+              }
+            }
+            console.log(`[odds-cache] warm-up complete: ${warmedCount}/${games.length} events cached`);
+          } catch (err) {
+            console.warn(`[odds-cache] warm-up failed: ${err.message}`);
+          }
+        })().catch(() => {});
+      }, ONE_HOUR).unref();
 
       if (process.env.X_AUTO_PUBLISH_ENABLED === '1') {
         const intervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);

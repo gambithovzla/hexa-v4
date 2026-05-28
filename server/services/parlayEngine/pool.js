@@ -1,8 +1,9 @@
 import { getTodayGames } from '../../mlb-api.js';
-import { getGameOdds, hydrateOddsForGame, matchOddsToGame } from '../../odds-api.js';
+import { getGameOdds, hydrateOddsForGame, matchOddsToGame, getEventAlternates } from '../../odds-api.js';
 import { buildContext } from '../../context-builder.js';
 import { buildDeterministicSafePayload } from '../../market-intelligence.js';
 import { calculateParallelScore } from '../xgboostValidator.js';
+import { buildExtendedCandidates } from '../extendedMarketCandidates.js';
 
 // 5-minute in-memory cache keyed by date + sorted gameIds
 const poolCache = new Map();
@@ -75,6 +76,8 @@ async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
     _buildContext,
     _buildDeterministicSafePayload,
     _calculateParallelScore,
+    _getEventAlternates,
+    _buildExtendedCandidates,
   } = deps;
 
   const gamePk = gameData.gamePk;
@@ -111,6 +114,33 @@ async function buildPoolForGame({ gameData, allOdds, lang, deps }) {
     lang,
     llmData: null,
   });
+
+  // Augment the candidate pool with alt-line / team-total markets. Pulled
+  // from the Postgres-backed alt cache (6h TTL). Failure here is non-fatal.
+  // Both helpers are dependency-injected so tests can opt out cleanly.
+  if (_getEventAlternates && _buildExtendedCandidates) {
+    let altMenu = null;
+    if (oddsData?.eventId) {
+      try { altMenu = await _getEventAlternates(oddsData.eventId); }
+      catch (err) { console.warn(`[parlay-synergy] gamePk ${gamePk}: alts fetch failed: ${err.message}`); }
+    }
+    const extendedSlate = _buildExtendedCandidates({
+      gameData,
+      features: _features,
+      mainCandidates: safePayload.safe_candidates ?? [],
+      alternates: altMenu,
+      lang,
+    });
+    // Team totals are not auto-resolvable yet — skip those at the architect
+    // level too so parlays don't end up with unresolvable legs.
+    const resolvableExtended = extendedSlate.filter((c) => c.auto_resolvable !== false);
+    if (resolvableExtended.length > 0) {
+      safePayload.safe_candidates = [
+        ...(safePayload.safe_candidates ?? []).map((c) => ({ ...c, market_source: c.market_source ?? 'main' })),
+        ...resolvableExtended,
+      ];
+    }
+  }
 
   const dataQualityScore = _features.dataQuality?.score ?? 50;
   const homeAbbr = gameData.teams?.home?.abbreviation ?? gameData.teams?.home?.name ?? '???';
@@ -198,6 +228,8 @@ export function createPoolBuilder({
   _buildContext,
   _buildDeterministicSafePayload,
   _calculateParallelScore,
+  _getEventAlternates = null,
+  _buildExtendedCandidates = null,
 }) {
   const deps = {
     _hydrateOddsForGame,
@@ -205,6 +237,8 @@ export function createPoolBuilder({
     _buildContext,
     _buildDeterministicSafePayload,
     _calculateParallelScore,
+    _getEventAlternates,
+    _buildExtendedCandidates,
   };
 
   return async function buildCandidatePool({ gameIds, date, lang = 'en' }) {
@@ -280,7 +314,9 @@ export function filterCandidatesByBetType(candidates, betType) {
   }
 }
 
-// Default export uses real production dependencies.
+// Default export uses real production dependencies. Extended candidates are
+// wired by default so the production architect sees alt RLs + alt totals;
+// tests using createPoolBuilder directly opt out unless they pass these.
 export const buildCandidatePool = createPoolBuilder({
   _getTodayGames: getTodayGames,
   _getGameOdds: getGameOdds,
@@ -289,4 +325,6 @@ export const buildCandidatePool = createPoolBuilder({
   _buildContext: buildContext,
   _buildDeterministicSafePayload: buildDeterministicSafePayload,
   _calculateParallelScore: calculateParallelScore,
+  _getEventAlternates: getEventAlternates,
+  _buildExtendedCandidates: buildExtendedCandidates,
 });

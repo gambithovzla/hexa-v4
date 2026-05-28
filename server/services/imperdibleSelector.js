@@ -29,6 +29,7 @@ export const MARKET_VARIANCE = {
   moneyline: 0,
   overunder: 3,
   runline: 5,
+  team_total: 4,
   playerprop_strikeouts: 8,
   playerprop_hits: 11,
   playerprop_other: 12,
@@ -42,6 +43,13 @@ export const DEFAULT_THRESHOLDS = {
   minDataQuality: 60,
   minConviction: 72,
   requireLineupConfirmed: true,
+  // Optional payout floor (decimal odds). null = disabled. Set e.g. to 1.10
+  // to reject locks where you would risk $10 to win $1.
+  minPayoutDecimal: null,
+  // When a candidate has no market implied probability (e.g. alt-line with
+  // no price), the gate skips the market_disagrees check by default. Setting
+  // this to true requires impliedProb to be present.
+  requireImpliedProb: false,
 };
 
 function clamp(value, min, max) {
@@ -154,6 +162,12 @@ export function computeConviction({
  * missing signal (e.g. no market odds) are skipped rather than failed, except
  * the ones that define "lock" (model prob, consensus, conviction, lineup).
  */
+function decimalFromAmerican(american) {
+  const n = Number(american);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);
+}
+
 export function evaluateGate(scored, thresholds = DEFAULT_THRESHOLDS) {
   const t = { ...DEFAULT_THRESHOLDS, ...thresholds };
   const failed = [];
@@ -166,9 +180,15 @@ export function evaluateGate(scored, thresholds = DEFAULT_THRESHOLDS) {
 
   const implied = scored.components?.impliedProb;
   if (implied != null && implied < t.minImpliedProb) failed.push('market_disagrees');
+  if (implied == null && t.requireImpliedProb) failed.push('market_price_missing');
 
   const ml = scored.components?.mlProb;
   if (ml != null && ml < t.minMlProb) failed.push('ml_against_pick');
+
+  if (t.minPayoutDecimal != null) {
+    const dec = scored.decimalOdds ?? decimalFromAmerican(scored.odds);
+    if (dec != null && dec < t.minPayoutDecimal) failed.push('payout_below_floor');
+  }
 
   return { pass: failed.length === 0, failedReasons: failed };
 }
