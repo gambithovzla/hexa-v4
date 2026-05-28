@@ -8,14 +8,60 @@
  *   calculatePayout(stake, americanOdds)         — compute potential payout
  */
 
+import { loadCachedOdds, saveCachedOdds } from './odds-cache.js';
+
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const CACHE_TTL_MS  = 60 * 60 * 1000; // 60 minutes
+// Optional: filter to a specific bookmaker (e.g. 'bet365') instead of taking
+// consensus across a US region. When set, ALL fetchers (main, alts, props)
+// pass `bookmakers=<value>` to The Odds API and skip the `regions` param —
+// you read the exact prices that book shows on its site. Common values:
+//   bet365 / pinnacle / williamhill / unibet / betfair
+// Leave empty for the default (regions=us + consensus across top books).
+const ODDS_API_BOOKMAKER = (process.env.ODDS_API_BOOKMAKER ?? '').trim().toLowerCase();
+// When using a non-US book (Bet365 lives in uk/eu), the Odds API still
+// accepts the bookmakers param without regions — but we may need to set
+// regions to widen the search if a bookmaker isn't found. Configurable.
+const ODDS_API_REGIONS = (process.env.ODDS_API_REGIONS ?? '').trim().toLowerCase() ||
+  (ODDS_API_BOOKMAKER ? 'us,uk,eu,au' : 'us');
 const PROP_MARKETS  = [
   'batter_hits',
   'pitcher_strikeouts',
   'batter_total_bases',
   'batter_home_runs',
   'batter_rbis',
+];
+
+// Extended menus fetched on-demand (per-event) for Imperdible / Safe /
+// Parlay / Oracle. Quota cost is real — these are only fetched when a
+// consumer explicitly asks, and the result is shared via Postgres cache.
+const ALT_GAME_MARKETS = [
+  'alternate_spreads',
+  'alternate_totals',
+  'team_totals',
+  'alternate_team_totals',
+];
+
+const EXTENDED_PROP_MARKETS = [
+  'batter_hits',
+  'batter_hits_alternate',
+  'batter_total_bases',
+  'batter_total_bases_alternate',
+  'batter_home_runs',
+  'batter_home_runs_alternate',
+  'batter_rbis',
+  'batter_rbis_alternate',
+  'batter_runs_scored',
+  'batter_runs_scored_alternate',
+  'batter_strikeouts',
+  'batter_strikeouts_alternate',
+  'pitcher_strikeouts',
+  'pitcher_strikeouts_alternate',
+  'pitcher_record_a_win',
+  'pitcher_hits_allowed',
+  'pitcher_outs',
+  'pitcher_earned_runs',
+  'pitcher_walks',
 ];
 
 const _cache = new Map();
@@ -100,11 +146,27 @@ function setLastFetchMeta(patch) {
   };
 }
 
+/**
+ * Append the bookmaker / regions params to a URLSearchParams instance.
+ * If ODDS_API_BOOKMAKER is set, both `regions` and `bookmakers` are sent —
+ * regions widens the search across markets the book serves, bookmakers
+ * filters to only that book. If not set, defaults to regions=us only.
+ */
+function applyBookmakerParams(params) {
+  params.set('regions', ODDS_API_REGIONS);
+  if (ODDS_API_BOOKMAKER) {
+    params.set('bookmakers', ODDS_API_BOOKMAKER);
+  }
+  return params;
+}
+
 export function getOddsApiStatus() {
   return {
     ..._lastFetchMeta,
     keyConfigured: Boolean(process.env.ODDS_API_KEY),
     backupKeyConfigured: Boolean(process.env.ODDS_API_BACKUP_KEY),
+    bookmaker: ODDS_API_BOOKMAKER || null,
+    regions: ODDS_API_REGIONS,
     cachedEvents: [..._cache.values()].reduce((sum, entry) => sum + (entry.data?.length ?? 0), 0),
   };
 }
@@ -168,13 +230,12 @@ export async function getGameOdds(options = {}) {
   }
 
   try {
-    const params = new URLSearchParams({
+    const params = applyBookmakerParams(new URLSearchParams({
       apiKey,
-      regions: 'us',
       markets: 'h2h,spreads,totals',
       oddsFormat: 'american',
       dateFormat: 'iso',
-    });
+    }));
     const window = getDateWindow(requestedDate);
     if (window) {
       params.set('commenceTimeFrom', window.from);
@@ -197,13 +258,12 @@ export async function getGameOdds(options = {}) {
       const retryBackupFullMarkets = async () => {
         if (!backupApiKey || backupApiKey === apiKey || !body.includes('OUT_OF_USAGE_CREDITS')) return null;
         console.warn('[odds-api] Primary key is out of usage credits; retrying full markets with backup key');
-        const backupParams = new URLSearchParams({
+        const backupParams = applyBookmakerParams(new URLSearchParams({
           apiKey: backupApiKey,
-          regions: 'us',
           markets: 'h2h,spreads,totals',
           oddsFormat: 'american',
           dateFormat: 'iso',
-        });
+        }));
         const window = getDateWindow(requestedDate);
         if (window) {
           backupParams.set('commenceTimeFrom', window.from);
@@ -256,13 +316,12 @@ export async function getGameOdds(options = {}) {
       const retryMoneylineOnly = async () => {
         if (!body.includes('OUT_OF_USAGE_CREDITS') || Number(quota.remaining) < 1) return null;
         console.warn('[odds-api] Remaining quota cannot cover h2h+spreads+totals; retrying with h2h moneyline only');
-        const fallbackParams = new URLSearchParams({
+        const fallbackParams = applyBookmakerParams(new URLSearchParams({
           apiKey,
-          regions: 'us',
           markets: 'h2h',
           oddsFormat: 'american',
           dateFormat: 'iso',
-        });
+        }));
         const window = getDateWindow(requestedDate);
         if (window) {
           fallbackParams.set('commenceTimeFrom', window.from);
@@ -412,9 +471,13 @@ export async function hydrateOddsForGame(oddsData) {
   }
 
   try {
-    const url =
-      `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(oddsData.eventId)}/odds?` +
-      `apiKey=${apiKey}&regions=us&markets=${PROP_MARKETS.join(',')}&oddsFormat=american&dateFormat=iso`;
+    const params = applyBookmakerParams(new URLSearchParams({
+      apiKey,
+      markets: PROP_MARKETS.join(','),
+      oddsFormat: 'american',
+      dateFormat: 'iso',
+    }));
+    const url = `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(oddsData.eventId)}/odds?${params.toString()}`;
 
     console.log('[odds-api] Fetching event props:', url.replace(apiKey, `${apiKey.substring(0, 8)}...`));
     const res = await fetch(url);
@@ -717,3 +780,252 @@ export function calculatePayout(stake, americanOdds) {
     totalPayout: Math.round((s + profit) * 100) / 100,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Extended market fetchers (alt lines + team totals + full props menu)
+// ---------------------------------------------------------------------------
+
+function pickApiKey() {
+  const primary = process.env.ODDS_API_KEY;
+  const backup = process.env.ODDS_API_BACKUP_KEY;
+  if (primary) return { key: primary, slot: 'primary', backup };
+  if (backup) return { key: backup, slot: 'backup', backup: null };
+  return null;
+}
+
+async function fetchEventMarketsRaw({ eventId, marketsList, apiKey }) {
+  const params = applyBookmakerParams(new URLSearchParams({
+    apiKey,
+    markets: marketsList.join(','),
+    oddsFormat: 'american',
+    dateFormat: 'iso',
+  }));
+  const url = `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(eventId)}/odds?${params.toString()}`;
+  const res = await fetch(url);
+  const quota = {
+    remaining: res.headers.get('x-requests-remaining'),
+    used: res.headers.get('x-requests-used'),
+    last: res.headers.get('x-requests-last'),
+  };
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    return { ok: false, status: res.status, body, quota };
+  }
+  const event = await res.json();
+  return { ok: true, status: res.status, event, quota };
+}
+
+function normalizeAlternateGameLines(event) {
+  const homeTeam = event?.home_team;
+  const awayTeam = event?.away_team;
+  if (!homeTeam || !awayTeam) return null;
+
+  // Aggregate consensus by (market, side, line). Up to 3 books per offer.
+  const altSpreads = new Map();  // key: side|line  → { prices: [] }
+  const altTotals = new Map();   // key: direction|line
+  const teamTotals = new Map();  // key: teamSide|direction|line  (incl. alt_team_totals)
+
+  for (const book of (event.bookmakers ?? []).slice(0, 6)) {
+    for (const market of book.markets ?? []) {
+      const key = market.key;
+      if (key === 'alternate_spreads') {
+        for (const o of market.outcomes ?? []) {
+          const point = Number(o.point);
+          const price = Number(o.price);
+          if (!Number.isFinite(point) || !Number.isFinite(price)) continue;
+          const side = o.name === homeTeam ? 'home' : (o.name === awayTeam ? 'away' : null);
+          if (!side) continue;
+          const k = `${side}|${point}`;
+          const entry = altSpreads.get(k) ?? { side, line: point, prices: [] };
+          entry.prices.push(price);
+          altSpreads.set(k, entry);
+        }
+      } else if (key === 'alternate_totals') {
+        for (const o of market.outcomes ?? []) {
+          const point = Number(o.point);
+          const price = Number(o.price);
+          if (!Number.isFinite(point) || !Number.isFinite(price)) continue;
+          const dir = normalizePropDirection(o.name);
+          if (!dir) continue;
+          const k = `${dir}|${point}`;
+          const entry = altTotals.get(k) ?? { direction: dir, line: point, prices: [] };
+          entry.prices.push(price);
+          altTotals.set(k, entry);
+        }
+      } else if (key === 'team_totals' || key === 'alternate_team_totals') {
+        for (const o of market.outcomes ?? []) {
+          const point = Number(o.point);
+          const price = Number(o.price);
+          if (!Number.isFinite(point) || !Number.isFinite(price)) continue;
+          const dir = normalizePropDirection(o.name);
+          if (!dir) continue;
+          // The team is in 'description' for team_totals markets
+          const teamName = String(o.description ?? '').trim();
+          if (!teamName) continue;
+          const teamSide = teamName === homeTeam ? 'home' : (teamName === awayTeam ? 'away' : null);
+          if (!teamSide) continue;
+          const k = `${teamSide}|${dir}|${point}`;
+          const entry = teamTotals.get(k) ?? { teamSide, direction: dir, line: point, prices: [] };
+          entry.prices.push(price);
+          teamTotals.set(k, entry);
+        }
+      }
+    }
+  }
+
+  const finalize = (map, fields) => [...map.values()].map((e) => {
+    const out = { ...e, price: consensusAmerican(e.prices) };
+    delete out.prices;
+    return fields ? Object.fromEntries(Object.entries(out).filter(([k]) => fields.includes(k))) : out;
+  });
+
+  return {
+    eventId: event.id,
+    homeTeam,
+    awayTeam,
+    altRunLines: finalize(altSpreads),
+    altTotals: finalize(altTotals),
+    teamTotals: finalize(teamTotals),
+  };
+}
+
+function normalizeExtendedProps(event) {
+  const grouped = new Map();
+  for (const book of (event.bookmakers ?? []).slice(0, 6)) {
+    for (const market of book.markets ?? []) {
+      if (!EXTENDED_PROP_MARKETS.includes(market.key)) continue;
+      for (const outcome of market.outcomes ?? []) {
+        const direction = normalizePropDirection(outcome.name);
+        const point = outcome.point != null ? Number(outcome.point) : null;
+        const price = Number(outcome.price);
+        const playerName = String(
+          outcome.description ?? outcome.participant ?? outcome.player ?? '',
+        ).trim();
+        if (!direction || !playerName || !Number.isFinite(price)) continue;
+        // Some markets (e.g. pitcher_record_a_win) have no point — encode as 0.
+        const linePoint = Number.isFinite(point) ? point : 0;
+        const key = `${market.key}::${normalizeName(playerName)}::${direction}::${linePoint}`;
+        const existing = grouped.get(key) ?? {
+          marketKey: market.key,
+          playerName,
+          normalizedPlayerName: normalizeName(playerName),
+          direction,
+          line: linePoint,
+          prices: [],
+        };
+        existing.prices.push(price);
+        grouped.set(key, existing);
+      }
+    }
+  }
+  const out = {};
+  for (const entry of grouped.values()) {
+    const offer = {
+      playerName: entry.playerName,
+      normalizedPlayerName: entry.normalizedPlayerName,
+      direction: entry.direction,
+      line: entry.line,
+      price: Math.round(avg(entry.prices)),
+    };
+    if (!out[entry.marketKey]) out[entry.marketKey] = [];
+    out[entry.marketKey].push(offer);
+  }
+  for (const k of Object.keys(out)) {
+    out[k].sort((a, b) =>
+      a.normalizedPlayerName.localeCompare(b.normalizedPlayerName) ||
+      a.line - b.line ||
+      a.direction.localeCompare(b.direction)
+    );
+  }
+  return out;
+}
+
+/**
+ * Fetch alt-line + team-totals menu for one event. Postgres-cached (6h TTL
+ * by default). Returns null when no API key is configured or upstream fails.
+ *
+ * @param {string} eventId  — Odds API event id
+ * @param {{ forceRefresh?: boolean, ttlMs?: number }} [opts]
+ * @returns {Promise<object|null>}
+ */
+export async function getEventAlternates(eventId, opts = {}) {
+  if (!eventId) return null;
+  if (!opts.forceRefresh) {
+    const cached = await loadCachedOdds({ scope: 'alts', subject: eventId });
+    if (cached?.payload) return cached.payload;
+  }
+  const apiKey = pickApiKey();
+  if (!apiKey) {
+    console.warn('[odds-api] getEventAlternates: no API key configured');
+    return null;
+  }
+  let attempt = await fetchEventMarketsRaw({ eventId, marketsList: ALT_GAME_MARKETS, apiKey: apiKey.key });
+  if (!attempt.ok && apiKey.backup && attempt.body?.includes('OUT_OF_USAGE_CREDITS')) {
+    console.warn(`[odds-api] alts: primary out of credits for event ${eventId}; falling back to backup`);
+    attempt = await fetchEventMarketsRaw({ eventId, marketsList: ALT_GAME_MARKETS, apiKey: apiKey.backup });
+  }
+  if (!attempt.ok) {
+    console.warn(`[odds-api] alts fetch failed for event ${eventId}: status=${attempt.status} body=${(attempt.body ?? '').slice(0, 160)}`);
+    return null;
+  }
+  const normalized = normalizeAlternateGameLines(attempt.event);
+  if (!normalized) return null;
+  await saveCachedOdds({
+    scope: 'alts',
+    subject: eventId,
+    payload: normalized,
+    markets: ALT_GAME_MARKETS.join(','),
+    quota: attempt.quota,
+    keySlot: apiKey.slot,
+    ttlMs: opts.ttlMs,
+  });
+  return normalized;
+}
+
+/**
+ * Fetch extended player props menu for one event. Postgres-cached (3h TTL by
+ * default). Returns null on any failure path.
+ *
+ * @param {string} eventId
+ * @param {{ forceRefresh?: boolean, ttlMs?: number, markets?: string[] }} [opts]
+ * @returns {Promise<object|null>}
+ */
+export async function getEventPropsExtended(eventId, opts = {}) {
+  if (!eventId) return null;
+  if (!opts.forceRefresh) {
+    const cached = await loadCachedOdds({ scope: 'props_full', subject: eventId });
+    if (cached?.payload) return cached.payload;
+  }
+  const apiKey = pickApiKey();
+  if (!apiKey) return null;
+  const marketsList = Array.isArray(opts.markets) && opts.markets.length > 0
+    ? opts.markets
+    : EXTENDED_PROP_MARKETS;
+  let attempt = await fetchEventMarketsRaw({ eventId, marketsList, apiKey: apiKey.key });
+  if (!attempt.ok && apiKey.backup && attempt.body?.includes('OUT_OF_USAGE_CREDITS')) {
+    console.warn(`[odds-api] props_full: primary out of credits for event ${eventId}; falling back to backup`);
+    attempt = await fetchEventMarketsRaw({ eventId, marketsList, apiKey: apiKey.backup });
+  }
+  if (!attempt.ok) {
+    console.warn(`[odds-api] props_full fetch failed for event ${eventId}: status=${attempt.status} body=${(attempt.body ?? '').slice(0, 160)}`);
+    return null;
+  }
+  const playerProps = normalizeExtendedProps(attempt.event);
+  const payload = { eventId, playerProps };
+  await saveCachedOdds({
+    scope: 'props_full',
+    subject: eventId,
+    payload,
+    markets: marketsList.join(','),
+    quota: attempt.quota,
+    keySlot: apiKey.slot,
+    ttlMs: opts.ttlMs,
+  });
+  return payload;
+}
+
+export const __MARKET_LISTS__ = {
+  PROP_MARKETS,
+  ALT_GAME_MARKETS,
+  EXTENDED_PROP_MARKETS,
+};

@@ -905,3 +905,38 @@ export async function runImperdibleMigrations() {
     client.release();
   }
 }
+
+// Postgres-backed odds cache shared across consumers (Imperdible, Safe,
+// Parlay Architect, Oracle Chat). Survives redeploys and avoids re-fetching
+// the same alt-line / props menu multiple times per day.
+export async function runOddsCacheMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS odds_cache (
+        id          BIGSERIAL    PRIMARY KEY,
+        cache_key   VARCHAR(200) NOT NULL UNIQUE,
+        sport       VARCHAR(10)  NOT NULL DEFAULT 'mlb',
+        scope       VARCHAR(40)  NOT NULL,
+        subject     VARCHAR(120),
+        payload     JSONB        NOT NULL,
+        markets     TEXT,
+        quota       JSONB,
+        key_slot    VARCHAR(20),
+        fetched_at  TIMESTAMPTZ  DEFAULT NOW(),
+        expires_at  TIMESTAMPTZ  NOT NULL
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_odds_cache_expires ON odds_cache(expires_at)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_odds_cache_scope_subject ON odds_cache(scope, subject)`);
+    await client.query('COMMIT');
+    console.log('[migrate] odds_cache table ready');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] odds_cache migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

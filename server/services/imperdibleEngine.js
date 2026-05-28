@@ -21,10 +21,11 @@
 
 import pool from '../db.js';
 import { getTodayGames } from '../mlb-api.js';
-import { getGameOdds, matchOddsToGame, calculateImpliedProbability } from '../odds-api.js';
+import { getGameOdds, matchOddsToGame, calculateImpliedProbability, getEventAlternates } from '../odds-api.js';
 import { buildContext } from '../context-builder.js';
 import { calculateParallelScore } from './xgboostValidator.js';
 import { buildDeterministicSafePayload } from '../market-intelligence.js';
+import { buildExtendedCandidates } from './extendedMarketCandidates.js';
 import { buildPickAlignedMlOpinion } from './pickAlignedMl.js';
 import { savePickFeatures } from '../feature-store.js';
 import { arbitrateImperdible } from './imperdibleArbiter.js';
@@ -61,7 +62,8 @@ function buildShadowStatcastData(features = {}) {
 }
 
 function candidateId(gamePk, c) {
-  return `${gamePk}:${c.market_type}:${c.side ?? 'na'}:${c.line ?? 'na'}`;
+  const teamPart = c.team_side ? `:${c.team_side}` : '';
+  return `${gamePk}:${c.market_type}${teamPart}:${c.side ?? 'na'}:${c.line ?? 'na'}`;
 }
 
 function americanToDecimal(odds) {
@@ -108,13 +110,40 @@ async function buildGameCandidates({ gameData, date, allOdds, lang }) {
     marketFocus: 'all',
   });
 
+  // Fetch the alt-line + team-totals menu for this event (Postgres-cached,
+  // 6h TTL). Failure is non-fatal — extended candidates still get generated
+  // with model-only probabilities and no market price attached.
+  let alternates = null;
+  if (matchedOdds?.eventId) {
+    try {
+      alternates = await getEventAlternates(matchedOdds.eventId);
+    } catch (err) {
+      console.warn(`[imperdible] getEventAlternates failed for ${matchedOdds.eventId}: ${err.message}`);
+    }
+  }
+
+  const extended = buildExtendedCandidates({
+    gameData,
+    features,
+    mainCandidates: safePayload.safe_candidates ?? [],
+    alternates,
+    extendedProps: null,
+    lang,
+  });
+
   const homeAbbr = gameData.teams?.home?.abbreviation ?? 'HOME';
   const awayAbbr = gameData.teams?.away?.abbreviation ?? 'AWAY';
   const matchup = `${awayAbbr} @ ${homeAbbr}`;
   const lineupConfirmed = gameData.lineupStatus === 'confirmed';
   const dataQuality = features?.dataQuality?.score ?? null;
 
-  const candidates = (safePayload.safe_candidates ?? []).map((c) => ({
+  // Combine main candidates (with market_source='main') and extended ones.
+  const allRaw = [
+    ...(safePayload.safe_candidates ?? []).map((c) => ({ ...c, market_source: c.market_source ?? 'main' })),
+    ...extended,
+  ];
+
+  const candidates = allRaw.map((c) => ({
     candidateId: candidateId(gameData.gamePk, c),
     gamePk: gameData.gamePk,
     matchup,
@@ -123,10 +152,13 @@ async function buildGameCandidates({ gameData, date, allOdds, lang }) {
     marketType: c.market_type,
     propKind: c.prop_kind ?? null,
     side: c.side ?? null,
+    teamSide: c.team_side ?? null,
     line: c.line ?? null,
     odds: c.odds ?? null,
     modelProbability: c.hit_probability ?? c.model_probability ?? null,
     impliedProbability: c.implied_probability ?? null,
+    marketSource: c.market_source ?? 'main',
+    autoResolvable: c.auto_resolvable !== false,
     reasoning: c.reasoning ?? '',
     lineupConfirmed,
     dataQuality,
@@ -141,6 +173,8 @@ async function buildGameCandidates({ gameData, date, allOdds, lang }) {
     statcast,
     xgboostResult,
     safePayload,
+    extended,
+    alternates,
     gameData,
     lineupConfirmed,
     candidates,
@@ -260,8 +294,15 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
   }
   const ranked = rankCandidates(stage2);
 
-  // Hard gate.
-  const gated = ranked.map((c) => ({ ...c, gate: evaluateGate(c, gate) }));
+  // Hard gate. Filter out candidates whose market type cannot be resolved
+  // automatically yet (e.g. team_total) — they remain in the slate dataset
+  // for the future model but cannot become the final lock.
+  const gated = ranked.map((c) => {
+    const baseGate = evaluateGate(c, gate);
+    const failed = [...baseGate.failedReasons];
+    if (c.autoResolvable === false) failed.push('market_not_auto_resolvable');
+    return { ...c, gate: { pass: failed.length === 0, failedReasons: failed } };
+  });
   const eligible = gated.filter((c) => c.gate.pass);
 
   if (eligible.length === 0) {
