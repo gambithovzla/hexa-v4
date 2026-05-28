@@ -12,6 +12,18 @@ import { loadCachedOdds, saveCachedOdds } from './odds-cache.js';
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const CACHE_TTL_MS  = 60 * 60 * 1000; // 60 minutes
+// Optional: filter to a specific bookmaker (e.g. 'bet365') instead of taking
+// consensus across a US region. When set, ALL fetchers (main, alts, props)
+// pass `bookmakers=<value>` to The Odds API and skip the `regions` param —
+// you read the exact prices that book shows on its site. Common values:
+//   bet365 / pinnacle / williamhill / unibet / betfair
+// Leave empty for the default (regions=us + consensus across top books).
+const ODDS_API_BOOKMAKER = (process.env.ODDS_API_BOOKMAKER ?? '').trim().toLowerCase();
+// When using a non-US book (Bet365 lives in uk/eu), the Odds API still
+// accepts the bookmakers param without regions — but we may need to set
+// regions to widen the search if a bookmaker isn't found. Configurable.
+const ODDS_API_REGIONS = (process.env.ODDS_API_REGIONS ?? '').trim().toLowerCase() ||
+  (ODDS_API_BOOKMAKER ? 'us,uk,eu,au' : 'us');
 const PROP_MARKETS  = [
   'batter_hits',
   'pitcher_strikeouts',
@@ -134,11 +146,27 @@ function setLastFetchMeta(patch) {
   };
 }
 
+/**
+ * Append the bookmaker / regions params to a URLSearchParams instance.
+ * If ODDS_API_BOOKMAKER is set, both `regions` and `bookmakers` are sent —
+ * regions widens the search across markets the book serves, bookmakers
+ * filters to only that book. If not set, defaults to regions=us only.
+ */
+function applyBookmakerParams(params) {
+  params.set('regions', ODDS_API_REGIONS);
+  if (ODDS_API_BOOKMAKER) {
+    params.set('bookmakers', ODDS_API_BOOKMAKER);
+  }
+  return params;
+}
+
 export function getOddsApiStatus() {
   return {
     ..._lastFetchMeta,
     keyConfigured: Boolean(process.env.ODDS_API_KEY),
     backupKeyConfigured: Boolean(process.env.ODDS_API_BACKUP_KEY),
+    bookmaker: ODDS_API_BOOKMAKER || null,
+    regions: ODDS_API_REGIONS,
     cachedEvents: [..._cache.values()].reduce((sum, entry) => sum + (entry.data?.length ?? 0), 0),
   };
 }
@@ -202,13 +230,12 @@ export async function getGameOdds(options = {}) {
   }
 
   try {
-    const params = new URLSearchParams({
+    const params = applyBookmakerParams(new URLSearchParams({
       apiKey,
-      regions: 'us',
       markets: 'h2h,spreads,totals',
       oddsFormat: 'american',
       dateFormat: 'iso',
-    });
+    }));
     const window = getDateWindow(requestedDate);
     if (window) {
       params.set('commenceTimeFrom', window.from);
@@ -231,13 +258,12 @@ export async function getGameOdds(options = {}) {
       const retryBackupFullMarkets = async () => {
         if (!backupApiKey || backupApiKey === apiKey || !body.includes('OUT_OF_USAGE_CREDITS')) return null;
         console.warn('[odds-api] Primary key is out of usage credits; retrying full markets with backup key');
-        const backupParams = new URLSearchParams({
+        const backupParams = applyBookmakerParams(new URLSearchParams({
           apiKey: backupApiKey,
-          regions: 'us',
           markets: 'h2h,spreads,totals',
           oddsFormat: 'american',
           dateFormat: 'iso',
-        });
+        }));
         const window = getDateWindow(requestedDate);
         if (window) {
           backupParams.set('commenceTimeFrom', window.from);
@@ -290,13 +316,12 @@ export async function getGameOdds(options = {}) {
       const retryMoneylineOnly = async () => {
         if (!body.includes('OUT_OF_USAGE_CREDITS') || Number(quota.remaining) < 1) return null;
         console.warn('[odds-api] Remaining quota cannot cover h2h+spreads+totals; retrying with h2h moneyline only');
-        const fallbackParams = new URLSearchParams({
+        const fallbackParams = applyBookmakerParams(new URLSearchParams({
           apiKey,
-          regions: 'us',
           markets: 'h2h',
           oddsFormat: 'american',
           dateFormat: 'iso',
-        });
+        }));
         const window = getDateWindow(requestedDate);
         if (window) {
           fallbackParams.set('commenceTimeFrom', window.from);
@@ -446,9 +471,13 @@ export async function hydrateOddsForGame(oddsData) {
   }
 
   try {
-    const url =
-      `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(oddsData.eventId)}/odds?` +
-      `apiKey=${apiKey}&regions=us&markets=${PROP_MARKETS.join(',')}&oddsFormat=american&dateFormat=iso`;
+    const params = applyBookmakerParams(new URLSearchParams({
+      apiKey,
+      markets: PROP_MARKETS.join(','),
+      oddsFormat: 'american',
+      dateFormat: 'iso',
+    }));
+    const url = `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(oddsData.eventId)}/odds?${params.toString()}`;
 
     console.log('[odds-api] Fetching event props:', url.replace(apiKey, `${apiKey.substring(0, 8)}...`));
     const res = await fetch(url);
@@ -765,9 +794,13 @@ function pickApiKey() {
 }
 
 async function fetchEventMarketsRaw({ eventId, marketsList, apiKey }) {
-  const url =
-    `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(eventId)}/odds?` +
-    `apiKey=${apiKey}&regions=us&markets=${marketsList.join(',')}&oddsFormat=american&dateFormat=iso`;
+  const params = applyBookmakerParams(new URLSearchParams({
+    apiKey,
+    markets: marketsList.join(','),
+    oddsFormat: 'american',
+    dateFormat: 'iso',
+  }));
+  const url = `${ODDS_API_BASE}/sports/baseball_mlb/events/${encodeURIComponent(eventId)}/odds?${params.toString()}`;
   const res = await fetch(url);
   const quota = {
     remaining: res.headers.get('x-requests-remaining'),

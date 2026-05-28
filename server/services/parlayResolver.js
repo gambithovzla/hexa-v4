@@ -274,23 +274,40 @@ export async function resolveParlayRunById({ runId, row = null, gamesByDate, liv
     fallbackDate: parlayRow.game_date,
   });
 
-  const finalized = aggregate.status !== 'pending';
+  // A parlay's outcome is "known" the moment any leg loses, even if other
+  // legs are still pending. We persist that outcome (hit, legs_hit) so the
+  // UI can show LOSS immediately. But the row itself stays `resolved=false`
+  // until ALL legs grade — otherwise pending legs never get re-resolved on
+  // future passes (the resolver filters by `resolved=false`).
+  const allLegsGraded = legResults.every((lr) => lr?.status !== 'pending');
+  const outcomeKnown = aggregate.status !== 'pending';
   const hit = aggregate.status === 'win' ? true : aggregate.status === 'loss' ? false : null;
 
-  if (finalized) {
+  if (outcomeKnown && allLegsGraded) {
     await pool.query(
       `UPDATE parlay_synergy_runs
           SET resolved    = true,
               hit         = $1,
               legs_hit    = $2,
               leg_results = $3::jsonb,
-              resolved_at = NOW()
+              resolved_at = COALESCE(resolved_at, NOW())
+        WHERE id = $4`,
+      [hit, aggregate.legsHit, JSON.stringify(legResults), runId],
+    );
+  } else if (outcomeKnown) {
+    // Outcome decided (loss, or push-only) but some legs still in-flight.
+    // Surface the outcome early so the user knows, but keep `resolved=false`
+    // so the next resolver pass picks the row up and finishes the partial legs.
+    await pool.query(
+      `UPDATE parlay_synergy_runs
+          SET hit         = $1,
+              legs_hit    = $2,
+              leg_results = $3::jsonb
         WHERE id = $4`,
       [hit, aggregate.legsHit, JSON.stringify(legResults), runId],
     );
   } else {
-    // Persist partial leg_results so the UI can show per-leg progress while
-    // some games are still in-flight, but leave resolved=false.
+    // Still pending — refresh partial leg results only.
     await pool.query(
       `UPDATE parlay_synergy_runs
           SET leg_results = $1::jsonb
@@ -305,7 +322,9 @@ export async function resolveParlayRunById({ runId, row = null, gamesByDate, liv
     legsHit: aggregate.legsHit,
     legsResolved: aggregate.legsResolved,
     totalLegs,
-    persisted: finalized,
+    persisted: outcomeKnown && allLegsGraded,
+    outcomeKnown,
+    allLegsGraded,
     legResults,
   };
 }
@@ -317,10 +336,23 @@ export async function resolveParlayRunById({ runId, row = null, gamesByDate, liv
 export async function resolvePendingParlays({ limit = 200 } = {}) {
   const summary = { scanned: 0, finalized: 0, wins: 0, losses: 0, pushes: 0, stillPending: 0, errors: [] };
 
+  // Two buckets:
+  //   1) resolved=false                  — never fully graded; normal flow
+  //   2) resolved=true + any pending leg — outcome known but pending legs
+  //      were left dangling by older buggy passes. Re-resolve to backfill.
   const { rows } = await pool.query(
     `SELECT id, game_date, chosen_legs, candidate_pool
        FROM parlay_synergy_runs
       WHERE resolved = false
+         OR (
+              resolved = true
+              AND leg_results IS NOT NULL
+              AND jsonb_typeof(leg_results) = 'array'
+              AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements(leg_results) elem
+                WHERE elem->>'status' = 'pending'
+              )
+            )
       ORDER BY game_date DESC, id ASC
       LIMIT $1`,
     [limit],
