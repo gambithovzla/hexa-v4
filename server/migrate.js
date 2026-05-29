@@ -940,3 +940,33 @@ export async function runOddsCacheMigrations() {
     client.release();
   }
 }
+
+/**
+ * runEnsembleBackfillMigration()
+ *
+ * One-time backfill: rows in shadow_model_runs that have python_pick_prob
+ * populated but python_model_score / python_model_status still NULL were
+ * created while the recordShadowModelRun bug existed — _enrichWithPythonScore
+ * was skipped when pickAligned.python_pick_prob was already set.
+ *
+ * This sets python_model_score = python_pick_prob and python_model_status =
+ * 'ok' for those rows so the ensemble training SQL can find them.
+ * Idempotent: re-running does nothing if already applied.
+ */
+export async function runEnsembleBackfillMigration() {
+  try {
+    const result = await pool.query(`
+      UPDATE shadow_model_runs
+      SET python_model_score  = python_pick_prob,
+          python_model_status = 'ok',
+          updated_at          = NOW()
+      WHERE python_pick_prob IS NOT NULL
+        AND (python_model_status IS DISTINCT FROM 'ok'
+             OR python_model_score IS NULL)
+    `);
+    console.log(`[migrate] ensemble backfill: updated ${result.rowCount} shadow_model_runs rows`);
+  } catch (err) {
+    console.error('[migrate] ensemble backfill failed:', err.message);
+    throw err;
+  }
+}

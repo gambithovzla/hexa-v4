@@ -23,7 +23,7 @@ from .models.ensemble import EnsembleMetaLearner
 
 logger = logging.getLogger("hexa_ml.predict")
 
-ENSEMBLE_MARKETS = ("moneyline",)
+ENSEMBLE_MARKETS = ("moneyline", "overunder", "runline", "prop")
 
 
 @dataclass

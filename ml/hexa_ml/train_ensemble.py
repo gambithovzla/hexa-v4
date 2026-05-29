@@ -36,7 +36,7 @@ from .models.ensemble import EnsembleMetaLearner, EnsembleMetrics
 
 logger = logging.getLogger("hexa_ml.train_ensemble")
 
-ENSEMBLE_MARKETS = ("moneyline",)
+ENSEMBLE_MARKETS = ("moneyline", "overunder", "runline", "prop")
 
 
 def _now_iso() -> str:
@@ -44,11 +44,11 @@ def _now_iso() -> str:
 
 
 def _extract_sources(df: pd.DataFrame) -> np.ndarray:
-    """Build the (n, 3) array of [oracle, legacy, python] probabilities."""
+    """Build the (n, 3) array of [oracle, legacy, python] pick-aligned probabilities."""
     return df[[
-        "oracle_home_win_prob",
-        "shadow_home_win_prob",
-        "python_model_score",
+        "oracle_pick_prob",
+        "legacy_pick_prob",
+        "python_pick_prob",
     ]].to_numpy(dtype=float)
 
 
