@@ -535,13 +535,13 @@ function buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeB
       uLines.push(`  Hand composition: ${rhp} RHP / ${lhp} LHP in bullpen`);
     }
 
-    // Fatigue summary for Oracle
+    // Fatigue summary for Oracle — label includes team name to prevent cross-team attribution errors
     if (usage.bullpenIP_3d >= 10) {
-      uLines.push(`  🔴 BULLPEN FATIGUE: CRITICAL — ${usage.bullpenIP_3d}IP in 3 days. Late-inning vulnerability HIGH.`);
+      uLines.push(`  🔴 [${label}] BULLPEN FATIGUE: CRITICAL — ${usage.bullpenIP_3d}IP in 3 days. Late-inning vulnerability HIGH.`);
     } else if (usage.bullpenIP_3d >= 7) {
-      uLines.push(`  🟡 BULLPEN FATIGUE: MODERATE — ${usage.bullpenIP_3d}IP in 3 days. Monitor late innings.`);
+      uLines.push(`  🟡 [${label}] BULLPEN FATIGUE: MODERATE — ${usage.bullpenIP_3d}IP in 3 days. Monitor late innings.`);
     } else {
-      uLines.push(`  🟢 BULLPEN FATIGUE: LOW — ${usage.bullpenIP_3d}IP in 3 days. Bullpen relatively fresh.`);
+      uLines.push(`  🟢 [${label}] BULLPEN FATIGUE: LOW — ${usage.bullpenIP_3d}IP in 3 days. Bullpen relatively fresh.`);
     }
 
     return uLines;
@@ -2098,6 +2098,11 @@ export async function buildContext(gameData, oddsData = null) {
       dataQuality,
       signalCoherence,
       oddsData: oddsData ?? null,
+      // Sprint 8d context blocks — for trace/observability in annotateAnalysisData
+      umpireData: umpireData ?? null,
+      umpireStats: umpireStats ?? null,
+      homeFatigue: homeFatigue ?? null,
+      awayFatigue: awayFatigue ?? null,
     },
   };
   _contextCache.set(cacheKey, { context: contextString, _features: result._features, timestamp: Date.now() });
