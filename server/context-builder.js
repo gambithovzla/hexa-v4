@@ -262,9 +262,14 @@ function pitcherBlock(label, pitcherData, probablePitcher) {
     ? fmt.stat((s.homeRuns / ip) * 9, 2)
     : 'N/A';
 
+  // Avg IP per start — tells Oracle how deep into games this starter typically goes
+  const gs = s.gamesStarted ?? 0;
+  const avgIPStart = gs > 0 ? (ip / gs).toFixed(1) : null;
+  const avgIPStr = avgIPStart != null ? ` | Avg IP/start: ${avgIPStart}` : '';
+
   lines.push(
-    `ERA: ${fmt.stat(s.era)} | WHIP: ${fmt.stat(s.whip)} | K/9: ${fmt.stat(s.strikeoutsPer9Inn, 2)} | BB/9: ${fmt.stat(s.walksPer9Inn, 2)} | HR/9: ${hr9}`,
-    `Record: ${fmt.int(s.wins)}-${fmt.int(s.losses)} | IP: ${s.inningsPitched ?? 'N/A'} | K: ${fmt.int(s.strikeOuts)} | BB: ${fmt.int(s.baseOnBalls)}`,
+    `ERA: ${fmt.stat(s.era)} | WHIP: ${fmt.stat(s.whip)} | K/9: ${fmt.stat(s.strikeoutsPer9Inn, 2)} | BB/9: ${fmt.stat(s.walksPer9Inn, 2)} | HR/9: ${hr9}${avgIPStr}`,
+    `Record: ${fmt.int(s.wins)}-${fmt.int(s.losses)} | IP: ${s.inningsPitched ?? 'N/A'} | GS: ${fmt.int(gs)} | K: ${fmt.int(s.strikeOuts)} | BB: ${fmt.int(s.baseOnBalls)}`,
   );
 
   return lines.join('\n');
@@ -387,19 +392,27 @@ function buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeB
     const fatigued = usage.relievers.filter(r => r.isBackToBack || r.totalIP_last3d >= 2.0);
     const heavy    = usage.relievers.filter(r => r.totalIP_last3d >= 3.0);
 
+    // Helper: format reliever name with individual season ERA/WHIP when available
+    const fmtR = (r) => {
+      const stats = (r.seasonEra != null || r.seasonWhip != null)
+        ? ` [ERA ${r.seasonEra ?? 'N/A'} WHIP ${r.seasonWhip ?? 'N/A'}]`
+        : '';
+      return `${r.name} (${r.totalIP_last3d.toFixed(1)}IP/3d${stats})`;
+    };
+
     if (heavy.length > 0) {
-      uLines.push(`  ⚠ HEAVY USAGE: ${heavy.map(r => `${r.name} (${r.totalIP_last3d.toFixed(1)}IP/${r.gamesLast3d}G)`).join(', ')}`);
+      uLines.push(`  ⚠ HEAVY USAGE: ${heavy.map(fmtR).join(', ')}`);
     }
     if (fatigued.length > 0) {
       const b2b = fatigued.filter(r => r.isBackToBack);
       if (b2b.length > 0) {
-        uLines.push(`  ⚠ BACK-TO-BACK: ${b2b.map(r => r.name).join(', ')} — pitched consecutive days`);
+        uLines.push(`  ⚠ BACK-TO-BACK: ${b2b.map(fmtR).join(', ')} — pitched consecutive days`);
       }
     }
 
     const fresh = usage.relievers.filter(r => r.gamesLast3d === 0 || (r.gamesLast3d === 1 && r.totalIP_last3d <= 1.0));
     if (fresh.length > 0) {
-      uLines.push(`  ✓ FRESH/AVAILABLE: ${fresh.map(r => r.name).join(', ')}`);
+      uLines.push(`  ✓ FRESH/AVAILABLE: ${fresh.map(fmtR).join(', ')}`);
     }
 
     // Fatigue summary for Oracle
@@ -420,7 +433,7 @@ function buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeB
   lines.push(...formatUsageBlock(awayName, awayBullpenUsage));
 
   lines.push('');
-  lines.push('ORACLE INSTRUCTION: When bullpen fatigue is CRITICAL or MODERATE, bias OVER/UNDER toward OVER for late innings. When a key reliever is back-to-back, reduce confidence in that team holding a lead. Fresh bullpen = UNDER bias for late innings.');
+  lines.push('ORACLE INSTRUCTION: When bullpen fatigue is CRITICAL or MODERATE, bias OVER/UNDER toward OVER for late innings. When a key reliever is back-to-back, reduce confidence in that team holding a lead. Fresh bullpen = UNDER bias for late innings. Individual reliever ERA/WHIP is shown in brackets — a fresh bullpen with ERA > 4.50 is a hidden OVER risk even without fatigue; a fresh bullpen with ERA < 3.20 reinforces UNDER.');
   lines.push('### END BULLPEN ###');
 
   return lines.join('\n');

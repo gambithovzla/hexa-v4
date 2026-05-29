@@ -1057,6 +1057,21 @@ export async function getBullpenUsage(teamId) {
       };
     });
 
+    // Enrich top relievers (by recent usage) with season ERA/WHIP — parallel, non-blocking
+    const topRelievers = [...relievers]
+      .sort((a, b) => b.totalIP_last3d - a.totalIP_last3d)
+      .slice(0, 6);
+    await Promise.all(topRelievers.map(async (r) => {
+      if (!r.id) return;
+      try {
+        const result = await getPitcherStats(r.id);
+        if (result?.stats) {
+          r.seasonEra  = result.stats.era  ?? null;
+          r.seasonWhip = result.stats.whip ?? null;
+        }
+      } catch { /* non-blocking — skip if unavailable */ }
+    }));
+
     const totalIP = ipToDisplay(bullpenIP_3d);
     console.log(`[MLB API] Bullpen usage for team ${teamId}: ${relievers.length} relievers, ${totalIP}IP last 3 days`);
 
