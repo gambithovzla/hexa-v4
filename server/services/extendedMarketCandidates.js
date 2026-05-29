@@ -193,9 +193,10 @@ export function buildExtendedCandidates({
 
   const candidates = [];
 
-  // ── Alt run lines: ±1.5 / ±2.5 / ±3.5 / ±4.5 / ±5.5 ───────────────────
-  // (saltamos ±1.5 porque ya está en main)
-  const altRlLines = [2.5, 3.5, 4.5, 5.5];
+  // ── Alt run lines: ±2.5 / ±3.5 ─────────────────────────────────────────
+  // (±1.5 ya está en main; cap en 3.5 — líneas más amplias no aparecen en
+  // la mayoría de libros mainstream como bet365)
+  const altRlLines = [2.5, 3.5];
   const homeIsFavorite = (homeMoneylineProb ?? 50) >= 50;
 
   for (const k of altRlLines) {
@@ -249,10 +250,12 @@ export function buildExtendedCandidates({
     });
   }
 
-  // ── Alt totals: rango simétrico ±4 alrededor del total proyectado ────
+  // ── Alt totals: rango simétrico ±2 alrededor del total proyectado ────
+  // Cap en ±2 — libros como bet365 no listan alt totals extremos (e.g., Under 13.5
+  // cuando el expected total es ~8-9, probabilidad ~95%, sin mercado real).
   const altTotalCenter = round(expectedTotal, 0);
   const altTotalLines = [];
-  for (let offset = -4; offset <= 4; offset++) {
+  for (let offset = -2; offset <= 2; offset++) {
     const line = altTotalCenter + offset + 0.5;
     if (line <= 4 || line >= 16) continue;
     if (Math.abs(line - marketTotal) < 0.6) continue;  // skip the main line

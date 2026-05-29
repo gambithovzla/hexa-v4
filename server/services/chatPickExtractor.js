@@ -390,6 +390,14 @@ export function normalizeExtracted(pickJson, ctx = {}) {
   }
 
   if (!market) return null;
+
+  // Markets that require a line to be actionable — without it we can't form a
+  // valid pick string and the resolver won't know what to resolve against.
+  if ((market === 'overunder' || market === 'runline' || market === 'prop') && line == null) {
+    console.warn(`[chatPickExtractor] discarding ${market} pick with null line (team_or_player="${teamOrPlayer}")`);
+    return null;
+  }
+
   return {
     market_type: market,
     side,
