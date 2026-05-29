@@ -41,7 +41,7 @@ Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js)
 
 1. **Sprint 5 Player Props MLB** — 🔄 **en progreso**. Savant snapshots ✅; `prop_*` en sidecar ✅; tablero `/props` + `GET /api/mlb/props/board` ✅; picks Oracle en board cuando Odds API aún no tiene líneas ✅; `props-resolver.js` (GUMBO) ✅; parser ES (`Bajo/Ariba Ponches`) ✅. Pendiente: resolver props integrado en pick lifecycle a escala, Brier ≥100 picks/mercado, `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
 2. **Sprint 5b — Pick-aligned shadow + admin ML** — ✅ cerrado (PRs #345–#347, merge 2026-05-17). [pickAlignedMl.js](../server/services/pickAlignedMl.js): Oracle/legacy/Python en el mismo mercado del pick; columnas en `shadow_model_runs`; `mlOpinion` en analyze game/safe (admin); tokens `--outcome-*` para W/L/P en League; Shadow UI muestra `game_date` del partido junto a hora Lima.
-3. **Brand restructure (League × Kinetic v.2.6)** — ✅ shippeada (PR #337). Skin alternable Classic ⇄ League; **dark-only**. Pendiente: re-skin profundo Admin ML / ParlayArchitect; PNG iOS + splash.
+3. **Brand restructure (League × Kinetic v.2.6)** — ✅ completa. Skin alternable Classic ⇄ League; **dark-only**. Admin ML + ParlayArchitect re-skinned con brand-clip-bevel + Oswald.
 4. **NBA hardening live** — go-live gate mergeado. Live tracker, Oracle Chat NBA, sport-aware postmortem ✅. Pendiente: flip público `NBA_ANALYSIS_ENABLED` tras validación E2E en prod.
 5. **Sprint 8a Monte Carlo bankroll** — ✅ cerrado.
 6. **Oracle Chat multi-pick stats** — ✅ jornada multi-pick + stats en Admin ML Control Center.
@@ -372,9 +372,7 @@ Diseñada por claude.ai/design. Brand book broadcast (navy uniform + lava/volt s
 **Scope re-skineado**: Shell (Topbar + Sidebar + BottomNav + SportSwitcher con livery dual) + Pizarra del día + Tab Juego (GameSelector + AnalysisPanel) + Historial + OracleChat/Dataset/Live con pass League-aware.
 
 **Pendiente**:
-- Re-skin Admin profundo (`AdminMLControlCenter`, `ParlayArchitect`) — OracleChat/Dataset/Live ya tienen pass League-aware, pero Admin ML completo sigue pendiente.
-- Rasterizar PNG iOS `icon-192.png` / `icon-512.png` desde `icon-brand.svg` (designer asset pass).
-- Splash screens iOS (`splash-*.png`) — los `<link>` originales apuntaban a archivos inexistentes; removidos hasta regenerar.
+- ✅ Re-skin `AdminMLControlCenter` + `ParlayArchitect` — brand-clip-bevel + Oswald/volt en League mode (Sprint 8e).
 
 ---
 
@@ -487,7 +485,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q3  Sprint 7c     — NBA pick lifecycle + tracker     ████████████████████████ ✅
 2026 Q3  Sprint 7d     — UI NBA + sport shell             ████████████████████████ ✅
 2026 Q3  Sprint 8a     — Monte Carlo bankroll sim         ████████████████████████ ✅
-2026 Q3  Brand v.2.6   — League × Kinetic skin            ██████████████████░░░░░░ ✅ (PWA icons ✅; Admin re-skin ⏳; splash ⏳)
+2026 Q3  Brand v.2.6   — League × Kinetic skin            ████████████████████████ ✅ (PWA icons ✅; Admin re-skin ✅)
 2026 Q3  Sprint 5b     — Pick-aligned shadow + mlOpinion  ████████████████████████ ✅
 2026 Q3  Sprint 8b     — Pick Imperdible (lock-of-slate)  ████████████████████████ ✅
 2026 Q3  Sprint 8c     — Ensemble multi-mkt + props fix   ████████████████████████ ✅
@@ -503,7 +501,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 **Próximo en cola** (actualizado 2026-05-29, post-audit):
 - ✅ Deploy hexa-v4 con Sprint 8d (bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE + guardrail atribución bullpen).
 - Sprint 5 Props MLB: resolver automático post-game en lifecycle + Brier ≥100 picks por prop_kind + `MLB_PROPS_ML_PUBLIC_ENABLED`.
-- Brand follow-ups: re-skin `AdminMLControlCenter` + `ParlayArchitect` con League × Kinetic; splash screens iOS (icon-192.png + icon-512.png YA EXISTEN en client/public/).
+- ✅ Brand follow-ups: re-skin `AdminMLControlCenter` + `ParlayArchitect` con League × Kinetic.
 - Sprint 7a: basketball-reference scraper (NBA savant equivalent); `nba_games` + `nba_team_stats` YA en migrate.js; pendiente: `nba_player_stats`.
 - Tier S: S3 audit feature store, S4 Telegram publisher, S5 Newsletter recap, S6 Postmortem dashboard cuantitativo (backend listo, falta UI).
 - NBA go-live: validación E2E + flip público `NBA_ANALYSIS_ENABLED`.
