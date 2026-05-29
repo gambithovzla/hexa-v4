@@ -76,7 +76,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -91,6 +91,12 @@ import {
   getNbaStandings,
   getNbaPlayoffBracket,
 } from './nba-api.js';
+import {
+  getNflGamesForWeek,
+  getNflTeamStats,
+  getNflStandings,
+  getCurrentNflWeek,
+} from './nfl-api.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -999,6 +1005,62 @@ app.get('/api/nba/playoffs', async (req, res) => {
       return res.status(400).json({ success: false, error: 'season must be YYYY-YY (e.g. 2025-26)' });
     }
     const data = await getNbaPlayoffBracket(season);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── NFL endpoints (Sprint 9a scaffolding — public, read-only) ─────────────────
+// GET /api/nfl/games?season=&seasonType=&week=  — by week (NFL cadence). No params → current week.
+app.get('/api/nfl/games', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    const seasonType = req.query.seasonType != null ? Number(req.query.seasonType) : null;
+    const week = req.query.week != null ? Number(req.query.week) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    if (seasonType != null && ![1, 2, 3].includes(seasonType)) {
+      return res.status(400).json({ success: false, error: 'seasonType must be 1 (pre), 2 (regular) or 3 (post)' });
+    }
+    const games = await getNflGamesForWeek({ season, seasonType, week });
+    const resolved = (season == null || seasonType == null || week == null) ? await getCurrentNflWeek() : null;
+    res.json({
+      success: true,
+      season: season ?? resolved?.season ?? null,
+      seasonType: seasonType ?? resolved?.seasonType ?? null,
+      week: week ?? resolved?.week ?? null,
+      count: games.length,
+      data: games,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nfl/teams?season=2025  — season team stats (standings-derived)
+app.get('/api/nfl/teams', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    const teams = await getNflTeamStats(season);
+    res.json({ success: true, season: season ?? (teams[0]?.season ?? null), count: teams.length, data: teams });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nfl/standings?season=2025
+app.get('/api/nfl/standings', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    const data = await getNflStandings(season);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -4778,6 +4840,8 @@ runMigrations()
   .then(() => runAdminMLControlCenterMigrations())
   .then(() => runNbaScaffoldingMigrations())
   .then(() => runNbaDatasetMigrations())
+  .then(() => runNflScaffoldingMigrations())
+  .then(() => runNflDatasetMigrations())
   .then(() => runPickAlignedShadowMigrations())
   .then(() => runImperdibleMigrations())
   .then(() => runOddsCacheMigrations())

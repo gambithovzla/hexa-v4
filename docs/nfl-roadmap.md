@@ -2,7 +2,7 @@
 
 Plan de construcción del **tercer deporte**, espejo exacto de la serie NBA (Sprint 7). Detalle técnico y de datos en [nfl-architecture.md](nfl-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md).
 
-**Estado**: 📋 planning. `nfl` ya está registrado como deporte **conocido pero inactivo** en `server/sports.js` y `client/src/config/sports.js` (`SPORT_META.nfl.active = false`). Falta todo el build.
+**Estado**: 🔄 en build. **Sprint 9a (scaffolding de datos) cerrado en código** (2026-05-29, rama `feat/nfl-scaffolding-9a`). `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active = false`, no está en `ACTIVE_SPORTS`); los endpoints de datos `GET /api/nfl/*` están vivos pero el análisis (9b+) aún no. Falta: Oracle NFL (9b), lifecycle (9c), UI (9d).
 
 ---
 
@@ -34,16 +34,17 @@ Plan de construcción del **tercer deporte**, espejo exacto de la serie NBA (Spr
 
 ## Sprints
 
-### Sprint 9a — Scaffolding de datos 📋
+### Sprint 9a — Scaffolding de datos ✅
 
-Espeja NBA 7a. Objetivo: leer NFL de extremo a extremo sin análisis todavía.
+Espeja NBA 7a. Objetivo: leer NFL de extremo a extremo sin análisis todavía. **Cerrado en código (2026-05-29)** — pendiente smoke con tráfico real en prod (ESPN bloquea la IP del sandbox de dev con 403; el NBA equivalente también, así que se valida en Railway).
 
-- [ ] `server/nfl-api.js` — wrapper ESPN (games por semana, stats, standings, injuries, summary, recent games). Cache + fallback stale.
-- [ ] `server/nfl-team-map.js` — ESPN id ↔ abbr ↔ nombre + coords estadio + flag `dome`.
-- [ ] `server/nfl-context-builder.js` — contexto por partido (EPA, success, PROE, pace, QB status, rest/short-week/off-bye, weather, injuries, line) + `context_meta`.
-- [ ] Migración `runNflScaffoldingMigrations()` — tablas `nfl_games`, `nfl_team_stats`; reusa `picks.sport` / `pick_features.sport`.
-- [ ] Endpoints públicos `GET /api/nfl/games` (por semana), `/api/nfl/teams`, `/api/nfl/standings`.
-- **Salida**: `GET /api/nfl/games?week=N` devuelve juegos normalizados; contexto sin bloques "data unavailable".
+- [x] `server/nfl-api.js` — wrapper ESPN (games **por semana** vía `seasontype`+`week`, `getCurrentNflWeek`, stats/standings, injuries, recent games, `getNflGameSummary`). Cache TTL (5min/30s live, 6h/15min) + fallback stale; nunca throwea.
+- [x] `server/nfl-team-map.js` — ESPN id ↔ abbr ↔ nombre + conf/división + coords estadio + flag `dome` (11 domos). Aliases (WAS→WSH, JAC→JAX, OAK→LV, SD→LAC). `resolveNflTeamId`, `getNflTeam`, `getNflStadium`, `enrichGameTeamIds`.
+- [x] `server/nfl-context-builder.js` — `buildNflGameContext`: records/PF-PA, recent form, rest/short-week/off-bye, QB status desde injuries, weather (Open-Meteo, solo no-domo) + `context_meta` (sources, completeness, staleFlags). EPA/success/PROE presentes pero null hasta nflverse (9b+).
+- [x] Migración `runNflScaffoldingMigrations()` (tablas `nfl_games` por semana, `nfl_team_stats`) + `runNflDatasetMigrations()` (columnas NFL en `pick_features`). Cableadas en la cadena de startup de `index.js` tras las NBA.
+- [x] Endpoints públicos `GET /api/nfl/games?season=&seasonType=&week=` (sin params → semana actual), `/api/nfl/teams`, `/api/nfl/standings`.
+- [x] Tests: `server/__tests__/nfl-team-map.test.js` (10 tests, lógica pura).
+- **Salida**: `GET /api/nfl/games?week=N` devuelve juegos normalizados; el context builder degrada con `staleFlags` honestos cuando una fuente falla (verificado: 403 → vacío sin crash). Contexto sin bloques "data unavailable" cuando ESPN responde.
 
 ### Sprint 9b — Oracle NFL 📋
 
