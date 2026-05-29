@@ -6,7 +6,7 @@
  * Polls /api/games/live every 30 seconds.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Typography, LinearProgress } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import { useAuth } from '../store/authStore';
@@ -734,19 +734,20 @@ function LiveGameCard({ game, picks, lang }) {
 export default function LiveTracker({ lang = 'en' }) {
   const { C, isLeague } = useHexaTheme();
   const { token } = useAuth();
-  const t         = T[lang] || T.en;
+  const t = T[lang] || T.en;
 
-  const [liveGames,   setLiveGames]   = useState([]);
+  const [liveGamePks,  setLiveGamePks]  = useState([]);
+  const [gameData,     setGameData]     = useState({});   // gamePk -> normalized game object
   const [pickProgress, setPickProgress] = useState([]);
-  const [loading,     setLoading]     = useState(false);
-  const [lastUpdate,  setLastUpdate]  = useState(null);
+  const [discovering,  setDiscovering]  = useState(false);
+  const [lastUpdate,   setLastUpdate]   = useState(null);
+  const connectionsRef = useRef(new Map());               // gamePk -> EventSource
 
-  const fetchLiveData = useCallback(async () => {
-    setLoading(true);
+  // — Game discovery: poll schedule every 3 min to find live gamePks ————————
+  const discoverLiveGames = useCallback(async () => {
+    setDiscovering(true);
     try {
-      // Check both the current and previous MLB calendar day so late west-coast
-      // games do not disappear right after midnight in Eastern time.
-      const today = getEasternDateString();
+      const today       = getEasternDateString();
       const previousDay = shiftDateString(today, -1);
       const [todayRes, previousRes] = await Promise.all([
         fetch(`${API_URL}/api/games?date=${today}`),
@@ -757,84 +758,113 @@ export default function LiveTracker({ lang = 'en' }) {
         previousRes.json(),
       ]);
       const mergedGames = [
-        ...(todayJson.success ? todayJson.data : []),
+        ...(todayJson.success  ? todayJson.data  : []),
         ...(previousJson.success ? previousJson.data : []),
       ];
       const allGames = Array.from(
-        new Map(mergedGames.map(game => [String(game.gamePk), game])).values()
+        new Map(mergedGames.map(g => [String(g.gamePk), g])).values()
       );
-
-      // 2. Filter live games
-      const liveGamePks = allGames
-        .filter(isLiveCandidate)
-        .map(g => g.gamePk);
-
-      if (liveGamePks.length === 0) {
-        setLiveGames([]);
-        setLoading(false);
-        setLastUpdate(new Date());
-        return;
-      }
-
-      // 3. Fetch live data
-      const liveRes  = await fetch(`${API_URL}/api/games/live`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ gamePks: liveGamePks }),
-      });
-      const liveJson = await liveRes.json();
-      const fetchedGames = Array.isArray(liveJson?.data) ? liveJson.data : [];
-      if (liveJson.success) {
-        setLiveGames(fetchedGames.filter(game => game?.status === 'live'));
-      }
-
-      // Auto-resolve picks for games that just finished
-      if (token && fetchedGames.length > 0) {
-        for (const game of fetchedGames) {
-          if (game.status === 'final') {
-            try {
-              await fetch(`${API_URL}/api/picks/resolve-game`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ gamePk: game.gamePk }),
-              });
-            } catch (e) { /* silent */ }
-          }
-        }
-      }
-
-      // 4. Fetch pick progress (authenticated only)
-      if (token) {
-        try {
-          const progressRes = await fetch(`${API_URL}/api/picks/live-progress`, {
-            method:  'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization:  `Bearer ${token}`,
-            },
-          });
-          const progressJson = await progressRes.json();
-          if (progressJson.success) setPickProgress(progressJson.data || []);
-        } catch {
-          // silent — picks are optional
-        }
-      }
-
+      setLiveGamePks(allGames.filter(isLiveCandidate).map(g => g.gamePk));
       setLastUpdate(new Date());
     } catch (err) {
-      console.error('[LiveTracker] Fetch error:', err);
+      console.error('[LiveTracker] discovery error:', err);
     } finally {
-      setLoading(false);
+      setDiscovering(false);
+    }
+  }, []);
+
+  // — Stable ref so SSE callbacks always call the latest handler —————————————
+  const handleUpdateRef = useRef(null);
+  handleUpdateRef.current = useCallback((gamePk, data) => {
+    setGameData(prev => ({ ...prev, [gamePk]: data }));
+    setLastUpdate(new Date());
+    if (data.status === 'final' && token) {
+      fetch(`${API_URL}/api/picks/resolve-game`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ gamePk }),
+      }).catch(() => {});
     }
   }, [token]);
 
+  // — Manage per-game SSE connections ———————————————————————————————————————
   useEffect(() => {
-    fetchLiveData();
-    const interval = setInterval(fetchLiveData, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [fetchLiveData]);
+    if (!token) return;
+    const connections = connectionsRef.current;
 
-  // Format time as HH:MM:SS
+    // Close connections for games no longer live
+    for (const [pk, es] of connections) {
+      if (!liveGamePks.includes(pk)) {
+        es.close();
+        connections.delete(pk);
+      }
+    }
+
+    // Open SSE for newly discovered live games
+    for (const pk of liveGamePks) {
+      if (connections.has(pk)) continue;
+      const url = `${API_URL}/api/games/${pk}/live/stream?interval=15000&_auth=${encodeURIComponent(token)}`;
+      const es  = new EventSource(url);
+
+      // Server emits unnamed SSE data → default 'message' event
+      es.onmessage = (e) => {
+        try {
+          const { ok, data } = JSON.parse(e.data);
+          if (!ok || !data) return;
+          handleUpdateRef.current(pk, data);
+          if (data.status === 'final') {
+            es.close();
+            connections.delete(pk);
+          }
+        } catch {}
+      };
+
+      es.onerror = () => {
+        es.close();
+        connections.delete(pk);
+      };
+
+      connections.set(pk, es);
+    }
+  }, [liveGamePks, token]);
+
+  // Close all SSE connections on unmount
+  useEffect(() => {
+    return () => {
+      for (const [, es] of connectionsRef.current) es.close();
+      connectionsRef.current.clear();
+    };
+  }, []);
+
+  // — Pick progress: poll every 60s ————————————————————————————————————————
+  const fetchPickProgress = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res  = await fetch(`${API_URL}/api/picks/live-progress`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success) setPickProgress(json.data || []);
+    } catch {}
+  }, [token]);
+
+  useEffect(() => {
+    fetchPickProgress();
+    const interval = setInterval(fetchPickProgress, 60_000);
+    return () => clearInterval(interval);
+  }, [fetchPickProgress]);
+
+  // — Initial discovery + repeat every 3 min ————————————————————————————————
+  useEffect(() => {
+    discoverLiveGames();
+    const interval = setInterval(discoverLiveGames, 3 * 60_000);
+    return () => clearInterval(interval);
+  }, [discoverLiveGames]);
+
+  const liveGames = Object.values(gameData).filter(g => g?.status === 'live');
+  const loading   = discovering;
+
   function fmtTime(d) {
     if (!d) return '—';
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
