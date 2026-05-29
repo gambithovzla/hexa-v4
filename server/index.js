@@ -73,7 +73,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration } from './migrate.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -3876,29 +3876,30 @@ app.post('/api/analyze/game-ensemble', verifyToken, async (req, res) => {
     if (!Number.isFinite(gamePk)) {
       return res.status(400).json({ success: false, error: 'game_pk is required' });
     }
-    if (market !== 'moneyline') {
-      return res.status(400).json({ success: false, error: 'Only moneyline ensembles are trained today.' });
+    const ENSEMBLE_MARKETS = new Set(['moneyline', 'overunder', 'runline']);
+    if (!ENSEMBLE_MARKETS.has(market)) {
+      return res.status(400).json({ success: false, error: `Unsupported ensemble market: ${market}. Valid: ${[...ENSEMBLE_MARKETS].join(', ')}` });
     }
 
-    // Pull the most recent shadow_model_runs row with all 3 sources populated.
+    // Pull the most recent shadow_model_runs row with all 3 pick-aligned probs.
     const sourceRow = await pool.query(
       `SELECT
-         oracle_home_win_prob,
-         shadow_home_win_prob,
-         python_model_score,
-         python_model_status,
+         oracle_pick_prob,
+         legacy_pick_prob,
+         python_pick_prob,
+         pick_market_type,
          home_team_abbr,
          away_team_abbr,
          created_at
        FROM shadow_model_runs
        WHERE game_pk = $1
-         AND oracle_home_win_prob IS NOT NULL
-         AND shadow_home_win_prob IS NOT NULL
-         AND python_model_score IS NOT NULL
-         AND python_model_status = 'ok'
+         AND (pick_market_type = $2 OR (pick_market_type IS NULL AND $2 = 'moneyline'))
+         AND oracle_pick_prob IS NOT NULL
+         AND legacy_pick_prob IS NOT NULL
+         AND python_pick_prob IS NOT NULL
        ORDER BY created_at DESC
        LIMIT 1`,
-      [gamePk]
+      [gamePk, market]
     );
 
     if (!sourceRow.rows.length) {
@@ -3906,16 +3907,16 @@ app.post('/api/analyze/game-ensemble', verifyToken, async (req, res) => {
         success: true,
         enabled: true,
         probability: null,
-        reason: 'No shadow_model_runs row has all 3 sources populated for this game yet.',
+        reason: 'No shadow_model_runs row has all 3 pick-aligned sources for this game yet.',
       });
     }
 
     const r = sourceRow.rows[0];
     const ensemble = await predictMlEnsemble({
       market,
-      oracle_prob: Number(r.oracle_home_win_prob),
-      legacy_prob: Number(r.shadow_home_win_prob),
-      python_prob: Number(r.python_model_score),
+      oracle_prob: Number(r.oracle_pick_prob),
+      legacy_prob: Number(r.legacy_pick_prob),
+      python_prob: Number(r.python_pick_prob),
     });
 
     if (!ensemble) {
@@ -4307,6 +4308,7 @@ runMigrations()
   .then(() => runPickAlignedShadowMigrations())
   .then(() => runImperdibleMigrations())
   .then(() => runOddsCacheMigrations())
+  .then(() => runEnsembleBackfillMigration())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {

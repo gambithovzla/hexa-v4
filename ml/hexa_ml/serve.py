@@ -253,7 +253,7 @@ def health() -> HealthResponse:
     registry = get_registry()
     available = [m for m in SUPPORTED_MARKETS if registry.has_artifact(m)]
     ensembles_available = [
-        m for m in ("moneyline",) if registry.has_ensemble_artifact(m)
+        m for m in ("moneyline", "overunder", "runline") if registry.has_ensemble_artifact(m)
     ]
     settings = get_settings()
     art_dir = settings.artifacts_dir.resolve()

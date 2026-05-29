@@ -217,24 +217,24 @@ def load_ensemble_training_data(
     database_url: str | None = None,
     market: str = "moneyline",
 ) -> pd.DataFrame:
-    """Pull ensemble training rows from `shadow_model_runs` (Sprint 3 schema).
+    """Pull ensemble training rows from `shadow_model_runs` using pick-aligned probs.
 
-    Returns rows where every source has a probability and the game is
-    resolved. The target `y` is 1 if the home team won, 0 otherwise.
+    Uses oracle_pick_prob / legacy_pick_prob / python_pick_prob — all in the
+    'did the pick win' frame — instead of the old home-win frame. Supports
+    moneyline, overunder, and runline markets.
 
-    Only `actual_status = 'resolved'` rows are returned — pushes and
-    pending games are excluded.
+    The target y_true = 1 when the picked side won, computed per market:
+      - moneyline : picked team won
+      - overunder : total > line (if side='over') or < line (if side='under')
+      - runline   : picked side covered -1.5 / +1.5
 
-    Per-market filtering is not enforced yet because shadow_model_runs
-    tracks game-winner predictions (moneyline only). Once the legacy
-    validator is extended to over/under and run-line we can add a
-    market_type column and filter here.
+    Only actual_status='resolved' rows with all three pick-aligned probabilities
+    are returned.
     """
-    if market != "moneyline":
+    supported = {"moneyline", "overunder", "runline"}
+    if market not in supported:
         raise NotImplementedError(
-            f"Ensemble market '{market}' not supported yet — only 'moneyline' has "
-            "shadow_model_runs coverage. Extend shadow-model.js to score over/under "
-            "and run-line first."
+            f"Ensemble market '{market}' not supported. Supported: {supported}"
         )
 
     url = database_url or get_settings().database_url
@@ -244,28 +244,27 @@ def load_ensemble_training_data(
             "shadow_model_runs lives in Postgres and is not exported to CSV."
         )
 
-    sql = """
+    sql = f"""
         SELECT
           id,
           game_pk,
           game_date,
           created_at,
-          home_team_id,
-          away_team_id,
-          oracle_home_win_prob,
-          shadow_home_win_prob,
-          python_model_score,
-          python_model_status,
-          actual_winner_id,
+          pick_market_type,
+          pick_side,
+          pick_line,
+          oracle_pick_prob,
+          legacy_pick_prob,
+          python_pick_prob,
           actual_home_score,
           actual_away_score,
           actual_status
         FROM shadow_model_runs
         WHERE actual_status = 'resolved'
-          AND oracle_home_win_prob IS NOT NULL
-          AND shadow_home_win_prob IS NOT NULL
-          AND python_model_score IS NOT NULL
-          AND python_model_status = 'ok'
+          AND pick_market_type = '{market}'
+          AND oracle_pick_prob IS NOT NULL
+          AND legacy_pick_prob IS NOT NULL
+          AND python_pick_prob IS NOT NULL
         ORDER BY created_at ASC
     """
 
@@ -278,16 +277,38 @@ def load_ensemble_training_data(
     if df.empty:
         return df
 
-    df["y_true"] = (
-        df["actual_winner_id"].astype(str) == df["home_team_id"].astype(str)
-    ).astype(int)
-
-    for col in ("oracle_home_win_prob", "shadow_home_win_prob", "python_model_score"):
+    for col in ("oracle_pick_prob", "legacy_pick_prob", "python_pick_prob",
+                "actual_home_score", "actual_away_score", "pick_line"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
     if df["game_date"].isna().all():
         df["game_date"] = pd.to_datetime(df["created_at"], errors="coerce")
+
+    def _pick_won(row: pd.Series) -> float:
+        hs = row["actual_home_score"]
+        as_ = row["actual_away_score"]
+        side = str(row.get("pick_side") or "").lower()
+        if pd.isna(hs) or pd.isna(as_):
+            return float("nan")
+        if market == "moneyline":
+            home_won = hs > as_
+            return float(home_won if side == "home" else not home_won)
+        if market == "overunder":
+            line = row["pick_line"]
+            if pd.isna(line):
+                return float("nan")
+            total = hs + as_
+            return float(total > line if side == "over" else total < line)
+        if market == "runline":
+            diff = hs - as_
+            # home picked -1.5 → need diff > 1.5; away picked +1.5 → need diff < 1.5
+            return float(diff > 1.5 if side == "home" else diff < 1.5)
+        return float("nan")
+
+    df["y_true"] = df.apply(_pick_won, axis=1)
+    df = df.dropna(subset=["y_true"]).copy()
+    df["y_true"] = df["y_true"].astype(int)
 
     return df
 

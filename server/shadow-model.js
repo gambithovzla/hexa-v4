@@ -464,9 +464,7 @@ export async function recordShadowModelRun(params) {
       ]
     );
 
-    if (pickAligned?.python_pick_prob == null) {
-      _enrichWithPythonScore(existingId, params.statcastData, params.features, pickAligned).catch(() => {});
-    }
+    _enrichWithPythonScore(existingId, params.statcastData, params.features, pickAligned).catch(() => {});
 
     return { id: existingId, ...payload };
   }
@@ -521,7 +519,7 @@ export async function recordShadowModelRun(params) {
 
   const newId = insert.rows[0]?.id ?? null;
 
-  if (newId != null && pickAligned?.python_pick_prob == null) {
+  if (newId != null) {
     _enrichWithPythonScore(newId, params.statcastData, params.features, pickAligned).catch(() => {});
   }
 
