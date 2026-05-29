@@ -1,0 +1,12 @@
+{
+  "defaultEnv": "default",
+  "default": {
+    "url": { "ENV": "DATABASE_URL" }
+  },
+  "dev": {
+    "url": { "ENV": "DATABASE_URL" }
+  },
+  "production": {
+    "url": { "ENV": "DATABASE_URL" }
+  }
+}

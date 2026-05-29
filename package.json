@@ -23,7 +23,10 @@
     "test:parlay": "node --test server/services/parlayEngine/__tests__/pool.test.js server/services/parlayEngine/__tests__/risk.test.js server/services/parlayEngine/__tests__/correl.test.js server/services/parlayEngine/__tests__/composer.test.js server/services/parlayEngine/__tests__/architect.test.js server/services/parlayEngine/__tests__/market-focus.test.js",
     "test:parsers": "node --test server/parsers/__tests__/pickParser.test.js",
     "training:backfill": "node scripts/training/backfill-pick-features.js",
-    "training:export": "node scripts/training/export-dataset.js"
+    "training:export": "node scripts/training/export-dataset.js",
+    "migrate:up": "node-pg-migrate --migrations-dir database/migrations --database-url-var DATABASE_URL up",
+    "migrate:down": "node-pg-migrate --migrations-dir database/migrations --database-url-var DATABASE_URL down",
+    "migrate:create": "node-pg-migrate --migrations-dir database/migrations create"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
@@ -36,6 +39,7 @@
     "express-rate-limit": "^8.3.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "node-pg-migrate": "^8.0.4",
     "pg": "^8.20.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

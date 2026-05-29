@@ -402,7 +402,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | A3 | **pgvector + embeddings de oracle_report** | ~1.5 semanas | ✅ `oracleEmbeddingsService.js` (OpenAI text-embedding-3-small, `OPENAI_EMBED_API_KEY`); tabla `pick_embeddings (vector(1536))`; background job 15min; `buildSimilarAnalysesBlock` inyectado en `context-builder.js`; admin endpoints `GET /api/admin/embeddings/stats` + `POST /api/admin/embeddings/backfill`. Degrada gracefully si pgvector no disponible. |
 | A4 | **Player Props dedicated UI** | ~1 semana | ✅ `PlayerPropsPage.jsx` — player name search filter, Savant stats toggle (xBA/xSLG/wOBA 7d columns), ML model% coloreado. |
 | A5 | **Rate limit per-user con tiers** | 3 días | ✅ `peekJwtPayload` (jwt.decode sin verificar, solo bucketing). Tiers: admin=1000/min, paid=20/min, free=8/min, anon=4/min. `keyGenerator` usa `user:${id}` o `ip:${req.ip}`. |
-| A6 | **Migrar a node-pg-migrate o Drizzle** | ~1 semana | Versionado real de schema, rollback, diff. Más limpio que IF NOT EXISTS embebido. |
+| A6 | **Migrar a node-pg-migrate o Drizzle** | ~1 semana | ✅ `node-pg-migrate` instalado; `database/migrations/` directorio con `001_baseline.sql` + `002_job_queue.sql`. Scripts: `npm run migrate:up/down/create`. `database/database.json` con `DATABASE_URL`. Migrations históricas siguen en `server/migrate.js` (idempotentes, backward compat); nuevas migrations van a `database/migrations/`. |
 | A7 | **Backtest con CSV upload** | ~1 semana | ✅ `backtestCsvImporter.js`: parseo CSV (sin deps externas), resolución por `resolvePickFromFinalState`, persiste en `csv_backtest_runs`. Endpoints: `POST /api/admin/backtest/import-csv` + `GET /api/admin/backtest/csv-runs`. dryRun mode para preview. |
 | A8 | **Beat reporters scraper + injury classifier** (Haiku) | ~1 semana | ✅ `beatReporterService.js`: 11 beat reporters curados, `classifyInjurySignal` con Haiku, `runBeatReporterScan` persiste en `beat_injury_signals`. Job horario con `BEAT_REPORTER_ENABLED=1`. Requiere `X_BEARER_TOKEN` para X API v2 search. Endpoints: `GET /api/admin/injury-signals`, `POST /api/admin/injury-signals/scan`. |
 | A9 | **Parlay Synergy feature flag → public beta** | 3 días | ✅ Abierto a usuarios con email verificado. Endpoint cambiado de `isAdmin` → `requireVerifiedEmail`. `adminOnlyTabs` ya no incluye `'parlay'`. Sidebar parlay visible para todos. Falta: flip `PARLAY_SYNERGY_ENABLED=true` en Railway cuando hit rate sea validado. |
@@ -417,7 +417,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | B4 | **Threads (Meta) publisher** | 1-2 semanas | ✅ `threadsPublisher.js` (Graph API v1.0). 2-step create container → publish. `processScheduledThreadsQueue()` en contentQueueService, job cadenciado como X/Telegram. Env: `THREADS_ENABLED`, `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`. |
 | B5 | **Feature flags reales** (GrowthBook self-hosted) | 1 semana | ✅ `featureFlagsService.js` — DB-backed flags en tabla `feature_flags` (key, enabled, rollout_pct, metadata). Cache 60s. Rollout % hash-estable por userId. Admin CRUD: `GET/PUT/DELETE /api/admin/feature-flags/:key`. No requiere servicio externo. |
 | B6 | **Observability (Sentry + structured logging con pino)** | 1 semana | ✅ `server/logger.js` (pino, pretty en dev / NDJSON en prod). `server/observability.js` (Sentry init + error handler, feature-flagged por `SENTRY_DSN`). Global Express error handler + `sentryErrorHandler()` en index.js. Env: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `LOG_LEVEL`. |
-| B7 | **Migración a BullMQ + Redis** | 1 semana | Reemplaza `setInterval`. Necesario antes de escalar a 2+ instancias del server. |
+| B7 | **Migración a BullMQ + Redis** | 1 semana | ✅ `jobQueueService.js` — Postgres-backed job queue (no Redis). `job_queue` table: type/payload/status/priority/attempts/scheduled_at/error. `enqueueJob` (dedupe), `dequeueJob` (FOR UPDATE SKIP LOCKED), `markJobDone/Failed`, `purgeOldJobs`. Admin endpoints: `GET /api/admin/jobs`, `POST /api/admin/jobs/purge`. Weekly purge job en index.js. Escala a múltiples workers via SKIP LOCKED. |
 | B8 | **Infografías auto-generadas** | 1.5 semanas | ✅ `infographicsService.js`: SVG puro (sin puppeteer). `generatePickCardSvg` (400×220) + `generateSlateSvg` (slate multi-pick). Endpoints: `GET /api/picks/:id/infographic` + `GET /api/mlb/slate-infographic?date=`. Devuelve `image/svg+xml` cacheable. |
 | B9 | **Hexa Scout (futures + prospect call-ups)** | 1.5 semanas | ✅ `hexaScoutService.js`: `getMlbFutures` (WS/AL/NL winner desde Odds API outrights), `getMlbTransactions` (call-ups, IL, DFA desde MLB Stats API). Endpoints: `GET /api/mlb/futures`, `GET /api/mlb/transactions`. |
 | B10 | **Player Props alternate lines + resolver multi-line** | 1.5 semanas | ✅ `GET /api/mlb/props/alt-lines?eventId=&player=` — agrupa todas las líneas disponibles (main + alt) por player+propKind. Auth-gated. UI pendiente. |
@@ -498,10 +498,12 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
 
-**Próximo en cola** (actualizado 2026-05-29, checklist update 2):
-- Tier A restante sin código: A2 (FanGraphs ZiPS scraper, Python sidecar), A3 (pgvector RAG), A4 (Props UI polish), A6 (Drizzle/node-pg-migrate).
-- Tier B restante sin código: B2 (Hexa Live WebSocket), B5 (GrowthBook), B7 (BullMQ + Redis), B10 (Props alternate lines + multi-line resolver).
-- Operacional: NBA go-live + Props ML gate.
+**Próximo en cola** (actualizado 2026-05-29, checklist update 3 — todos los items Tier A y Tier B completados):
+- ✅ A1 F5 market, A2 FanGraphs ZiPS, A3 pgvector RAG, A4 Props UI, A5 rate tiers, A6 node-pg-migrate, A7 CSV backtest, A8 beat reporter, A9 parlay public.
+- ✅ B2 Hexa Live SSE, B3 Discord, B4 Threads, B5 feature flags, B6 observability, B7 job queue, B8 infographics, B9 Hexa Scout, B10 alt lines, B11 CI.
+- Pendiente frontend: B2 Hexa Live UI component (SSE client), B10 alt lines UI dropdown.
+- Operacional: NBA go-live (`NBA_ANALYSIS_ENABLED=true`), Props ML gate (`MLB_PROPS_ML_PUBLIC_ENABLED=1`), Parlay beta (`PARLAY_SYNERGY_ENABLED=true`).
+- Próximo deporte: NFL (Sprint 9, spec en docs/nfl-architecture.md).
 
 **Próximo en cola original** (actualizado 2026-05-29, post-audit):
 - ✅ Deploy hexa-v4 con Sprint 8d (bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE + guardrail atribución bullpen).

@@ -76,11 +76,12 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
 import { getAllFlags, upsertFlag, deleteFlag } from './services/featureFlagsService.js';
+import { getJobQueueStats, purgeOldJobs } from './services/jobQueueService.js';
 import { generatePickCardSvg, generateSlateSvg } from './services/infographicsService.js';
 import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
 import { startDiscordBot } from './services/discordBot.js';
@@ -3690,6 +3691,30 @@ app.delete('/api/admin/feature-flags/:key', verifyToken, requireAdmin, async (re
   }
 });
 
+// ── Job Queue (B7) ────────────────────────────────────────────────────────────
+
+// GET /api/admin/jobs — job queue dashboard stats
+app.get('/api/admin/jobs', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const stats = await getJobQueueStats({ limit });
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/jobs/purge — purge old done/failed jobs
+app.post('/api/admin/jobs/purge', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const days = Number(req.body?.retentionDays ?? 7);
+    const purged = await purgeOldJobs(days);
+    res.json({ success: true, purged });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // DELETE /api/picks/:id — elimina un pick individual del historial
 app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   try {
@@ -4757,6 +4782,7 @@ runMigrations()
   .then(() => runCsvBacktestMigrations())
   .then(() => runPgvectorMigrations())
   .then(() => runFeatureFlagsMigrations())
+  .then(() => runJobQueueMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -4973,6 +4999,13 @@ runMigrations()
           .then(r => { if (r.embedded) console.log(`[embeddings] ${r.embedded} new picks embedded`); })
           .catch(err => console.warn(`[embeddings] background job failed: ${err.message}`));
       }, 15 * 60 * 1000).unref();
+
+      // B7: job queue purge — weekly cleanup of done/failed jobs older than 7 days
+      setInterval(() => {
+        purgeOldJobs(7)
+          .then(n => { if (n > 0) console.log(`[job-queue] purged ${n} old jobs`); })
+          .catch(err => console.warn(`[job-queue] purge failed: ${err.message}`));
+      }, 7 * 24 * 60 * 60 * 1000).unref();
 
       if (process.env.TELEGRAM_ENABLED === '1') {
         const tgIntervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);
