@@ -2634,6 +2634,36 @@ app.get('/api/games/:gamePk/live', async (req, res) => {
   }
 });
 
+// GET /api/games/:gamePk/live/stream — SSE live game stream (B2 Hexa Live)
+// Pushes normalized game state every POLL_MS. Client closes connection when done.
+app.get('/api/games/:gamePk/live/stream', verifyToken, (req, res) => {
+  const gamePk = req.params.gamePk;
+  const POLL_MS = Math.max(5000, Math.min(60000, Number(req.query.interval ?? 15000)));
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  async function sendUpdate() {
+    try {
+      const data = await getLiveGameData(gamePk);
+      res.write(`data: ${JSON.stringify({ ok: true, data })}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ ok: false, error: err.message })}\n\n`);
+    }
+  }
+
+  sendUpdate();
+  const timer = setInterval(sendUpdate, POLL_MS);
+
+  req.on('close', () => {
+    clearInterval(timer);
+  });
+});
+
 // GET /api/games/:gamePk/play-by-play - Complete game timeline for Gameday detail
 app.get('/api/games/:gamePk/play-by-play', async (req, res) => {
   try {

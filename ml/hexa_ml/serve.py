@@ -12,6 +12,9 @@ Endpoints:
   - GET  /calibration/ensemble   → ensemble manifest (Sprint 4)
   - POST /retrain                → fire training run (admin token required)
   - POST /retrain/ensemble       → fire ensemble training (admin token required)
+  - POST /fangraphs/refresh      → admin trigger to re-scrape FanGraphs ZiPS projections (A2)
+  - GET  /fangraphs/pitcher/{name} → pitcher ZiPS/DC projection lookup
+  - GET  /fangraphs/batter/{name}  → batter ZiPS/DC projection lookup
 
 Auth: every non-/health endpoint requires
   Authorization: Bearer ${HEXA_ML_INTERNAL_TOKEN}
@@ -35,6 +38,7 @@ from . import __version__
 from .config import get_settings
 from .predict import ModelNotAvailable, Prediction, get_registry
 from .models import MARKET_MODELS
+from .fangraphs_scraper import get_projections, find_pitcher, find_batter
 
 logger = logging.getLogger("hexa_ml.serve")
 SUPPORTED_MARKETS = tuple(MARKET_MODELS.keys())
@@ -431,3 +435,51 @@ async def retrain(payload: RetrainRequest) -> RetrainResponse:
     summary = await asyncio.to_thread(_run)
     get_registry().reload()
     return RetrainResponse(status="ok", summary=summary)
+
+
+# ── FanGraphs ZiPS projections (A2) ──────────────────────────────────────────
+
+class FangraphsRefreshResponse(BaseModel):
+    status: str
+    totals: dict[str, int]
+
+
+class FangraphsPlayerResponse(BaseModel):
+    found: bool
+    data: dict | None = None
+
+
+@app.post(
+    "/fangraphs/refresh",
+    response_model=FangraphsRefreshResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def fangraphs_refresh() -> FangraphsRefreshResponse:
+    """Re-scrape all FanGraphs ZiPS/DC projections and refresh the in-memory cache."""
+    projections = await get_projections(force_refresh=True)
+    totals = {k: len(v) for k, v in projections.items()}
+    return FangraphsRefreshResponse(status="ok", totals=totals)
+
+
+@app.get(
+    "/fangraphs/pitcher/{name}",
+    response_model=FangraphsPlayerResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def fangraphs_pitcher(name: str) -> FangraphsPlayerResponse:
+    """Look up a pitcher's ZiPS or DC projection by name (partial match)."""
+    projections = await get_projections()
+    result = find_pitcher(projections, name)
+    return FangraphsPlayerResponse(found=result is not None, data=result)
+
+
+@app.get(
+    "/fangraphs/batter/{name}",
+    response_model=FangraphsPlayerResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def fangraphs_batter(name: str) -> FangraphsPlayerResponse:
+    """Look up a batter's ZiPS or DC projection by name (partial match)."""
+    projections = await get_projections()
+    result = find_batter(projections, name)
+    return FangraphsPlayerResponse(found=result is not None, data=result)
