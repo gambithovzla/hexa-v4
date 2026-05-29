@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { initSentry, sentryErrorHandler } from './observability.js';
 import dotenv from 'dotenv';
@@ -15,7 +15,7 @@ import { buildExtendedCandidates, formatExtendedMenuForLLM } from './services/ex
 import { pruneExpiredOddsCache, getOddsCacheStats } from './odds-cache.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
-import { verifyToken, requireVerifiedEmail } from './middleware/auth-middleware.js';
+import { verifyToken, requireVerifiedEmail, requireAdmin } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
 import { regradeBacktestProps } from './services/backtestRegrader.js';
@@ -619,7 +619,7 @@ const analysisLimiter = rateLimit({
   },
   keyGenerator: (req) => {
     const payload = peekJwtPayload(req);
-    return payload?.id ? `user:${payload.id}` : `ip:${req.ip}`;
+    return payload?.id ? `user:${payload.id}` : ipKeyGenerator(req);
   },
   standardHeaders: true,
   legacyHeaders: false,

@@ -16,7 +16,7 @@
 
 import crypto from 'crypto';
 import pool from '../db.js';
-import { generateDraftForType } from './contentDraftService.js';
+import { generateContentDraft } from './contentDraftService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://hexaoracle.lat';
 
@@ -171,7 +171,7 @@ export async function sendWeeklyNewsletter(lang = 'es', date = null) {
   const isEs = String(lang).startsWith('es');
 
   // Generate the weekly_recap content
-  const draft = await generateDraftForType({ type: 'weekly_recap', lang, date });
+  const draft = await generateContentDraft({ type: 'weekly_recap', lang, date });
   const posts    = Array.isArray(draft.posts) ? draft.posts : [];
   const title    = draft.title ?? (isEs ? 'Resumen semanal HEXA' : 'HEXA Weekly Recap');
   const hashtags = draft.hashtags ?? [];
