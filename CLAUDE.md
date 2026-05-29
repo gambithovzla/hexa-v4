@@ -41,7 +41,7 @@ hexa-v4/
 - **No herramienta de migración externa.** Las migraciones viven en [server/migrate.js](server/migrate.js) como funciones SQL idempotentes (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`). Se ejecutan al arrancar el server.
 - **No queue worker.** Background jobs son `setInterval` en [server/index.js](server/index.js) (Statcast warm-up cada 6h, line snapshots, pick resolver, closing line capture, content auto-publish).
 - **No feature flag system.** Solo env vars como toggles (`SHADOW_MODE_ENABLED`, `PARLAY_SYNERGY_ENABLED`, `X_AUTO_PUBLISH_ENABLED`).
-- **No Sentry / Datadog.** Solo `console.log/warn/error` con prefijos `[module-name]`.
+- **Sentry opcional via lazy import.** `server/observability.js` carga `@sentry/node` dinámicamente al iniciar solo si `SENTRY_DSN` está definido; si falta el paquete o la variable, el servidor arranca igual y loguea `[observability] SENTRY_DSN not set — Sentry disabled`. Logging base sigue siendo `console.log/warn/error` con prefijos `[module-name]`.
 - **Tests con `node:test`** (builtin). Cobertura en `server/services/parlayEngine/__tests__/`, `server/services/__tests__/pickAlignedMl.test.js`, `server/parsers/__tests__/pickParser.test.js`.
 
 ---
@@ -81,7 +81,7 @@ hexa-v4/
 - [server/middleware/auth-middleware.js](server/middleware/auth-middleware.js) — `verifyToken`, `requireVerifiedEmail`, `isAdmin`.
 - [server/nowpayments.js](server/nowpayments.js) + [server/nowpayments-webhook.js](server/nowpayments-webhook.js) — checkout cripto + IPN HMAC-SHA512.
 - [server/plans.js](server/plans.js) — fuente de verdad de credit packs vendidos vía NowPayments (planId, precio, créditos a otorgar).
-- [server/email.js](server/email.js) — Resend client.
+- [server/email.js](server/email.js) — Resend client. Import lazy: `getResendClient()` carga `resend` dinámicamente; si el paquete no está disponible o `RESEND_API_KEY` falta, retorna `null` y las funciones de email son no-ops silenciosos.
 
 ### Content pipeline X
 - [server/services/contentDraftService.js](server/services/contentDraftService.js) — drafts con Haiku.
@@ -409,8 +409,17 @@ Estado del pipeline ML:
   - `buildBullpenBlock` incluye `[TeamName]` en línea CRITICAL/MODERATE/LOW para prevenir confusión LLM.
   - `annotateAnalysisData` detecta mismatch entre `alert_flags` (equipo correcto) y `oracle_report` (equipo incorrecto); añade `⚠ DATA CHECK (server)` si se detecta inversión.
   - `buildAnalysisMeta` + trace flag extendidos: `RollingW N/2`, `BatRolling N/2`, `Umpire ✓/✗`, `Fatigue N/2`.
+- ✅ Sprint 8f — **Railway hardening + Node 20** (2026-05-29):
+  - **Tres crashes de startup corregidos** antes de merge: `requireAdmin` faltaba en el import de `auth-middleware.js`; `express-rate-limit v8` requería `ipKeyGenerator` explícito en el keyGenerator; `newsletterService.js` importaba `generateDraftForType` (renombrada a `generateContentDraft`).
+  - **`server/observability.js` refactorizado**: carga `@sentry/node` con `await import()` dinámico dentro de `initSentry()`; sin `SENTRY_DSN` o sin el paquete instalado, el servidor arranca igual — no más `ERR_MODULE_NOT_FOUND` en Railway.
+  - **`server/email.js` refactorizado**: `getResendClient()` carga `resend` dinámicamente; sin `RESEND_API_KEY` o con Node < 20, retorna `null` y los emails son no-ops silenciosos.
+  - **Discord lazy**: `startDiscordBot` se carga con `import()` dinámico en `index.js`; si `DISCORD_ENABLED` no está activo o el paquete falla, el servidor arranca igual.
+  - **`server/.nvmrc`** creado con `20` — pin de Node en el service root que Railway lee para Nixpacks. La variable `NIXPACKS_NODE_VERSION=20` en Railway es el override definitivo.
+  - **`ml/requirements.txt` + `ml/pyproject.toml`**: `httpx` y `beautifulsoup4` promovidos de dev-only a runtime. El sidecar Python crasheaba al importar `fangraphs_scraper` porque `httpx` no estaba en las deps de producción.
+  - **`ml/hexa_ml/serve.py`**: import de `fangraphs_scraper` envuelto en `try/except ImportError`; si falla, los endpoints `/fangraphs/*` devuelven HTTP 503 en vez de hundir todo el servicio al arrancar.
+  - Resultado: los tres servicios Railway (Postgres, hexa-v4, Hexa ML) en **Online** tras el deploy; `NIXPACKS_NODE_VERSION=20` confirmado activo — emails de verificación operativos.
 
-**Estado en producción (2026-05-29, post-audit)**:
+**Estado en producción (2026-05-29, post-8f)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
 - Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".
@@ -419,7 +428,9 @@ Estado del pipeline ML:
 
 **Variables en Railway Hexa ML**: `DATABASE_URL` (public URL), `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `MIN_TRAIN_SIZE=60`, `RUNLINE_MIN_TRAIN_SIZE=25` (override), `TEST_DAYS=7`
 
-**Variables en Railway hexa-v4**: `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app`, `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `CHAT_EXTRACTOR_HAIKU_FALLBACK=1` (default), `CHAT_EXTRACTOR_HAIKU_MODEL=claude-haiku-4-5-20251001` (default)
+**Variables en Railway hexa-v4**: `NIXPACKS_NODE_VERSION=20` (pin Node 20 para Nixpacks — sin esto Railway usa Node 18 y `resend@6` / `node-pg-migrate@8` no arrancan), `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app`, `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `CHAT_EXTRACTOR_HAIKU_FALLBACK=1` (default), `CHAT_EXTRACTOR_HAIKU_MODEL=claude-haiku-4-5-20251001` (default)
+
+**Nota Railway — Node version**: el service root de hexa-v4 en Railway es `server/`, por eso el `.nvmrc` y `engines` en la raíz del repo son **invisibles** para Nixpacks. La variable `NIXPACKS_NODE_VERSION=20` es el override correcto. Adicionalmente existe `server/.nvmrc` con `20` como fallback para herramientas que leen el service root.
 
 **Para reentrenar manualmente (CLI)**:
 ```bash
