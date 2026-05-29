@@ -38,9 +38,28 @@ from . import __version__
 from .config import get_settings
 from .predict import ModelNotAvailable, Prediction, get_registry
 from .models import MARKET_MODELS
-from .fangraphs_scraper import get_projections, find_pitcher, find_batter
 
 logger = logging.getLogger("hexa_ml.serve")
+
+# FanGraphs scraping is an optional add-on (needs httpx + beautifulsoup4).
+# Import defensively so a missing dependency can never take down the core
+# prediction service — only the /fangraphs/* endpoints degrade.
+try:
+    from .fangraphs_scraper import get_projections, find_pitcher, find_batter
+    _FANGRAPHS_AVAILABLE = True
+except ImportError as _fg_err:  # pragma: no cover - depends on optional deps
+    logger.warning("fangraphs scraper unavailable — /fangraphs/* disabled (%s)", _fg_err)
+    _FANGRAPHS_AVAILABLE = False
+
+
+def _require_fangraphs() -> None:
+    """Raise 503 if the optional FanGraphs scraper deps aren't installed."""
+    if not _FANGRAPHS_AVAILABLE:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="FanGraphs scraper unavailable (missing httpx/beautifulsoup4)",
+        )
+
 SUPPORTED_MARKETS = tuple(MARKET_MODELS.keys())
 SUPPORTED_PROP_ENDPOINTS = {
     "hits": "prop_hits",
@@ -456,6 +475,7 @@ class FangraphsPlayerResponse(BaseModel):
 )
 async def fangraphs_refresh() -> FangraphsRefreshResponse:
     """Re-scrape all FanGraphs ZiPS/DC projections and refresh the in-memory cache."""
+    _require_fangraphs()
     projections = await get_projections(force_refresh=True)
     totals = {k: len(v) for k, v in projections.items()}
     return FangraphsRefreshResponse(status="ok", totals=totals)
@@ -468,6 +488,7 @@ async def fangraphs_refresh() -> FangraphsRefreshResponse:
 )
 async def fangraphs_pitcher(name: str) -> FangraphsPlayerResponse:
     """Look up a pitcher's ZiPS or DC projection by name (partial match)."""
+    _require_fangraphs()
     projections = await get_projections()
     result = find_pitcher(projections, name)
     return FangraphsPlayerResponse(found=result is not None, data=result)
@@ -480,6 +501,7 @@ async def fangraphs_pitcher(name: str) -> FangraphsPlayerResponse:
 )
 async def fangraphs_batter(name: str) -> FangraphsPlayerResponse:
     """Look up a batter's ZiPS or DC projection by name (partial match)."""
+    _require_fangraphs()
     projections = await get_projections()
     result = find_batter(projections, name)
     return FangraphsPlayerResponse(found=result is not None, data=result)
