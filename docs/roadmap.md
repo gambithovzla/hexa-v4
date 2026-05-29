@@ -71,15 +71,18 @@ Solución aplicada: **scaffolding NBA en paralelo con equity + persistencia ML**
 | Sprint 4 | Ensemble meta-learner (LogReg sobre oracle+legacy+python en logit space). `/predict/ensemble`, `/calibration/ensemble` | ✅ |
 | Sprint 5 UI | Admin ML Control Center (`/admin/ml-control`) — HUD live, retrain on-demand, audit log, chat-picks dashboard, AdminEnsembleBadge per-pick. Oracle Chat → Training pipeline con bucket `source='oracle_chat'` aislado | ✅ |
 
-**Sprint 5 Player Props MLB** — 🔄 **en progreso** (promovido 2026-05-16):
+**Sprint 5 Player Props MLB** — ✅ **código completo** (audit 2026-05-29; pendiente solo acumulación de datos):
 - ✅ Savant snapshots estructurados en `pick_features`.
 - ✅ Prop-kind markets en sidecar training + inference (`prop_hits`, `prop_strikeouts`, etc.).
 - ✅ Tablero UI `/props` + API `GET /api/mlb/props/board` ([mlb-props.js](../server/routes/mlb-props.js), [PlayerPropsPage.jsx](../client/src/pages/PlayerPropsPage.jsx)).
 - ✅ Bloque **Picks Oracle (guardados)** en board (desde `picks` por `game_date` / `game_pk`).
 - ✅ [props-resolver.js](../server/props-resolver.js) — boxscore GUMBO para K/H/TB/HR/RBI.
 - ✅ Parser español en [pickParser.js](../server/parsers/pickParser.js).
-- ⏳ Resolver props en flujo automático post-game (integración con `pick-resolver` / volumen).
-- ⏳ Validación Brier ≥100 picks resueltos por `prop_kind` antes de rollout público.
+- ✅ Resolver automático integrado en `resolvePendingPicks()` vía `resolvePickFromFinalState` — props se resuelven en el job de 30 min junto a moneyline/runline/OvUn. Escribe `result` + `propResult` al DB.
+- ✅ ML scores en board gateados por `is_admin` (admin los ve siempre) o `MLB_PROPS_ML_PUBLIC_ENABLED=1` (público). Flag listo en código.
+- ✅ `mlModelHealth.js` trackea `prop_hits`, `prop_strikeouts`, `prop_total_bases`, `prop_home_runs`, `prop_rbis` — visibles en HUD de `/admin/ml-control`.
+- ⏳ **Ops**: acumular ≥50 picks props resueltos con los 3 scores (oracle/legacy/python) para que el sidecar entrene el modelo `prop`. El HUD muestra n_train por mercado — cuando llegue a 50+, hacer retrain desde `/admin/ml-control` y verificar Brier.
+- ⏳ **Ops**: flippear `MLB_PROPS_ML_PUBLIC_ENABLED=1` en Railway cuando pase el gate Brier.
 
 **Sprint 5b — Pick-aligned shadow + admin ML** — ✅ **cerrado** (2026-05-17):
 - [pickAlignedMl.js](../server/services/pickAlignedMl.js) + migración columnas `shadow_model_runs`.

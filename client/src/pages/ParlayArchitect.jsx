@@ -10,6 +10,7 @@ import ParlayArchitectHistory from '../components/ParlayArchitectHistory';
 import HexaLearnings from '../components/HexaLearnings';
 import { MONO, BARLOW } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
+import { useHexaTheme } from '../themeProvider';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -493,6 +494,7 @@ function ResultPanel({ result, t, lang, expandedAlt, setExpandedAlt }) {
 export default function ParlayArchitect({ lang = 'en' }) {
   const t = L[lang] ?? L.en;
   const { token } = useAuth();
+  const { isLeague } = useHexaTheme();
   const { games, date, setDate, gamesLoading } = useGames();
   const { grouped, groupedDates, stats, winRate, addRun, markResult, autoResolve, deleteRun } = useParlayArchitectHistory(token);
   const { data: learningsData, loading: learningsLoading, error: learningsError } = useParlayLearnings(
@@ -577,13 +579,13 @@ export default function ParlayArchitect({ lang = 'en' }) {
       {loading && <OracleLoadingOverlay lang={lang} />}
 
       {/* Page header */}
-      <Box>
+      <Box className={isLeague ? 'brand-clip-bevel' : ''} sx={isLeague ? { pl: '10px', py: '4px' } : {}}>
         <Typography sx={{
-          fontFamily: BARLOW,
+          fontFamily: isLeague ? 'var(--font-display)' : BARLOW,
           fontWeight: 800,
           fontSize: { xs: '1.05rem', sm: '1.25rem' },
-          letterSpacing: '0.22em',
-          color: C.accent,
+          letterSpacing: isLeague ? '0.18em' : '0.22em',
+          color: isLeague ? 'var(--volt)' : C.accent,
           textTransform: 'uppercase',
         }}>
           {t.title}

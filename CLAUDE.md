@@ -382,7 +382,7 @@ Estado del pipeline ML:
 - ✅ Sprint 3 — integración Node↔Python (mlModelClient.js, circuit breaker), shadow_model_runs enriquecido, dashboard `/admin/ml-calibration`.
 - ✅ Sprint 4 — ensemble meta-learner (LogReg oracle+legacy+python), `/predict/ensemble`, `/admin/ml-ensemble-calibration`.
 - ✅ Sprint 5 UI — Admin ML Control Center (`/admin/ml-control`): HUD live, retrain on-demand por mercado + ensemble + RETRAIN ALL, per-pick ensemble breakdown badge en HistoryPanel, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Chat→Training pipeline con `source='oracle_chat'` aislado del training default. Observability runline/ensemble en HUD (`mlModelHealth.js`).
-- 🔄 Sprint 5 Player Props MLB — en progreso: Savant en feature store, `prop_*` en sidecar, `/props` + `mlb-props.js`, `props-resolver.js`, parser ES. Pendiente: resolver a escala en lifecycle + gate Brier por mercado.
+- ✅ Sprint 5 Player Props MLB — código completo (audit 2026-05-29). Resolver automático integrado en `resolvePendingPicks()`. ML scores gateados por admin + `MLB_PROPS_ML_PUBLIC_ENABLED`. Pendiente solo: acumular ≥50 props resueltos en prod para retrain `prop` model + flip flag público.
 - ✅ Sprint 5b — Pick-aligned shadow + `mlOpinion` admin + tokens `--outcome-*` League (merge main 2026-05-17, PRs #345–#347).
 - ✅ Sprint 6 — equity/Sharpe/drawdown + comparativa bankroll (`userEquityCompare.js`, `GET /api/bankroll/equity-stats`); persistencia ML prod (6b).
 - ✅ Post-6 — parlay resolve/AUTO (`parlayResolver.js`, `parlayRunOutcome.js`); NBA team-map + output guard (`nba-team-map.js`, `nbaOutputGuard.js`).
