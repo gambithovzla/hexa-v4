@@ -2,7 +2,7 @@
 
 Plan de construcción del **tercer deporte**, espejo exacto de la serie NBA (Sprint 7). Detalle técnico y de datos en [nfl-architecture.md](nfl-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md).
 
-**Estado**: 🔄 en build. **Sprint 9a (scaffolding de datos) cerrado en código** (2026-05-29, rama `feat/nfl-scaffolding-9a`). `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active = false`, no está en `ACTIVE_SPORTS`); los endpoints de datos `GET /api/nfl/*` están vivos pero el análisis (9b+) aún no. Falta: Oracle NFL (9b), lifecycle (9c), UI (9d).
+**Estado**: 🔄 en build. **9a (scaffolding de datos) mergeado** (PR #373); **9b (Oracle NFL) cerrado en código** (rama `feat/nfl-oracle-9b`). `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active = false`, no está en `ACTIVE_SPORTS`); los endpoints de datos `GET /api/nfl/*` están vivos. El Oracle NFL (motor + prompts + guard) existe pero aún no hay endpoint que lo exponga. Falta: lifecycle/rutas (9c), UI (9d).
 
 ---
 
@@ -46,15 +46,16 @@ Espeja NBA 7a. Objetivo: leer NFL de extremo a extremo sin análisis todavía. *
 - [x] Tests: `server/__tests__/nfl-team-map.test.js` (10 tests, lógica pura).
 - **Salida**: `GET /api/nfl/games?week=N` devuelve juegos normalizados; el context builder degrada con `staleFlags` honestos cuando una fuente falla (verificado: 403 → vacío sin crash). Contexto sin bloques "data unavailable" cuando ESPN responde.
 
-### Sprint 9b — Oracle NFL 📋
+### Sprint 9b — Oracle NFL ✅
 
-Espeja NBA 7b.
+Espeja NBA 7b. **Cerrado en código (2026-05-29, rama `feat/nfl-oracle-9b`)** — el motor + prompts + guard listos; el endpoint que los expone es 9c.
 
-- [ ] `server/prompts/oracle-nfl-prompts.js` — `NFL_SYSTEM_PROMPT` + `NFL_CHAT_PROMPT`. Cap 72%, key numbers, guardrail anti-hallucination, prioridad QB→EPA.
-- [ ] `server/services/oracleNfl.js` — `analyzeNflGame`, `analyzeNflChat` (Anthropic propio, sin Grok).
-- [ ] `server/services/nflOutputGuard.js` — validación (no props, no ABSTAIN, rango confianza, parse).
-- [ ] (Opcional) `server/nfl-advanced-fetcher.js` — stats nflverse semanales.
-- **Salida**: análisis end-to-end de un juego con pick válido, JSON limpio, sin fabricaciones.
+- [x] `server/prompts/oracle-nfl-prompts.js` — `NFL_SYSTEM_PROMPT` + `NFL_CHAT_PROMPT` + `NFL_OUTPUT_SCHEMA_VERSION`. Cap **72%** (el más bajo de los 3 deportes), **key numbers 3/7** como ley de spread, prioridad QB→EPA(→point-diff proxy)→success→trincheras→rest→weather→situacional, guardrail anti-hallucination (sin web search/tool calls simulados, sin inventar inactivos), player props deshabilitados, anti-bias (no default favorito/OVER/home). Output JSON idéntico al schema NBA/MLB.
+- [x] `server/services/oracleNfl.js` — `analyzeNflGame`, `analyzeNflChat`, `serializeNflContext` (Anthropic propio, sin Grok; **no toca oracle.js**). El serializer usa EPA cuando está, y cae a point-differential/PF-PA per game como proxy hasta nflverse; renderiza QB status, weather (dome-aware), rest/short-week/off-bye, market odds y DATA QUALITY.
+- [x] `server/services/nflOutputGuard.js` — `validateNflAnalysisOutput`: rechaza parse fallido/empty/parlay/missing-pick/ABSTAIN/player-prop; degrada (no fatal) confianza fuera de rango 50–72 y reporte corto, surfacing en `alert_flags`. Espeja `nbaOutputGuard`.
+- [x] Tests: `server/services/__tests__/nflOutputGuard.test.js` (11 tests). `serializeNflContext` validado end-to-end con contexto mock.
+- [ ] (Opcional) `server/nfl-advanced-fetcher.js` — stats nflverse semanales (diferido; el Oracle ya funciona con el proxy point-diff).
+- **Salida**: motor end-to-end listo. Verificado: prompt determinístico bien formado, guard correcto, 324 tests verdes. La llamada LLM real se valida cuando 9c exponga el endpoint (requiere `ANTHROPIC_API_KEY`).
 
 ### Sprint 9c — Pick lifecycle NFL 📋
 
