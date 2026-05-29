@@ -447,8 +447,38 @@ function pitcherSavantBlock(label, savant) {
     `Whiff%: ${fp(savant.whiff_percent)} | K%: ${fp(savant.k_percent)} | BB%: ${fp(savant.bb_percent)}`,
   );
 
+  // Plate discipline — CSW% and chase rate (prompt has explicit thresholds for both)
+  const csw = savant.csw_percent;
+  const chase = savant.o_swing_percent;
+  if (csw != null || chase != null) {
+    lines.push(`CSW%: ${csw != null ? fp(csw) : 'N/A'} | Chase%: ${chase != null ? fp(chase) : 'N/A'}`);
+  }
+
+  // Rolling wOBA against — short-term form (prompt has HOT/STRUGGLING thresholds on 7d/14d)
+  const rw = savant.rolling_windows_against;
+  if (rw?.woba_against_7d != null || rw?.woba_against_14d != null) {
+    const w7  = rw.woba_against_7d  != null ? f3(rw.woba_against_7d)  : 'N/A';
+    const w14 = rw.woba_against_14d != null ? f3(rw.woba_against_14d) : 'N/A';
+    const w21 = rw.woba_against_21d != null ? f3(rw.woba_against_21d) : null;
+    lines.push(`Rolling wOBA against: 7d ${w7} | 14d ${w14}${w21 != null ? ` | 21d ${w21}` : ''}`);
+  }
+
+  // Active spin + pitch movement (prompt references active_spin_pct > 95% and vertical/horizontal break)
+  const as = savant.active_spin;
+  const pm = savant.pitch_movement;
+  const spinParts = [];
+  if (as?.active_spin_pct != null) spinParts.push(`ActiveSpin: ${fp(as.active_spin_pct)}`);
+  if (pm?.vertical_break   != null) spinParts.push(`vBreak: ${f2(pm.vertical_break)}"`);
+  if (pm?.horizontal_break != null) spinParts.push(`hBreak: ${f2(pm.horizontal_break)}"`);
+  if (spinParts.length) lines.push(spinParts.join(' | '));
+
+  // HR profile allowed (prompt flags hr_per_fb_allowed > .20 as HR RISK)
+  const hrp = savant.home_run_profile_against;
+  if (hrp?.hr_per_fb_allowed != null) {
+    lines.push(`HR/FB allowed: ${f3(hrp.hr_per_fb_allowed)}${hrp.avg_hr_dist_allowed != null ? ` | Avg HR dist: ${Math.round(hrp.avg_hr_dist_allowed)}ft` : ''}`);
+  }
+
   if (savant.arsenal && Object.keys(savant.arsenal).length > 0) {
-    // Summarise top run values and whiff rates by pitch type
     const pitchTypes = { ff: 'FF', si: 'SI', fc: 'FC', sl: 'SL', cu: 'CU', ch: 'CH', fs: 'FS' };
     const rvParts = [];
     for (const [prefix, name] of Object.entries(pitchTypes)) {
@@ -476,11 +506,37 @@ function batterSavantLine(name, savant) {
   const pctStr   = pctXwOBA != null ? ` | xwOBA-pct:${Math.round(pctXwOBA)}` : '';
   const evPct    = pctEV    != null ? ` EV-pct:${Math.round(pctEV)}`         : '';
 
-  return (
+  const parts = [
     `  ${name}: xwOBA ${f3(savant.xwOBA)} xBA ${f3(savant.xBA)} xSLG ${f3(savant.xSLG)}` +
     ` | EV ${f1(savant.avg_exit_velocity)} Barrel% ${fp(savant.barrel_batted_rate)} HH% ${fp(savant.hard_hit_percent)}` +
-    pctStr + evPct
-  );
+    pctStr + evPct,
+  ];
+
+  // Rolling wOBA windows — short-term hot/cold streak detection (prompt has ±10% confidence rules)
+  const rw = savant.rolling_windows;
+  if (rw?.woba_7d != null || rw?.woba_14d != null) {
+    const w7  = rw.woba_7d  != null ? f3(rw.woba_7d)  : 'N/A';
+    const w14 = rw.woba_14d != null ? f3(rw.woba_14d) : 'N/A';
+    const w21 = rw.woba_21d != null ? ` | woba_21d ${f3(rw.woba_21d)}` : '';
+    parts.push(`    woba_7d ${w7} | woba_14d ${w14}${w21}`);
+  }
+
+  // Swing profile — attack angle (prompt: 8-16° optimal, >20° uppercut, <5° flat) + bat speed
+  const sp  = savant.swing_path;
+  const bt  = savant.bat_tracking;
+  const swingParts = [];
+  if (sp?.attack_angle != null)  swingParts.push(`AttackAngle: ${f1(sp.attack_angle)}°`);
+  if (bt?.bat_speed    != null)  swingParts.push(`BatSpeed: ${f1(bt.bat_speed)}mph`);
+  if (savant.sprint_speed != null) swingParts.push(`SprintSpd: ${f1(savant.sprint_speed)}ft/s`);
+  if (swingParts.length) parts.push(`    ${swingParts.join(' | ')}`);
+
+  // HR profile — hr_per_fb (prompt: > .20 → boost HR prop +10%)
+  const hrp = savant.home_run_profile;
+  if (hrp?.hr_per_fb != null) {
+    parts.push(`    HR/FB: ${f3(hrp.hr_per_fb)}${hrp.pull_pct != null ? ` | Pull%: ${fp(hrp.pull_pct)}` : ''}`);
+  }
+
+  return parts.join('\n');
 }
 
 // ---------------------------------------------------------------------------
