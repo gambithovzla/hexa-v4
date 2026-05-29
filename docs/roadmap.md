@@ -48,7 +48,7 @@ Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js)
 
 **Explícitamente fuera de esta fase**: Sprint 7e NBA ML sidecar (waiting for ~500 NBA picks resolved); Sprint 7a basketball-reference scraper + tablas dedicadas NBA.
 
-**Siguiente deporte — NFL (📋 planning, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Datos ESPN + The Odds API + nflverse. Spec maestra en [nfl-architecture.md](nfl-architecture.md) y roadmap por sprints en [nfl-roadmap.md](nfl-roadmap.md). Arranque sugerido: verano 2026 (off-season NFL) → MVP admin-only en kickoff de septiembre.
+**Siguiente deporte — NFL (🔄 en build, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Datos ESPN + The Odds API + nflverse. Spec maestra en [nfl-architecture.md](nfl-architecture.md) y roadmap por sprints en [nfl-roadmap.md](nfl-roadmap.md). **9a (scaffolding de datos) mergeado (PR #373); 9b (Oracle NFL + prompts) en build.** Arranque: verano 2026 (off-season NFL) → MVP admin-only en kickoff de septiembre.
 
 ### El trade-off explícito
 
@@ -535,7 +535,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
   - NBA validación E2E en prod con tráfico real → `NBA_ANALYSIS_ENABLED=true` si ya está activo.
   - Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
   - `OPENAI_EMBED_API_KEY` → activa RAG (pgvector embeddings de oracle_report en contexto).
-- **Pendiente frontend**: B2 Hexa Live UI (SSE client en HexaBoard), B10 alt lines UI dropdown.
-- **Próximo deporte**: NFL (Sprint 9) — spec en [docs/nfl-architecture.md](nfl-architecture.md), roadmap en [docs/nfl-roadmap.md](nfl-roadmap.md). Arranque verano 2026.
+- ✅ **Frontend B2/B10 cerrados** (PR #372): `LiveTracker` migrado a SSE per-game; `AltLinesModal` + `PlayerPropsPage` ya completos.
+- **Próximo deporte**: NFL (Sprint 9) — spec en [docs/nfl-architecture.md](nfl-architecture.md), roadmap en [docs/nfl-roadmap.md](nfl-roadmap.md). **9a mergeado (PR #373); 9b Oracle en build.** Arranque verano 2026.
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).
