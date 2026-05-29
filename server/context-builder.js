@@ -7,8 +7,8 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats } from './mlb-api.js';
-import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory } from './savant-fetcher.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats, getUmpireForGame, getTeamScheduleFatigue } from './mlb-api.js';
+import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory, getUmpireStats } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
@@ -347,6 +347,118 @@ function offenseBlock(label, hittingData, teamName, splitsData = null, rivalHand
 }
 
 // ---------------------------------------------------------------------------
+// Bloque de forma ofensiva del equipo (rolling wOBA del lineup)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a team offensive form summary from individual batter rolling wOBA windows.
+ * Aggregates the lineup's avg woba_7d and woba_14d to detect collective hot/cold streaks.
+ */
+function buildTeamFormBlock(homeName, awayName, savantBatters) {
+  const computeAvg = (batters, field) => {
+    const vals = batters
+      .map(b => b.savant?.rolling_windows?.[field])
+      .filter(v => v != null && Number.isFinite(Number(v)))
+      .map(Number);
+    return vals.length >= 3 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  };
+
+  const f3 = (v) => (v != null ? Number(v).toFixed(3) : null);
+
+  const homeW7  = computeAvg(savantBatters?.home ?? [], 'woba_7d');
+  const homeW14 = computeAvg(savantBatters?.home ?? [], 'woba_14d');
+  const awayW7  = computeAvg(savantBatters?.away ?? [], 'woba_7d');
+  const awayW14 = computeAvg(savantBatters?.away ?? [], 'woba_14d');
+
+  if (homeW7 == null && awayW7 == null) return null;
+
+  const lines = ['### TEAM OFFENSIVE FORM (Rolling wOBA — lineup aggregate) ###'];
+
+  const fmtTeam = (name, w7, w14) => {
+    if (w7 == null && w14 == null) return `[${name}] Insufficient batter data`;
+    const tag7  = w7  != null && w7  > 0.370 ? ' 🔥 HOT'  : w7  != null && w7  < 0.290 ? ' 🧊 COLD' : '';
+    const tag14 = w14 != null && w14 > 0.360 ? ' 🔥'      : w14 != null && w14 < 0.295 ? ' 🧊'      : '';
+    return `[${name}] Lineup avg woba_7d: ${f3(w7) ?? 'N/A'}${tag7} | woba_14d: ${f3(w14) ?? 'N/A'}${tag14}`;
+  };
+
+  lines.push(fmtTeam(homeName, homeW7, homeW14));
+  lines.push(fmtTeam(awayName, awayW7, awayW14));
+  lines.push('ORACLE INSTRUCTION: When lineup avg woba_7d > .370, treat as collective HOT STREAK — boost OVER and that team\'s ML. When < .290, treat as collective COLD — boost UNDER. Confirm against individual batter streaks.');
+  lines.push('### END TEAM FORM ###');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Bloque de contexto del umpire del home plate
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the home plate umpire context block.
+ */
+function buildUmpireBlock(umpire, stats) {
+  if (!umpire?.name) return null;
+
+  const lines = ['### HOME PLATE UMPIRE ###'];
+  lines.push(`Umpire: ${umpire.name}`);
+
+  if (stats) {
+    const f1 = (v) => (v != null ? Number(v).toFixed(1) : 'N/A');
+    if (stats.accuracy_pct != null)
+      lines.push(`Accuracy: ${f1(stats.accuracy_pct)}%`);
+    if (stats.extra_calls_per_game != null) {
+      const bias = stats.extra_calls_per_game > 0.5
+        ? 'PITCHER-FRIENDLY (larger zone — more Ks, fewer walks)'
+        : stats.extra_calls_per_game < -0.5
+        ? 'BATTER-FRIENDLY (tight zone — more walks, fewer Ks)'
+        : 'NEUTRAL zone';
+      lines.push(`Zone tendency: ${bias} | Extra calls/game vs avg: ${f1(stats.extra_calls_per_game)}`);
+    }
+    if (stats.zone_size != null)
+      lines.push(`Zone size vs avg: ${f1(stats.zone_size)}`);
+  } else {
+    lines.push('Zone stats: not available for this umpire');
+  }
+
+  lines.push('ORACLE INSTRUCTION: A pitcher-friendly umpire (extra_calls > +0.5) biases toward UNDER and K props OVER. A batter-friendly umpire biases toward OVER and suppresses K props.');
+  lines.push('### END UMPIRE ###');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Bloque de fatiga por calendario
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a schedule fatigue context note for both teams.
+ */
+function buildScheduleFatigueBlock(homeName, awayName, homeFatigue, awayFatigue) {
+  if (!homeFatigue && !awayFatigue) return null;
+
+  const lines = ['### SCHEDULE FATIGUE ###'];
+
+  const fmtFatigue = (name, f) => {
+    if (!f) return `[${name}] Schedule data unavailable`;
+    const parts = [`[${name}] ${f.gamesLast7d} games in last 7 days`];
+    if (f.consecutiveDaysPlayed >= 5)
+      parts.push(`⚠ ${f.consecutiveDaysPlayed} consecutive days — HIGH FATIGUE`);
+    else if (f.consecutiveDaysPlayed >= 3)
+      parts.push(`${f.consecutiveDaysPlayed} consecutive days`);
+    if (f.roadGamesLast7d >= 5)
+      parts.push(`${f.roadGamesLast7d} road games (travel fatigue)`);
+    return parts.join(' | ');
+  };
+
+  lines.push(fmtFatigue(homeName, homeFatigue));
+  lines.push(fmtFatigue(awayName, awayFatigue));
+  lines.push('ORACLE INSTRUCTION: 5+ consecutive days or 6+ road games in 7 days = schedule fatigue signal. Reduces late-inning reliability for position players and affects starter pitch count management. Factor into run-line and late-inning totals analysis.');
+  lines.push('### END SCHEDULE FATIGUE ###');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Bloque de bullpen / pitcheo del equipo (texto)
 // ---------------------------------------------------------------------------
 
@@ -413,6 +525,14 @@ function buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeB
     const fresh = usage.relievers.filter(r => r.gamesLast3d === 0 || (r.gamesLast3d === 1 && r.totalIP_last3d <= 1.0));
     if (fresh.length > 0) {
       uLines.push(`  ✓ FRESH/AVAILABLE: ${fresh.map(fmtR).join(', ')}`);
+    }
+
+    // LHP/RHP handedness breakdown of available relievers
+    const withHand = usage.relievers.filter(r => r.throwingHand != null);
+    if (withHand.length > 0) {
+      const lhp = withHand.filter(r => r.throwingHand === 'L').length;
+      const rhp = withHand.filter(r => r.throwingHand === 'R').length;
+      uLines.push(`  Hand composition: ${rhp} RHP / ${lhp} LHP in bullpen`);
     }
 
     // Fatigue summary for Oracle
@@ -1189,6 +1309,33 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Bullpen usage data unavailable — continuing:', err.message);
   }
 
+  // ── Umpire + schedule fatigue (parallel, non-blocking) ─────────────────────
+  let umpireData    = null;
+  let umpireStats   = null;
+  let homeFatigue   = null;
+  let awayFatigue   = null;
+  try {
+    const gamePkNum = gameData?.gamePk ?? null;
+    const [umpireResult, homeFatigueResult, awayFatigueResult] = await Promise.all([
+      gamePkNum ? getUmpireForGame(gamePkNum) : Promise.resolve(null),
+      home?.id  ? getTeamScheduleFatigue(home.id)  : Promise.resolve(null),
+      away?.id  ? getTeamScheduleFatigue(away.id)  : Promise.resolve(null),
+    ]);
+    umpireData  = umpireResult;
+    homeFatigue = homeFatigueResult;
+    awayFatigue = awayFatigueResult;
+    if (umpireData?.name) console.log(`[context-builder] Umpire: ${umpireData.name}`);
+  } catch (err) {
+    console.warn('[context-builder] Umpire/fatigue data unavailable:', err.message);
+  }
+
+  // Fetch umpire zone stats if we identified the umpire
+  if (umpireData?.name) {
+    try {
+      umpireStats = await getUmpireStats(umpireData.name);
+    } catch { /* non-blocking */ }
+  }
+
   const homePitcherTeam = settled(homeTeamVerifyResult);
   const awayPitcherTeam = settled(awayTeamVerifyResult);
 
@@ -1547,6 +1694,15 @@ export async function buildContext(gameData, oddsData = null) {
   // Bullpen / pitcheo del equipo
   blocks.push(buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeBullpenUsage, awayBullpenUsage));
   blocks.push('');
+
+  const teamFormBlock = buildTeamFormBlock(homeName, awayName, savantBatters);
+  if (teamFormBlock) blocks.push(teamFormBlock);
+
+  const umpireBlock = buildUmpireBlock(umpireData, umpireStats);
+  if (umpireBlock) blocks.push(umpireBlock);
+
+  const fatigueBlock = buildScheduleFatigueBlock(homeName, awayName, homeFatigue, awayFatigue);
+  if (fatigueBlock) blocks.push(fatigueBlock);
 
   // Ofensiva — cross-matched with rival pitcher's throwing hand for platoon splits
   // Home offense faces the Away pitcher → use awayPitcher.throwingHand
