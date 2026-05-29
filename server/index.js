@@ -2639,7 +2639,14 @@ app.get('/api/games/:gamePk/live', async (req, res) => {
 
 // GET /api/games/:gamePk/live/stream — SSE live game stream (B2 Hexa Live)
 // Pushes normalized game state every POLL_MS. Client closes connection when done.
-app.get('/api/games/:gamePk/live/stream', verifyToken, (req, res) => {
+// Accepts token via Authorization header OR ?_auth= query param (EventSource workaround).
+app.get('/api/games/:gamePk/live/stream', (req, res, next) => {
+  // SSE auth: EventSource doesn't support headers — fall back to _auth query param
+  if (!req.headers['authorization'] && req.query._auth) {
+    req.headers['authorization'] = `Bearer ${req.query._auth}`;
+  }
+  next();
+}, verifyToken, (req, res) => {
   const gamePk = req.params.gamePk;
   const POLL_MS = Math.max(5000, Math.min(60000, Number(req.query.interval ?? 15000)));
 

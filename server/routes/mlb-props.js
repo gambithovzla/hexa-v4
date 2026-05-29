@@ -130,6 +130,7 @@ router.get('/props/board', verifyToken, async (req, res) => {
       if (props.length > 0) {
         gameRows.push({
           gamePk: game.game_pk ?? game.gamePk,
+          eventId: matched?.id ?? null,
           awayTeam: game.teams?.away?.abbreviation ?? game.away_team?.abbreviation ?? game.awayTeam,
           homeTeam: game.teams?.home?.abbreviation ?? game.home_team?.abbreviation ?? game.homeTeam,
           startTime: game.gameTime ?? game.game_time ?? game.startTime ?? null,

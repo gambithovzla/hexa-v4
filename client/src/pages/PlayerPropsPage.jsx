@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box, Typography, Button, CircularProgress, MenuItem, Select, FormControl, InputLabel,
-  Chip, Collapse, Tooltip,
+  Chip,
 } from '@mui/material';
+import AltLinesModal from '../components/AltLinesModal.jsx';
 import HelpTip from '../components/HelpTip';
 import { MONO, BARLOW } from '../theme';
 
@@ -170,6 +171,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
   const [minEdge, setMinEdge] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
   const [showSavant, setShowSavant] = useState(false);
+  const [altLines, setAltLines] = useState(null); // { eventId, playerName, propKind }
   const [loading, setLoading] = useState(true);
   const [board, setBoard] = useState(null);
   const [error, setError] = useState(null);
@@ -369,6 +371,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
                   <ThLabel label={T.edge} help={H.edge} />
                   {showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>xBA / xSLG</th>}
                   {showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>wOBA 7d</th>}
+                  {g.eventId && <th style={{ padding: '6px 8px', color: MUTED }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -404,6 +407,24 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
                           {p.savant?.rolling7d != null ? p.savant.rolling7d.toFixed(3) : '—'}
                         </td>
                       )}
+                      {g.eventId && (
+                        <td style={{ padding: '4px 8px' }}>
+                          <button
+                            onClick={() => setAltLines({ eventId: g.eventId, playerName: p.playerName, propKind: p.propKind })}
+                            style={{
+                              background: 'transparent',
+                              border: `1px solid var(--border)`,
+                              color: 'var(--ink-2)',
+                              fontFamily: MONO,
+                              fontSize: '9px',
+                              padding: '2px 6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {T.altLines}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -433,6 +454,16 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
           {T.mlControlLink}
         </Typography>
       </Box>
+
+      <AltLinesModal
+        open={altLines != null}
+        onClose={() => setAltLines(null)}
+        eventId={altLines?.eventId}
+        playerName={altLines?.playerName}
+        propKind={altLines?.propKind}
+        token={token}
+        lang={lang}
+      />
     </Box>
   );
 }
