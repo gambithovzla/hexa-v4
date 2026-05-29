@@ -27,6 +27,7 @@ import {
 } from 'recharts';
 import HelpTip from '../components/HelpTip';
 import { MONO, DISPLAY } from '../theme';
+import { useHexaTheme } from '../themeProvider';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // ── Palette (CSS vars — follows classic + league-kinetic via index.css) ───────
@@ -349,6 +350,7 @@ function CornerBrackets({ color = CYAN, size = 10 }) {
 
 // ── HUD: top status overlay ──────────────────────────────────────────────────
 function HUDStatusBar({ status, loading, onRefresh, T }) {
+  const { isLeague } = useHexaTheme();
   const enabled            = !!status?.enabled;
   const ensembleEnabled    = !!status?.ensemble_enabled;
   const circuit            = status?.circuit?.state ?? 'unknown';
@@ -391,7 +393,7 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
       : MUTED;
 
   return (
-    <Box sx={{
+    <Box className={isLeague ? 'brand-clip-bevel' : ''} sx={{
       position:     'relative',
       background:   `linear-gradient(135deg, ${SURFACE} 0%, ${SURFACE2} 100%)`,
       border:       `1px solid ${BORDER}`,
@@ -403,7 +405,7 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
       <Box className="amlc-flow-border" sx={{
         position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
       }} />
-      <CornerBrackets color={CYAN} />
+      {!isLeague && <CornerBrackets color={CYAN} />}
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 220 }}>
@@ -411,7 +413,14 @@ function HUDStatusBar({ status, loading, onRefresh, T }) {
             HEXA.ML // CONTROL CENTER
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.05rem', fontWeight: 700, color: INK0, lineHeight: 1.1 }}>
+            <Typography sx={{
+              fontFamily: isLeague ? 'var(--font-display)' : DISPLAY,
+              fontSize: '1.05rem', fontWeight: 700,
+              color: isLeague ? 'var(--volt)' : INK0,
+              lineHeight: 1.1,
+              letterSpacing: isLeague ? '0.08em' : 'normal',
+              textTransform: isLeague ? 'uppercase' : 'none',
+            }}>
               {T.dashboard}
             </Typography>
             <HelpTip title={T.help?.page} />

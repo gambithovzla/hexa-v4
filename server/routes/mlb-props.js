@@ -2,7 +2,7 @@ import express from 'express';
 import pool from '../db.js';
 import { parsePick } from '../parsers/pickParser.js';
 import { getTodayGames } from '../mlb-api.js';
-import { getGameOdds, hydrateOddsForGame, matchOddsToGame } from '../odds-api.js';
+import { getGameOdds, hydrateOddsForGame, matchOddsToGame, getEventPropsExtended } from '../odds-api.js';
 import { verifyToken } from '../middleware/auth-middleware.js';
 import { getBatterStatcast, getPitcherStatcast } from '../savant-fetcher.js';
 import { enrichPropFeatures, mapOddsMarketToPropKind } from '../services/propFeatureEnricher.js';
@@ -130,6 +130,7 @@ router.get('/props/board', verifyToken, async (req, res) => {
       if (props.length > 0) {
         gameRows.push({
           gamePk: game.game_pk ?? game.gamePk,
+          eventId: matched?.id ?? null,
           awayTeam: game.teams?.away?.abbreviation ?? game.away_team?.abbreviation ?? game.awayTeam,
           homeTeam: game.teams?.home?.abbreviation ?? game.home_team?.abbreviation ?? game.homeTeam,
           startTime: game.gameTime ?? game.game_time ?? game.startTime ?? null,
@@ -239,6 +240,52 @@ router.get('/props/board', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('[mlb-props] board failed:', err.message);
     res.status(500).json({ error: 'Failed to load props board' });
+  }
+});
+
+// GET /api/mlb/props/alt-lines?eventId=&player= — alternate prop lines for a player (B10)
+router.get('/props/alt-lines', verifyToken, async (req, res) => {
+  try {
+    const { eventId, player } = req.query;
+    if (!eventId) return res.status(400).json({ error: 'eventId required' });
+
+    const extended = await getEventPropsExtended(eventId);
+    if (!extended?.playerProps) return res.json({ success: true, data: [] });
+
+    let props = extended.playerProps;
+
+    // Filter by player name if provided
+    if (player) {
+      const needle = player.toLowerCase();
+      props = props.filter(p => (p.player ?? '').toLowerCase().includes(needle));
+    }
+
+    // Group by player + prop kind, include all available lines
+    const byPlayerKind = new Map();
+    for (const p of props) {
+      const key = `${p.player}|${p.propKind}`;
+      if (!byPlayerKind.has(key)) {
+        byPlayerKind.set(key, { player: p.player, propKind: p.propKind, lines: [] });
+      }
+      byPlayerKind.get(key).lines.push({
+        line: p.line,
+        direction: p.direction,
+        odds: p.odds,
+        implied: americanToImplied(p.odds),
+        book: p.book ?? null,
+        isAlternate: p.isAlternate ?? false,
+      });
+    }
+
+    const data = Array.from(byPlayerKind.values()).map(g => ({
+      ...g,
+      lines: g.lines.sort((a, b) => (a.line ?? 0) - (b.line ?? 0)),
+    }));
+
+    res.json({ success: true, eventId, data, total: data.length });
+  } catch (err) {
+    console.error('[mlb-props] alt-lines failed:', err.message);
+    res.status(500).json({ error: 'Failed to load alternate prop lines' });
   }
 });
 

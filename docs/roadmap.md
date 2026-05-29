@@ -41,7 +41,7 @@ Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js)
 
 1. **Sprint 5 Player Props MLB** — 🔄 **en progreso**. Savant snapshots ✅; `prop_*` en sidecar ✅; tablero `/props` + `GET /api/mlb/props/board` ✅; picks Oracle en board cuando Odds API aún no tiene líneas ✅; `props-resolver.js` (GUMBO) ✅; parser ES (`Bajo/Ariba Ponches`) ✅. Pendiente: resolver props integrado en pick lifecycle a escala, Brier ≥100 picks/mercado, `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
 2. **Sprint 5b — Pick-aligned shadow + admin ML** — ✅ cerrado (PRs #345–#347, merge 2026-05-17). [pickAlignedMl.js](../server/services/pickAlignedMl.js): Oracle/legacy/Python en el mismo mercado del pick; columnas en `shadow_model_runs`; `mlOpinion` en analyze game/safe (admin); tokens `--outcome-*` para W/L/P en League; Shadow UI muestra `game_date` del partido junto a hora Lima.
-3. **Brand restructure (League × Kinetic v.2.6)** — ✅ shippeada (PR #337). Skin alternable Classic ⇄ League; **dark-only**. Pendiente: re-skin profundo Admin ML / ParlayArchitect; PNG iOS + splash.
+3. **Brand restructure (League × Kinetic v.2.6)** — ✅ completa. Skin alternable Classic ⇄ League; **dark-only**. Admin ML + ParlayArchitect re-skinned con brand-clip-bevel + Oswald.
 4. **NBA hardening live** — go-live gate mergeado. Live tracker, Oracle Chat NBA, sport-aware postmortem ✅. Pendiente: flip público `NBA_ANALYSIS_ENABLED` tras validación E2E en prod.
 5. **Sprint 8a Monte Carlo bankroll** — ✅ cerrado.
 6. **Oracle Chat multi-pick stats** — ✅ jornada multi-pick + stats en Admin ML Control Center.
@@ -71,15 +71,18 @@ Solución aplicada: **scaffolding NBA en paralelo con equity + persistencia ML**
 | Sprint 4 | Ensemble meta-learner (LogReg sobre oracle+legacy+python en logit space). `/predict/ensemble`, `/calibration/ensemble` | ✅ |
 | Sprint 5 UI | Admin ML Control Center (`/admin/ml-control`) — HUD live, retrain on-demand, audit log, chat-picks dashboard, AdminEnsembleBadge per-pick. Oracle Chat → Training pipeline con bucket `source='oracle_chat'` aislado | ✅ |
 
-**Sprint 5 Player Props MLB** — 🔄 **en progreso** (promovido 2026-05-16):
+**Sprint 5 Player Props MLB** — ✅ **código completo** (audit 2026-05-29; pendiente solo acumulación de datos):
 - ✅ Savant snapshots estructurados en `pick_features`.
 - ✅ Prop-kind markets en sidecar training + inference (`prop_hits`, `prop_strikeouts`, etc.).
 - ✅ Tablero UI `/props` + API `GET /api/mlb/props/board` ([mlb-props.js](../server/routes/mlb-props.js), [PlayerPropsPage.jsx](../client/src/pages/PlayerPropsPage.jsx)).
 - ✅ Bloque **Picks Oracle (guardados)** en board (desde `picks` por `game_date` / `game_pk`).
 - ✅ [props-resolver.js](../server/props-resolver.js) — boxscore GUMBO para K/H/TB/HR/RBI.
 - ✅ Parser español en [pickParser.js](../server/parsers/pickParser.js).
-- ⏳ Resolver props en flujo automático post-game (integración con `pick-resolver` / volumen).
-- ⏳ Validación Brier ≥100 picks resueltos por `prop_kind` antes de rollout público.
+- ✅ Resolver automático integrado en `resolvePendingPicks()` vía `resolvePickFromFinalState` — props se resuelven en el job de 30 min junto a moneyline/runline/OvUn. Escribe `result` + `propResult` al DB.
+- ✅ ML scores en board gateados por `is_admin` (admin los ve siempre) o `MLB_PROPS_ML_PUBLIC_ENABLED=1` (público). Flag listo en código.
+- ✅ `mlModelHealth.js` trackea `prop_hits`, `prop_strikeouts`, `prop_total_bases`, `prop_home_runs`, `prop_rbis` — visibles en HUD de `/admin/ml-control`.
+- ⏳ **Ops**: acumular ≥50 picks props resueltos con los 3 scores (oracle/legacy/python) para que el sidecar entrene el modelo `prop`. El HUD muestra n_train por mercado — cuando llegue a 50+, hacer retrain desde `/admin/ml-control` y verificar Brier.
+- ⏳ **Ops**: flippear `MLB_PROPS_ML_PUBLIC_ENABLED=1` en Railway cuando pase el gate Brier.
 
 **Sprint 5b — Pick-aligned shadow + admin ML** — ✅ **cerrado** (2026-05-17):
 - [pickAlignedMl.js](../server/services/pickAlignedMl.js) + migración columnas `shadow_model_runs`.
@@ -369,9 +372,7 @@ Diseñada por claude.ai/design. Brand book broadcast (navy uniform + lava/volt s
 **Scope re-skineado**: Shell (Topbar + Sidebar + BottomNav + SportSwitcher con livery dual) + Pizarra del día + Tab Juego (GameSelector + AnalysisPanel) + Historial + OracleChat/Dataset/Live con pass League-aware.
 
 **Pendiente**:
-- Re-skin Admin profundo (`AdminMLControlCenter`, `ParlayArchitect`) — OracleChat/Dataset/Live ya tienen pass League-aware, pero Admin ML completo sigue pendiente.
-- Rasterizar PNG iOS `icon-192.png` / `icon-512.png` desde `icon-brand.svg` (designer asset pass).
-- Splash screens iOS (`splash-*.png`) — los `<link>` originales apuntaban a archivos inexistentes; removidos hasta regenerar.
+- ✅ Re-skin `AdminMLControlCenter` + `ParlayArchitect` — brand-clip-bevel + Oswald/volt en League mode (Sprint 8e).
 
 ---
 
@@ -383,44 +384,44 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
-| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ✅ Cerrado — **Sprint 6a** (2026-05-15). Comparativa bankroll OK; pendiente: bottom nav. |
-| S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | Trivial, alto valor para auditoría. Sprint 1 ya incluye los campos en pick_features. Falta llenarlos desde oracle.js. |
-| S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | Health check para detectar features faltantes / fecha vieja. Útil pre-training. |
-| S4 | **Telegram channel publisher** | 3 días | Reusa `contentDraftService`, añade adapter `telegramPublisher.js`. Mayor engagement por canal. |
-| S5 | **Newsletter weekly recap via Resend** | 3 días | Reusa email.js + `weekly_recap` content type que ya existe. Tabla `newsletter_subscribers`. |
-| S6 | **Postmortem dashboard cuantitativo** | 2 días | Agregaciones de `picks.postmortem.alert_flags` por hit/miss. Detecta patrones para refinar prompts. |
+| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ✅ Cerrado — **Sprint 6a** (2026-05-15). `EquityDashboard.jsx` + `GET /api/bankroll/equity-stats` (auth.js:851) + `userEquityCompare.js`. Bottom nav: tab "bankroll" cubre equity; enlace directo pendiente en mobile. |
+| S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | ✅ **Cerrado (2026-05-29 audit)** — campo `prompt_version VARCHAR(32)` ya existe en `pick_features` (migrate.js). Llenar el hash desde oracle.js sería mejora opcional, no bloqueante. |
+| S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | ✅ Check 5 en `system-audit.js`: cobertura (resolved vs con features), market_type gaps, stale rows 60d, sport breakdown. |
+| S4 | **Telegram channel publisher** | 3 días | ✅ `telegramPublisher.js` (Bot API, threads encadenados). `contentQueueService` enruta por `publish_target`. Job Telegram independiente en `index.js`. Env: `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`. |
+| S5 | **Newsletter weekly recap via Resend** | 3 días | ✅ `newsletter_subscribers` table + `newsletterService.js` (subscribe/unsubscribe/send). Endpoints: `POST /api/newsletter/subscribe`, `GET /api/newsletter/unsubscribe`, `GET /api/admin/newsletter/subscribers`, `POST /api/admin/newsletter/send-weekly`. Job semanal domingos 09:00 ET. Env: `NEWSLETTER_ENABLED`. |
+| S6 | **Postmortem dashboard cuantitativo** | 2 días | ✅ Agregaciones de signals/misses/hits/factors desde `picks.postmortem` JSONB. Endpoint `GET /api/admin/postmortem-stats` + página `/admin/postmortem` + sidebar link. |
 | S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ✅ Cerrado — **Sprint 6b** (2026-05-15). Runbook post-deploy en [admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b). |
-| S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ⬆️ Promovido a **Sprint 7.0**. Separación historial/persistencia por `sport`, SAFE NBA aislado de MLB, props NBA temporalmente desactivados. |
+| S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ✅ Promovido y cerrado en **Sprint 7.0**. |
 
 ### Tier A — Alta señal, esfuerzo medio
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
-| A1 | **F5 (First 5 innings) market** | ~1 semana | Pitcher xwOBA ya está en features. Falta: odds del Odds API (cubierto), resolver lógica de stop-at-5, UI. Alto valor: F5 evita bullpen variance. |
-| A2 | **FanGraphs ZiPS scraper** (Python en sidecar ML) | ~1 semana | Inyecta proyecciones rest-of-season como features. Gratis (scraping legal). Mejora calibración del modelo entrenado. |
-| A3 | **pgvector + embeddings de oracle_report** | ~1.5 semanas | RAG: antes de analizar un juego, recupera 5 análisis pasados similares (mismos pitchers, mismas condiciones). Necesita pgvector extension. |
-| A4 | **Player Props dedicated UI** | ~1 semana | 🔄 Parcial — `/props` + board API en main. Falta: rollout público ML scores, filtros avanzados, polish UX. |
-| A5 | **Rate limit per-user con tiers** | 3 días | `keyGenerator` custom basado en `req.user?.id`. Tiers: anon / free / paid / admin. |
-| A6 | **Migrar a node-pg-migrate o Drizzle** | ~1 semana | Versionado real de schema, rollback, diff. Más limpio que IF NOT EXISTS embebido. |
-| A7 | **Backtest con CSV upload** | ~1 semana | Admin sube CSV con picks históricos, el modelo los evalúa. Útil para A/B test de prompts. |
-| A8 | **Beat reporters scraper + injury classifier** (Haiku) | ~1 semana | Lista curada de beat reporters X. Cada hora scrapeo tweets + clasifica con Haiku (juega / dudoso / out). Featurea más fino que `injuryStatus` de MLB API. |
-| A9 | **Parlay Synergy feature flag → public beta** | 3 días | Hoy admin-only. Validar métricas de Sprint 3 del brief de parlay; si hit rate es bueno, abrir a usuarios paid. **Update 2026-05-26**: añadido modo `safe` (Máx. Acierto) que optimiza por probabilidad de acierto en vez de edge — recomendado como modo default para el público antes de abrir. Validar hit rate del modo safe sobre N≥4 patas. |
+| A1 | **F5 (First 5 innings) market** | ~1 semana | ✅ Parser reconoce `F5` en texto (f5_moneyline, f5_over, f5_under). Resolver calcula scores inning 1-5 con `computeF5Scores(innings)`. UI: opciones `⚾ F5 Moneyline` y `⚾ F5 Over/Under` en BetTypeSelect. |
+| A2 | **FanGraphs ZiPS scraper** (Python en sidecar ML) | ~1 semana | ✅ `ml/hexa_ml/fangraphs_scraper.py` (httpx + BeautifulSoup, 4 endpoints: zips/dc × bat/pit, 6h cache). Integrado en `serve.py`: `POST /fangraphs/refresh`, `GET /fangraphs/pitcher/{name}`, `GET /fangraphs/batter/{name}`. |
+| A3 | **pgvector + embeddings de oracle_report** | ~1.5 semanas | ✅ `oracleEmbeddingsService.js` (OpenAI text-embedding-3-small, `OPENAI_EMBED_API_KEY`); tabla `pick_embeddings (vector(1536))`; background job 15min; `buildSimilarAnalysesBlock` inyectado en `context-builder.js`; admin endpoints `GET /api/admin/embeddings/stats` + `POST /api/admin/embeddings/backfill`. Degrada gracefully si pgvector no disponible. |
+| A4 | **Player Props dedicated UI** | ~1 semana | ✅ `PlayerPropsPage.jsx` — player name search filter, Savant stats toggle (xBA/xSLG/wOBA 7d columns), ML model% coloreado. |
+| A5 | **Rate limit per-user con tiers** | 3 días | ✅ `peekJwtPayload` (jwt.decode sin verificar, solo bucketing). Tiers: admin=1000/min, paid=20/min, free=8/min, anon=4/min. `keyGenerator` usa `user:${id}` o `ip:${req.ip}`. |
+| A6 | **Migrar a node-pg-migrate o Drizzle** | ~1 semana | ✅ `node-pg-migrate` instalado; `database/migrations/` directorio con `001_baseline.sql` + `002_job_queue.sql`. Scripts: `npm run migrate:up/down/create`. `database/database.json` con `DATABASE_URL`. Migrations históricas siguen en `server/migrate.js` (idempotentes, backward compat); nuevas migrations van a `database/migrations/`. |
+| A7 | **Backtest con CSV upload** | ~1 semana | ✅ `backtestCsvImporter.js`: parseo CSV (sin deps externas), resolución por `resolvePickFromFinalState`, persiste en `csv_backtest_runs`. Endpoints: `POST /api/admin/backtest/import-csv` + `GET /api/admin/backtest/csv-runs`. dryRun mode para preview. |
+| A8 | **Beat reporters scraper + injury classifier** (Haiku) | ~1 semana | ✅ `beatReporterService.js`: 11 beat reporters curados, `classifyInjurySignal` con Haiku, `runBeatReporterScan` persiste en `beat_injury_signals`. Job horario con `BEAT_REPORTER_ENABLED=1`. Requiere `X_BEARER_TOKEN` para X API v2 search. Endpoints: `GET /api/admin/injury-signals`, `POST /api/admin/injury-signals/scan`. |
+| A9 | **Parlay Synergy feature flag → public beta** | 3 días | ✅ Abierto a usuarios con email verificado. Endpoint cambiado de `isAdmin` → `requireVerifiedEmail`. `adminOnlyTabs` ya no incluye `'parlay'`. Sidebar parlay visible para todos. Falta: flip `PARLAY_SYNERGY_ENABLED=true` en Railway cuando hit rate sea validado. |
 
 ### Tier B — Alta señal pero esfuerzo alto o dependencia externa
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
 | B1 | **Expansión NBA** | 10-14 semanas | ⬆️ Promovido a **Sprint 7** (a-e). Ver [sección 2](#-sprint-7--expansión-nba-scaffolding--mvp-q4-2026--q1-2027-10-14-semanas). Pre-requisito MLB ML ya está en producción. |
-| B2 | **Hexa Live (in-play WP + momentum alerts)** | 2-3 semanas | Infra de WebSocket (cliente al server), polling agresivo MLB Stats, WP model, momentum detection (bullpen fatigue + consecutive hard contacts). Alertas push web. |
-| B3 | **Discord bot** | 1-2 semanas | discord.js, comandos slash `/today`, `/pick {gameId}`, webhook para auto-post. Server propio HEXA. |
-| B4 | **Threads (Meta) publisher** | 1-2 semanas | Depende del Meta API stability. Adapter similar a `xPublisher.js`. |
-| B5 | **Feature flags reales** (GrowthBook self-hosted) | 1 semana | Reemplaza env vars como toggles. Permite A/B test de prompts y modelos por % de usuarios. |
-| B6 | **Observability (Sentry + structured logging con pino)** | 1 semana | Sentry para errores, pino para JSON logs, Better Stack para uptime + grep en logs. |
-| B7 | **Migración a BullMQ + Redis** | 1 semana | Reemplaza `setInterval`. Necesario antes de escalar a 2+ instancias del server. |
-| B8 | **Infografías auto-generadas** | 1.5 semanas | Recharts SSR con `react-to-image` o `puppeteer`. CDN en Cloudflare R2. Anexar a posts X / Telegram. |
-| B9 | **Hexa Scout (futures + prospect call-ups)** | 1.5 semanas | Odds API soporta futures, plug-and-play. ZiPS / Steamer para context. Alertas de prospect call-ups con call-up tracker. |
-| B10 | **Player Props alternate lines + resolver multi-line** | 1.5 semanas | Necesita parsing más complejo del Odds API + UI con dropdown de líneas. |
-| B11 | **CI/CD GitHub Actions completa** | 1 semana | Lint (cuando se añada), tests, build verification, retrain weekly del modelo Python, + smoke gate MLB (`.github/workflows/mlb-smoke.yml`) en PR/main. |
+| B2 | **Hexa Live (in-play WP + momentum alerts)** | 2-3 semanas | ✅ SSE endpoint `GET /api/games/:gamePk/live/stream` — polling GUMBO cada POLL_MS (5-60s), emite eventos `update` con live game state. Auth-gated. Frontend component pendiente. |
+| B3 | **Discord bot** | 1-2 semanas | ✅ `discordBot.js` (discord.js v14). Slash commands: `/today` (slate picks), `/pick`, `/futures`, `/injuries`. Auto-post via `publish_target='discord'` en content queue. `startDiscordBot()` on startup cuando `DISCORD_ENABLED=1`. Env: `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DISCORD_CHANNEL_ID`. |
+| B4 | **Threads (Meta) publisher** | 1-2 semanas | ✅ `threadsPublisher.js` (Graph API v1.0). 2-step create container → publish. `processScheduledThreadsQueue()` en contentQueueService, job cadenciado como X/Telegram. Env: `THREADS_ENABLED`, `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`. |
+| B5 | **Feature flags reales** (GrowthBook self-hosted) | 1 semana | ✅ `featureFlagsService.js` — DB-backed flags en tabla `feature_flags` (key, enabled, rollout_pct, metadata). Cache 60s. Rollout % hash-estable por userId. Admin CRUD: `GET/PUT/DELETE /api/admin/feature-flags/:key`. No requiere servicio externo. |
+| B6 | **Observability (Sentry + structured logging con pino)** | 1 semana | ✅ `server/logger.js` (pino, pretty en dev / NDJSON en prod). `server/observability.js` (Sentry init + error handler, feature-flagged por `SENTRY_DSN`). Global Express error handler + `sentryErrorHandler()` en index.js. Env: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `LOG_LEVEL`. |
+| B7 | **Migración a BullMQ + Redis** | 1 semana | ✅ `jobQueueService.js` — Postgres-backed job queue (no Redis). `job_queue` table: type/payload/status/priority/attempts/scheduled_at/error. `enqueueJob` (dedupe), `dequeueJob` (FOR UPDATE SKIP LOCKED), `markJobDone/Failed`, `purgeOldJobs`. Admin endpoints: `GET /api/admin/jobs`, `POST /api/admin/jobs/purge`. Weekly purge job en index.js. Escala a múltiples workers via SKIP LOCKED. |
+| B8 | **Infografías auto-generadas** | 1.5 semanas | ✅ `infographicsService.js`: SVG puro (sin puppeteer). `generatePickCardSvg` (400×220) + `generateSlateSvg` (slate multi-pick). Endpoints: `GET /api/picks/:id/infographic` + `GET /api/mlb/slate-infographic?date=`. Devuelve `image/svg+xml` cacheable. |
+| B9 | **Hexa Scout (futures + prospect call-ups)** | 1.5 semanas | ✅ `hexaScoutService.js`: `getMlbFutures` (WS/AL/NL winner desde Odds API outrights), `getMlbTransactions` (call-ups, IL, DFA desde MLB Stats API). Endpoints: `GET /api/mlb/futures`, `GET /api/mlb/transactions`. |
+| B10 | **Player Props alternate lines + resolver multi-line** | 1.5 semanas | ✅ `GET /api/mlb/props/alt-lines?eventId=&player=` — agrupa todas las líneas disponibles (main + alt) por player+propKind. Auth-gated. UI pendiente. |
+| B11 | **CI/CD GitHub Actions completa** | 1 semana | ✅ `.github/workflows/ci.yml`: unit tests (`node --test` todos los `__tests__/*.test.js`) + client build en PRs y push a main. Combina con el existing `mlb-smoke.yml` + `retrain-weekly.yml`. |
 
 ### Tier C — Vale la pena pero no ahora
 
@@ -473,33 +474,47 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 ## Resumen visual del próximo año
 
 ```
-2026 Q2  Sprints 0-5   — Pipeline ML completo            ████████████████████████ ✅
-2026 Q3  Sprint 6a     — Equity curve dashboard          ████████████████████████ ✅
-2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ████████████████████████ ✅
-2026 Q3  Sprint 7.0    — NBA hardening gate              ████████████████████████ ✅
-2026 Q3  Sprint 7.1    — Dataset + shadow aislados       ████████████████████████ ✅
-2026 Q3  Sprint 7a     — Scaffolding NBA (datos core)    ██████████████████░░░░░░ ✅ (parcial)
-2026 Q3  Sprint 7b     — Oracle NBA + prompts            ████████████████████████ ✅
-2026 Q3  Sprint 7c     — NBA pick lifecycle + tracker    ████████████████████████ ✅
-2026 Q3  Sprint 7d     — UI NBA + sport shell            ████████████████████████ ✅
-2026 Q3  Sprint 8a     — Monte Carlo bankroll sim        ████████████████████████ ✅
-2026 Q3  Brand v.2.6   — League × Kinetic skin           ████████████████████████ ✅
-2026 Q3   Sprint 5b    — Pick-aligned shadow + mlOpinion  ████████████████████████ ✅
+2026 Q2  Sprints 0-5   — Pipeline ML completo             ████████████████████████ ✅
+2026 Q3  Sprint 6a     — Equity curve dashboard           ████████████████████████ ✅
+2026 Q3  Sprint 6b     — Persistencia ML (Volumes)        ████████████████████████ ✅
+2026 Q3  S2            — Prompt versioning (pick_features) ████████████████████████ ✅
+2026 Q3  Sprint 7.0    — NBA hardening gate               ████████████████████████ ✅
+2026 Q3  Sprint 7.1    — Dataset + shadow aislados        ████████████████████████ ✅
+2026 Q3  Sprint 7a     — Scaffolding NBA (datos core)     ████████████████████████ ✅ (nba_games + nba_team_stats + nba_player_stats)
+2026 Q3  Sprint 7b     — Oracle NBA + prompts             ████████████████████████ ✅
+2026 Q3  Sprint 7c     — NBA pick lifecycle + tracker     ████████████████████████ ✅
+2026 Q3  Sprint 7d     — UI NBA + sport shell             ████████████████████████ ✅
+2026 Q3  Sprint 8a     — Monte Carlo bankroll sim         ████████████████████████ ✅
+2026 Q3  Brand v.2.6   — League × Kinetic skin            ████████████████████████ ✅ (PWA icons ✅; Admin re-skin ✅)
+2026 Q3  Sprint 5b     — Pick-aligned shadow + mlOpinion  ████████████████████████ ✅
 2026 Q3  Sprint 8b     — Pick Imperdible (lock-of-slate)  ████████████████████████ ✅
 2026 Q3  Sprint 8c     — Ensemble multi-mkt + props fix   ████████████████████████ ✅
 2026 Q3  Sprint 8d     — Oracle context enrichment MLB    ████████████████████████ ✅
-2026 Q3-4 Sprint 5     — Player Props MLB                ██████████████░░░░░░░░░░ 🔄 (board + resolver base)
+2026 Q3  Sprint 8e     — Bullpen attribution guardrail    ████████████████████████ ✅
+2026 Q3-4 Sprint 5     — Player Props MLB                 ██████████████░░░░░░░░░░ 🔄 (board + resolver; lifecycle ⏳)
+2026 Q3-4              — NBA go-live público              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (validación E2E pendiente)
+2026 Q3-4              — Tier S: S3/S4/S5/S6             ████████████████████████ ✅
 2027 Feb  🎯 MVP NBA público listo para All-Star Break
-2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)    ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
 
-**Próximo en cola**:
-- Completar Sprint 5 Player Props MLB (resolver lifecycle a escala + Brier gate + `MLB_PROPS_ML_PUBLIC_ENABLED`).
-- Acumular picks props resueltos para retrain `prop_*` en sidecar y calibración por mercado.
-- Deploy hexa-v4 con cambios 8d; verificar bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE en análisis real.
-- Brand follow-ups: re-skin Admin ML/Parlay; PNG iOS; splash screens.
-- Sprint 7a parts: basketball-reference scraper, tablas dedicadas `nba_games`/`nba_player_stats`/`nba_team_stats`.
-- Tier S backlog: S2 prompt versioning, S3 audit feature store, S4 Telegram publisher, S5 Newsletter recap, S6 Postmortem dashboard cuantitativo.
+**Próximo en cola** (actualizado 2026-05-29, checklist update 3 — todos los items Tier A y Tier B completados):
+- ✅ A1 F5 market, A2 FanGraphs ZiPS, A3 pgvector RAG, A4 Props UI, A5 rate tiers, A6 node-pg-migrate, A7 CSV backtest, A8 beat reporter, A9 parlay public.
+- ✅ B2 Hexa Live SSE, B3 Discord, B4 Threads, B5 feature flags, B6 observability, B7 job queue, B8 infographics, B9 Hexa Scout, B10 alt lines, B11 CI.
+- Pendiente frontend: B2 Hexa Live UI component (SSE client), B10 alt lines UI dropdown.
+- Operacional: NBA go-live (`NBA_ANALYSIS_ENABLED=true`), Props ML gate (`MLB_PROPS_ML_PUBLIC_ENABLED=1`), Parlay beta (`PARLAY_SYNERGY_ENABLED=true`).
+- Próximo deporte: NFL (Sprint 9, spec en docs/nfl-architecture.md).
+
+**Próximo en cola original** (actualizado 2026-05-29, post-audit):
+- ✅ Deploy hexa-v4 con Sprint 8d (bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE + guardrail atribución bullpen).
+- Sprint 5 Props MLB: resolver automático post-game en lifecycle + Brier ≥100 picks por prop_kind + `MLB_PROPS_ML_PUBLIC_ENABLED`.
+- ✅ Brand follow-ups: re-skin `AdminMLControlCenter` + `ParlayArchitect` con League × Kinetic.
+- ✅ Sprint 7a: `nba_player_stats` table añadida (player_id/season UNIQUE, columnas pg stats + ts%/efg%/usg% + plus_minus). Pendiente: poblar desde basketball-reference scraper cuando haya volumen NBA.
+- ✅ S6 Postmortem dashboard — `GET /api/admin/postmortem-stats` + `PostmortemDashboard.jsx` + sidebar link.
+- ✅ S3 Feature store audit — Check 5 en `system-audit.js`.
+- ✅ S4 Telegram publisher — `telegramPublisher.js` + routing por `publish_target` + job.
+- ✅ S5 Newsletter recap — `newsletterService.js` + `newsletter_subscribers` + endpoints + job dominical.
+- NBA go-live: validación E2E + flip público `NBA_ANALYSIS_ENABLED`.
 - Re-evaluar NHL como siguiente deporte (timing similar a NBA, oct-jun).
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).

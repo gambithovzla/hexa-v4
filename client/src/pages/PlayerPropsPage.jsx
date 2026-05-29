@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box, Typography, Button, CircularProgress, MenuItem, Select, FormControl, InputLabel,
+  Chip,
 } from '@mui/material';
+import AltLinesModal from '../components/AltLinesModal.jsx';
 import HelpTip from '../components/HelpTip';
 import { MONO, BARLOW } from '../theme';
 
@@ -27,6 +29,9 @@ const STRINGS = {
     filters: 'Filters',
     allKinds: 'All markets',
     minEdge: 'Min |edge|',
+    playerSearch: 'Player name…',
+    showSavant: 'Savant',
+    hideSavant: 'Hide Savant',
     player: 'Player',
     market: 'Market',
     line: 'Line',
@@ -35,6 +40,7 @@ const STRINGS = {
     implied: 'Implied %',
     edge: 'Edge',
     game: 'Game',
+    altLines: 'Alt lines',
     helpHint: 'Hover the ? icons to see what each section means.',
     mlControlLink: 'ML metrics & retrain → /admin/ml-control',
     help: {
@@ -67,6 +73,9 @@ const STRINGS = {
     filters: 'Filtros',
     allKinds: 'Todos los mercados',
     minEdge: 'Edge mín. |edge|',
+    playerSearch: 'Buscar jugador…',
+    showSavant: 'Savant',
+    hideSavant: 'Ocultar Savant',
     player: 'Jugador',
     market: 'Mercado',
     line: 'Línea',
@@ -75,6 +84,7 @@ const STRINGS = {
     implied: 'Implícita %',
     edge: 'Edge',
     game: 'Partido',
+    altLines: 'Líneas alt.',
     helpHint: 'Pasa el cursor sobre los ? para ver qué significa cada bloque.',
     mlControlLink: 'Métricas ML y reentrenar → /admin/ml-control',
     help: {
@@ -159,6 +169,9 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
   );
   const [propKind, setPropKind] = useState('');
   const [minEdge, setMinEdge] = useState('');
+  const [playerSearch, setPlayerSearch] = useState('');
+  const [showSavant, setShowSavant] = useState(false);
+  const [altLines, setAltLines] = useState(null); // { eventId, playerName, propKind }
   const [loading, setLoading] = useState(true);
   const [board, setBoard] = useState(null);
   const [error, setError] = useState(null);
@@ -185,6 +198,18 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
   }, [token, date, propKind, minEdge]);
 
   useEffect(() => { load(); }, [load]);
+
+  const filteredGames = useMemo(() => {
+    if (!board?.games) return [];
+    const needle = playerSearch.trim().toLowerCase();
+    if (!needle) return board.games;
+    return board.games
+      .map((g) => ({
+        ...g,
+        props: g.props.filter((p) => (p.playerName ?? '').toLowerCase().includes(needle)),
+      }))
+      .filter((g) => g.props.length > 0);
+  }, [board, playerSearch]);
 
   return (
     <Box sx={{ minHeight: '100vh', background: BG, color: INK0, p: { xs: 1.5, md: 3 } }}>
@@ -240,6 +265,22 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
           />
           <HelpTip title={H.minEdge} />
         </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <input
+            type="text"
+            placeholder={T.playerSearch}
+            value={playerSearch}
+            onChange={(e) => setPlayerSearch(e.target.value)}
+            style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', width: 160, fontFamily: MONO, fontSize: '11px' }}
+          />
+        </Box>
+        <Button
+          onClick={() => setShowSavant((v) => !v)}
+          size="small"
+          sx={{ color: showSavant ? CYAN : MUTED, fontFamily: MONO, fontSize: '10px', border: `1px solid ${showSavant ? CYAN : BORDER}` }}
+        >
+          {showSavant ? T.hideSavant : T.showSavant}
+        </Button>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Button onClick={load} sx={{ color: CYAN, fontFamily: MONO, border: `1px solid ${CYAN}` }}>
             ↻
@@ -311,7 +352,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
         </Box>
       )}
 
-      {!loading && board?.games?.map((g) => (
+      {!loading && filteredGames.map((g) => (
         <Box key={g.gamePk} sx={{ mb: 3, background: SURF, border: `1px solid ${BORDER}`, p: 2 }}>
           <SectionHeading
             title={`${T.game}: ${g.awayTeam} @ ${g.homeTeam}${g.startTime ? ` · ${g.startTime}` : ''}`}
@@ -328,6 +369,9 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
                   <ThLabel label={T.implied} help={H.implied} />
                   <ThLabel label={T.model} help={H.model} />
                   <ThLabel label={T.edge} help={H.edge} />
+                  {showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>xBA / xSLG</th>}
+                  {showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>wOBA 7d</th>}
+                  {g.eventId && <th style={{ padding: '6px 8px', color: MUTED }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -335,13 +379,52 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
                   const edgeColor = p.edge == null ? MUTED : p.edge > 0 ? GREEN : RED;
                   return (
                     <tr key={`${p.playerName}-${p.propKind}-${p.side}-${p.line}-${idx}`} style={{ borderTop: `1px solid ${BORDER}` }}>
-                      <td style={{ padding: '8px' }}>{p.playerName}</td>
+                      <td style={{ padding: '8px' }}>
+                        <span>{p.playerName}</span>
+                        {board?.mlEnabled && (
+                          <Chip
+                            label={board.mlPublic ? board.mlPublic : ''}
+                            size="small"
+                            sx={{ ml: 0.5, display: 'none' }}
+                          />
+                        )}
+                      </td>
                       <td>{KL[p.propKind] ?? p.propKind} {p.side?.toUpperCase()}</td>
                       <td>{p.line}</td>
                       <td>{p.oddsAmerican > 0 ? `+${p.oddsAmerican}` : p.oddsAmerican}</td>
                       <td>{fmtPct(p.impliedProb)}</td>
-                      <td>{fmtPct(p.modelProb)}</td>
+                      <td style={{ color: p.modelProb != null ? CYAN : MUTED }}>{fmtPct(p.modelProb)}</td>
                       <td style={{ color: edgeColor, fontWeight: 700 }}>{fmtEdge(p.edge)}</td>
+                      {showSavant && (
+                        <td style={{ color: MUTED }}>
+                          {p.savant?.xba != null ? p.savant.xba.toFixed(3) : '—'}
+                          {' / '}
+                          {p.savant?.xslg != null ? p.savant.xslg.toFixed(3) : '—'}
+                        </td>
+                      )}
+                      {showSavant && (
+                        <td style={{ color: MUTED }}>
+                          {p.savant?.rolling7d != null ? p.savant.rolling7d.toFixed(3) : '—'}
+                        </td>
+                      )}
+                      {g.eventId && (
+                        <td style={{ padding: '4px 8px' }}>
+                          <button
+                            onClick={() => setAltLines({ eventId: g.eventId, playerName: p.playerName, propKind: p.propKind })}
+                            style={{
+                              background: 'transparent',
+                              border: `1px solid var(--border)`,
+                              color: 'var(--ink-2)',
+                              fontFamily: MONO,
+                              fontSize: '9px',
+                              padding: '2px 6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {T.altLines}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -371,6 +454,16 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
           {T.mlControlLink}
         </Typography>
       </Box>
+
+      <AltLinesModal
+        open={altLines != null}
+        onClose={() => setAltLines(null)}
+        eventId={altLines?.eventId}
+        playerName={altLines?.playerName}
+        propKind={altLines?.propKind}
+        token={token}
+        lang={lang}
+      />
     </Box>
   );
 }

@@ -289,6 +289,19 @@ export function parsePick(pickStr) {
   }
   }
 
+  // F5 (First 5 Innings) picks — resolved against innings 1-5 only
+  const F5_TAG = /\bf5\b|\bfirst\s+5\b|\bprimeras?\s+5\b/i;
+  if (F5_TAG.test(cleaned)) {
+    const stripped = cleaned.replace(F5_TAG, '').trim();
+    const ouF5 = stripped.match(/^(?:Over|O|M[aá]s\s+de|Alto)\s+(\d+\.?\d*)/i);
+    if (ouF5) return { type: 'f5_over', team: null, line: parseFloat(ouF5[1]) };
+    const uF5 = stripped.match(/^(?:Under|U|Menos\s+de|Bajo)\s+(\d+\.?\d*)/i);
+    if (uF5) return { type: 'f5_under', team: null, line: parseFloat(uF5[1]) };
+    // F5 moneyline: remaining text is team
+    const teamF5 = stripped.replace(/\b(?:ML|Moneyline|A\s+ganar)\b/i, '').trim();
+    if (teamF5) return { type: 'f5_moneyline', team: teamF5, line: null };
+  }
+
   // Over — standalone: "Over 8.5", "O 8.5", "Más de 8.5", "Alto 8.5"
   let m = cleaned.match(/^(?:Over|O|M[aá]s\s+de|Alto)\s+(\d+\.?\d*)\s*(?:Runs?|runs?)?$/i);
   if (m) return { type: 'over', team: null, line: parseFloat(m[1]) };
@@ -334,16 +347,59 @@ export function parsePick(pickStr) {
 // ── Result resolution ─────────────────────────────────────────────────────────
 
 /**
+ * Sums runs for home/away through innings 1-5.
+ * Returns null if fewer than 5 full innings are recorded.
+ */
+function computeF5Scores(innings) {
+  if (!Array.isArray(innings) || innings.length < 5) return null;
+  const first5 = innings.filter(inn => inn.num >= 1 && inn.num <= 5);
+  if (first5.length < 5) return null;
+  const homeF5 = first5.reduce((sum, inn) => sum + (Number(inn.home?.runs) || 0), 0);
+  const awayF5 = first5.reduce((sum, inn) => sum + (Number(inn.away?.runs) || 0), 0);
+  return { homeF5, awayF5, totalF5: homeF5 + awayF5 };
+}
+
+/**
  * Determines whether a parsed pick won, lost, or pushed given a final game.
  * Returns 'win' | 'loss' | 'push' | null (null = unable to determine).
+ *
+ * @param {object} parsed - output of parsePick()
+ * @param {object} game   - game object with teams.home/away.score + linescore.innings
+ * @param {Array}  [innings] - per-inning data array from live feed (required for F5 types)
  */
-export function resolvePickResult(parsed, game) {
+export function resolvePickResult(parsed, game, innings) {
   const home = game.teams.home;
   const away = game.teams.away;
   const homeScore = Number(home.score);
   const awayScore = Number(away.score);
 
   if (isNaN(homeScore) || isNaN(awayScore)) return null;
+
+  // ── F5 (First 5 Innings) bets ──────────────────────────────────────────────
+  if (parsed.type === 'f5_over' || parsed.type === 'f5_under' || parsed.type === 'f5_moneyline') {
+    const f5 = computeF5Scores(innings ?? game?.linescore?.innings);
+    if (!f5) return null;
+    if (parsed.type === 'f5_over') {
+      if (f5.totalF5 > parsed.line) return 'win';
+      if (f5.totalF5 < parsed.line) return 'loss';
+      return 'push';
+    }
+    if (parsed.type === 'f5_under') {
+      if (f5.totalF5 < parsed.line) return 'win';
+      if (f5.totalF5 > parsed.line) return 'loss';
+      return 'push';
+    }
+    if (parsed.type === 'f5_moneyline') {
+      const pickedHome = tokenMatchesTeam(parsed.team, home.name, home.abbreviation);
+      const pickedAway = tokenMatchesTeam(parsed.team, away.name, away.abbreviation);
+      if (!pickedHome && !pickedAway) return null;
+      const myF5  = pickedHome ? f5.homeF5 : f5.awayF5;
+      const oppF5 = pickedHome ? f5.awayF5 : f5.homeF5;
+      if (myF5 > oppF5) return 'win';
+      if (myF5 < oppF5) return 'loss';
+      return 'push';
+    }
+  }
 
   // ── Totals bets ────────────────────────────────────────────────────────────
   if (parsed.type === 'over') {
@@ -422,7 +478,7 @@ export function buildResolverGameFromLiveData(liveData, fallbackGameDate = null)
   };
 }
 
-export function resolvePickFromFinalState(pickText, game, playerStats = null) {
+export function resolvePickFromFinalState(pickText, game, playerStats = null, opts = {}) {
   const parsed = parsePick(pickText);
   const pickStr = String(pickText ?? '').toLowerCase();
   const homeName = String(game?.teams?.home?.name ?? '');
@@ -432,13 +488,14 @@ export function resolvePickFromFinalState(pickText, game, playerStats = null) {
   const homeScore = Number(game?.teams?.home?.score ?? 0);
   const awayScore = Number(game?.teams?.away?.score ?? 0);
   const totalRuns = homeScore + awayScore;
+  const innings = opts.innings ?? game?.linescore?.innings ?? null;
 
   if (parsed?.type === 'player_prop') {
     const propResult = resolvePlayerPropPickResult(parsed, playerStats);
     return { parsed, result: propResult?.result ?? null, propResult };
   }
 
-  let result = parsed ? resolvePickResult(parsed, game) : null;
+  let result = parsed ? resolvePickResult(parsed, game, innings) : null;
 
   const ouMatch = pickStr.match(/^(over|under|más\s+de|mas\s+de|menos\s+de|bajo|alto)\s+(\d+\.?\d*)/i);
   if (!result && ouMatch) {
@@ -816,7 +873,8 @@ export async function resolvePendingPicks() {
         const { parsed, result, propResult } = resolvePickFromFinalState(
           pick.pick,
           finalGame,
-          liveData?.playerStats ?? null
+          liveData?.playerStats ?? null,
+          { innings: liveData?.innings ?? null }
         );
 
         if (!parsed && !result) {

@@ -26,15 +26,17 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const L = {
   en: {
     betType: {
-      label:      'Bet Focus',
-      all:        'All Types',
-      moneyline:  'Moneyline',
-      runline:    'Run Line',
-      totals:     'Over/Under',
-      props:      'Player Props',
-      pitcherprops:'🔥 Pitcher Props (Strikeouts)',
-      batterprops: '🦇 Batter Props (HR, Hits)',
-      fadehits:    '🚫 FADE HITS',
+      label:        'Bet Focus',
+      all:          'All Types',
+      moneyline:    'Moneyline',
+      runline:      'Run Line',
+      totals:       'Over/Under',
+      f5moneyline:  '⚾ F5 Moneyline',
+      f5totals:     '⚾ F5 Over/Under',
+      props:        'Player Props',
+      pitcherprops: '🔥 Pitcher Props (Strikeouts)',
+      batterprops:  '🦇 Batter Props (HR, Hits)',
+      fadehits:     '🚫 FADE HITS',
     },
     modelSelect: {
       label:   'Analysis Model',
@@ -83,15 +85,17 @@ const L = {
   },
   es: {
     betType: {
-      label:      'Enfoque de Apuesta',
-      all:        'Todos los Tipos',
-      moneyline:  'Moneyline',
-      runline:    'Línea de Carreras',
-      totals:     'Totales (O/U)',
-      props:      'Props de Jugador',
-      pitcherprops:'🔥 Pitcher Props (Ponches)',
-      batterprops: '🦇 Batter Props (HR, Hits)',
-      fadehits:    '🚫 FADE HITS',
+      label:        'Enfoque de Apuesta',
+      all:          'Todos los Tipos',
+      moneyline:    'Moneyline',
+      runline:      'Línea de Carreras',
+      totals:       'Totales (O/U)',
+      f5moneyline:  '⚾ F5 Moneyline',
+      f5totals:     '⚾ F5 Totales',
+      props:        'Props de Jugador',
+      pitcherprops: '🔥 Pitcher Props (Ponches)',
+      batterprops:  '🦇 Batter Props (HR, Hits)',
+      fadehits:     '🚫 FADE HITS',
     },
     modelSelect: {
       label:   'Modelo de Análisis',
@@ -310,14 +314,16 @@ function MatchupHeader({ games, mode }) {
 
 function BetTypeSelect({ value, onChange, t }) {
   const options = [
-    { value: 'all',         label: t.betType.all         },
-    { value: 'moneyline',   label: t.betType.moneyline   },
-    { value: 'runline',     label: t.betType.runline      },
-    { value: 'totals',      label: t.betType.totals       },
-    { value: 'props',       label: t.betType.props        },
-    { value: 'Pitcher Props', label: t.betType.pitcherprops },
-    { value: 'Batter Props',  label: t.betType.batterprops  },
-    { value: 'fade_hits',     label: t.betType.fadehits     },
+    { value: 'all',           label: t.betType.all           },
+    { value: 'moneyline',     label: t.betType.moneyline     },
+    { value: 'runline',       label: t.betType.runline       },
+    { value: 'totals',        label: t.betType.totals        },
+    { value: 'f5_moneyline',  label: t.betType.f5moneyline   },
+    { value: 'f5_totals',     label: t.betType.f5totals      },
+    { value: 'props',         label: t.betType.props         },
+    { value: 'Pitcher Props', label: t.betType.pitcherprops  },
+    { value: 'Batter Props',  label: t.betType.batterprops   },
+    { value: 'fade_hits',     label: t.betType.fadehits      },
   ];
 
   return (

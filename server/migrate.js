@@ -986,3 +986,215 @@ export async function runEnsembleBackfillMigration() {
     throw err;
   }
 }
+
+export async function runNbaPlayerStatsMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS nba_player_stats (
+        id          BIGSERIAL    PRIMARY KEY,
+        player_id   INTEGER      NOT NULL,
+        player_name VARCHAR(100) NOT NULL,
+        team_id     INTEGER      NOT NULL,
+        team_abbr   VARCHAR(5),
+        season      VARCHAR(10)  NOT NULL,
+        gp          INTEGER,
+        min_pg      DECIMAL(5,2),
+        pts_pg      DECIMAL(6,3),
+        reb_pg      DECIMAL(6,3),
+        ast_pg      DECIMAL(6,3),
+        stl_pg      DECIMAL(6,3),
+        blk_pg      DECIMAL(6,3),
+        tov_pg      DECIMAL(6,3),
+        fg_pct      DECIMAL(6,4),
+        fg3_pct     DECIMAL(6,4),
+        ft_pct      DECIMAL(6,4),
+        ts_pct      DECIMAL(6,4),
+        efg_pct     DECIMAL(6,4),
+        usg_pct     DECIMAL(6,4),
+        plus_minus  DECIMAL(7,3),
+        updated_at  TIMESTAMPTZ  DEFAULT NOW(),
+        UNIQUE (player_id, season)
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_nba_player_stats_team
+        ON nba_player_stats(team_id, season)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_nba_player_stats_name
+        ON nba_player_stats(player_name, season)
+    `);
+    console.log('[migrate] nba_player_stats table ready');
+  } catch (err) {
+    console.error('[migrate] nba_player_stats migration failed:', err.message);
+    throw err;
+  }
+}
+
+export async function runNewsletterMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+        id                  BIGSERIAL PRIMARY KEY,
+        email               VARCHAR(255) NOT NULL UNIQUE,
+        unsubscribe_token   VARCHAR(64)  NOT NULL,
+        lang                VARCHAR(5)   NOT NULL DEFAULT 'es',
+        active              BOOLEAN      NOT NULL DEFAULT true,
+        subscribed_at       TIMESTAMP    NOT NULL DEFAULT NOW(),
+        unsubscribed_at     TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_email
+        ON newsletter_subscribers(email)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_active
+        ON newsletter_subscribers(active)
+    `);
+    console.log('[migrate] newsletter_subscribers table ready');
+  } catch (err) {
+    console.error('[migrate] newsletter migrations failed:', err.message);
+    throw err;
+  }
+}
+
+export async function runCsvBacktestMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS csv_backtest_runs (
+        id          BIGSERIAL    PRIMARY KEY,
+        run_id      VARCHAR(128) NOT NULL,
+        matchup     TEXT         NOT NULL,
+        pick        TEXT         NOT NULL,
+        result      VARCHAR(16)  NOT NULL,
+        home_score  REAL,
+        away_score  REAL,
+        game_date   DATE,
+        confidence  REAL,
+        notes       TEXT,
+        created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_csv_backtest_runs_run_id
+        ON csv_backtest_runs(run_id)
+    `);
+    console.log('[migrate] csv_backtest_runs table ready');
+  } catch (err) {
+    console.error('[migrate] csv backtest migrations failed:', err.message);
+    throw err;
+  }
+}
+
+export async function runBeatReporterMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS beat_injury_signals (
+        id                BIGSERIAL    PRIMARY KEY,
+        tweet_id          VARCHAR(64)  NOT NULL UNIQUE,
+        reporter_handle   VARCHAR(64)  NOT NULL,
+        reporter_team     VARCHAR(8),
+        tweet_text        TEXT         NOT NULL,
+        tweet_created_at  TIMESTAMPTZ,
+        signal            VARCHAR(16)  NOT NULL DEFAULT 'none',
+        player_name       VARCHAR(128),
+        team_abbr         VARCHAR(8),
+        confidence        REAL         NOT NULL DEFAULT 0,
+        summary           VARCHAR(256),
+        classified_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_beat_injury_signals_team
+        ON beat_injury_signals(team_abbr, classified_at DESC)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_beat_injury_signals_signal
+        ON beat_injury_signals(signal, classified_at DESC)
+    `);
+    console.log('[migrate] beat_injury_signals table ready');
+  } catch (err) {
+    console.error('[migrate] beat reporter migrations failed:', err.message);
+    throw err;
+  }
+}
+
+export async function runPgvectorMigrations() {
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pick_embeddings (
+        id          BIGSERIAL   PRIMARY KEY,
+        pick_id     BIGINT      NOT NULL REFERENCES picks(id) ON DELETE CASCADE,
+        embedding   vector(1536),
+        model       VARCHAR(64) NOT NULL DEFAULT 'text-embedding-3-small',
+        embedded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(pick_id)
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pick_embeddings_pick_id
+        ON pick_embeddings(pick_id)
+    `);
+    console.log('[migrate] pick_embeddings table ready');
+    // IVFFlat index requires at least 1 row — create lazily after first embed
+  } catch (err) {
+    // pgvector not installed — RAG similarity search will be skipped silently
+    console.warn(`[migrate] pgvector unavailable: ${err.message}. RAG disabled.`);
+  }
+}
+
+export async function runFeatureFlagsMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS feature_flags (
+        key          VARCHAR(128) PRIMARY KEY,
+        enabled      BOOLEAN      NOT NULL DEFAULT false,
+        rollout_pct  INT          NOT NULL DEFAULT 100 CHECK (rollout_pct BETWEEN 0 AND 100),
+        metadata     JSONB        NOT NULL DEFAULT '{}',
+        created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('[migrate] feature_flags table ready');
+  } catch (err) {
+    console.error('[migrate] feature flags migrations failed:', err.message);
+    throw err;
+  }
+}
+
+export async function runJobQueueMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS job_queue (
+        id           BIGSERIAL    PRIMARY KEY,
+        type         VARCHAR(64)  NOT NULL,
+        payload      JSONB        NOT NULL DEFAULT '{}',
+        status       VARCHAR(16)  NOT NULL DEFAULT 'pending'
+                                  CHECK (status IN ('pending','running','done','failed')),
+        priority     INT          NOT NULL DEFAULT 0,
+        attempts     INT          NOT NULL DEFAULT 0,
+        max_attempts INT          NOT NULL DEFAULT 3,
+        scheduled_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        run_at       TIMESTAMPTZ,
+        done_at      TIMESTAMPTZ,
+        error        TEXT,
+        created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_job_queue_pending
+        ON job_queue (type, scheduled_at)
+        WHERE status = 'pending'
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_job_queue_created_at
+        ON job_queue (created_at DESC)
+    `);
+    console.log('[migrate] job_queue table ready');
+  } catch (err) {
+    console.error('[migrate] job queue migrations failed:', err.message);
+    throw err;
+  }
+}

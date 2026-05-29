@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
+import { initSentry, sentryErrorHandler } from './observability.js';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -13,7 +15,7 @@ import { buildExtendedCandidates, formatExtendedMenuForLLM } from './services/ex
 import { pruneExpiredOddsCache, getOddsCacheStats } from './odds-cache.js';
 import { getCacheStatus, refreshCache } from './savant-fetcher.js';
 import authRouter, { bankrollRouter, seedAdminUser } from './auth.js';
-import { verifyToken, requireVerifiedEmail } from './middleware/auth-middleware.js';
+import { verifyToken, requireVerifiedEmail, requireAdmin } from './middleware/auth-middleware.js';
 import { runMigrations } from './migrate.js';
 import { getGameBoxscore, resolvePlayerProp } from './props-resolver.js';
 import { regradeBacktestProps } from './services/backtestRegrader.js';
@@ -56,7 +58,8 @@ import adminMlRouter from './routes/admin-ml.js';
 import mlbPropsRouter from './routes/mlb-props.js';
 import imperdibleRouter from './routes/imperdible.js';
 import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames } from './services/chatPickExtractor.js';
-import { processScheduledContentQueue } from './services/contentQueueService.js';
+import { processScheduledContentQueue, processScheduledTelegramQueue, processScheduledThreadsQueue } from './services/contentQueueService.js';
+import { subscribeNewsletter, unsubscribeNewsletter, sendWeeklyNewsletter, getSubscribers } from './services/newsletterService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { mountAdminDbExplorer } from './admin-db-explorer.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
@@ -73,7 +76,15 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
+import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
+import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
+import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
+import { getAllFlags, upsertFlag, deleteFlag } from './services/featureFlagsService.js';
+import { getJobQueueStats, purgeOldJobs } from './services/jobQueueService.js';
+import { generatePickCardSvg, generateSlateSvg } from './services/infographicsService.js';
+import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
+import { startDiscordBot } from './services/discordBot.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -548,6 +559,9 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
+// ── Sentry: init before routes ────────────────────────────────────────────────
+initSentry(app);
+
 // ── CORS: strict origin (must be first) ───────────────────────────────────────
 app.use(cors({
   origin: ['https://hexaoracle.lat', 'https://www.hexaoracle.lat', 'http://localhost:5173', /\.vercel\.app$/],
@@ -583,9 +597,30 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // ── Strict rate limiting for analysis endpoints (consume Anthropic API) ───────
+// Tiers (per minute): admin=unlimited, paid=20, free=8, anon=4
+// Uses jwt.decode (no sig verification) for bucketing — auth gate is still verifyToken.
+const ANALYSIS_LIMITS = { admin: 1000, paid: 20, free: 8, anon: 4 };
+
+function peekJwtPayload(req) {
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return null;
+  try { return jwt.decode(token); } catch { return null; }
+}
+
 const analysisLimiter = rateLimit({
-  windowMs: 60 * 1000,   // 1 minute window
-  max: 10,               // max 10 analysis requests per minute per IP
+  windowMs: 60 * 1000,
+  max: (req) => {
+    const payload = peekJwtPayload(req);
+    if (!payload) return ANALYSIS_LIMITS.anon;
+    if (payload.is_admin) return ANALYSIS_LIMITS.admin;
+    if (payload.plan && payload.plan !== 'free') return ANALYSIS_LIMITS.paid;
+    return ANALYSIS_LIMITS.free;
+  },
+  keyGenerator: (req) => {
+    const payload = peekJwtPayload(req);
+    return payload?.id ? `user:${payload.id}` : ipKeyGenerator(req);
+  },
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many analysis requests. Please wait a moment.' },
@@ -886,6 +921,29 @@ app.get('/api/mlb/playoffs', async (req, res) => {
     const season = Number.parseInt(req.query.season, 10) || new Date().getFullYear();
     const bracket = await getMlbPlayoffBracket(season);
     res.json({ success: true, data: bracket });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Hexa Scout — futures + transactions (B9) ─────────────────────────────────
+
+// GET /api/mlb/futures — MLB futures odds from The Odds API
+app.get('/api/mlb/futures', verifyToken, async (req, res) => {
+  try {
+    const data = await getMlbFutures();
+    res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/mlb/transactions — recent roster moves (call-ups, IL, DFA, etc.)
+app.get('/api/mlb/transactions', verifyToken, async (req, res) => {
+  try {
+    const days = Math.min(14, Math.max(1, Number(req.query.days ?? 3)));
+    const data = await getMlbTransactions(days);
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -1248,8 +1306,8 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
   }
 });
 
-// POST /api/analyze/parlay-synergy — Parlay Synergy Engine (admin-only beta), costs 6 (fast) / 12 (deep)
-app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
+// POST /api/analyze/parlay-synergy — Parlay Synergy Engine (paid users), costs 6 (fast) / 12 (deep)
+app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, requireVerifiedEmail, async (req, res) => {
   // Feature flag — off by default until explicitly enabled in .env
   if (process.env.PARLAY_SYNERGY_ENABLED !== 'true') {
     return res.status(503).json({
@@ -2579,6 +2637,43 @@ app.get('/api/games/:gamePk/live', async (req, res) => {
   }
 });
 
+// GET /api/games/:gamePk/live/stream — SSE live game stream (B2 Hexa Live)
+// Pushes normalized game state every POLL_MS. Client closes connection when done.
+// Accepts token via Authorization header OR ?_auth= query param (EventSource workaround).
+app.get('/api/games/:gamePk/live/stream', (req, res, next) => {
+  // SSE auth: EventSource doesn't support headers — fall back to _auth query param
+  if (!req.headers['authorization'] && req.query._auth) {
+    req.headers['authorization'] = `Bearer ${req.query._auth}`;
+  }
+  next();
+}, verifyToken, (req, res) => {
+  const gamePk = req.params.gamePk;
+  const POLL_MS = Math.max(5000, Math.min(60000, Number(req.query.interval ?? 15000)));
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  async function sendUpdate() {
+    try {
+      const data = await getLiveGameData(gamePk);
+      res.write(`data: ${JSON.stringify({ ok: true, data })}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ ok: false, error: err.message })}\n\n`);
+    }
+  }
+
+  sendUpdate();
+  const timer = setInterval(sendUpdate, POLL_MS);
+
+  req.on('close', () => {
+    clearInterval(timer);
+  });
+});
+
 // GET /api/games/:gamePk/play-by-play - Complete game timeline for Gameday detail
 app.get('/api/games/:gamePk/play-by-play', async (req, res) => {
   try {
@@ -3312,6 +3407,316 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
     );
 
     return res.json({ success: true, data: saved[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/postmortem-stats — aggregate postmortem data (admin-only)
+app.get('/api/admin/postmortem-stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const sport = req.query.sport ?? null;
+    const sportFilter = sport ? `AND COALESCE(p.sport,'mlb') = $1` : '';
+    const params = sport ? [sport] : [];
+
+    const [coverageRes, signalsRes, missesRes, hitsRes, keyFactorsRes, recentRes] = await Promise.all([
+      // Coverage: resolved picks vs postmortems generated
+      pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE result IS NOT NULL AND result != 'pending' AND deleted_at IS NULL) AS resolved_total,
+          COUNT(*) FILTER (WHERE postmortem IS NOT NULL AND deleted_at IS NULL) AS postmortem_count
+        FROM picks p
+        WHERE deleted_at IS NULL ${sport ? `AND COALESCE(p.sport,'mlb') = $1` : ''}
+      `, params),
+
+      // Top adjustment_signals
+      pool.query(`
+        SELECT sig AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'adjustment_signals') AS sig
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY sig ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Top what_hexa_missed
+      pool.query(`
+        SELECT miss AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'what_hexa_missed') AS miss
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY miss ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Top what_hexa_got_right
+      pool.query(`
+        SELECT hit AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'what_hexa_got_right') AS hit
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY hit ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Top key_factors
+      pool.query(`
+        SELECT factor AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'key_factors') AS factor
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY factor ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Recent postmortems (last 30)
+      pool.query(`
+        SELECT
+          p.id, p.pick, p.result, p.matchup, p.game_date,
+          COALESCE(p.sport,'mlb') AS sport,
+          p.postmortem_summary,
+          p.postmortem_generated_at,
+          p.postmortem->'key_factors' AS key_factors,
+          p.postmortem->'what_hexa_missed' AS what_hexa_missed,
+          p.postmortem->'adjustment_signals' AS adjustment_signals,
+          p.postmortem->'training_takeaway' AS training_takeaway
+        FROM picks p
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        ORDER BY p.postmortem_generated_at DESC
+        LIMIT 30
+      `, params),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        coverage: {
+          resolved_total: parseInt(coverageRes.rows[0]?.resolved_total ?? 0),
+          postmortem_count: parseInt(coverageRes.rows[0]?.postmortem_count ?? 0),
+        },
+        adjustment_signals: signalsRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        what_hexa_missed:   missesRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        what_hexa_got_right: hitsRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        key_factors:        keyFactorsRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        recent:             recentRes.rows,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Newsletter endpoints ───────────────────────────────────────────────────
+
+// POST /api/newsletter/subscribe — public
+app.post('/api/newsletter/subscribe', async (req, res) => {
+  try {
+    const { email, lang = 'es' } = req.body ?? {};
+    if (!email) return res.status(400).json({ success: false, error: 'email required' });
+    const result = await subscribeNewsletter(email, lang);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    if (err.code === 'INVALID_EMAIL') return res.status(400).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/newsletter/unsubscribe?email=&token= — public (unsubscribe link)
+app.get('/api/newsletter/unsubscribe', async (req, res) => {
+  try {
+    const { email, token } = req.query;
+    if (!email || !token) return res.status(400).json({ success: false, error: 'email and token required' });
+    const result = await unsubscribeNewsletter(email, token);
+    if (!result.ok) return res.status(400).json({ success: false, error: result.reason });
+    res.json({ success: true, message: 'Unsubscribed successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/newsletter/subscribers — admin
+app.get('/api/admin/newsletter/subscribers', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const activeOnly = req.query.active !== '0';
+    const rows = await getSubscribers({ activeOnly });
+    res.json({ success: true, data: rows, total: rows.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/newsletter/send-weekly — admin trigger
+app.post('/api/admin/newsletter/send-weekly', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    if (process.env.NEWSLETTER_ENABLED !== '1') {
+      return res.status(403).json({ success: false, error: 'NEWSLETTER_ENABLED is not set to 1' });
+    }
+    const lang = req.body?.lang ?? 'es';
+    const date = req.body?.date ?? null;
+    const result = await sendWeeklyNewsletter(lang, date);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/picks/:id/infographic — SVG pick card (B8)
+app.get('/api/picks/:id/infographic', verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, matchup, pick, confidence, result, sport, created_at
+       FROM picks WHERE id = $1 AND deleted_at IS NULL`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
+    const svg = generatePickCardSvg(rows[0]);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(svg);
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/mlb/slate-infographic?date=YYYY-MM-DD — SVG slate overview (B8)
+app.get('/api/mlb/slate-infographic', verifyToken, async (req, res) => {
+  try {
+    const date = req.query.date ?? new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const { rows } = await pool.query(
+      `SELECT matchup, pick, confidence, result, created_at
+       FROM picks
+       WHERE game_date = $1 AND deleted_at IS NULL AND COALESCE(sport,'mlb') = 'mlb'
+       ORDER BY confidence DESC NULLS LAST
+       LIMIT 10`,
+      [date]
+    );
+    const svg = generateSlateSvg({ picks: rows, date });
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(svg);
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/backtest/import-csv — evaluate historical picks from CSV (A7)
+app.post('/api/admin/backtest/import-csv', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { csv, label, dryRun = false } = req.body ?? {};
+    if (!csv || typeof csv !== 'string') {
+      return res.status(400).json({ success: false, error: 'csv field (string) required' });
+    }
+    const result = await importBacktestCsv({ csv, label, dryRun: !!dryRun });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/backtest/csv-runs — list past CSV backtest runs
+app.get('/api/admin/backtest/csv-runs', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 20)));
+    const runs = await listCsvBacktestRuns({ limit });
+    res.json({ success: true, data: runs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/injury-signals — recent beat reporter injury signals
+app.get('/api/admin/injury-signals', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { team, hours = 24 } = req.query;
+    const signals = await getRecentInjurySignals({ teamAbbr: team, hoursBack: Number(hours), limit: 100 });
+    res.json({ success: true, data: signals, total: signals.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/injury-signals/scan — trigger manual beat reporter scan
+app.post('/api/admin/injury-signals/scan', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await runBeatReporterScan();
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Oracle Embeddings (A3) ───────────────────────────────────────────────────
+
+// GET /api/admin/embeddings/stats
+app.get('/api/admin/embeddings/stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const stats = await getEmbeddingsStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/embeddings/backfill — embed all eligible picks
+app.post('/api/admin/embeddings/backfill', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const batchSize = Number(req.body?.batchSize ?? 100);
+    const result = await embedPendingPicks(Math.min(batchSize, 500));
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Feature Flags (B5) ───────────────────────────────────────────────────────
+
+// GET /api/admin/feature-flags
+app.get('/api/admin/feature-flags', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const flags = await getAllFlags();
+    res.json({ success: true, data: flags });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// PUT /api/admin/feature-flags/:key
+app.put('/api/admin/feature-flags/:key', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { enabled, rollout_pct, metadata } = req.body ?? {};
+    await upsertFlag({ key, enabled: Boolean(enabled), rollout_pct: rollout_pct ?? 100, metadata: metadata ?? {} });
+    res.json({ success: true, key });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// DELETE /api/admin/feature-flags/:key
+app.delete('/api/admin/feature-flags/:key', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    await deleteFlag(req.params.key);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Job Queue (B7) ────────────────────────────────────────────────────────────
+
+// GET /api/admin/jobs — job queue dashboard stats
+app.get('/api/admin/jobs', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const stats = await getJobQueueStats({ limit });
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/jobs/purge — purge old done/failed jobs
+app.post('/api/admin/jobs/purge', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const days = Number(req.body?.retentionDays ?? 7);
+    const purged = await purgeOldJobs(days);
+    res.json({ success: true, purged });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -4358,6 +4763,14 @@ app.post('/api/admin/feature-store/backfill', verifyToken, async (req, res) => {
   }
 });
 
+// ── Global error handler (Sentry + JSON response) ────────────────────────────
+app.use(sentryErrorHandler());
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  console.error(`[express] Unhandled error ${req.method} ${req.path}:`, err.message);
+  res.status(err.status ?? 500).json({ success: false, error: safeError(err) });
+});
+
 runMigrations()
   .then(() => runParlaySynergyMigrations())
   .then(() => runSprint1Migrations())
@@ -4370,6 +4783,13 @@ runMigrations()
   .then(() => runImperdibleMigrations())
   .then(() => runOddsCacheMigrations())
   .then(() => runEnsembleBackfillMigration())
+  .then(() => runNbaPlayerStatsMigrations())
+  .then(() => runNewsletterMigrations())
+  .then(() => runBeatReporterMigrations())
+  .then(() => runCsvBacktestMigrations())
+  .then(() => runPgvectorMigrations())
+  .then(() => runFeatureFlagsMigrations())
+  .then(() => runJobQueueMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -4537,6 +4957,77 @@ runMigrations()
               console.error('[content-queue] Scheduled publish failed:', err.message);
             });
         }, CONTENT_QUEUE_INTERVAL).unref();
+      }
+
+      if (process.env.NEWSLETTER_ENABLED === '1') {
+        // Weekly newsletter — fires every Sunday between 09:00 and 09:59 ET
+        setInterval(() => {
+          const now = new Date();
+          const dayET  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+          const dow    = dayET.getDay();   // 0 = Sunday
+          const hourET = dayET.getHours();
+          if (dow !== 0 || hourET !== 9) return;
+          ['es', 'en'].forEach((lang) => {
+            sendWeeklyNewsletter(lang, null).catch((err) => {
+              console.error(`[newsletter] weekly send (${lang}) failed:`, err.message);
+            });
+          });
+        }, 60 * 60 * 1000).unref(); // check hourly
+        console.log('[newsletter] Weekly newsletter job scheduled (Sundays 09:00 ET)');
+      }
+
+      if (process.env.BEAT_REPORTER_ENABLED === '1') {
+        console.log('[beat-reporter] Hourly injury signal scan enabled');
+        setInterval(() => {
+          runBeatReporterScan()
+            .then(r => {
+              if (r.signals > 0) console.log(`[beat-reporter] Scan done: ${r.processed} tweets, ${r.signals} signals`);
+            })
+            .catch(err => console.error('[beat-reporter] Scan failed:', err.message));
+        }, 60 * 60 * 1000).unref();
+      }
+
+      if (process.env.THREADS_ENABLED === '1') {
+        const threadsInterval = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);
+        setInterval(() => {
+          processScheduledThreadsQueue()
+            .then(r => { if (r.length) console.log(`[threads-queue] Processed ${r.length} item(s)`); })
+            .catch(err => console.error('[threads-queue] Publish failed:', err.message));
+        }, threadsInterval * 60 * 1000).unref();
+      }
+
+      if (process.env.DISCORD_ENABLED === '1') {
+        startDiscordBot().catch(err => console.error('[discord] Startup failed:', err.message));
+      }
+
+      // A3: background embedding job — embeds new oracle_reports every 15 min
+      setInterval(() => {
+        embedPendingPicks(20)
+          .then(r => { if (r.embedded) console.log(`[embeddings] ${r.embedded} new picks embedded`); })
+          .catch(err => console.warn(`[embeddings] background job failed: ${err.message}`));
+      }, 15 * 60 * 1000).unref();
+
+      // B7: job queue purge — weekly cleanup of done/failed jobs older than 7 days
+      setInterval(() => {
+        purgeOldJobs(7)
+          .then(n => { if (n > 0) console.log(`[job-queue] purged ${n} old jobs`); })
+          .catch(err => console.warn(`[job-queue] purge failed: ${err.message}`));
+      }, 7 * 24 * 60 * 60 * 1000).unref();
+
+      if (process.env.TELEGRAM_ENABLED === '1') {
+        const tgIntervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);
+        console.log(`[telegram-queue] Scheduled Telegram autopublish enabled (${tgIntervalMinutes}m cadence)`);
+        setInterval(() => {
+          processScheduledTelegramQueue()
+            .then((results) => {
+              if (results.length > 0) {
+                console.log(`[telegram-queue] Processed ${results.length} item(s)`);
+              }
+            })
+            .catch((err) => {
+              console.error('[telegram-queue] Scheduled publish failed:', err.message);
+            });
+        }, tgIntervalMinutes * 60 * 1000).unref();
       }
     });
   })
