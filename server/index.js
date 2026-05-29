@@ -247,6 +247,10 @@ function buildAnalysisMeta(features = {}) {
   const countNonNull = (values) => values.filter((value) => value != null).length;
   const hasLineupXwoba = (batters) => (batters ?? []).some((b) => b?.savant?.xwOBA != null);
 
+  // Sprint 8d observability fields
+  const hasRollingWoba = (s) => s?.rolling_windows_against?.woba_against_7d != null;
+  const hasBatterRolling = (batters) => batters.some((b) => b?.savant?.rolling_windows?.woba_7d != null);
+
   return {
     pitcher_profiles_loaded: countNonNull([homePitcherStatcast, awayPitcherStatcast]),
     pitcher_xwoba_loaded: countNonNull([
@@ -257,10 +261,20 @@ function buildAnalysisMeta(features = {}) {
       homePitcherStatcast?.whiff_percent,
       awayPitcherStatcast?.whiff_percent,
     ]),
+    pitcher_rolling_woba_loaded: countNonNull([
+      hasRollingWoba(homePitcherStatcast) ? 1 : null,
+      hasRollingWoba(awayPitcherStatcast) ? 1 : null,
+    ]),
     lineup_xwoba_loaded: countNonNull([
       hasLineupXwoba(savantBatters.home) ? 1 : null,
       hasLineupXwoba(savantBatters.away) ? 1 : null,
     ]),
+    batter_rolling_woba_loaded: countNonNull([
+      hasBatterRolling(savantBatters.home) ? 1 : null,
+      hasBatterRolling(savantBatters.away) ? 1 : null,
+    ]),
+    umpire_loaded: features.umpireData?.name ? 1 : 0,
+    fatigue_loaded: countNonNull([features.homeFatigue, features.awayFatigue]),
   };
 }
 
@@ -276,9 +290,56 @@ function annotateAnalysisData(data, features = {}, gameData = null) {
     ));
   }
 
-  const traceFlag = `Server check: P xwOBA ${analysisMeta.pitcher_xwoba_loaded}/2, Whiff ${analysisMeta.pitcher_whiff_loaded}/2, Lineups ${analysisMeta.lineup_xwoba_loaded}/2`;
+  const umpireStr  = analysisMeta.umpire_loaded  ? '✓' : '✗';
+  const fatigueStr = analysisMeta.fatigue_loaded > 0 ? `${analysisMeta.fatigue_loaded}/2` : '✗';
+  const traceFlag = [
+    `Server check: P xwOBA ${analysisMeta.pitcher_xwoba_loaded}/2`,
+    `Whiff ${analysisMeta.pitcher_whiff_loaded}/2`,
+    `RollingW ${analysisMeta.pitcher_rolling_woba_loaded}/2`,
+    `Lineups ${analysisMeta.lineup_xwoba_loaded}/2`,
+    `BatRolling ${analysisMeta.batter_rolling_woba_loaded}/2`,
+    `Umpire ${umpireStr}`,
+    `Fatigue ${fatigueStr}`,
+  ].join(', ');
   if (!alertFlags.some((flag) => String(flag).startsWith('Server check:'))) {
     alertFlags.push(traceFlag);
+  }
+
+  // Bullpen attribution guard: detect when oracle_report names the wrong team as critical/moderate.
+  // alert_flags (LLM-generated) are usually correct; oracle_report narrative sometimes inverts teams.
+  if (gameData?.teams) {
+    const homeL = (gameData.teams.home?.name ?? '').toLowerCase();
+    const awayL = (gameData.teams.away?.name ?? '').toLowerCase();
+    const reportL = (data.oracle_report ?? '').toLowerCase();
+
+    const criticalFlagged = [];
+    for (const flag of alertFlags) {
+      const m = String(flag).match(/(?:critical|moderate)\s+bullpen\s+fatigue[^—–\-]*[—–\-]\s*(.+?)\s+us[oó]/i);
+      if (m) criticalFlagged.push(m[1].trim().toLowerCase());
+    }
+
+    if (criticalFlagged.length > 0) {
+      for (const team of [{ name: homeL }, { name: awayL }]) {
+        const isCritical = criticalFlagged.some(ct =>
+          team.name.includes(ct) || ct.split(/\s+/).some(tok => tok.length >= 4 && team.name.includes(tok))
+        );
+        if (isCritical) continue;
+
+        // This team is NOT critical — check if oracle_report incorrectly calls it critical
+        const token = team.name.split(/\s+/).find(t => t.length >= 4) ?? '';
+        if (!token) continue;
+        const idx = reportL.indexOf(token);
+        if (idx === -1) continue;
+        const window = reportL.slice(Math.max(0, idx - 100), idx + 200);
+        if (
+          /bullpen.{0,60}(crític|critical)/i.test(window) ||
+          /(crític|critical).{0,60}bullpen/i.test(window)
+        ) {
+          alertFlags.push('⚠ DATA CHECK (server): oracle_report puede haber invertido equipos en fatiga de bullpen — verificar manualmente');
+          break;
+        }
+      }
+    }
   }
 
   const valueBreakdown = buildValueBreakdown({
