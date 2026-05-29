@@ -351,10 +351,10 @@ router.post('/ml/retrain/ensemble', async (req, res) => {
         const { rows } = await pool.query(
           `SELECT COUNT(*)::INT AS eligible
              FROM shadow_model_runs
-            WHERE oracle_home_win_prob IS NOT NULL
-              AND shadow_home_win_prob IS NOT NULL
-              AND python_model_score   IS NOT NULL
-              AND actual_winner_id     IS NOT NULL`
+            WHERE oracle_pick_prob  IS NOT NULL
+              AND legacy_pick_prob  IS NOT NULL
+              AND python_pick_prob  IS NOT NULL
+              AND actual_winner_id  IS NOT NULL`
         );
         eligibleRows = rows?.[0]?.eligible ?? 0;
       } catch (err) {

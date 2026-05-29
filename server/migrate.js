@@ -955,7 +955,8 @@ export async function runOddsCacheMigrations() {
  */
 export async function runEnsembleBackfillMigration() {
   try {
-    const result = await pool.query(`
+    // Pass 1: rows that have python_pick_prob but not python_model_score
+    const r1 = await pool.query(`
       UPDATE shadow_model_runs
       SET python_model_score  = python_pick_prob,
           python_model_status = 'ok',
@@ -964,7 +965,22 @@ export async function runEnsembleBackfillMigration() {
         AND (python_model_status IS DISTINCT FROM 'ok'
              OR python_model_score IS NULL)
     `);
-    console.log(`[migrate] ensemble backfill: updated ${result.rowCount} shadow_model_runs rows`);
+    // Pass 2: rows that have python_model_score but not python_pick_prob.
+    // For moneyline: invert using pick_side (away → 1 - score).
+    // For overunder/runline: same inversion logic (model scores are pick-direction agnostic
+    // pre-Sprint 8c, so treat 'over'/'home_rl' as non-inverted, rest as inverted).
+    const r2 = await pool.query(`
+      UPDATE shadow_model_runs
+      SET python_pick_prob = CASE
+            WHEN pick_side IN ('away', 'under', 'away_rl') THEN 1.0 - python_model_score
+            ELSE python_model_score
+          END,
+          updated_at = NOW()
+      WHERE python_model_score IS NOT NULL
+        AND python_pick_prob   IS NULL
+        AND pick_side          IS NOT NULL
+    `);
+    console.log(`[migrate] ensemble backfill: pass1=${r1.rowCount} pass2=${r2.rowCount} rows updated`);
   } catch (err) {
     console.error('[migrate] ensemble backfill failed:', err.message);
     throw err;
