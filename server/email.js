@@ -1,14 +1,21 @@
-import { Resend } from 'resend';
-
+// `resend` is loaded lazily via dynamic import so a missing/incompatible
+// package (e.g. resend@6 needs Node >=20) can never crash boot — email
+// just degrades to a skipped send.
 let resendClient = null;
 let resendApiKey = null;
 
-function getResendClient() {
+async function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return null;
   if (!resendClient || resendApiKey !== apiKey) {
-    resendClient = new Resend(apiKey);
-    resendApiKey = apiKey;
+    try {
+      const { Resend } = await import('resend');
+      resendClient = new Resend(apiKey);
+      resendApiKey = apiKey;
+    } catch (err) {
+      console.warn(`[email] resend package unavailable — email disabled (${err.message})`);
+      return null;
+    }
   }
   return resendClient;
 }
@@ -26,7 +33,7 @@ export function generateCode() {
 }
 
 export async function sendVerificationEmail(email, code) {
-  const resend = getResendClient();
+  const resend = await getResendClient();
   if (!resend) {
     console.warn('[email] RESEND_API_KEY not set - skipping email, code:', code);
     return false;
@@ -55,7 +62,7 @@ export async function sendVerificationEmail(email, code) {
 }
 
 export async function sendPasswordResetEmail(email, code) {
-  const resend = getResendClient();
+  const resend = await getResendClient();
   if (!resend) {
     console.warn('[email] RESEND_API_KEY not set - skipping password reset email, code:', code);
     return false;
