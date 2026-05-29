@@ -396,7 +396,7 @@ export default function App() {
   const [isAdmin,           setIsAdmin]           = useState(false);
   const [performancePublic, setPerformancePublic] = useState(false);
   const { isMobileExperience } = useShellMode();
-  const adminOnlyTabs = ['parlay', 'tools', 'batch', 'synergy'];
+  const adminOnlyTabs = ['tools', 'batch', 'synergy'];
   const sportOptions = getActiveSportOptions();
 
   // Check admin status on mount

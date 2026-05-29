@@ -987,6 +987,50 @@ export async function runEnsembleBackfillMigration() {
   }
 }
 
+export async function runNbaPlayerStatsMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS nba_player_stats (
+        id          BIGSERIAL    PRIMARY KEY,
+        player_id   INTEGER      NOT NULL,
+        player_name VARCHAR(100) NOT NULL,
+        team_id     INTEGER      NOT NULL,
+        team_abbr   VARCHAR(5),
+        season      VARCHAR(10)  NOT NULL,
+        gp          INTEGER,
+        min_pg      DECIMAL(5,2),
+        pts_pg      DECIMAL(6,3),
+        reb_pg      DECIMAL(6,3),
+        ast_pg      DECIMAL(6,3),
+        stl_pg      DECIMAL(6,3),
+        blk_pg      DECIMAL(6,3),
+        tov_pg      DECIMAL(6,3),
+        fg_pct      DECIMAL(6,4),
+        fg3_pct     DECIMAL(6,4),
+        ft_pct      DECIMAL(6,4),
+        ts_pct      DECIMAL(6,4),
+        efg_pct     DECIMAL(6,4),
+        usg_pct     DECIMAL(6,4),
+        plus_minus  DECIMAL(7,3),
+        updated_at  TIMESTAMPTZ  DEFAULT NOW(),
+        UNIQUE (player_id, season)
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_nba_player_stats_team
+        ON nba_player_stats(team_id, season)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_nba_player_stats_name
+        ON nba_player_stats(player_name, season)
+    `);
+    console.log('[migrate] nba_player_stats table ready');
+  } catch (err) {
+    console.error('[migrate] nba_player_stats migration failed:', err.message);
+    throw err;
+  }
+}
+
 export async function runNewsletterMigrations() {
   try {
     await pool.query(`

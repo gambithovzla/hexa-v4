@@ -405,7 +405,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | A6 | **Migrar a node-pg-migrate o Drizzle** | ~1 semana | Versionado real de schema, rollback, diff. Más limpio que IF NOT EXISTS embebido. |
 | A7 | **Backtest con CSV upload** | ~1 semana | Admin sube CSV con picks históricos, el modelo los evalúa. Útil para A/B test de prompts. |
 | A8 | **Beat reporters scraper + injury classifier** (Haiku) | ~1 semana | Lista curada de beat reporters X. Cada hora scrapeo tweets + clasifica con Haiku (juega / dudoso / out). Featurea más fino que `injuryStatus` de MLB API. |
-| A9 | **Parlay Synergy feature flag → public beta** | 3 días | Hoy admin-only. Validar métricas de Sprint 3 del brief de parlay; si hit rate es bueno, abrir a usuarios paid. **Update 2026-05-26**: añadido modo `safe` (Máx. Acierto) que optimiza por probabilidad de acierto en vez de edge — recomendado como modo default para el público antes de abrir. Validar hit rate del modo safe sobre N≥4 patas. |
+| A9 | **Parlay Synergy feature flag → public beta** | 3 días | ✅ Abierto a usuarios con email verificado. Endpoint cambiado de `isAdmin` → `requireVerifiedEmail`. `adminOnlyTabs` ya no incluye `'parlay'`. Sidebar parlay visible para todos. Falta: flip `PARLAY_SYNERGY_ENABLED=true` en Railway cuando hit rate sea validado. |
 
 ### Tier B — Alta señal pero esfuerzo alto o dependencia externa
 
@@ -480,7 +480,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q3  S2            — Prompt versioning (pick_features) ████████████████████████ ✅
 2026 Q3  Sprint 7.0    — NBA hardening gate               ████████████████████████ ✅
 2026 Q3  Sprint 7.1    — Dataset + shadow aislados        ████████████████████████ ✅
-2026 Q3  Sprint 7a     — Scaffolding NBA (datos core)     ███████████████████░░░░░ ✅ (parcial; nba_player_stats pendiente)
+2026 Q3  Sprint 7a     — Scaffolding NBA (datos core)     ████████████████████████ ✅ (nba_games + nba_team_stats + nba_player_stats)
 2026 Q3  Sprint 7b     — Oracle NBA + prompts             ████████████████████████ ✅
 2026 Q3  Sprint 7c     — NBA pick lifecycle + tracker     ████████████████████████ ✅
 2026 Q3  Sprint 7d     — UI NBA + sport shell             ████████████████████████ ✅
@@ -502,7 +502,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 - ✅ Deploy hexa-v4 con Sprint 8d (bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE + guardrail atribución bullpen).
 - Sprint 5 Props MLB: resolver automático post-game en lifecycle + Brier ≥100 picks por prop_kind + `MLB_PROPS_ML_PUBLIC_ENABLED`.
 - ✅ Brand follow-ups: re-skin `AdminMLControlCenter` + `ParlayArchitect` con League × Kinetic.
-- Sprint 7a: basketball-reference scraper (NBA savant equivalent); `nba_games` + `nba_team_stats` YA en migrate.js; pendiente: `nba_player_stats`.
+- ✅ Sprint 7a: `nba_player_stats` table añadida (player_id/season UNIQUE, columnas pg stats + ts%/efg%/usg% + plus_minus). Pendiente: poblar desde basketball-reference scraper cuando haya volumen NBA.
 - ✅ S6 Postmortem dashboard — `GET /api/admin/postmortem-stats` + `PostmortemDashboard.jsx` + sidebar link.
 - ✅ S3 Feature store audit — Check 5 en `system-audit.js`.
 - ✅ S4 Telegram publisher — `telegramPublisher.js` + routing por `publish_target` + job.

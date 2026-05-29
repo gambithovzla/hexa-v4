@@ -74,7 +74,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNewsletterMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations } from './migrate.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -1249,8 +1249,8 @@ app.post('/api/analyze/parlay', analysisLimiter, verifyToken, async (req, res) =
   }
 });
 
-// POST /api/analyze/parlay-synergy — Parlay Synergy Engine (admin-only beta), costs 6 (fast) / 12 (deep)
-app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, isAdmin, async (req, res) => {
+// POST /api/analyze/parlay-synergy — Parlay Synergy Engine (paid users), costs 6 (fast) / 12 (deep)
+app.post('/api/analyze/parlay-synergy', analysisLimiter, verifyToken, requireVerifiedEmail, async (req, res) => {
   // Feature flag — off by default until explicitly enabled in .env
   if (process.env.PARLAY_SYNERGY_ENABLED !== 'true') {
     return res.status(503).json({
@@ -4515,6 +4515,7 @@ runMigrations()
   .then(() => runImperdibleMigrations())
   .then(() => runOddsCacheMigrations())
   .then(() => runEnsembleBackfillMigration())
+  .then(() => runNbaPlayerStatsMigrations())
   .then(() => runNewsletterMigrations())
   .then(() => seedAdminUser())
   .then(() => {
