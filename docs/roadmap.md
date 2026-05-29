@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-29 — Sprint 8c: ensemble multi-mercado (moneyline + overunder + runline + prop, frame pick-aligned), ensemble gap fix, parlay alt lines recortados, Oracle Chat null-line guard. Sprint 8d: Oracle context enrichment MLB (rich Savant — rolling wOBA, CSW%, active spin, attack angle, bat speed, sprint speed, HR/FB; avgIP/start; ERA/WHIP por relevista; LHP/RHP breakdown; umpire zone stats; team form block; schedule fatigue). Sprint 8b Pick Imperdible en main. Brand League × Kinetic v2.6 en main.
+**Última actualización**: 2026-05-29 — Sprint 8f: Railway hardening + Node 20 (observability/email/discord lazy imports, `server/.nvmrc`, `NIXPACKS_NODE_VERSION=20`, ML sidecar fangraphs defensive import, httpx+bs4 en runtime deps). Sprint 8e: bullpen attribution guardrail. Sprint 8d: Oracle context enrichment MLB (rich Savant, umpire, team form, schedule fatigue). Sprint 8c: ensemble multi-mercado + props + parlay alt lines.
 
 ---
 
@@ -376,6 +376,34 @@ Diseñada por claude.ai/design. Brand book broadcast (navy uniform + lava/volt s
 
 ---
 
+### ✅ Sprint 8f — Railway hardening + Node 20 (Q3 2026)
+
+**Status**: ✅ **cerrado** (2026-05-29) — PRs #368, #369, #370.
+
+**Problema que resolvía**: merge del roadmap PR (#368) produjo tres crashes de startup en CI y dos crashes en Railway en producción: el server Node y el sidecar Python caían antes de aceptar tráfico.
+
+**Crashes corregidos**:
+
+| Crash | Causa | Fix |
+|---|---|---|
+| `ReferenceError: requireAdmin is not defined` | Faltaba en el import de `auth-middleware.js` | Añadido al import destructuring |
+| `ValidationError: Custom keyGenerator…ipKeyGenerator` | `express-rate-limit v8` requiere `ipKeyGenerator` helper explícito | Importado + usado en keyGenerator |
+| `SyntaxError: 'generateDraftForType' not exported` | `newsletterService.js` usaba nombre viejo (renombrado a `generateContentDraft`) | Corregido el import |
+| `ERR_MODULE_NOT_FOUND: @sentry/node` (Railway, Node 18) | `observability.js` importaba Sentry estáticamente; Railway usaba Node 18 (service root `server/` hace invisible el `.nvmrc` raíz) | `observability.js` refactorizado a import dinámico; `server/.nvmrc` creado; `NIXPACKS_NODE_VERSION=20` en Railway |
+| `ModuleNotFoundError: No module named 'httpx'` (Hexa ML) | `fangraphs_scraper.py` usa httpx + bs4; solo estaban en dev deps; `serve.py` los importaba a nivel de módulo | httpx + bs4 promovidos a runtime deps; import defensivo con `try/except` en `serve.py` |
+
+**Entregables**:
+- `server/observability.js` — lazy Sentry: `_Sentry = await import('@sentry/node')` dentro de `initSentry()`. Sin paquete o sin `SENTRY_DSN`, el servidor arranca igual.
+- `server/email.js` — lazy Resend: `getResendClient()` con `await import('resend')`; sin `RESEND_API_KEY` o Node < 20, las funciones de email son no-ops.
+- `server/index.js` — discord lazy: `import('./services/discordBot.js').then(...)`. `initSentry(app).catch(() => {})`.
+- `server/.nvmrc` — contiene `20`; pin de Node en el service root que Nixpacks lee.
+- `package.json` — `"engines": { "node": "20.x" }`.
+- `ml/requirements.txt` + `ml/pyproject.toml` — `httpx==0.27.2` + `beautifulsoup4==4.12.3` en runtime.
+- `ml/hexa_ml/serve.py` — `_FANGRAPHS_AVAILABLE` flag; endpoints `/fangraphs/*` devuelven HTTP 503 si el scraper no cargó.
+- Railway: `NIXPACKS_NODE_VERSION=20` confirmado activo → Node 20 en builds → emails de verificación operativos.
+
+---
+
 ## 3. Backlog priorizado
 
 Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de la prioridad en cada item.
@@ -491,6 +519,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q3  Sprint 8c     — Ensemble multi-mkt + props fix   ████████████████████████ ✅
 2026 Q3  Sprint 8d     — Oracle context enrichment MLB    ████████████████████████ ✅
 2026 Q3  Sprint 8e     — Bullpen attribution guardrail    ████████████████████████ ✅
+2026 Q3  Sprint 8f     — Railway hardening + Node 20      ████████████████████████ ✅
 2026 Q3-4 Sprint 5     — Player Props MLB                 ██████████████░░░░░░░░░░ 🔄 (board + resolver; lifecycle ⏳)
 2026 Q3-4              — NBA go-live público              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (validación E2E pendiente)
 2026 Q3-4              — Tier S: S3/S4/S5/S6             ████████████████████████ ✅
@@ -498,23 +527,15 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
 
-**Próximo en cola** (actualizado 2026-05-29, checklist update 3 — todos los items Tier A y Tier B completados):
-- ✅ A1 F5 market, A2 FanGraphs ZiPS, A3 pgvector RAG, A4 Props UI, A5 rate tiers, A6 node-pg-migrate, A7 CSV backtest, A8 beat reporter, A9 parlay public.
-- ✅ B2 Hexa Live SSE, B3 Discord, B4 Threads, B5 feature flags, B6 observability, B7 job queue, B8 infographics, B9 Hexa Scout, B10 alt lines, B11 CI.
-- Pendiente frontend: B2 Hexa Live UI component (SSE client), B10 alt lines UI dropdown.
-- Operacional: NBA go-live (`NBA_ANALYSIS_ENABLED=true`), Props ML gate (`MLB_PROPS_ML_PUBLIC_ENABLED=1`), Parlay beta (`PARLAY_SYNERGY_ENABLED=true`).
-- Próximo deporte: NFL (Sprint 9, spec en docs/nfl-architecture.md).
-
-**Próximo en cola original** (actualizado 2026-05-29, post-audit):
-- ✅ Deploy hexa-v4 con Sprint 8d (bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE + guardrail atribución bullpen).
-- Sprint 5 Props MLB: resolver automático post-game en lifecycle + Brier ≥100 picks por prop_kind + `MLB_PROPS_ML_PUBLIC_ENABLED`.
-- ✅ Brand follow-ups: re-skin `AdminMLControlCenter` + `ParlayArchitect` con League × Kinetic.
-- ✅ Sprint 7a: `nba_player_stats` table añadida (player_id/season UNIQUE, columnas pg stats + ts%/efg%/usg% + plus_minus). Pendiente: poblar desde basketball-reference scraper cuando haya volumen NBA.
-- ✅ S6 Postmortem dashboard — `GET /api/admin/postmortem-stats` + `PostmortemDashboard.jsx` + sidebar link.
-- ✅ S3 Feature store audit — Check 5 en `system-audit.js`.
-- ✅ S4 Telegram publisher — `telegramPublisher.js` + routing por `publish_target` + job.
-- ✅ S5 Newsletter recap — `newsletterService.js` + `newsletter_subscribers` + endpoints + job dominical.
-- NBA go-live: validación E2E + flip público `NBA_ANALYSIS_ENABLED`.
-- Re-evaluar NHL como siguiente deporte (timing similar a NBA, oct-jun).
+**Próximo en cola** (actualizado 2026-05-29, post-8f — plataforma estable en prod):
+- ✅ Sprint 8f Railway hardening — tres servicios Online, Node 20 activo, emails operativos.
+- ✅ A1–A9, B2–B11 completados. Todos los Tier A y Tier B cerrados en código.
+- **Pendiente ops**:
+  - Props ML gate: acumular ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
+  - NBA validación E2E en prod con tráfico real → `NBA_ANALYSIS_ENABLED=true` si ya está activo.
+  - Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
+  - `OPENAI_EMBED_API_KEY` → activa RAG (pgvector embeddings de oracle_report en contexto).
+- **Pendiente frontend**: B2 Hexa Live UI (SSE client en HexaBoard), B10 alt lines UI dropdown.
+- **Próximo deporte**: NFL (Sprint 9) — spec en [docs/nfl-architecture.md](nfl-architecture.md), roadmap en [docs/nfl-roadmap.md](nfl-roadmap.md). Arranque verano 2026.
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).
