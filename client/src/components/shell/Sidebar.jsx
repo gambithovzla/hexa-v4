@@ -313,6 +313,8 @@ export default function Sidebar({
         icon: ICONS.performance, label: 'Performance' },
       isAdmin && { key: 'equity', action: () => { window.location.href = '/admin/equity'; },
         icon: ICONS.performance, label: 'Equity Curve' },
+      isAdmin && { key: 'postmortem', action: () => { window.location.href = '/admin/postmortem'; },
+        icon: ICONS.performance, label: L('Postmortem', 'Postmortem', lang) },
       isAdmin && { key: 'backtests', action: () => { window.location.href = '/admin/backtests'; },
         icon: ICONS.backtests, label: 'Backtests' },
       isAdmin && { key: 'run-test', action: () => { window.location.href = '/admin/run-backtest'; },

@@ -3317,6 +3317,96 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/postmortem-stats — aggregate postmortem data (admin-only)
+app.get('/api/admin/postmortem-stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const sport = req.query.sport ?? null;
+    const sportFilter = sport ? `AND COALESCE(p.sport,'mlb') = $1` : '';
+    const params = sport ? [sport] : [];
+
+    const [coverageRes, signalsRes, missesRes, hitsRes, keyFactorsRes, recentRes] = await Promise.all([
+      // Coverage: resolved picks vs postmortems generated
+      pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE result IS NOT NULL AND result != 'pending' AND deleted_at IS NULL) AS resolved_total,
+          COUNT(*) FILTER (WHERE postmortem IS NOT NULL AND deleted_at IS NULL) AS postmortem_count
+        FROM picks p
+        WHERE deleted_at IS NULL ${sport ? `AND COALESCE(p.sport,'mlb') = $1` : ''}
+      `, params),
+
+      // Top adjustment_signals
+      pool.query(`
+        SELECT sig AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'adjustment_signals') AS sig
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY sig ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Top what_hexa_missed
+      pool.query(`
+        SELECT miss AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'what_hexa_missed') AS miss
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY miss ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Top what_hexa_got_right
+      pool.query(`
+        SELECT hit AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'what_hexa_got_right') AS hit
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY hit ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Top key_factors
+      pool.query(`
+        SELECT factor AS text, COUNT(*) AS cnt
+        FROM picks p,
+          jsonb_array_elements_text(p.postmortem->'key_factors') AS factor
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        GROUP BY factor ORDER BY cnt DESC LIMIT 15
+      `, params),
+
+      // Recent postmortems (last 30)
+      pool.query(`
+        SELECT
+          p.id, p.pick, p.result, p.matchup, p.game_date,
+          COALESCE(p.sport,'mlb') AS sport,
+          p.postmortem_summary,
+          p.postmortem_generated_at,
+          p.postmortem->'key_factors' AS key_factors,
+          p.postmortem->'what_hexa_missed' AS what_hexa_missed,
+          p.postmortem->'adjustment_signals' AS adjustment_signals,
+          p.postmortem->'training_takeaway' AS training_takeaway
+        FROM picks p
+        WHERE p.postmortem IS NOT NULL AND p.deleted_at IS NULL ${sportFilter}
+        ORDER BY p.postmortem_generated_at DESC
+        LIMIT 30
+      `, params),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        coverage: {
+          resolved_total: parseInt(coverageRes.rows[0]?.resolved_total ?? 0),
+          postmortem_count: parseInt(coverageRes.rows[0]?.postmortem_count ?? 0),
+        },
+        adjustment_signals: signalsRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        what_hexa_missed:   missesRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        what_hexa_got_right: hitsRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        key_factors:        keyFactorsRes.rows.map(r => ({ text: r.text, count: parseInt(r.cnt) })),
+        recent:             recentRes.rows,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // DELETE /api/picks/:id — elimina un pick individual del historial
 app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   try {

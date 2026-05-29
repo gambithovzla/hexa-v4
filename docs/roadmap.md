@@ -389,7 +389,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | Health check para detectar features faltantes / fecha vieja. Útil pre-training. |
 | S4 | **Telegram channel publisher** | 3 días | Reusa `contentDraftService`, añade adapter `telegramPublisher.js`. Mayor engagement por canal. |
 | S5 | **Newsletter weekly recap via Resend** | 3 días | Reusa email.js + `weekly_recap` content type que ya existe. Tabla `newsletter_subscribers`. |
-| S6 | **Postmortem dashboard cuantitativo** | 2 días | Agregaciones de `picks.postmortem.alert_flags` por hit/miss. Backend (`pick-postmortem.js`) existe; falta UI + endpoint `/api/admin/postmortem-stats`. |
+| S6 | **Postmortem dashboard cuantitativo** | 2 días | ✅ Agregaciones de signals/misses/hits/factors desde `picks.postmortem` JSONB. Endpoint `GET /api/admin/postmortem-stats` + página `/admin/postmortem` + sidebar link. |
 | S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ✅ Cerrado — **Sprint 6b** (2026-05-15). Runbook post-deploy en [admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b). |
 | S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ✅ Promovido y cerrado en **Sprint 7.0**. |
 
@@ -503,7 +503,8 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 - Sprint 5 Props MLB: resolver automático post-game en lifecycle + Brier ≥100 picks por prop_kind + `MLB_PROPS_ML_PUBLIC_ENABLED`.
 - ✅ Brand follow-ups: re-skin `AdminMLControlCenter` + `ParlayArchitect` con League × Kinetic.
 - Sprint 7a: basketball-reference scraper (NBA savant equivalent); `nba_games` + `nba_team_stats` YA en migrate.js; pendiente: `nba_player_stats`.
-- Tier S: S3 audit feature store, S4 Telegram publisher, S5 Newsletter recap, S6 Postmortem dashboard cuantitativo (backend listo, falta UI).
+- ✅ S6 Postmortem dashboard — `GET /api/admin/postmortem-stats` + `PostmortemDashboard.jsx` + sidebar link.
+- Tier S pendiente: S3 audit feature store, S4 Telegram publisher, S5 Newsletter recap.
 - NBA go-live: validación E2E + flip público `NBA_ANALYSIS_ENABLED`.
 - Re-evaluar NHL como siguiente deporte (timing similar a NBA, oct-jun).
 
