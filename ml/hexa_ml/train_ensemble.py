@@ -36,7 +36,7 @@ from .models.ensemble import EnsembleMetaLearner, EnsembleMetrics
 
 logger = logging.getLogger("hexa_ml.train_ensemble")
 
-ENSEMBLE_MARKETS = ("moneyline", "overunder", "runline")
+ENSEMBLE_MARKETS = ("moneyline", "overunder", "runline", "prop")
 
 
 def _now_iso() -> str:

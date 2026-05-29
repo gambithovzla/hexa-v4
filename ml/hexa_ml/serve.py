@@ -200,7 +200,7 @@ class EnsembleRequest(BaseModel):
     three are available; otherwise it should fall back to the Oracle.
     """
 
-    market: str = Field(default="moneyline", pattern="^(moneyline)$")
+    market: str = Field(default="moneyline", pattern="^(moneyline|overunder|runline|prop)$")
     oracle_prob: float = Field(..., ge=0, le=1)
     legacy_prob: float = Field(..., ge=0, le=1)
     python_prob: float = Field(..., ge=0, le=1)
@@ -216,7 +216,7 @@ class EnsembleResponse(BaseModel):
 
 
 class EnsembleRetrainRequest(BaseModel):
-    market: str = Field(default="moneyline", pattern="^(moneyline|all)$")
+    market: str = Field(default="moneyline", pattern="^(moneyline|overunder|runline|prop|all)$")
     min_rows: int = Field(default=50, ge=20, le=10_000)
     force: bool = Field(
         default=False,
@@ -253,7 +253,7 @@ def health() -> HealthResponse:
     registry = get_registry()
     available = [m for m in SUPPORTED_MARKETS if registry.has_artifact(m)]
     ensembles_available = [
-        m for m in ("moneyline", "overunder", "runline") if registry.has_ensemble_artifact(m)
+        m for m in ("moneyline", "overunder", "runline", "prop") if registry.has_ensemble_artifact(m)
     ]
     settings = get_settings()
     art_dir = settings.artifacts_dir.resolve()

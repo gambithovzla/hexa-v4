@@ -221,17 +221,18 @@ def load_ensemble_training_data(
 
     Uses oracle_pick_prob / legacy_pick_prob / python_pick_prob — all in the
     'did the pick win' frame — instead of the old home-win frame. Supports
-    moneyline, overunder, and runline markets.
+    moneyline, overunder, runline, and prop markets.
 
     The target y_true = 1 when the picked side won, computed per market:
       - moneyline : picked team won
       - overunder : total > line (if side='over') or < line (if side='under')
       - runline   : picked side covered -1.5 / +1.5
+      - prop      : picks.result IN ('win', 'won') — requires JOIN on pick_id
 
     Only actual_status='resolved' rows with all three pick-aligned probabilities
     are returned.
     """
-    supported = {"moneyline", "overunder", "runline"}
+    supported = {"moneyline", "overunder", "runline", "prop"}
     if market not in supported:
         raise NotImplementedError(
             f"Ensemble market '{market}' not supported. Supported: {supported}"
@@ -244,32 +245,53 @@ def load_ensemble_training_data(
             "shadow_model_runs lives in Postgres and is not exported to CSV."
         )
 
-    sql = f"""
-        SELECT
-          id,
-          game_pk,
-          game_date,
-          created_at,
-          pick_market_type,
-          pick_side,
-          pick_line,
-          oracle_pick_prob,
-          legacy_pick_prob,
-          python_pick_prob,
-          actual_home_score,
-          actual_away_score,
-          actual_status
-        FROM shadow_model_runs
-        WHERE actual_status = 'resolved'
-          AND pick_market_type = '{market}'
-          AND oracle_pick_prob IS NOT NULL
-          AND legacy_pick_prob IS NOT NULL
-          AND python_pick_prob IS NOT NULL
-        ORDER BY created_at ASC
-    """
-
     engine = create_engine(url)
     try:
+        if market == "prop":
+            sql = """
+                SELECT
+                  smr.id,
+                  smr.game_pk,
+                  smr.game_date,
+                  smr.created_at,
+                  smr.oracle_pick_prob,
+                  smr.legacy_pick_prob,
+                  smr.python_pick_prob,
+                  LOWER(p.result) AS pick_result
+                FROM shadow_model_runs smr
+                JOIN picks p ON p.id = smr.pick_id
+                WHERE smr.actual_status = 'resolved'
+                  AND smr.pick_market_type = 'prop'
+                  AND smr.oracle_pick_prob IS NOT NULL
+                  AND smr.legacy_pick_prob IS NOT NULL
+                  AND smr.python_pick_prob IS NOT NULL
+                  AND LOWER(p.result) IN ('win', 'won', 'loss', 'lost')
+                ORDER BY smr.created_at ASC
+            """
+        else:
+            sql = f"""
+                SELECT
+                  id,
+                  game_pk,
+                  game_date,
+                  created_at,
+                  pick_market_type,
+                  pick_side,
+                  pick_line,
+                  oracle_pick_prob,
+                  legacy_pick_prob,
+                  python_pick_prob,
+                  actual_home_score,
+                  actual_away_score,
+                  actual_status
+                FROM shadow_model_runs
+                WHERE actual_status = 'resolved'
+                  AND pick_market_type = '{market}'
+                  AND oracle_pick_prob IS NOT NULL
+                  AND legacy_pick_prob IS NOT NULL
+                  AND python_pick_prob IS NOT NULL
+                ORDER BY created_at ASC
+            """
         df = pd.read_sql(sql, engine)
     finally:
         engine.dispose()
@@ -277,39 +299,44 @@ def load_ensemble_training_data(
     if df.empty:
         return df
 
-    for col in ("oracle_pick_prob", "legacy_pick_prob", "python_pick_prob",
-                "actual_home_score", "actual_away_score", "pick_line"):
+    for col in ("oracle_pick_prob", "legacy_pick_prob", "python_pick_prob"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
     if df["game_date"].isna().all():
         df["game_date"] = pd.to_datetime(df["created_at"], errors="coerce")
 
-    def _pick_won(row: pd.Series) -> float:
-        hs = row["actual_home_score"]
-        as_ = row["actual_away_score"]
-        side = str(row.get("pick_side") or "").lower()
-        if pd.isna(hs) or pd.isna(as_):
-            return float("nan")
-        if market == "moneyline":
-            home_won = hs > as_
-            return float(home_won if side == "home" else not home_won)
-        if market == "overunder":
-            line = row["pick_line"]
-            if pd.isna(line):
+    if market == "prop":
+        df["y_true"] = df["pick_result"].isin(["win", "won"]).astype(int)
+    else:
+        for col in ("actual_home_score", "actual_away_score", "pick_line"):
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        def _pick_won(row: pd.Series) -> float:
+            hs = row["actual_home_score"]
+            as_ = row["actual_away_score"]
+            side = str(row.get("pick_side") or "").lower()
+            if pd.isna(hs) or pd.isna(as_):
                 return float("nan")
-            total = hs + as_
-            return float(total > line if side == "over" else total < line)
-        if market == "runline":
-            diff = hs - as_
-            # home picked -1.5 → need diff > 1.5; away picked +1.5 → need diff < 1.5
-            return float(diff > 1.5 if side == "home" else diff < 1.5)
-        return float("nan")
+            if market == "moneyline":
+                home_won = hs > as_
+                return float(home_won if side == "home" else not home_won)
+            if market == "overunder":
+                line = row["pick_line"]
+                if pd.isna(line):
+                    return float("nan")
+                total = hs + as_
+                return float(total > line if side == "over" else total < line)
+            if market == "runline":
+                diff = hs - as_
+                # home picked -1.5 → need diff > 1.5; away picked +1.5 → need diff < 1.5
+                return float(diff > 1.5 if side == "home" else diff < 1.5)
+            return float("nan")
 
-    df["y_true"] = df.apply(_pick_won, axis=1)
-    df = df.dropna(subset=["y_true"]).copy()
+        df["y_true"] = df.apply(_pick_won, axis=1)
+        df = df.dropna(subset=["y_true"]).copy()
+
     df["y_true"] = df["y_true"].astype(int)
-
     return df
 
 
