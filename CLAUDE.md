@@ -50,7 +50,7 @@ hexa-v4/
 
 ### LLM / Predicción
 - [server/oracle.js](server/oracle.js) — motor LLM dual (Claude + Grok). **FROZEN.**
-- [server/context-builder.js](server/context-builder.js) — arma payload por partido. **FROZEN.**
+- [server/context-builder.js](server/context-builder.js) — arma payload por partido. Descongelado en Sprint 8d para enriquecimiento Savant: rolling wOBA, CSW%, active spin, attack angle, bat speed, sprint speed, HR/FB en bloques pitcher/batter; avgIP/start del starter; ERA/WHIP por relevista; LHP/RHP handedness; `buildTeamFormBlock`, `buildUmpireBlock`, `buildScheduleFatigueBlock`.
 - [server/market-intelligence.js](server/market-intelligence.js) — `buildDeterministicSafePayload`, `buildValueBreakdown`. **FROZEN.**
 - [server/services/xgboostValidator.js](server/services/xgboostValidator.js) — validador determinístico (no es XGBoost real, es scoring con pesos hardcodeados). **FROZEN.**
 - [server/shadow-model.js](server/shadow-model.js) — runner del validator + persistencia pick-aligned (`pick_market_type`, `python_pick_prob`, `pick_agree_python`, etc.). Bug fix 2026-05-29: `_enrichWithPythonScore` ya no tiene el guard `python_pick_prob == null` que impedía guardar `python_model_score` cuando el sidecar respondía bien — esto causaba que el ensemble tuviera 0 filas elegibles.
@@ -67,11 +67,11 @@ hexa-v4/
 - [server/feature-store.js](server/feature-store.js) — persistencia de features por pick.
 
 ### Datos externos
-- [server/mlb-api.js](server/mlb-api.js) — MLB Stats API wrapper.
+- [server/mlb-api.js](server/mlb-api.js) — MLB Stats API wrapper. Sprint 8d: `getBullpenUsage` ahora incluye `throwingHand` por relevista; nueva `getUmpireForGame(gamePk)` → HP umpire `{id, name}` desde boxscore; nueva `getTeamScheduleFatigue(teamId)` → `{gamesLast7d, consecutiveDaysPlayed, roadGamesLast7d}` desde schedule API.
 - [server/nba-api.js](server/nba-api.js) — NBA Stats API wrapper (`stats.nba.com/stats/`) + ESPN fallback (Railway-friendly). Endpoints: scoreboardv2 (juegos del día), leaguedashteamstats (season stats), teamgamelog (últimos 10 juegos). Exporta también `getNbaLeagueInjuries` + `findTeamInjuries` (ESPN league injury feed, cache 15min, fallback stale). **Nota**: `teamgamelog` no devuelve `PLUS_MINUS` — usa `normalisePlusMinus()` con búsqueda dinámica de headers.
 - [server/nba-odds.js](server/nba-odds.js) — The Odds API `basketball_nba` con dual key fallback. Exporta `getNbaGameOdds`, `matchNbaOddsToGame`, `buildMarketOddsForGame`. Aislado del MLB `odds-api.js` por convención (frozen).
 - [server/nba-context-builder.js](server/nba-context-builder.js) — arma contexto NBA por partido (net/off/def rating, pace, TS%, REB%, AST%, rest days, last-10 form, injuries) y emite `context_meta` (sources, completeness, staleFlags). Lookup por `team_id` con fallback a `team_abbr` para tolerar mismatch ESPN ↔ stats.nba.com.
-- [server/savant-fetcher.js](server/savant-fetcher.js) — Baseball Savant leaderboards (cache 6h).
+- [server/savant-fetcher.js](server/savant-fetcher.js) — Baseball Savant leaderboards (cache 6h). ~33 leaderboards: batting/pitching rolling stats, active spin, attack angle, bat speed, sprint speed, HR/FB, OAA, catcher framing, park factors. Sprint 8d: `umpireScorecard` leaderboard añadido; nueva export `getUmpireStats(name)` — match por apellido → `{accuracy_pct, favor, extra_calls_per_game, k_rate_impact}`.
 - [server/odds-api.js](server/odds-api.js) — The Odds API MLB (dual key fallback).
 - [server/weather-api.js](server/weather-api.js) — Open-Meteo.
 - [server/live-feed.js](server/live-feed.js) — play-by-play MLB.
@@ -176,7 +176,7 @@ Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos 
 Estos archivos están congelados por el brief del Parlay Synergy Engine y por estabilidad del Oracle:
 
 - `server/oracle.js`
-- `server/context-builder.js`
+- `server/context-builder.js` ← descongelado en Sprint 8d para enriquecimiento de contexto Savant; **NO tocar el prompt Oracle en oracle.js ni la lógica de market-intelligence**
 - `server/market-intelligence.js`
 - `server/services/xgboostValidator.js`
 - `server/shadow-model.js` ← modificado para Python score (Sprint 3) y pick-aligned (2026-05); estable salvo bugs explícitos
@@ -383,6 +383,16 @@ Estado del pipeline ML:
   - **Props ensemble**: `data.py` rama especial para `market='prop'` — JOIN con `picks` para `y_true` desde `picks.result`; props pooled (todos los kinds juntos, ~50 filas mínimo para entrenar).
   - **Parlay alt lines**: `extendedMarketCandidates.js` — alt totals capeados a ±2 (era ±4); alt runlines máx ±3.5 (era ±5.5). Rangos realistas para bet365.
   - **Oracle Chat pick null-line**: `chatPickExtractor.js` `normalizeExtracted()` descarta picks `overunder/runline/prop` con `line == null` en vez de guardar el matchup string como texto de pick.
+- ✅ Sprint 8d — **Oracle context enrichment MLB** (2026-05-29):
+  - **Rich Savant pitcher metrics**: rolling wOBA against 7d/14d/21d, CSW% + chase rate, active spin + vertical/horizontal break, HR/FB allowed — surface los datos que el prompt Oracle ya referenciaba por nombre pero nunca recibía.
+  - **Rich Savant batter metrics**: rolling wOBA 7d/14d/21d, attack angle + bat speed + sprint speed, HR/FB + pull% — multi-line por batter en `batterSavantLine()`.
+  - **Starter depth**: `avgIP/start = ip/gamesStarted` en línea ERA del starter — el Oracle ya puede diferenciar entre un ace de 7 innings y un opener.
+  - **Bullpen calidad individual**: top 6 relievers muestran ERA/WHIP en brackets (e.g. `Clase [ERA 1.23 / WHIP 0.89]`) via parallel `getPitcherStats`. ORACLE INSTRUCTION actualizado: bullpen fresco-pero-malo = riesgo OVER.
+  - **Bullpen handedness**: LHP/RHP breakdown en `buildBullpenBlock` — `Hand composition: N RHP / N LHP in bullpen`.
+  - **Umpire integration**: `getUmpireForGame(gamePk)` desde MLB boxscore API; `getUmpireStats(name)` desde Baseball Savant umpire-scorecard leaderboard; `buildUmpireBlock` renderiza nombre + accuracy_pct + favor (pitcher-friendly vs batter-friendly) + extra_calls_per_game.
+  - **Team rolling wOBA**: `buildTeamFormBlock` — lineup avg rolling wOBA 7d/14d/21d por equipo desde Savant batters.
+  - **Schedule fatigue**: `getTeamScheduleFatigue(teamId)` desde schedule API (gamesLast7d, consecutiveDaysPlayed, roadGamesLast7d); `buildScheduleFatigueBlock` advierte al Oracle sobre carga reciente.
+  - **Fetch paralelo**: umpire + home/away fatigue se resuelven en un único `Promise.all` antes del ensamblado del contexto.
 
 **Estado en producción (2026-05-29)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
@@ -492,6 +502,7 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 **Foco docs / ops (2026-05-29)**:
 - **Ensemble**: deploy ML sidecar con los cambios de 8c → reentrenar `all` desde `/admin/ml-control` → verificar que `ensembles_available` en `/health` muestre los 4 mercados cuando haya datos suficientes.
 - **Props ensemble**: el modelo `prop` entrena cuando `shadow_model_runs` tenga ≥50 filas `pick_market_type='prop'` resueltas con los 3 probs. Monitorear en panel "Chat-sourced picks" de `/admin/ml-control`.
+- **Context enrichment (8d)**: deploy hexa-v4 con los cambios de 8d → verificar en análisis real que los bloques UMPIRE, TEAM FORM y SCHEDULE FATIGUE aparecen en el contexto; si Savant umpire-scorecard cambia el CSV header, actualizar `getUmpireStats` en `savant-fetcher.js`.
 - Completar Sprint 5 props: resolver lifecycle + validación Brier; `MLB_PROPS_ML_PUBLIC_ENABLED` cuando pase el gate.
 - NBA: validación E2E en prod con `NBA_ANALYSIS_ENABLED`; equity en bottom nav (menor).
 - Brand: re-skin Admin ML / ParlayArchitect; assets PWA iOS.
