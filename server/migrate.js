@@ -986,3 +986,31 @@ export async function runEnsembleBackfillMigration() {
     throw err;
   }
 }
+
+export async function runNewsletterMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+        id                  BIGSERIAL PRIMARY KEY,
+        email               VARCHAR(255) NOT NULL UNIQUE,
+        unsubscribe_token   VARCHAR(64)  NOT NULL,
+        lang                VARCHAR(5)   NOT NULL DEFAULT 'es',
+        active              BOOLEAN      NOT NULL DEFAULT true,
+        subscribed_at       TIMESTAMP    NOT NULL DEFAULT NOW(),
+        unsubscribed_at     TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_email
+        ON newsletter_subscribers(email)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_active
+        ON newsletter_subscribers(active)
+    `);
+    console.log('[migrate] newsletter_subscribers table ready');
+  } catch (err) {
+    console.error('[migrate] newsletter migrations failed:', err.message);
+    throw err;
+  }
+}

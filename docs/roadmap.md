@@ -388,7 +388,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | ✅ **Cerrado (2026-05-29 audit)** — campo `prompt_version VARCHAR(32)` ya existe en `pick_features` (migrate.js). Llenar el hash desde oracle.js sería mejora opcional, no bloqueante. |
 | S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | ✅ Check 5 en `system-audit.js`: cobertura (resolved vs con features), market_type gaps, stale rows 60d, sport breakdown. |
 | S4 | **Telegram channel publisher** | 3 días | ✅ `telegramPublisher.js` (Bot API, threads encadenados). `contentQueueService` enruta por `publish_target`. Job Telegram independiente en `index.js`. Env: `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`. |
-| S5 | **Newsletter weekly recap via Resend** | 3 días | Reusa email.js + `weekly_recap` content type que ya existe. Tabla `newsletter_subscribers`. |
+| S5 | **Newsletter weekly recap via Resend** | 3 días | ✅ `newsletter_subscribers` table + `newsletterService.js` (subscribe/unsubscribe/send). Endpoints: `POST /api/newsletter/subscribe`, `GET /api/newsletter/unsubscribe`, `GET /api/admin/newsletter/subscribers`, `POST /api/admin/newsletter/send-weekly`. Job semanal domingos 09:00 ET. Env: `NEWSLETTER_ENABLED`. |
 | S6 | **Postmortem dashboard cuantitativo** | 2 días | ✅ Agregaciones de signals/misses/hits/factors desde `picks.postmortem` JSONB. Endpoint `GET /api/admin/postmortem-stats` + página `/admin/postmortem` + sidebar link. |
 | S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ✅ Cerrado — **Sprint 6b** (2026-05-15). Runbook post-deploy en [admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b). |
 | S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ✅ Promovido y cerrado en **Sprint 7.0**. |
@@ -493,7 +493,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q3  Sprint 8e     — Bullpen attribution guardrail    ████████████████████████ ✅
 2026 Q3-4 Sprint 5     — Player Props MLB                 ██████████████░░░░░░░░░░ 🔄 (board + resolver; lifecycle ⏳)
 2026 Q3-4              — NBA go-live público              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (validación E2E pendiente)
-2026 Q3-4              — Tier S: S3/S4/S5/S6             ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2026 Q3-4              — Tier S: S3/S4/S5/S6             ████████████████████████ ✅
 2027 Feb  🎯 MVP NBA público listo para All-Star Break
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
@@ -506,7 +506,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 - ✅ S6 Postmortem dashboard — `GET /api/admin/postmortem-stats` + `PostmortemDashboard.jsx` + sidebar link.
 - ✅ S3 Feature store audit — Check 5 en `system-audit.js`.
 - ✅ S4 Telegram publisher — `telegramPublisher.js` + routing por `publish_target` + job.
-- Tier S pendiente: S5 Newsletter recap.
+- ✅ S5 Newsletter recap — `newsletterService.js` + `newsletter_subscribers` + endpoints + job dominical.
 - NBA go-live: validación E2E + flip público `NBA_ANALYSIS_ENABLED`.
 - Re-evaluar NHL como siguiente deporte (timing similar a NBA, oct-jun).
 

@@ -57,6 +57,7 @@ import mlbPropsRouter from './routes/mlb-props.js';
 import imperdibleRouter from './routes/imperdible.js';
 import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames } from './services/chatPickExtractor.js';
 import { processScheduledContentQueue, processScheduledTelegramQueue } from './services/contentQueueService.js';
+import { subscribeNewsletter, unsubscribeNewsletter, sendWeeklyNewsletter, getSubscribers } from './services/newsletterService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { mountAdminDbExplorer } from './admin-db-explorer.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
@@ -73,7 +74,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNewsletterMigrations } from './migrate.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -3407,6 +3408,60 @@ app.get('/api/admin/postmortem-stats', verifyToken, requireAdmin, async (req, re
   }
 });
 
+// ── Newsletter endpoints ───────────────────────────────────────────────────
+
+// POST /api/newsletter/subscribe — public
+app.post('/api/newsletter/subscribe', async (req, res) => {
+  try {
+    const { email, lang = 'es' } = req.body ?? {};
+    if (!email) return res.status(400).json({ success: false, error: 'email required' });
+    const result = await subscribeNewsletter(email, lang);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    if (err.code === 'INVALID_EMAIL') return res.status(400).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/newsletter/unsubscribe?email=&token= — public (unsubscribe link)
+app.get('/api/newsletter/unsubscribe', async (req, res) => {
+  try {
+    const { email, token } = req.query;
+    if (!email || !token) return res.status(400).json({ success: false, error: 'email and token required' });
+    const result = await unsubscribeNewsletter(email, token);
+    if (!result.ok) return res.status(400).json({ success: false, error: result.reason });
+    res.json({ success: true, message: 'Unsubscribed successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/newsletter/subscribers — admin
+app.get('/api/admin/newsletter/subscribers', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const activeOnly = req.query.active !== '0';
+    const rows = await getSubscribers({ activeOnly });
+    res.json({ success: true, data: rows, total: rows.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/newsletter/send-weekly — admin trigger
+app.post('/api/admin/newsletter/send-weekly', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    if (process.env.NEWSLETTER_ENABLED !== '1') {
+      return res.status(403).json({ success: false, error: 'NEWSLETTER_ENABLED is not set to 1' });
+    }
+    const lang = req.body?.lang ?? 'es';
+    const date = req.body?.date ?? null;
+    const result = await sendWeeklyNewsletter(lang, date);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // DELETE /api/picks/:id — elimina un pick individual del historial
 app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   try {
@@ -4460,6 +4515,7 @@ runMigrations()
   .then(() => runImperdibleMigrations())
   .then(() => runOddsCacheMigrations())
   .then(() => runEnsembleBackfillMigration())
+  .then(() => runNewsletterMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -4627,6 +4683,23 @@ runMigrations()
               console.error('[content-queue] Scheduled publish failed:', err.message);
             });
         }, CONTENT_QUEUE_INTERVAL).unref();
+      }
+
+      if (process.env.NEWSLETTER_ENABLED === '1') {
+        // Weekly newsletter — fires every Sunday between 09:00 and 09:59 ET
+        setInterval(() => {
+          const now = new Date();
+          const dayET  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+          const dow    = dayET.getDay();   // 0 = Sunday
+          const hourET = dayET.getHours();
+          if (dow !== 0 || hourET !== 9) return;
+          ['es', 'en'].forEach((lang) => {
+            sendWeeklyNewsletter(lang, null).catch((err) => {
+              console.error(`[newsletter] weekly send (${lang}) failed:`, err.message);
+            });
+          });
+        }, 60 * 60 * 1000).unref(); // check hourly
+        console.log('[newsletter] Weekly newsletter job scheduled (Sundays 09:00 ET)');
       }
 
       if (process.env.TELEGRAM_ENABLED === '1') {
