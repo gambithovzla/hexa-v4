@@ -311,6 +311,111 @@ async function runAudit() {
     results.push({ label, status, lines });
   }
 
+  // ── CHECK 5: Feature Store health ───────────────────────────────────────────
+
+  {
+    const label = 'Check 5 — Feature Store (pick_features coverage + gaps)';
+    const lines = [];
+    let status  = 'pass';
+
+    try {
+      // 5a. Overall coverage: resolved picks vs picks with at least one feature row
+      const coverageRes = await pool.query(`
+        SELECT
+          COUNT(*)                                        AS total_picks,
+          COUNT(*) FILTER (WHERE deleted_at IS NULL
+            AND result IS NOT NULL AND result != 'pending') AS resolved_picks,
+          COUNT(DISTINCT pf.pick_id)                     AS picks_with_features
+        FROM picks p
+        LEFT JOIN pick_features pf ON pf.pick_id = p.id
+        WHERE p.deleted_at IS NULL
+      `);
+
+      const cov = coverageRes.rows[0];
+      const totalPicks     = parseInt(cov.total_picks, 10);
+      const resolvedPicks  = parseInt(cov.resolved_picks, 10);
+      const withFeatures   = parseInt(cov.picks_with_features, 10);
+      const missingFeatures = Math.max(0, resolvedPicks - withFeatures);
+      const coveragePct    = resolvedPicks > 0 ? ((withFeatures / resolvedPicks) * 100).toFixed(1) : '0';
+
+      lines.push(info(`Total picks: ${totalPicks}  |  Resolved: ${resolvedPicks}  |  With features: ${withFeatures}  |  Coverage: ${coveragePct}%`));
+
+      if (withFeatures === 0) {
+        status = 'warn';
+        lines.push(warn('No pick_features rows found — pick_features table is empty'));
+      } else if (missingFeatures > resolvedPicks * 0.15) {
+        status = 'warn';
+        lines.push(warn(`${missingFeatures} resolved picks lack feature rows (>${Math.round((missingFeatures / resolvedPicks) * 100)}% gap) — run backfill script`));
+      } else {
+        lines.push(ok(`Feature store coverage is ${coveragePct}% of resolved picks`));
+      }
+
+      // 5b. market_type gap (null = pickParser never ran)
+      const marketRes = await pool.query(`
+        SELECT
+          COUNT(*)                                        AS total_rows,
+          COUNT(*) FILTER (WHERE market_type IS NULL)    AS null_market,
+          COUNT(*) FILTER (WHERE market_type = 'moneyline')  AS ml,
+          COUNT(*) FILTER (WHERE market_type = 'overunder')  AS ou,
+          COUNT(*) FILTER (WHERE market_type = 'runline')    AS rl,
+          COUNT(*) FILTER (WHERE market_type = 'prop')       AS prop,
+          COUNT(*) FILTER (WHERE market_type NOT IN ('moneyline','overunder','runline','prop')
+            AND market_type IS NOT NULL)                 AS other_market
+        FROM pick_features
+      `);
+
+      if (marketRes.rowCount > 0) {
+        const m = marketRes.rows[0];
+        const totalRows  = parseInt(m.total_rows, 10);
+        const nullMarket = parseInt(m.null_market, 10);
+        const nullPct    = totalRows > 0 ? ((nullMarket / totalRows) * 100).toFixed(1) : '0';
+
+        lines.push(info(`pick_features rows: ${totalRows}  |  market_type breakdown: ML=${m.ml} O/U=${m.ou} RL=${m.rl} Prop=${m.prop} Other=${m.other_market} Null=${nullMarket} (${nullPct}%)`));
+
+        if (nullMarket > totalRows * 0.2) {
+          status = status === 'fail' ? 'fail' : 'warn';
+          lines.push(warn(`${nullMarket} rows (${nullPct}%) have null market_type — run backfill-pick-features.js`));
+        } else if (nullMarket > 0) {
+          lines.push(info(`${nullMarket} rows with null market_type — minor gap, acceptable`));
+        } else {
+          lines.push(ok('All pick_features rows have market_type parsed'));
+        }
+      }
+
+      // 5c. Stale features: rows not updated in 60+ days (data rot check)
+      const staleRes = await pool.query(`
+        SELECT COUNT(*) AS stale
+        FROM pick_features
+        WHERE created_at < NOW() - INTERVAL '60 days'
+          AND result IS NULL
+      `);
+      const staleCount = parseInt(staleRes.rows[0]?.stale ?? 0, 10);
+      if (staleCount > 0) {
+        status = status === 'fail' ? 'fail' : 'warn';
+        lines.push(warn(`${staleCount} feature rows are 60+ days old with no result — may indicate unresolved stale picks`));
+      } else {
+        lines.push(ok('No stale unresolved feature rows (60d threshold)'));
+      }
+
+      // 5d. Sport isolation: NBA picks should have sport='nba'
+      const sportRes = await pool.query(`
+        SELECT COALESCE(sport,'mlb') AS sport, COUNT(*) AS cnt
+        FROM pick_features
+        GROUP BY COALESCE(sport,'mlb')
+        ORDER BY cnt DESC
+      `);
+      if (sportRes.rowCount > 0) {
+        const breakdown = sportRes.rows.map(r => `${r.sport}=${r.cnt}`).join('  ');
+        lines.push(info(`Sport breakdown in pick_features: ${breakdown}`));
+      }
+    } catch (err) {
+      status = 'fail';
+      lines.push(fail(`Feature store check failed: ${err.message}`));
+    }
+
+    results.push({ label, status, lines });
+  }
+
   // ── Print structured report ──────────────────────────────────────────────────
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);

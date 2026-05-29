@@ -56,7 +56,7 @@ import adminMlRouter from './routes/admin-ml.js';
 import mlbPropsRouter from './routes/mlb-props.js';
 import imperdibleRouter from './routes/imperdible.js';
 import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames } from './services/chatPickExtractor.js';
-import { processScheduledContentQueue } from './services/contentQueueService.js';
+import { processScheduledContentQueue, processScheduledTelegramQueue } from './services/contentQueueService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { mountAdminDbExplorer } from './admin-db-explorer.js';
 import { publishWinningInsightByPickId } from './services/weeklyWinsPublisher.js';
@@ -4627,6 +4627,22 @@ runMigrations()
               console.error('[content-queue] Scheduled publish failed:', err.message);
             });
         }, CONTENT_QUEUE_INTERVAL).unref();
+      }
+
+      if (process.env.TELEGRAM_ENABLED === '1') {
+        const tgIntervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);
+        console.log(`[telegram-queue] Scheduled Telegram autopublish enabled (${tgIntervalMinutes}m cadence)`);
+        setInterval(() => {
+          processScheduledTelegramQueue()
+            .then((results) => {
+              if (results.length > 0) {
+                console.log(`[telegram-queue] Processed ${results.length} item(s)`);
+              }
+            })
+            .catch((err) => {
+              console.error('[telegram-queue] Scheduled publish failed:', err.message);
+            });
+        }, tgIntervalMinutes * 60 * 1000).unref();
       }
     });
   })

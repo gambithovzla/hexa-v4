@@ -1,5 +1,6 @@
 import pool from '../db.js';
 import { publishQueueItemToX } from './xPublisher.js';
+import { publishQueueItemToTelegram, isTelegramConfigured } from './telegramPublisher.js';
 
 const ALLOWED_STATUSES = new Set(['draft', 'approved', 'scheduled', 'published', 'failed']);
 
@@ -179,7 +180,10 @@ export async function publishQueuedContent({ id }) {
   }
 
   try {
-    const publishResult = await publishQueueItemToX(item);
+    const target = item.publish_target ?? 'x';
+    const publishResult = target === 'telegram'
+      ? await publishQueueItemToTelegram(item)
+      : await publishQueueItemToX(item);
     return await markPublishResult({ id, status: 'published', publishResult });
   } catch (err) {
     await markPublishResult({ id, status: 'failed', error: err.message });
@@ -192,6 +196,32 @@ export async function processScheduledContentQueue() {
     `SELECT * FROM content_queue
      WHERE status = 'scheduled'
        AND publish_target = 'x'
+       AND scheduled_for IS NOT NULL
+       AND scheduled_for <= NOW()
+     ORDER BY scheduled_for ASC
+     LIMIT 10`
+  );
+
+  const results = [];
+  for (const row of rows) {
+    try {
+      const published = await publishQueuedContent({ id: row.id });
+      results.push({ id: row.id, status: 'published', item: published });
+    } catch (err) {
+      results.push({ id: row.id, status: 'failed', error: err.message });
+    }
+  }
+
+  return results;
+}
+
+export async function processScheduledTelegramQueue() {
+  if (!isTelegramConfigured()) return [];
+
+  const { rows } = await pool.query(
+    `SELECT * FROM content_queue
+     WHERE status = 'scheduled'
+       AND publish_target = 'telegram'
        AND scheduled_for IS NOT NULL
        AND scheduled_for <= NOW()
      ORDER BY scheduled_for ASC
