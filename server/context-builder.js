@@ -13,6 +13,7 @@ import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
 import { buildOracleMemory } from './oracle-memory.js';
+import { buildSimilarAnalysesBlock } from './services/oracleEmbeddingsService.js';
 
 // ---------------------------------------------------------------------------
 // In-memory context cache — avoids redundant API calls when the same game is
@@ -2105,6 +2106,12 @@ export async function buildContext(gameData, oddsData = null) {
       awayFatigue: awayFatigue ?? null,
     },
   };
+  // A3: RAG — append similar past oracle analyses as calibration signal
+  try {
+    const ragBlock = await buildSimilarAnalysesBlock(homeName, awayName, gameData.gamePk ?? null);
+    if (ragBlock) contextString += ragBlock;
+  } catch (_) {}
+
   _contextCache.set(cacheKey, { context: contextString, _features: result._features, timestamp: Date.now() });
   console.log(`[context-builder] Cache SET for ${cacheKey} (total cached: ${_contextCache.size})`);
   return result;

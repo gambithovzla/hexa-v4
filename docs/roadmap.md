@@ -398,9 +398,9 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
 | A1 | **F5 (First 5 innings) market** | ~1 semana | ✅ Parser reconoce `F5` en texto (f5_moneyline, f5_over, f5_under). Resolver calcula scores inning 1-5 con `computeF5Scores(innings)`. UI: opciones `⚾ F5 Moneyline` y `⚾ F5 Over/Under` en BetTypeSelect. |
-| A2 | **FanGraphs ZiPS scraper** (Python en sidecar ML) | ~1 semana | Inyecta proyecciones rest-of-season como features. Gratis (scraping legal). Mejora calibración del modelo entrenado. |
-| A3 | **pgvector + embeddings de oracle_report** | ~1.5 semanas | RAG: antes de analizar un juego, recupera 5 análisis pasados similares (mismos pitchers, mismas condiciones). Necesita pgvector extension. |
-| A4 | **Player Props dedicated UI** | ~1 semana | 🔄 Parcial — `/props` + board API en main. Falta: rollout público ML scores, filtros avanzados, polish UX. |
+| A2 | **FanGraphs ZiPS scraper** (Python en sidecar ML) | ~1 semana | ✅ `ml/hexa_ml/fangraphs_scraper.py` (httpx + BeautifulSoup, 4 endpoints: zips/dc × bat/pit, 6h cache). Integrado en `serve.py`: `POST /fangraphs/refresh`, `GET /fangraphs/pitcher/{name}`, `GET /fangraphs/batter/{name}`. |
+| A3 | **pgvector + embeddings de oracle_report** | ~1.5 semanas | ✅ `oracleEmbeddingsService.js` (OpenAI text-embedding-3-small, `OPENAI_EMBED_API_KEY`); tabla `pick_embeddings (vector(1536))`; background job 15min; `buildSimilarAnalysesBlock` inyectado en `context-builder.js`; admin endpoints `GET /api/admin/embeddings/stats` + `POST /api/admin/embeddings/backfill`. Degrada gracefully si pgvector no disponible. |
+| A4 | **Player Props dedicated UI** | ~1 semana | ✅ `PlayerPropsPage.jsx` — player name search filter, Savant stats toggle (xBA/xSLG/wOBA 7d columns), ML model% coloreado. |
 | A5 | **Rate limit per-user con tiers** | 3 días | ✅ `peekJwtPayload` (jwt.decode sin verificar, solo bucketing). Tiers: admin=1000/min, paid=20/min, free=8/min, anon=4/min. `keyGenerator` usa `user:${id}` o `ip:${req.ip}`. |
 | A6 | **Migrar a node-pg-migrate o Drizzle** | ~1 semana | Versionado real de schema, rollback, diff. Más limpio que IF NOT EXISTS embebido. |
 | A7 | **Backtest con CSV upload** | ~1 semana | ✅ `backtestCsvImporter.js`: parseo CSV (sin deps externas), resolución por `resolvePickFromFinalState`, persiste en `csv_backtest_runs`. Endpoints: `POST /api/admin/backtest/import-csv` + `GET /api/admin/backtest/csv-runs`. dryRun mode para preview. |
@@ -412,15 +412,15 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
 | B1 | **Expansión NBA** | 10-14 semanas | ⬆️ Promovido a **Sprint 7** (a-e). Ver [sección 2](#-sprint-7--expansión-nba-scaffolding--mvp-q4-2026--q1-2027-10-14-semanas). Pre-requisito MLB ML ya está en producción. |
-| B2 | **Hexa Live (in-play WP + momentum alerts)** | 2-3 semanas | Infra de WebSocket (cliente al server), polling agresivo MLB Stats, WP model, momentum detection (bullpen fatigue + consecutive hard contacts). Alertas push web. |
+| B2 | **Hexa Live (in-play WP + momentum alerts)** | 2-3 semanas | ✅ SSE endpoint `GET /api/games/:gamePk/live/stream` — polling GUMBO cada POLL_MS (5-60s), emite eventos `update` con live game state. Auth-gated. Frontend component pendiente. |
 | B3 | **Discord bot** | 1-2 semanas | ✅ `discordBot.js` (discord.js v14). Slash commands: `/today` (slate picks), `/pick`, `/futures`, `/injuries`. Auto-post via `publish_target='discord'` en content queue. `startDiscordBot()` on startup cuando `DISCORD_ENABLED=1`. Env: `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DISCORD_CHANNEL_ID`. |
 | B4 | **Threads (Meta) publisher** | 1-2 semanas | ✅ `threadsPublisher.js` (Graph API v1.0). 2-step create container → publish. `processScheduledThreadsQueue()` en contentQueueService, job cadenciado como X/Telegram. Env: `THREADS_ENABLED`, `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`. |
-| B5 | **Feature flags reales** (GrowthBook self-hosted) | 1 semana | Reemplaza env vars como toggles. Permite A/B test de prompts y modelos por % de usuarios. |
+| B5 | **Feature flags reales** (GrowthBook self-hosted) | 1 semana | ✅ `featureFlagsService.js` — DB-backed flags en tabla `feature_flags` (key, enabled, rollout_pct, metadata). Cache 60s. Rollout % hash-estable por userId. Admin CRUD: `GET/PUT/DELETE /api/admin/feature-flags/:key`. No requiere servicio externo. |
 | B6 | **Observability (Sentry + structured logging con pino)** | 1 semana | ✅ `server/logger.js` (pino, pretty en dev / NDJSON en prod). `server/observability.js` (Sentry init + error handler, feature-flagged por `SENTRY_DSN`). Global Express error handler + `sentryErrorHandler()` en index.js. Env: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `LOG_LEVEL`. |
 | B7 | **Migración a BullMQ + Redis** | 1 semana | Reemplaza `setInterval`. Necesario antes de escalar a 2+ instancias del server. |
 | B8 | **Infografías auto-generadas** | 1.5 semanas | ✅ `infographicsService.js`: SVG puro (sin puppeteer). `generatePickCardSvg` (400×220) + `generateSlateSvg` (slate multi-pick). Endpoints: `GET /api/picks/:id/infographic` + `GET /api/mlb/slate-infographic?date=`. Devuelve `image/svg+xml` cacheable. |
 | B9 | **Hexa Scout (futures + prospect call-ups)** | 1.5 semanas | ✅ `hexaScoutService.js`: `getMlbFutures` (WS/AL/NL winner desde Odds API outrights), `getMlbTransactions` (call-ups, IL, DFA desde MLB Stats API). Endpoints: `GET /api/mlb/futures`, `GET /api/mlb/transactions`. |
-| B10 | **Player Props alternate lines + resolver multi-line** | 1.5 semanas | Necesita parsing más complejo del Odds API + UI con dropdown de líneas. |
+| B10 | **Player Props alternate lines + resolver multi-line** | 1.5 semanas | ✅ `GET /api/mlb/props/alt-lines?eventId=&player=` — agrupa todas las líneas disponibles (main + alt) por player+propKind. Auth-gated. UI pendiente. |
 | B11 | **CI/CD GitHub Actions completa** | 1 semana | ✅ `.github/workflows/ci.yml`: unit tests (`node --test` todos los `__tests__/*.test.js`) + client build en PRs y push a main. Combina con el existing `mlb-smoke.yml` + `retrain-weekly.yml`. |
 
 ### Tier C — Vale la pena pero no ahora

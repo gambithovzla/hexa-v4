@@ -76,9 +76,11 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
+import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
+import { getAllFlags, upsertFlag, deleteFlag } from './services/featureFlagsService.js';
 import { generatePickCardSvg, generateSlateSvg } from './services/infographicsService.js';
 import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
 import { startDiscordBot } from './services/discordBot.js';
@@ -3631,6 +3633,63 @@ app.post('/api/admin/injury-signals/scan', verifyToken, requireAdmin, async (req
   }
 });
 
+// ── Oracle Embeddings (A3) ───────────────────────────────────────────────────
+
+// GET /api/admin/embeddings/stats
+app.get('/api/admin/embeddings/stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const stats = await getEmbeddingsStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/embeddings/backfill — embed all eligible picks
+app.post('/api/admin/embeddings/backfill', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const batchSize = Number(req.body?.batchSize ?? 100);
+    const result = await embedPendingPicks(Math.min(batchSize, 500));
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Feature Flags (B5) ───────────────────────────────────────────────────────
+
+// GET /api/admin/feature-flags
+app.get('/api/admin/feature-flags', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const flags = await getAllFlags();
+    res.json({ success: true, data: flags });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// PUT /api/admin/feature-flags/:key
+app.put('/api/admin/feature-flags/:key', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { enabled, rollout_pct, metadata } = req.body ?? {};
+    await upsertFlag({ key, enabled: Boolean(enabled), rollout_pct: rollout_pct ?? 100, metadata: metadata ?? {} });
+    res.json({ success: true, key });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// DELETE /api/admin/feature-flags/:key
+app.delete('/api/admin/feature-flags/:key', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    await deleteFlag(req.params.key);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // DELETE /api/picks/:id — elimina un pick individual del historial
 app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   try {
@@ -4696,6 +4755,8 @@ runMigrations()
   .then(() => runNewsletterMigrations())
   .then(() => runBeatReporterMigrations())
   .then(() => runCsvBacktestMigrations())
+  .then(() => runPgvectorMigrations())
+  .then(() => runFeatureFlagsMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -4905,6 +4966,13 @@ runMigrations()
       if (process.env.DISCORD_ENABLED === '1') {
         startDiscordBot().catch(err => console.error('[discord] Startup failed:', err.message));
       }
+
+      // A3: background embedding job — embeds new oracle_reports every 15 min
+      setInterval(() => {
+        embedPendingPicks(20)
+          .then(r => { if (r.embedded) console.log(`[embeddings] ${r.embedded} new picks embedded`); })
+          .catch(err => console.warn(`[embeddings] background job failed: ${err.message}`));
+      }, 15 * 60 * 1000).unref();
 
       if (process.env.TELEGRAM_ENABLED === '1') {
         const tgIntervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);

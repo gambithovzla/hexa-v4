@@ -1119,3 +1119,47 @@ export async function runBeatReporterMigrations() {
     throw err;
   }
 }
+
+export async function runPgvectorMigrations() {
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pick_embeddings (
+        id          BIGSERIAL   PRIMARY KEY,
+        pick_id     BIGINT      NOT NULL REFERENCES picks(id) ON DELETE CASCADE,
+        embedding   vector(1536),
+        model       VARCHAR(64) NOT NULL DEFAULT 'text-embedding-3-small',
+        embedded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(pick_id)
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pick_embeddings_pick_id
+        ON pick_embeddings(pick_id)
+    `);
+    console.log('[migrate] pick_embeddings table ready');
+    // IVFFlat index requires at least 1 row — create lazily after first embed
+  } catch (err) {
+    // pgvector not installed — RAG similarity search will be skipped silently
+    console.warn(`[migrate] pgvector unavailable: ${err.message}. RAG disabled.`);
+  }
+}
+
+export async function runFeatureFlagsMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS feature_flags (
+        key          VARCHAR(128) PRIMARY KEY,
+        enabled      BOOLEAN      NOT NULL DEFAULT false,
+        rollout_pct  INT          NOT NULL DEFAULT 100 CHECK (rollout_pct BETWEEN 0 AND 100),
+        metadata     JSONB        NOT NULL DEFAULT '{}',
+        created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('[migrate] feature_flags table ready');
+  } catch (err) {
+    console.error('[migrate] feature flags migrations failed:', err.message);
+    throw err;
+  }
+}
