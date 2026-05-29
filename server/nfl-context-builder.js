@@ -1,0 +1,290 @@
+/**
+ * nfl-context-builder.js — assembles a rich game context payload for NFL picks.
+ *
+ * Mirrors nba-context-builder.js, scoped to NFL. Consumes nfl-api.js for team
+ * stats (standings-derived), recent form, and ESPN injuries, plus Open-Meteo for
+ * outdoor weather. Always returns a `context_meta` block exposing data freshness
+ * and completeness so the admin UI and downstream guards can gate on quality.
+ *
+ * NFL-specific shape vs NBA:
+ *   - rest/short-week/off-bye derived from the schedule (weekly cadence)
+ *   - QB availability surfaced explicitly from injuries (the dominant variable)
+ *   - weather (wind/cold) for non-dome home venues; domes are weather-neutral
+ *   - EPA/success/PROE fields are present but null until the nflverse fetcher (9b+)
+ */
+
+import {
+  getNflTeamStats,
+  getNflTeamRecentGames,
+  getNflLeagueInjuries,
+  findTeamInjuries,
+} from './nfl-api.js';
+import { resolveNflTeamId, getNflTeam, getNflStadium } from './nfl-team-map.js';
+
+function diffDays(fromDateStr, toDateStr) {
+  if (!fromDateStr || !toDateStr) return null;
+  const a = new Date(fromDateStr);
+  const b = new Date(toDateStr);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  return Math.round((b - a) / (1000 * 60 * 60 * 24));
+}
+
+function recentFormSummary(games) {
+  if (!games?.length) return null;
+  const wins = games.filter(g => g.result === 'W').length;
+  const losses = games.filter(g => g.result === 'L').length;
+  const ties = games.filter(g => g.result === 'T').length;
+  const pf = games.filter(g => g.points_for != null);
+  const pa = games.filter(g => g.points_against != null);
+  const avg = arr => (arr.length ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10 : null);
+  return {
+    record: `${wins}-${losses}${ties ? `-${ties}` : ''}`,
+    avgPointsFor: avg(pf.map(g => g.points_for)),
+    avgPointsAgainst: avg(pa.map(g => g.points_against)),
+    games: games.map(g => ({
+      date: g.game_date,
+      opponent: g.opponent,
+      homeAway: g.home_away,
+      result: g.result,
+      pointsFor: g.points_for,
+      pointsAgainst: g.points_against,
+    })),
+  };
+}
+
+function rankInjuriesBySeverity(injuries) {
+  const order = { out_for_season: 0, out: 1, doubtful: 2, questionable: 3, game_time_decision: 4, probable: 5, day_to_day: 6, unknown: 7 };
+  return [...injuries].sort((a, b) => (order[a.statusKey] ?? 99) - (order[b.statusKey] ?? 99));
+}
+
+function summariseInjuries(record) {
+  if (!record || !Array.isArray(record.injuries)) {
+    return { ok: false, count: 0, items: [], severeCount: 0, qbStatus: null };
+  }
+  const items = rankInjuriesBySeverity(record.injuries);
+  const severeCount = items.filter(i => ['out', 'doubtful', 'out_for_season'].includes(i.statusKey)).length;
+  // QB is the dominant NFL variable — surface the most severe QB injury, if any.
+  const qb = items.find(i => String(i.position).toUpperCase() === 'QB');
+  const qbStatus = qb ? { playerName: qb.playerName, status: qb.status, statusKey: qb.statusKey } : null;
+  return { ok: true, count: items.length, items, severeCount, qbStatus };
+}
+
+function fractionPresent(...vals) {
+  const total = vals.length || 1;
+  const present = vals.filter(v => v != null).length;
+  return Math.round((present / total) * 100) / 100;
+}
+
+// ── Weather (Open-Meteo direct; weather-api.js is MLB-coupled/frozen) ──────────
+
+function nflWeatherFlags(temp, wind, precip) {
+  const flags = [];
+  if (wind != null) {
+    if (wind > 20)      flags.push(`HIGH WIND ${wind}mph — suppresses passing & long FGs, favor UNDER/run`);
+    else if (wind > 15) flags.push(`WIND ${wind}mph — modest passing/kicking impact`);
+  }
+  if (temp != null) {
+    if (temp < 20)      flags.push(`EXTREME COLD ${temp}°F — ball-handling/passing degraded, favor UNDER`);
+    else if (temp < 32) flags.push(`FREEZING ${temp}°F — run-leaning script likely`);
+  }
+  if (precip != null && precip > 60) flags.push(`PRECIP ${precip}% — ball security risk, favor UNDER/run`);
+  return flags;
+}
+
+async function fetchNflWeather({ lat, lon, gameTime }) {
+  if (lat == null || lon == null) return null;
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${lat}&longitude=${lon}` +
+      `&hourly=temperature_2m,windspeed_10m,winddirection_10m,precipitation_probability,weathercode` +
+      `&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=auto&forecast_days=2`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let data;
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+    const times = data.hourly?.time ?? [];
+    if (!times.length) return null;
+    const gameHour = gameTime ? new Date(gameTime).getHours() : 13;
+    let idx = times.findIndex(t => new Date(t).getHours() >= gameHour);
+    if (idx === -1) idx = times.length - 1;
+    const temp = data.hourly.temperature_2m?.[idx] ?? null;
+    const wind = data.hourly.windspeed_10m?.[idx] ?? null;
+    const precip = data.hourly.precipitation_probability?.[idx] ?? null;
+    return {
+      temperature: temp,
+      windSpeed: wind,
+      windDirection: data.hourly.winddirection_10m?.[idx] ?? null,
+      precipitationProbability: precip,
+      weatherCode: data.hourly.weathercode?.[idx] ?? null,
+      analysis: nflWeatherFlags(temp, wind, precip),
+    };
+  } catch (err) {
+    console.warn(`[nfl-context] weather fetch failed: ${err.message}`);
+    return null;
+  }
+}
+
+function lookupTeamStats(teamStats, teamId, teamAbbr) {
+  if (!Array.isArray(teamStats) || teamStats.length === 0) return null;
+  if (teamId != null) {
+    const byId = teamStats.find(t => String(t.team_id) === String(teamId));
+    if (byId) return byId;
+  }
+  if (teamAbbr) {
+    const byAbbr = teamStats.find(t => String(t.team_abbr).toUpperCase() === String(teamAbbr).toUpperCase());
+    if (byAbbr) return byAbbr;
+  }
+  return null;
+}
+
+function buildTeamBlock(stats, recentGames, injuries, teamId, teamAbbr, gameDate) {
+  const meta = getNflTeam({ teamId, teamAbbr }) ?? {};
+  const lastGame = recentGames[0] ?? null;
+  const rest = diffDays(lastGame?.game_date, gameDate);
+  return {
+    teamId: teamId ?? null,
+    teamAbbr: stats?.team_abbr ?? teamAbbr ?? meta.abbr ?? null,
+    teamName: stats?.team_name ?? meta.name ?? null,
+    conference: stats?.conference ?? meta.conference ?? null,
+    division: stats?.division ?? meta.division ?? null,
+    record: stats ? `${stats.wins ?? 0}-${stats.losses ?? 0}${stats.ties ? `-${stats.ties}` : ''}` : null,
+    pointsForPerGame: stats?.ppg_for ?? null,
+    pointsAgainstPerGame: stats?.ppg_against ?? null,
+    pointDiff: stats?.point_diff ?? null,
+    // nflverse-sourced (null until advanced fetcher):
+    epaOff: stats?.epa_off ?? null,
+    epaDef: stats?.epa_def ?? null,
+    successRateOff: stats?.success_rate_off ?? null,
+    successRateDef: stats?.success_rate_def ?? null,
+    proe: stats?.proe ?? null,
+    pace: stats?.pace_sec_play ?? null,
+    restDays: rest,
+    isShortWeek: rest != null ? rest <= 5 : null,
+    isOffBye: rest != null ? rest >= 13 : null,
+    recentForm: recentFormSummary(recentGames),
+    injuries,
+    qbStatus: injuries.qbStatus,
+  };
+}
+
+/**
+ * buildNflGameContext({ homeTeamId, awayTeamId, homeTeamAbbr, awayTeamAbbr, gameDate, gameTime?, season?, marketOdds? })
+ *
+ * Returns { season, gameDate, home, away, weather, context_meta }.
+ */
+export async function buildNflGameContext({
+  homeTeamId,
+  awayTeamId,
+  homeTeamAbbr = null,
+  awayTeamAbbr = null,
+  gameDate,
+  gameTime = null,
+  season = null,
+  marketOdds = null,
+}) {
+  const startedAt = Date.now();
+
+  const homeId = resolveNflTeamId({ teamId: homeTeamId, teamAbbr: homeTeamAbbr });
+  const awayId = resolveNflTeamId({ teamId: awayTeamId, teamAbbr: awayTeamAbbr });
+  const stadium = getNflStadium({ teamId: homeId, teamAbbr: homeTeamAbbr });
+  const isDome = stadium?.dome === true;
+
+  const [teamStats, homeGames, awayGames, injuriesPayload, weather] = await Promise.all([
+    getNflTeamStats(season).catch(err => {
+      console.warn(`[nfl-context] team stats failed: ${err.message}`);
+      return [];
+    }),
+    getNflTeamRecentGames(homeId, season, 6).catch(err => {
+      console.warn(`[nfl-context] home recent games failed: ${err.message}`);
+      return [];
+    }),
+    getNflTeamRecentGames(awayId, season, 6).catch(err => {
+      console.warn(`[nfl-context] away recent games failed: ${err.message}`);
+      return [];
+    }),
+    getNflLeagueInjuries().catch(err => {
+      console.warn(`[nfl-context] injuries failed: ${err.message}`);
+      return { byTeamId: {}, byAbbr: {}, fetchedAt: null, source: 'unavailable', stale: true };
+    }),
+    isDome
+      ? Promise.resolve(null)
+      : fetchNflWeather({ lat: stadium?.lat, lon: stadium?.lon, gameTime }),
+  ]);
+
+  const homeStats = lookupTeamStats(teamStats, homeId, homeTeamAbbr);
+  const awayStats = lookupTeamStats(teamStats, awayId, awayTeamAbbr);
+
+  const homeInjuries = summariseInjuries(findTeamInjuries(injuriesPayload, { teamId: homeId, teamAbbr: homeTeamAbbr }));
+  const awayInjuries = summariseInjuries(findTeamInjuries(injuriesPayload, { teamId: awayId, teamAbbr: awayTeamAbbr }));
+
+  const home = buildTeamBlock(homeStats, homeGames, homeInjuries, homeId, homeTeamAbbr, gameDate);
+  const away = buildTeamBlock(awayStats, awayGames, awayInjuries, awayId, awayTeamAbbr, gameDate);
+
+  const weatherBlock = isDome
+    ? { dome: true, stadium: stadium?.stadium ?? null, neutral: true, analysis: [] }
+    : weather
+      ? { dome: false, stadium: stadium?.stadium ?? null, ...weather }
+      : { dome: false, stadium: stadium?.stadium ?? null, neutral: false, unavailable: true, analysis: [] };
+
+  const staleFlags = [];
+  if (!homeStats) staleFlags.push('home_team_stats_missing');
+  if (!awayStats) staleFlags.push('away_team_stats_missing');
+  if (!homeGames.length) staleFlags.push('home_recent_games_missing');
+  if (!awayGames.length) staleFlags.push('away_recent_games_missing');
+  if (injuriesPayload.source === 'unavailable') staleFlags.push('injuries_unavailable');
+  else if (injuriesPayload.stale) staleFlags.push('injuries_stale');
+  if (!homeInjuries.qbStatus && !awayInjuries.qbStatus) { /* no QB flags = healthy starters assumed */ }
+  if (!isDome && (!weather)) staleFlags.push('weather_unavailable');
+  if (!marketOdds) staleFlags.push('market_odds_missing');
+
+  const completeness = {
+    teamStats: fractionPresent(homeStats, awayStats),
+    recentForm: fractionPresent(homeGames.length ? 1 : null, awayGames.length ? 1 : null),
+    injuries: injuriesPayload.source === 'espn' ? 1 : 0,
+    weather: isDome ? 1 : (weather ? 1 : 0),
+    marketOdds: marketOdds ? 1 : 0,
+  };
+  const overall = +(
+    (completeness.teamStats * 0.35 +
+     completeness.recentForm * 0.25 +
+     completeness.injuries * 0.20 +
+     completeness.weather * 0.10 +
+     completeness.marketOdds * 0.10).toFixed(2)
+  );
+
+  const context_meta = {
+    generatedAt: new Date().toISOString(),
+    durationMs: Date.now() - startedAt,
+    teamIds: {
+      home: { input: homeTeamId ?? null, resolved: homeId ?? null },
+      away: { input: awayTeamId ?? null, resolved: awayId ?? null },
+    },
+    sources: {
+      teamStats: { ok: !!(homeStats && awayStats), source: 'espn-standings', n: teamStats.length },
+      recentForm: { ok: !!(homeGames.length && awayGames.length), source: 'espn', n: { home: homeGames.length, away: awayGames.length } },
+      injuries: {
+        ok: injuriesPayload.source === 'espn',
+        source: injuriesPayload.source,
+        stale: !!injuriesPayload.stale,
+        fetchedAt: injuriesPayload.fetchedAt,
+        count: { home: homeInjuries.count, away: awayInjuries.count },
+        severe: { home: homeInjuries.severeCount, away: awayInjuries.severeCount },
+        qb: { home: homeInjuries.qbStatus, away: awayInjuries.qbStatus },
+      },
+      weather: { ok: isDome || !!weather, source: isDome ? 'dome' : (weather ? 'open-meteo' : 'unavailable'), dome: isDome },
+      marketOdds: { ok: !!marketOdds, source: marketOdds?.source ?? null, provided: marketOdds ? (marketOdds.provided ?? 'server') : null },
+    },
+    completeness,
+    overallCompleteness: overall,
+    staleFlags,
+  };
+
+  return { season, gameDate, home, away, weather: weatherBlock, context_meta };
+}
