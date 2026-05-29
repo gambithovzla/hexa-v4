@@ -84,7 +84,6 @@ import { getAllFlags, upsertFlag, deleteFlag } from './services/featureFlagsServ
 import { getJobQueueStats, purgeOldJobs } from './services/jobQueueService.js';
 import { generatePickCardSvg, generateSlateSvg } from './services/infographicsService.js';
 import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
-import { startDiscordBot } from './services/discordBot.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -560,7 +559,7 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // ── Sentry: init before routes ────────────────────────────────────────────────
-initSentry(app);
+initSentry(app).catch(() => {});
 
 // ── CORS: strict origin (must be first) ───────────────────────────────────────
 app.use(cors({
@@ -4997,7 +4996,11 @@ runMigrations()
       }
 
       if (process.env.DISCORD_ENABLED === '1') {
-        startDiscordBot().catch(err => console.error('[discord] Startup failed:', err.message));
+        // Lazy import keeps discord.js out of the boot graph — a missing
+        // package only matters when the bot is explicitly enabled.
+        import('./services/discordBot.js')
+          .then(({ startDiscordBot }) => startDiscordBot())
+          .catch(err => console.error('[discord] Startup failed:', err.message));
       }
 
       // A3: background embedding job — embeds new oracle_reports every 15 min
