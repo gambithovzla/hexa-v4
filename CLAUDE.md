@@ -526,13 +526,15 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 - Historial, logos, resolver, jobs, dataset admin y shadow runs aislados por `sport`. ✅
 - Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
-**Foco docs / ops (2026-05-29)**:
+**Foco docs / ops (2026-05-29, post-B2/B10)**:
+- **B2 Hexa Live SSE** ✅: `LiveTracker.jsx` migrado a SSE per-game. Descubrimiento cada 3 min + EventSource por gamePk (evento `message` default, cadencia 15s). `HexaLiveStream.jsx` eliminado. Lag real ~1-2s vs 30s anterior.
+- **B10 Alt lines UI** ✅: `AltLinesModal.jsx` + botón en `PlayerPropsPage.jsx` ya estaban completos; roadmap sincronizado.
 - **Ensemble**: deploy ML sidecar con los cambios de 8c → reentrenar `all` desde `/admin/ml-control` → verificar que `ensembles_available` en `/health` muestre los 4 mercados cuando haya datos suficientes.
 - **Props ensemble**: el modelo `prop` entrena cuando `shadow_model_runs` tenga ≥50 filas `pick_market_type='prop'` resueltas con los 3 probs. Monitorear en panel "Chat-sourced picks" de `/admin/ml-control`.
 - **Context enrichment (8d)**: deploy hexa-v4 con los cambios de 8d → verificar en análisis real que los bloques UMPIRE, TEAM FORM y SCHEDULE FATIGUE aparecen en el contexto; si Savant umpire-scorecard cambia el CSV header, actualizar `getUmpireStats` en `savant-fetcher.js`.
 - Completar Sprint 5 props: resolver lifecycle + validación Brier; `MLB_PROPS_ML_PUBLIC_ENABLED` cuando pase el gate.
 - NBA: validación E2E en prod con `NBA_ANALYSIS_ENABLED`; equity en bottom nav (menor).
-- Brand: re-skin Admin ML / ParlayArchitect; assets PWA iOS.
+- **Próximo**: NFL Sprint 9 (tercer deporte). Todo el Tier A + B está cerrado en código y frontend — no hay más pendientes de UI.
 
 **Shadow dashboard — lectura de fechas**:
 - Columna **Hora Lima** = `pick_time_lima` / `created_at` (cuándo se corrió el análisis).

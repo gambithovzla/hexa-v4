@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-29 — Sprint 8f: Railway hardening + Node 20 (observability/email/discord lazy imports, `server/.nvmrc`, `NIXPACKS_NODE_VERSION=20`, ML sidecar fangraphs defensive import, httpx+bs4 en runtime deps). Sprint 8e: bullpen attribution guardrail. Sprint 8d: Oracle context enrichment MLB (rich Savant, umpire, team form, schedule fatigue). Sprint 8c: ensemble multi-mercado + props + parlay alt lines.
+**Última actualización**: 2026-05-29 — B2 + B10 frontend cerrados: `LiveTracker` migrado de batch poll 30s a SSE per-game (`/api/games/:gamePk/live/stream`); `AltLinesModal` + `PlayerPropsPage` ya completos (estaban cerrados en código, roadmap desactualizado). `HexaLiveStream.jsx` (roto/huérfano) eliminado. Sprint 8f anterior: Railway hardening + Node 20.
 
 ---
 
@@ -440,7 +440,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
 | B1 | **Expansión NBA** | 10-14 semanas | ⬆️ Promovido a **Sprint 7** (a-e). Ver [sección 2](#-sprint-7--expansión-nba-scaffolding--mvp-q4-2026--q1-2027-10-14-semanas). Pre-requisito MLB ML ya está en producción. |
-| B2 | **Hexa Live (in-play WP + momentum alerts)** | 2-3 semanas | ✅ SSE endpoint `GET /api/games/:gamePk/live/stream` — polling GUMBO cada POLL_MS (5-60s), emite eventos `update` con live game state. Auth-gated. Frontend component pendiente. |
+| B2 | **Hexa Live (in-play WP + momentum alerts)** | 2-3 semanas | ✅ **Frontend cerrado (2026-05-29)**. SSE endpoint `GET /api/games/:gamePk/live/stream`. `LiveTracker.jsx` migrado: descubrimiento de juegos cada 3 min + EventSource individual por gamePk (evento `message` default, cadencia ~15s). `HexaLiveStream.jsx` (roto/huérfano) eliminado. |
 | B3 | **Discord bot** | 1-2 semanas | ✅ `discordBot.js` (discord.js v14). Slash commands: `/today` (slate picks), `/pick`, `/futures`, `/injuries`. Auto-post via `publish_target='discord'` en content queue. `startDiscordBot()` on startup cuando `DISCORD_ENABLED=1`. Env: `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DISCORD_CHANNEL_ID`. |
 | B4 | **Threads (Meta) publisher** | 1-2 semanas | ✅ `threadsPublisher.js` (Graph API v1.0). 2-step create container → publish. `processScheduledThreadsQueue()` en contentQueueService, job cadenciado como X/Telegram. Env: `THREADS_ENABLED`, `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`. |
 | B5 | **Feature flags reales** (GrowthBook self-hosted) | 1 semana | ✅ `featureFlagsService.js` — DB-backed flags en tabla `feature_flags` (key, enabled, rollout_pct, metadata). Cache 60s. Rollout % hash-estable por userId. Admin CRUD: `GET/PUT/DELETE /api/admin/feature-flags/:key`. No requiere servicio externo. |
@@ -448,7 +448,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | B7 | **Migración a BullMQ + Redis** | 1 semana | ✅ `jobQueueService.js` — Postgres-backed job queue (no Redis). `job_queue` table: type/payload/status/priority/attempts/scheduled_at/error. `enqueueJob` (dedupe), `dequeueJob` (FOR UPDATE SKIP LOCKED), `markJobDone/Failed`, `purgeOldJobs`. Admin endpoints: `GET /api/admin/jobs`, `POST /api/admin/jobs/purge`. Weekly purge job en index.js. Escala a múltiples workers via SKIP LOCKED. |
 | B8 | **Infografías auto-generadas** | 1.5 semanas | ✅ `infographicsService.js`: SVG puro (sin puppeteer). `generatePickCardSvg` (400×220) + `generateSlateSvg` (slate multi-pick). Endpoints: `GET /api/picks/:id/infographic` + `GET /api/mlb/slate-infographic?date=`. Devuelve `image/svg+xml` cacheable. |
 | B9 | **Hexa Scout (futures + prospect call-ups)** | 1.5 semanas | ✅ `hexaScoutService.js`: `getMlbFutures` (WS/AL/NL winner desde Odds API outrights), `getMlbTransactions` (call-ups, IL, DFA desde MLB Stats API). Endpoints: `GET /api/mlb/futures`, `GET /api/mlb/transactions`. |
-| B10 | **Player Props alternate lines + resolver multi-line** | 1.5 semanas | ✅ `GET /api/mlb/props/alt-lines?eventId=&player=` — agrupa todas las líneas disponibles (main + alt) por player+propKind. Auth-gated. UI pendiente. |
+| B10 | **Player Props alternate lines + resolver multi-line** | 1.5 semanas | ✅ **Completo (2026-05-29 audit)**. `GET /api/mlb/props/alt-lines?eventId=&player=`, `AltLinesModal.jsx` (modal por player+propKind con todas las líneas main+alt), montado en `PlayerPropsPage.jsx`. El roadmap lo listaba como "UI pendiente" pero ya estaba cerrado en código. |
 | B11 | **CI/CD GitHub Actions completa** | 1 semana | ✅ `.github/workflows/ci.yml`: unit tests (`node --test` todos los `__tests__/*.test.js`) + client build en PRs y push a main. Combina con el existing `mlb-smoke.yml` + `retrain-weekly.yml`. |
 
 ### Tier C — Vale la pena pero no ahora
@@ -520,6 +520,8 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q3  Sprint 8d     — Oracle context enrichment MLB    ████████████████████████ ✅
 2026 Q3  Sprint 8e     — Bullpen attribution guardrail    ████████████████████████ ✅
 2026 Q3  Sprint 8f     — Railway hardening + Node 20      ████████████████████████ ✅
+2026 Q3  B2            — Hexa Live SSE (LiveTracker)      ████████████████████████ ✅
+2026 Q3  B10           — Alt lines UI (AltLinesModal)     ████████████████████████ ✅
 2026 Q3-4 Sprint 5     — Player Props MLB                 ██████████████░░░░░░░░░░ 🔄 (board + resolver; lifecycle ⏳)
 2026 Q3-4              — NBA go-live público              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (validación E2E pendiente)
 2026 Q3-4              — Tier S: S3/S4/S5/S6             ████████████████████████ ✅
@@ -527,15 +529,16 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
 
-**Próximo en cola** (actualizado 2026-05-29, post-8f — plataforma estable en prod):
+**Próximo en cola** (actualizado 2026-05-29, post-B2/B10 frontend):
 - ✅ Sprint 8f Railway hardening — tres servicios Online, Node 20 activo, emails operativos.
-- ✅ A1–A9, B2–B11 completados. Todos los Tier A y Tier B cerrados en código.
+- ✅ A1–A9, B2–B11 completados. Todos los Tier A y Tier B cerrados en código y en frontend.
+- ✅ B2 Hexa Live UI — `LiveTracker` SSE per-game (2026-05-29). Lag real ~1-2s vs 30s antes.
+- ✅ B10 Alt lines UI — `AltLinesModal` + botón en `PlayerPropsPage` (ya estaba cerrado en código; roadmap sincronizado).
 - **Pendiente ops**:
   - Props ML gate: acumular ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
-  - NBA validación E2E en prod con tráfico real → `NBA_ANALYSIS_ENABLED=true` si ya está activo.
+  - NBA validación E2E en prod con tráfico real → flip `NBA_ANALYSIS_ENABLED=true`.
   - Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
   - `OPENAI_EMBED_API_KEY` → activa RAG (pgvector embeddings de oracle_report en contexto).
-- **Pendiente frontend**: B2 Hexa Live UI (SSE client en HexaBoard), B10 alt lines UI dropdown.
 - **Próximo deporte**: NFL (Sprint 9) — spec en [docs/nfl-architecture.md](nfl-architecture.md), roadmap en [docs/nfl-roadmap.md](nfl-roadmap.md). Arranque verano 2026.
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).
