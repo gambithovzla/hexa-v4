@@ -77,9 +77,10 @@ hexa-v4/
 - [server/live-feed.js](server/live-feed.js) — play-by-play MLB.
 
 ### Auth, payments, comms
-- [server/auth.js](server/auth.js) — JWT custom, bcryptjs, email verification, password reset, bankroll.
+- [server/auth.js](server/auth.js) — JWT custom, bcryptjs, email verification, password reset, bankroll. `bankrollRouter` incluye `GET /api/bankroll/equity-stats` (auth.js:851) — equity curve + Sharpe + drawdown por usuario.
 - [server/middleware/auth-middleware.js](server/middleware/auth-middleware.js) — `verifyToken`, `requireVerifiedEmail`, `isAdmin`.
 - [server/nowpayments.js](server/nowpayments.js) + [server/nowpayments-webhook.js](server/nowpayments-webhook.js) — checkout cripto + IPN HMAC-SHA512.
+- [server/plans.js](server/plans.js) — fuente de verdad de credit packs vendidos vía NowPayments (planId, precio, créditos a otorgar).
 - [server/email.js](server/email.js) — Resend client.
 
 ### Content pipeline X
@@ -105,6 +106,16 @@ hexa-v4/
 ### Admin
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
 - Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
+- [server/services/mlModelHealth.js](server/services/mlModelHealth.js) — observabilidad del sidecar ML: estado por mercado, modelos cargados, runline early-model flag, ensemble disponibilidad. Usado en HUD de `/admin/ml-control`.
+- [server/services/backtestRegrader.js](server/services/backtestRegrader.js) — lógica de re-grading de props en `backtest_results`. Compartida entre el script CLI (`scripts/regrade-backtest-props.js`) y el endpoint admin del dashboard.
+- [server/services/public-stats.js](server/services/public-stats.js) — cálculo puro de ROI/performance summary público. Reutilizado por `GET /api/picks/public-stats` y el Content API (`/api/content/v1/performance/summary`).
+
+### Servicios de datos adicionales
+- [server/services/hexaSmartSignalsService.js](server/services/hexaSmartSignalsService.js) — generadores de señales rule-based para la Pizarra del Día (MLB). Sin ML ni LLM: funciones determinísticas sobre datos MLB API.
+- [server/services/hexaNbaBoardService.js](server/services/hexaNbaBoardService.js) — NBA "pizarra del día" (lightweight board). Misma forma de respuesta que `buildHexaBoard()` para que `HexaBoard` pueda renderizar con `sport=nba`.
+- [server/services/mlbPropShadow.js](server/services/mlbPropShadow.js) — shadow model para MLB props. Usa `mlModelClient.js` para predicciones `prop_hits`, `prop_strikeouts`, etc.; alimenta el feature store de props.
+- [server/services/xaiClient.js](server/services/xaiClient.js) — cliente HTTP para la API de xAI (Grok). Usado por `oracle.js` en modo dual-engine. **No tocar**: frozen junto al oracle.
+- [server/services/nbaOutputGuard.js](server/services/nbaOutputGuard.js) — validación de salida Oracle NBA antes de persistir: rechaza picks ambiguos, player props, ABSTAIN; degrada con `alert_flags` si faltan campos secundarios. (También documentado en sección NBA Oracle.)
 
 ### NBA Oracle
 - [server/services/oracleNba.js](server/services/oracleNba.js) — Motor LLM NBA (Anthropic only, sin Grok). Exporta `analyzeNbaGame` y `analyzeNbaChat`. **No toca oracle.js.** `serializeNbaContext` renderiza injuries por equipo y un bloque `DATA QUALITY` cuando `context_meta` reporta `staleFlags`/completeness < 100%.
@@ -393,8 +404,13 @@ Estado del pipeline ML:
   - **Team rolling wOBA**: `buildTeamFormBlock` — lineup avg rolling wOBA 7d/14d/21d por equipo desde Savant batters.
   - **Schedule fatigue**: `getTeamScheduleFatigue(teamId)` desde schedule API (gamesLast7d, consecutiveDaysPlayed, roadGamesLast7d); `buildScheduleFatigueBlock` advierte al Oracle sobre carga reciente.
   - **Fetch paralelo**: umpire + home/away fatigue se resuelven en un único `Promise.all` antes del ensamblado del contexto.
+  - **_features exporta campos 8d**: `umpireData`, `umpireStats`, `homeFatigue`, `awayFatigue` para observabilidad en `annotateAnalysisData`.
+- ✅ Sprint 8e — **Bullpen attribution guardrail** (2026-05-29):
+  - `buildBullpenBlock` incluye `[TeamName]` en línea CRITICAL/MODERATE/LOW para prevenir confusión LLM.
+  - `annotateAnalysisData` detecta mismatch entre `alert_flags` (equipo correcto) y `oracle_report` (equipo incorrecto); añade `⚠ DATA CHECK (server)` si se detecta inversión.
+  - `buildAnalysisMeta` + trace flag extendidos: `RollingW N/2`, `BatRolling N/2`, `Umpire ✓/✗`, `Fatigue N/2`.
 
-**Estado en producción (2026-05-29)**:
+**Estado en producción (2026-05-29, post-audit)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
 - Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".

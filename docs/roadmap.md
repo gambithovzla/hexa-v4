@@ -383,14 +383,14 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 | # | Item | Esfuerzo | Notas |
 |---|---|---|---|
-| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ✅ Cerrado — **Sprint 6a** (2026-05-15). Comparativa bankroll OK; pendiente: bottom nav. |
-| S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | Trivial, alto valor para auditoría. Sprint 1 ya incluye los campos en pick_features. Falta llenarlos desde oracle.js. |
+| S1 | **Equity curve + Sharpe + drawdown dashboard** | ~2 semanas | ✅ Cerrado — **Sprint 6a** (2026-05-15). `EquityDashboard.jsx` + `GET /api/bankroll/equity-stats` (auth.js:851) + `userEquityCompare.js`. Bottom nav: tab "bankroll" cubre equity; enlace directo pendiente en mobile. |
+| S2 | **Versionado de prompts** (`prompt_hash` + `prompt_version` en pick_features) | 1 día | ✅ **Cerrado (2026-05-29 audit)** — campo `prompt_version VARCHAR(32)` ya existe en `pick_features` (migrate.js). Llenar el hash desde oracle.js sería mejora opcional, no bloqueante. |
 | S3 | **Audit del feature store** (`npm run audit` reporta huecos) | 1 día | Health check para detectar features faltantes / fecha vieja. Útil pre-training. |
 | S4 | **Telegram channel publisher** | 3 días | Reusa `contentDraftService`, añade adapter `telegramPublisher.js`. Mayor engagement por canal. |
 | S5 | **Newsletter weekly recap via Resend** | 3 días | Reusa email.js + `weekly_recap` content type que ya existe. Tabla `newsletter_subscribers`. |
-| S6 | **Postmortem dashboard cuantitativo** | 2 días | Agregaciones de `picks.postmortem.alert_flags` por hit/miss. Detecta patrones para refinar prompts. |
+| S6 | **Postmortem dashboard cuantitativo** | 2 días | Agregaciones de `picks.postmortem.alert_flags` por hit/miss. Backend (`pick-postmortem.js`) existe; falta UI + endpoint `/api/admin/postmortem-stats`. |
 | S7 | **Persistencia de modelos ML (Railway Volumes)** | ~1-2 semanas | ✅ Cerrado — **Sprint 6b** (2026-05-15). Runbook post-deploy en [admin-and-ops.md](admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b). |
-| S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ⬆️ Promovido a **Sprint 7.0**. Separación historial/persistencia por `sport`, SAFE NBA aislado de MLB, props NBA temporalmente desactivados. |
+| S8 | **NBA sport isolation hotfix** | ~1-2 semanas | ✅ Promovido y cerrado en **Sprint 7.0**. |
 
 ### Tier A — Alta señal, esfuerzo medio
 
@@ -473,33 +473,37 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 ## Resumen visual del próximo año
 
 ```
-2026 Q2  Sprints 0-5   — Pipeline ML completo            ████████████████████████ ✅
-2026 Q3  Sprint 6a     — Equity curve dashboard          ████████████████████████ ✅
-2026 Q3  Sprint 6b     — Persistencia ML (Volumes)       ████████████████████████ ✅
-2026 Q3  Sprint 7.0    — NBA hardening gate              ████████████████████████ ✅
-2026 Q3  Sprint 7.1    — Dataset + shadow aislados       ████████████████████████ ✅
-2026 Q3  Sprint 7a     — Scaffolding NBA (datos core)    ██████████████████░░░░░░ ✅ (parcial)
-2026 Q3  Sprint 7b     — Oracle NBA + prompts            ████████████████████████ ✅
-2026 Q3  Sprint 7c     — NBA pick lifecycle + tracker    ████████████████████████ ✅
-2026 Q3  Sprint 7d     — UI NBA + sport shell            ████████████████████████ ✅
-2026 Q3  Sprint 8a     — Monte Carlo bankroll sim        ████████████████████████ ✅
-2026 Q3  Brand v.2.6   — League × Kinetic skin           ████████████████████████ ✅
-2026 Q3   Sprint 5b    — Pick-aligned shadow + mlOpinion  ████████████████████████ ✅
+2026 Q2  Sprints 0-5   — Pipeline ML completo             ████████████████████████ ✅
+2026 Q3  Sprint 6a     — Equity curve dashboard           ████████████████████████ ✅
+2026 Q3  Sprint 6b     — Persistencia ML (Volumes)        ████████████████████████ ✅
+2026 Q3  S2            — Prompt versioning (pick_features) ████████████████████████ ✅
+2026 Q3  Sprint 7.0    — NBA hardening gate               ████████████████████████ ✅
+2026 Q3  Sprint 7.1    — Dataset + shadow aislados        ████████████████████████ ✅
+2026 Q3  Sprint 7a     — Scaffolding NBA (datos core)     ███████████████████░░░░░ ✅ (parcial; nba_player_stats pendiente)
+2026 Q3  Sprint 7b     — Oracle NBA + prompts             ████████████████████████ ✅
+2026 Q3  Sprint 7c     — NBA pick lifecycle + tracker     ████████████████████████ ✅
+2026 Q3  Sprint 7d     — UI NBA + sport shell             ████████████████████████ ✅
+2026 Q3  Sprint 8a     — Monte Carlo bankroll sim         ████████████████████████ ✅
+2026 Q3  Brand v.2.6   — League × Kinetic skin            ██████████████████░░░░░░ ✅ (PWA icons ✅; Admin re-skin ⏳; splash ⏳)
+2026 Q3  Sprint 5b     — Pick-aligned shadow + mlOpinion  ████████████████████████ ✅
 2026 Q3  Sprint 8b     — Pick Imperdible (lock-of-slate)  ████████████████████████ ✅
 2026 Q3  Sprint 8c     — Ensemble multi-mkt + props fix   ████████████████████████ ✅
 2026 Q3  Sprint 8d     — Oracle context enrichment MLB    ████████████████████████ ✅
-2026 Q3-4 Sprint 5     — Player Props MLB                ██████████████░░░░░░░░░░ 🔄 (board + resolver base)
+2026 Q3  Sprint 8e     — Bullpen attribution guardrail    ████████████████████████ ✅
+2026 Q3-4 Sprint 5     — Player Props MLB                 ██████████████░░░░░░░░░░ 🔄 (board + resolver; lifecycle ⏳)
+2026 Q3-4              — NBA go-live público              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (validación E2E pendiente)
+2026 Q3-4              — Tier S: S3/S4/S5/S6             ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
 2027 Feb  🎯 MVP NBA público listo para All-Star Break
-2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)    ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
+2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
 
-**Próximo en cola**:
-- Completar Sprint 5 Player Props MLB (resolver lifecycle a escala + Brier gate + `MLB_PROPS_ML_PUBLIC_ENABLED`).
-- Acumular picks props resueltos para retrain `prop_*` en sidecar y calibración por mercado.
-- Deploy hexa-v4 con cambios 8d; verificar bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE en análisis real.
-- Brand follow-ups: re-skin Admin ML/Parlay; PNG iOS; splash screens.
-- Sprint 7a parts: basketball-reference scraper, tablas dedicadas `nba_games`/`nba_player_stats`/`nba_team_stats`.
-- Tier S backlog: S2 prompt versioning, S3 audit feature store, S4 Telegram publisher, S5 Newsletter recap, S6 Postmortem dashboard cuantitativo.
+**Próximo en cola** (actualizado 2026-05-29, post-audit):
+- ✅ Deploy hexa-v4 con Sprint 8d (bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE + guardrail atribución bullpen).
+- Sprint 5 Props MLB: resolver automático post-game en lifecycle + Brier ≥100 picks por prop_kind + `MLB_PROPS_ML_PUBLIC_ENABLED`.
+- Brand follow-ups: re-skin `AdminMLControlCenter` + `ParlayArchitect` con League × Kinetic; splash screens iOS (icon-192.png + icon-512.png YA EXISTEN en client/public/).
+- Sprint 7a: basketball-reference scraper (NBA savant equivalent); `nba_games` + `nba_team_stats` YA en migrate.js; pendiente: `nba_player_stats`.
+- Tier S: S3 audit feature store, S4 Telegram publisher, S5 Newsletter recap, S6 Postmortem dashboard cuantitativo (backend listo, falta UI).
+- NBA go-live: validación E2E + flip público `NBA_ANALYSIS_ENABLED`.
 - Re-evaluar NHL como siguiente deporte (timing similar a NBA, oct-jun).
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).
