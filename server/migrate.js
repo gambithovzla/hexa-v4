@@ -1058,3 +1058,64 @@ export async function runNewsletterMigrations() {
     throw err;
   }
 }
+
+export async function runCsvBacktestMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS csv_backtest_runs (
+        id          BIGSERIAL    PRIMARY KEY,
+        run_id      VARCHAR(128) NOT NULL,
+        matchup     TEXT         NOT NULL,
+        pick        TEXT         NOT NULL,
+        result      VARCHAR(16)  NOT NULL,
+        home_score  REAL,
+        away_score  REAL,
+        game_date   DATE,
+        confidence  REAL,
+        notes       TEXT,
+        created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_csv_backtest_runs_run_id
+        ON csv_backtest_runs(run_id)
+    `);
+    console.log('[migrate] csv_backtest_runs table ready');
+  } catch (err) {
+    console.error('[migrate] csv backtest migrations failed:', err.message);
+    throw err;
+  }
+}
+
+export async function runBeatReporterMigrations() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS beat_injury_signals (
+        id                BIGSERIAL    PRIMARY KEY,
+        tweet_id          VARCHAR(64)  NOT NULL UNIQUE,
+        reporter_handle   VARCHAR(64)  NOT NULL,
+        reporter_team     VARCHAR(8),
+        tweet_text        TEXT         NOT NULL,
+        tweet_created_at  TIMESTAMPTZ,
+        signal            VARCHAR(16)  NOT NULL DEFAULT 'none',
+        player_name       VARCHAR(128),
+        team_abbr         VARCHAR(8),
+        confidence        REAL         NOT NULL DEFAULT 0,
+        summary           VARCHAR(256),
+        classified_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_beat_injury_signals_team
+        ON beat_injury_signals(team_abbr, classified_at DESC)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_beat_injury_signals_signal
+        ON beat_injury_signals(signal, classified_at DESC)
+    `);
+    console.log('[migrate] beat_injury_signals table ready');
+  } catch (err) {
+    console.error('[migrate] beat reporter migrations failed:', err.message);
+    throw err;
+  }
+}

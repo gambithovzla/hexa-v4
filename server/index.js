@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
+import { initSentry, sentryErrorHandler } from './observability.js';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -56,7 +58,7 @@ import adminMlRouter from './routes/admin-ml.js';
 import mlbPropsRouter from './routes/mlb-props.js';
 import imperdibleRouter from './routes/imperdible.js';
 import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames } from './services/chatPickExtractor.js';
-import { processScheduledContentQueue, processScheduledTelegramQueue } from './services/contentQueueService.js';
+import { processScheduledContentQueue, processScheduledTelegramQueue, processScheduledThreadsQueue } from './services/contentQueueService.js';
 import { subscribeNewsletter, unsubscribeNewsletter, sendWeeklyNewsletter, getSubscribers } from './services/newsletterService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
 import { mountAdminDbExplorer } from './admin-db-explorer.js';
@@ -74,7 +76,12 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations } from './migrate.js';
+import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
+import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
+import { generatePickCardSvg, generateSlateSvg } from './services/infographicsService.js';
+import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
+import { startDiscordBot } from './services/discordBot.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import {
   getNbaGamesForDate,
@@ -549,6 +556,9 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
+// ── Sentry: init before routes ────────────────────────────────────────────────
+initSentry(app);
+
 // ── CORS: strict origin (must be first) ───────────────────────────────────────
 app.use(cors({
   origin: ['https://hexaoracle.lat', 'https://www.hexaoracle.lat', 'http://localhost:5173', /\.vercel\.app$/],
@@ -584,9 +594,30 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // ── Strict rate limiting for analysis endpoints (consume Anthropic API) ───────
+// Tiers (per minute): admin=unlimited, paid=20, free=8, anon=4
+// Uses jwt.decode (no sig verification) for bucketing — auth gate is still verifyToken.
+const ANALYSIS_LIMITS = { admin: 1000, paid: 20, free: 8, anon: 4 };
+
+function peekJwtPayload(req) {
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return null;
+  try { return jwt.decode(token); } catch { return null; }
+}
+
 const analysisLimiter = rateLimit({
-  windowMs: 60 * 1000,   // 1 minute window
-  max: 10,               // max 10 analysis requests per minute per IP
+  windowMs: 60 * 1000,
+  max: (req) => {
+    const payload = peekJwtPayload(req);
+    if (!payload) return ANALYSIS_LIMITS.anon;
+    if (payload.is_admin) return ANALYSIS_LIMITS.admin;
+    if (payload.plan && payload.plan !== 'free') return ANALYSIS_LIMITS.paid;
+    return ANALYSIS_LIMITS.free;
+  },
+  keyGenerator: (req) => {
+    const payload = peekJwtPayload(req);
+    return payload?.id ? `user:${payload.id}` : `ip:${req.ip}`;
+  },
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many analysis requests. Please wait a moment.' },
@@ -887,6 +918,29 @@ app.get('/api/mlb/playoffs', async (req, res) => {
     const season = Number.parseInt(req.query.season, 10) || new Date().getFullYear();
     const bracket = await getMlbPlayoffBracket(season);
     res.json({ success: true, data: bracket });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Hexa Scout — futures + transactions (B9) ─────────────────────────────────
+
+// GET /api/mlb/futures — MLB futures odds from The Odds API
+app.get('/api/mlb/futures', verifyToken, async (req, res) => {
+  try {
+    const data = await getMlbFutures();
+    res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/mlb/transactions — recent roster moves (call-ups, IL, DFA, etc.)
+app.get('/api/mlb/transactions', verifyToken, async (req, res) => {
+  try {
+    const days = Math.min(14, Math.max(1, Number(req.query.days ?? 3)));
+    const data = await getMlbTransactions(days);
+    res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -3462,6 +3516,91 @@ app.post('/api/admin/newsletter/send-weekly', verifyToken, requireAdmin, async (
   }
 });
 
+// GET /api/picks/:id/infographic — SVG pick card (B8)
+app.get('/api/picks/:id/infographic', verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, matchup, pick, confidence, result, sport, created_at
+       FROM picks WHERE id = $1 AND deleted_at IS NULL`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Pick not found' });
+    const svg = generatePickCardSvg(rows[0]);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(svg);
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/mlb/slate-infographic?date=YYYY-MM-DD — SVG slate overview (B8)
+app.get('/api/mlb/slate-infographic', verifyToken, async (req, res) => {
+  try {
+    const date = req.query.date ?? new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const { rows } = await pool.query(
+      `SELECT matchup, pick, confidence, result, created_at
+       FROM picks
+       WHERE game_date = $1 AND deleted_at IS NULL AND COALESCE(sport,'mlb') = 'mlb'
+       ORDER BY confidence DESC NULLS LAST
+       LIMIT 10`,
+      [date]
+    );
+    const svg = generateSlateSvg({ picks: rows, date });
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(svg);
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/backtest/import-csv — evaluate historical picks from CSV (A7)
+app.post('/api/admin/backtest/import-csv', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { csv, label, dryRun = false } = req.body ?? {};
+    if (!csv || typeof csv !== 'string') {
+      return res.status(400).json({ success: false, error: 'csv field (string) required' });
+    }
+    const result = await importBacktestCsv({ csv, label, dryRun: !!dryRun });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/backtest/csv-runs — list past CSV backtest runs
+app.get('/api/admin/backtest/csv-runs', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 20)));
+    const runs = await listCsvBacktestRuns({ limit });
+    res.json({ success: true, data: runs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/admin/injury-signals — recent beat reporter injury signals
+app.get('/api/admin/injury-signals', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { team, hours = 24 } = req.query;
+    const signals = await getRecentInjurySignals({ teamAbbr: team, hoursBack: Number(hours), limit: 100 });
+    res.json({ success: true, data: signals, total: signals.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// POST /api/admin/injury-signals/scan — trigger manual beat reporter scan
+app.post('/api/admin/injury-signals/scan', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await runBeatReporterScan();
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // DELETE /api/picks/:id — elimina un pick individual del historial
 app.delete('/api/picks/:id', verifyToken, async (req, res) => {
   try {
@@ -4503,6 +4642,14 @@ app.post('/api/admin/feature-store/backfill', verifyToken, async (req, res) => {
   }
 });
 
+// ── Global error handler (Sentry + JSON response) ────────────────────────────
+app.use(sentryErrorHandler());
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  console.error(`[express] Unhandled error ${req.method} ${req.path}:`, err.message);
+  res.status(err.status ?? 500).json({ success: false, error: safeError(err) });
+});
+
 runMigrations()
   .then(() => runParlaySynergyMigrations())
   .then(() => runSprint1Migrations())
@@ -4517,6 +4664,8 @@ runMigrations()
   .then(() => runEnsembleBackfillMigration())
   .then(() => runNbaPlayerStatsMigrations())
   .then(() => runNewsletterMigrations())
+  .then(() => runBeatReporterMigrations())
+  .then(() => runCsvBacktestMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -4701,6 +4850,30 @@ runMigrations()
           });
         }, 60 * 60 * 1000).unref(); // check hourly
         console.log('[newsletter] Weekly newsletter job scheduled (Sundays 09:00 ET)');
+      }
+
+      if (process.env.BEAT_REPORTER_ENABLED === '1') {
+        console.log('[beat-reporter] Hourly injury signal scan enabled');
+        setInterval(() => {
+          runBeatReporterScan()
+            .then(r => {
+              if (r.signals > 0) console.log(`[beat-reporter] Scan done: ${r.processed} tweets, ${r.signals} signals`);
+            })
+            .catch(err => console.error('[beat-reporter] Scan failed:', err.message));
+        }, 60 * 60 * 1000).unref();
+      }
+
+      if (process.env.THREADS_ENABLED === '1') {
+        const threadsInterval = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);
+        setInterval(() => {
+          processScheduledThreadsQueue()
+            .then(r => { if (r.length) console.log(`[threads-queue] Processed ${r.length} item(s)`); })
+            .catch(err => console.error('[threads-queue] Publish failed:', err.message));
+        }, threadsInterval * 60 * 1000).unref();
+      }
+
+      if (process.env.DISCORD_ENABLED === '1') {
+        startDiscordBot().catch(err => console.error('[discord] Startup failed:', err.message));
       }
 
       if (process.env.TELEGRAM_ENABLED === '1') {
