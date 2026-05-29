@@ -149,6 +149,7 @@ const ENDPOINTS = {
     'https://baseballsavant.mlb.com/leaderboard/pitch-movement?year=2025&type=pitcher&min=q&csv=true',
     'https://baseballsavant.mlb.com/leaderboard/custom?year=2025&type=pitcher&filter=&sort=4&sortDir=desc&min=q&selections=pfx_x,pfx_z,spin_rate&chart=false&csv=true',
   ],
+  umpireScorecard: 'https://baseballsavant.mlb.com/leaderboard/umpire-scorecard?type=hp&min=10&year=2025&csv=true',
 };
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ let _cache = {
   pitcherPositioning: null,
   activeSpin:        null,
   pitchMovement:     null,
+  umpireScorecard:   null,
   lastUpdated:       0,
   yearsLoaded:       [],
 };
@@ -359,6 +361,7 @@ async function loadAll() {
     'swingPath',
     'batTracking', 'catcherPopTime', 'outfieldJump', 'armStrength',
     'ninetyFtSplits', 'pitcherPositioning', 'activeSpin', 'pitchMovement',
+    'umpireScorecard',
   ];
 
   const fetches = KEYS.map(key => {
@@ -372,6 +375,15 @@ async function loadAll() {
         .then(rows => ({ rows, yearsLoaded: [2025] }))
         .catch(err => {
           console.warn(`[savant] parkFactors: ${err.message}`);
+          return { rows: [], yearsLoaded: [] };
+        });
+    }
+    if (key === 'umpireScorecard') {
+      // Fixed current-season URL — fetch once, not multi-year
+      return fetchCSV(endpoint)
+        .then(rows => ({ rows, yearsLoaded: [2025] }))
+        .catch(err => {
+          console.warn(`[savant] umpireScorecard: ${err.message}`);
           return { rows: [], yearsLoaded: [] };
         });
     }
@@ -411,7 +423,8 @@ async function loadAll() {
     `rp7d: ${c.rollingPitcher7d.length}, rp14d: ${c.rollingPitcher14d.length}, rp21d: ${c.rollingPitcher21d.length}, ` +
     `swingPath: ${c.swingPath.length}, ` +
     `batTracking: ${c.batTracking.length}, catcherPopTime: ${c.catcherPopTime.length}, outfieldJump: ${c.outfieldJump.length}, armStrength: ${c.armStrength.length}, ` +
-    `90ft: ${c.ninetyFtSplits.length}, pitcherPos: ${c.pitcherPositioning.length}, activeSpin: ${c.activeSpin.length}, pitchMovement: ${c.pitchMovement.length}`
+    `90ft: ${c.ninetyFtSplits.length}, pitcherPos: ${c.pitcherPositioning.length}, activeSpin: ${c.activeSpin.length}, pitchMovement: ${c.pitchMovement.length}, ` +
+    `umpireScorecard: ${c.umpireScorecard.length}`
   );
   console.log(`[savant] Year breakdown: ${JSON.stringify(Object.fromEntries([...newCache.yearsLoaded].map(y => [y, 'loaded'])))}`);
 }
@@ -841,6 +854,43 @@ export async function getOutfieldJump(playerName) {
   };
 }
 
+/**
+ * Returns historical zone stats for a home plate umpire by name (last name match).
+ * Fields: name, accuracy_pct, favor (positive = pitcher-friendly, negative = batter-friendly),
+ * extra_calls_per_game (positive = more strikes than avg), k_rate_impact.
+ * Returns null if umpire not found in leaderboard.
+ */
+export async function getUmpireStats(umpireName) {
+  await ensureCache();
+  if (!_cache.umpireScorecard?.length || !umpireName) return null;
+
+  const searchName = String(umpireName).trim().toLowerCase();
+  const lastName = searchName.split(' ').pop();
+
+  const row = _cache.umpireScorecard.find(r => {
+    const rowName = String(r['umpire_name'] ?? r['last_name, first_name'] ?? r['name'] ?? '').toLowerCase();
+    return rowName.includes(lastName) || rowName.includes(searchName);
+  });
+
+  if (!row) return null;
+
+  const toNum = (keys) => {
+    for (const k of keys) {
+      const v = parseFloat(row[k] ?? '');
+      if (!isNaN(v)) return v;
+    }
+    return null;
+  };
+
+  return {
+    name: row['umpire_name'] ?? row['name'] ?? umpireName,
+    accuracy_pct:         toNum(['accuracy_pct', 'correct_call_rate', 'accuracy']),
+    favor:                toNum(['favor', 'favor_home', 'pitcher_favor']),
+    extra_calls_per_game: toNum(['extra_calls_per_game', 'extra_calls', 'calls_above_avg']),
+    zone_size:            toNum(['zone_size', 'strike_zone_size', 'zone_pct']),
+  };
+}
+
 /** Forces a full cache refresh regardless of TTL. Returns getCacheStatus() after refresh. */
 export async function refreshCache() {
   _cache.lastUpdated = 0;
@@ -891,6 +941,7 @@ export function getCacheStatus() {
       pitcherPositioning: _cache.pitcherPositioning?.length ?? 0,
       activeSpin:         _cache.activeSpin?.length         ?? 0,
       pitchMovement:      _cache.pitchMovement?.length      ?? 0,
+      umpireScorecard:    _cache.umpireScorecard?.length    ?? 0,
     },
   };
 }

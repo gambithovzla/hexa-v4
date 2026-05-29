@@ -1005,6 +1005,7 @@ export async function getBullpenUsage(teamId) {
             relieversMap.set(pid, {
               id: pid,
               name: player.person?.fullName ?? `Player ${pid}`,
+              throwingHand: player.person?.pitchHand?.code ?? null,
               appearances: [],
             });
           }
@@ -1057,6 +1058,21 @@ export async function getBullpenUsage(teamId) {
       };
     });
 
+    // Enrich top relievers (by recent usage) with season ERA/WHIP — parallel, non-blocking
+    const topRelievers = [...relievers]
+      .sort((a, b) => b.totalIP_last3d - a.totalIP_last3d)
+      .slice(0, 6);
+    await Promise.all(topRelievers.map(async (r) => {
+      if (!r.id) return;
+      try {
+        const result = await getPitcherStats(r.id);
+        if (result?.stats) {
+          r.seasonEra  = result.stats.era  ?? null;
+          r.seasonWhip = result.stats.whip ?? null;
+        }
+      } catch { /* non-blocking — skip if unavailable */ }
+    }));
+
     const totalIP = ipToDisplay(bullpenIP_3d);
     console.log(`[MLB API] Bullpen usage for team ${teamId}: ${relievers.length} relievers, ${totalIP}IP last 3 days`);
 
@@ -1072,6 +1088,84 @@ export async function getBullpenUsage(teamId) {
     };
   } catch (err) {
     console.warn(`[MLB API] getBullpenUsage failed for team ${teamId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Gets the home plate umpire for a game from the boxscore officials.
+ * Returns { name, id } or null if unavailable.
+ */
+export async function getUmpireForGame(gamePk) {
+  if (!gamePk) return null;
+  try {
+    const data = await fetchJSON(`${MLB_BASE}/game/${gamePk}/boxscore`);
+    const officials = data.officials ?? [];
+    const hp = officials.find(o =>
+      (o.officialType ?? '').toLowerCase().includes('home plate') ||
+      (o.officialType ?? '').toLowerCase() === 'hp'
+    );
+    if (!hp?.official) return null;
+    return {
+      id:   hp.official.id   ?? null,
+      name: hp.official.fullName ?? hp.official.lastName ?? null,
+    };
+  } catch (err) {
+    console.warn(`[MLB API] getUmpireForGame failed for gamePk ${gamePk}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Returns schedule fatigue metrics for a team over the last 7 days.
+ * { gamesLast7d, consecutiveDaysPlayed, roadGamesLast7d, isOnRoadStreak }
+ */
+export async function getTeamScheduleFatigue(teamId) {
+  if (!teamId) return null;
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const sevenDaysAgoDate = new Date();
+    sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 7);
+    const sevenDaysAgo = sevenDaysAgoDate.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+    const url = `${MLB_BASE}/schedule?teamId=${teamId}&startDate=${sevenDaysAgo}&endDate=${today}&sportId=1&gameType=R`;
+    const data = await fetchJSON(url);
+
+    const playedDates = new Set();
+    let roadGames = 0;
+
+    for (const dateEntry of (data.dates ?? [])) {
+      for (const game of (dateEntry.games ?? [])) {
+        if (game.status?.abstractGameState !== 'Final') continue;
+        playedDates.add(dateEntry.date);
+        const isHome = game.teams?.home?.team?.id === Number(teamId);
+        if (!isHome) roadGames++;
+      }
+    }
+
+    const sortedDates = [...playedDates].sort();
+    const gamesLast7d = sortedDates.length;
+
+    // Count current consecutive-day streak (ending today or yesterday)
+    let consecutiveDaysPlayed = 0;
+    const checkDate = new Date();
+    for (let i = 0; i < 10; i++) {
+      const d = checkDate.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      if (playedDates.has(d)) {
+        consecutiveDaysPlayed++;
+      } else if (consecutiveDaysPlayed > 0) {
+        break;
+      }
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    return {
+      gamesLast7d,
+      consecutiveDaysPlayed,
+      roadGamesLast7d: roadGames,
+    };
+  } catch (err) {
+    console.warn(`[MLB API] getTeamScheduleFatigue failed for team ${teamId}:`, err.message);
     return null;
   }
 }

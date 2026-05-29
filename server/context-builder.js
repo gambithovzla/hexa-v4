@@ -7,8 +7,8 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats } from './mlb-api.js';
-import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory } from './savant-fetcher.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats, getUmpireForGame, getTeamScheduleFatigue } from './mlb-api.js';
+import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory, getUmpireStats } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
@@ -262,9 +262,14 @@ function pitcherBlock(label, pitcherData, probablePitcher) {
     ? fmt.stat((s.homeRuns / ip) * 9, 2)
     : 'N/A';
 
+  // Avg IP per start — tells Oracle how deep into games this starter typically goes
+  const gs = s.gamesStarted ?? 0;
+  const avgIPStart = gs > 0 ? (ip / gs).toFixed(1) : null;
+  const avgIPStr = avgIPStart != null ? ` | Avg IP/start: ${avgIPStart}` : '';
+
   lines.push(
-    `ERA: ${fmt.stat(s.era)} | WHIP: ${fmt.stat(s.whip)} | K/9: ${fmt.stat(s.strikeoutsPer9Inn, 2)} | BB/9: ${fmt.stat(s.walksPer9Inn, 2)} | HR/9: ${hr9}`,
-    `Record: ${fmt.int(s.wins)}-${fmt.int(s.losses)} | IP: ${s.inningsPitched ?? 'N/A'} | K: ${fmt.int(s.strikeOuts)} | BB: ${fmt.int(s.baseOnBalls)}`,
+    `ERA: ${fmt.stat(s.era)} | WHIP: ${fmt.stat(s.whip)} | K/9: ${fmt.stat(s.strikeoutsPer9Inn, 2)} | BB/9: ${fmt.stat(s.walksPer9Inn, 2)} | HR/9: ${hr9}${avgIPStr}`,
+    `Record: ${fmt.int(s.wins)}-${fmt.int(s.losses)} | IP: ${s.inningsPitched ?? 'N/A'} | GS: ${fmt.int(gs)} | K: ${fmt.int(s.strikeOuts)} | BB: ${fmt.int(s.baseOnBalls)}`,
   );
 
   return lines.join('\n');
@@ -342,6 +347,118 @@ function offenseBlock(label, hittingData, teamName, splitsData = null, rivalHand
 }
 
 // ---------------------------------------------------------------------------
+// Bloque de forma ofensiva del equipo (rolling wOBA del lineup)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a team offensive form summary from individual batter rolling wOBA windows.
+ * Aggregates the lineup's avg woba_7d and woba_14d to detect collective hot/cold streaks.
+ */
+function buildTeamFormBlock(homeName, awayName, savantBatters) {
+  const computeAvg = (batters, field) => {
+    const vals = batters
+      .map(b => b.savant?.rolling_windows?.[field])
+      .filter(v => v != null && Number.isFinite(Number(v)))
+      .map(Number);
+    return vals.length >= 3 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  };
+
+  const f3 = (v) => (v != null ? Number(v).toFixed(3) : null);
+
+  const homeW7  = computeAvg(savantBatters?.home ?? [], 'woba_7d');
+  const homeW14 = computeAvg(savantBatters?.home ?? [], 'woba_14d');
+  const awayW7  = computeAvg(savantBatters?.away ?? [], 'woba_7d');
+  const awayW14 = computeAvg(savantBatters?.away ?? [], 'woba_14d');
+
+  if (homeW7 == null && awayW7 == null) return null;
+
+  const lines = ['### TEAM OFFENSIVE FORM (Rolling wOBA — lineup aggregate) ###'];
+
+  const fmtTeam = (name, w7, w14) => {
+    if (w7 == null && w14 == null) return `[${name}] Insufficient batter data`;
+    const tag7  = w7  != null && w7  > 0.370 ? ' 🔥 HOT'  : w7  != null && w7  < 0.290 ? ' 🧊 COLD' : '';
+    const tag14 = w14 != null && w14 > 0.360 ? ' 🔥'      : w14 != null && w14 < 0.295 ? ' 🧊'      : '';
+    return `[${name}] Lineup avg woba_7d: ${f3(w7) ?? 'N/A'}${tag7} | woba_14d: ${f3(w14) ?? 'N/A'}${tag14}`;
+  };
+
+  lines.push(fmtTeam(homeName, homeW7, homeW14));
+  lines.push(fmtTeam(awayName, awayW7, awayW14));
+  lines.push('ORACLE INSTRUCTION: When lineup avg woba_7d > .370, treat as collective HOT STREAK — boost OVER and that team\'s ML. When < .290, treat as collective COLD — boost UNDER. Confirm against individual batter streaks.');
+  lines.push('### END TEAM FORM ###');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Bloque de contexto del umpire del home plate
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the home plate umpire context block.
+ */
+function buildUmpireBlock(umpire, stats) {
+  if (!umpire?.name) return null;
+
+  const lines = ['### HOME PLATE UMPIRE ###'];
+  lines.push(`Umpire: ${umpire.name}`);
+
+  if (stats) {
+    const f1 = (v) => (v != null ? Number(v).toFixed(1) : 'N/A');
+    if (stats.accuracy_pct != null)
+      lines.push(`Accuracy: ${f1(stats.accuracy_pct)}%`);
+    if (stats.extra_calls_per_game != null) {
+      const bias = stats.extra_calls_per_game > 0.5
+        ? 'PITCHER-FRIENDLY (larger zone — more Ks, fewer walks)'
+        : stats.extra_calls_per_game < -0.5
+        ? 'BATTER-FRIENDLY (tight zone — more walks, fewer Ks)'
+        : 'NEUTRAL zone';
+      lines.push(`Zone tendency: ${bias} | Extra calls/game vs avg: ${f1(stats.extra_calls_per_game)}`);
+    }
+    if (stats.zone_size != null)
+      lines.push(`Zone size vs avg: ${f1(stats.zone_size)}`);
+  } else {
+    lines.push('Zone stats: not available for this umpire');
+  }
+
+  lines.push('ORACLE INSTRUCTION: A pitcher-friendly umpire (extra_calls > +0.5) biases toward UNDER and K props OVER. A batter-friendly umpire biases toward OVER and suppresses K props.');
+  lines.push('### END UMPIRE ###');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Bloque de fatiga por calendario
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a schedule fatigue context note for both teams.
+ */
+function buildScheduleFatigueBlock(homeName, awayName, homeFatigue, awayFatigue) {
+  if (!homeFatigue && !awayFatigue) return null;
+
+  const lines = ['### SCHEDULE FATIGUE ###'];
+
+  const fmtFatigue = (name, f) => {
+    if (!f) return `[${name}] Schedule data unavailable`;
+    const parts = [`[${name}] ${f.gamesLast7d} games in last 7 days`];
+    if (f.consecutiveDaysPlayed >= 5)
+      parts.push(`⚠ ${f.consecutiveDaysPlayed} consecutive days — HIGH FATIGUE`);
+    else if (f.consecutiveDaysPlayed >= 3)
+      parts.push(`${f.consecutiveDaysPlayed} consecutive days`);
+    if (f.roadGamesLast7d >= 5)
+      parts.push(`${f.roadGamesLast7d} road games (travel fatigue)`);
+    return parts.join(' | ');
+  };
+
+  lines.push(fmtFatigue(homeName, homeFatigue));
+  lines.push(fmtFatigue(awayName, awayFatigue));
+  lines.push('ORACLE INSTRUCTION: 5+ consecutive days or 6+ road games in 7 days = schedule fatigue signal. Reduces late-inning reliability for position players and affects starter pitch count management. Factor into run-line and late-inning totals analysis.');
+  lines.push('### END SCHEDULE FATIGUE ###');
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Bloque de bullpen / pitcheo del equipo (texto)
 // ---------------------------------------------------------------------------
 
@@ -387,19 +504,35 @@ function buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeB
     const fatigued = usage.relievers.filter(r => r.isBackToBack || r.totalIP_last3d >= 2.0);
     const heavy    = usage.relievers.filter(r => r.totalIP_last3d >= 3.0);
 
+    // Helper: format reliever name with individual season ERA/WHIP when available
+    const fmtR = (r) => {
+      const stats = (r.seasonEra != null || r.seasonWhip != null)
+        ? ` [ERA ${r.seasonEra ?? 'N/A'} WHIP ${r.seasonWhip ?? 'N/A'}]`
+        : '';
+      return `${r.name} (${r.totalIP_last3d.toFixed(1)}IP/3d${stats})`;
+    };
+
     if (heavy.length > 0) {
-      uLines.push(`  ⚠ HEAVY USAGE: ${heavy.map(r => `${r.name} (${r.totalIP_last3d.toFixed(1)}IP/${r.gamesLast3d}G)`).join(', ')}`);
+      uLines.push(`  ⚠ HEAVY USAGE: ${heavy.map(fmtR).join(', ')}`);
     }
     if (fatigued.length > 0) {
       const b2b = fatigued.filter(r => r.isBackToBack);
       if (b2b.length > 0) {
-        uLines.push(`  ⚠ BACK-TO-BACK: ${b2b.map(r => r.name).join(', ')} — pitched consecutive days`);
+        uLines.push(`  ⚠ BACK-TO-BACK: ${b2b.map(fmtR).join(', ')} — pitched consecutive days`);
       }
     }
 
     const fresh = usage.relievers.filter(r => r.gamesLast3d === 0 || (r.gamesLast3d === 1 && r.totalIP_last3d <= 1.0));
     if (fresh.length > 0) {
-      uLines.push(`  ✓ FRESH/AVAILABLE: ${fresh.map(r => r.name).join(', ')}`);
+      uLines.push(`  ✓ FRESH/AVAILABLE: ${fresh.map(fmtR).join(', ')}`);
+    }
+
+    // LHP/RHP handedness breakdown of available relievers
+    const withHand = usage.relievers.filter(r => r.throwingHand != null);
+    if (withHand.length > 0) {
+      const lhp = withHand.filter(r => r.throwingHand === 'L').length;
+      const rhp = withHand.filter(r => r.throwingHand === 'R').length;
+      uLines.push(`  Hand composition: ${rhp} RHP / ${lhp} LHP in bullpen`);
     }
 
     // Fatigue summary for Oracle
@@ -420,7 +553,7 @@ function buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeB
   lines.push(...formatUsageBlock(awayName, awayBullpenUsage));
 
   lines.push('');
-  lines.push('ORACLE INSTRUCTION: When bullpen fatigue is CRITICAL or MODERATE, bias OVER/UNDER toward OVER for late innings. When a key reliever is back-to-back, reduce confidence in that team holding a lead. Fresh bullpen = UNDER bias for late innings.');
+  lines.push('ORACLE INSTRUCTION: When bullpen fatigue is CRITICAL or MODERATE, bias OVER/UNDER toward OVER for late innings. When a key reliever is back-to-back, reduce confidence in that team holding a lead. Fresh bullpen = UNDER bias for late innings. Individual reliever ERA/WHIP is shown in brackets — a fresh bullpen with ERA > 4.50 is a hidden OVER risk even without fatigue; a fresh bullpen with ERA < 3.20 reinforces UNDER.');
   lines.push('### END BULLPEN ###');
 
   return lines.join('\n');
@@ -447,8 +580,38 @@ function pitcherSavantBlock(label, savant) {
     `Whiff%: ${fp(savant.whiff_percent)} | K%: ${fp(savant.k_percent)} | BB%: ${fp(savant.bb_percent)}`,
   );
 
+  // Plate discipline — CSW% and chase rate (prompt has explicit thresholds for both)
+  const csw = savant.csw_percent;
+  const chase = savant.o_swing_percent;
+  if (csw != null || chase != null) {
+    lines.push(`CSW%: ${csw != null ? fp(csw) : 'N/A'} | Chase%: ${chase != null ? fp(chase) : 'N/A'}`);
+  }
+
+  // Rolling wOBA against — short-term form (prompt has HOT/STRUGGLING thresholds on 7d/14d)
+  const rw = savant.rolling_windows_against;
+  if (rw?.woba_against_7d != null || rw?.woba_against_14d != null) {
+    const w7  = rw.woba_against_7d  != null ? f3(rw.woba_against_7d)  : 'N/A';
+    const w14 = rw.woba_against_14d != null ? f3(rw.woba_against_14d) : 'N/A';
+    const w21 = rw.woba_against_21d != null ? f3(rw.woba_against_21d) : null;
+    lines.push(`Rolling wOBA against: 7d ${w7} | 14d ${w14}${w21 != null ? ` | 21d ${w21}` : ''}`);
+  }
+
+  // Active spin + pitch movement (prompt references active_spin_pct > 95% and vertical/horizontal break)
+  const as = savant.active_spin;
+  const pm = savant.pitch_movement;
+  const spinParts = [];
+  if (as?.active_spin_pct != null) spinParts.push(`ActiveSpin: ${fp(as.active_spin_pct)}`);
+  if (pm?.vertical_break   != null) spinParts.push(`vBreak: ${f2(pm.vertical_break)}"`);
+  if (pm?.horizontal_break != null) spinParts.push(`hBreak: ${f2(pm.horizontal_break)}"`);
+  if (spinParts.length) lines.push(spinParts.join(' | '));
+
+  // HR profile allowed (prompt flags hr_per_fb_allowed > .20 as HR RISK)
+  const hrp = savant.home_run_profile_against;
+  if (hrp?.hr_per_fb_allowed != null) {
+    lines.push(`HR/FB allowed: ${f3(hrp.hr_per_fb_allowed)}${hrp.avg_hr_dist_allowed != null ? ` | Avg HR dist: ${Math.round(hrp.avg_hr_dist_allowed)}ft` : ''}`);
+  }
+
   if (savant.arsenal && Object.keys(savant.arsenal).length > 0) {
-    // Summarise top run values and whiff rates by pitch type
     const pitchTypes = { ff: 'FF', si: 'SI', fc: 'FC', sl: 'SL', cu: 'CU', ch: 'CH', fs: 'FS' };
     const rvParts = [];
     for (const [prefix, name] of Object.entries(pitchTypes)) {
@@ -476,11 +639,37 @@ function batterSavantLine(name, savant) {
   const pctStr   = pctXwOBA != null ? ` | xwOBA-pct:${Math.round(pctXwOBA)}` : '';
   const evPct    = pctEV    != null ? ` EV-pct:${Math.round(pctEV)}`         : '';
 
-  return (
+  const parts = [
     `  ${name}: xwOBA ${f3(savant.xwOBA)} xBA ${f3(savant.xBA)} xSLG ${f3(savant.xSLG)}` +
     ` | EV ${f1(savant.avg_exit_velocity)} Barrel% ${fp(savant.barrel_batted_rate)} HH% ${fp(savant.hard_hit_percent)}` +
-    pctStr + evPct
-  );
+    pctStr + evPct,
+  ];
+
+  // Rolling wOBA windows — short-term hot/cold streak detection (prompt has ±10% confidence rules)
+  const rw = savant.rolling_windows;
+  if (rw?.woba_7d != null || rw?.woba_14d != null) {
+    const w7  = rw.woba_7d  != null ? f3(rw.woba_7d)  : 'N/A';
+    const w14 = rw.woba_14d != null ? f3(rw.woba_14d) : 'N/A';
+    const w21 = rw.woba_21d != null ? ` | woba_21d ${f3(rw.woba_21d)}` : '';
+    parts.push(`    woba_7d ${w7} | woba_14d ${w14}${w21}`);
+  }
+
+  // Swing profile — attack angle (prompt: 8-16° optimal, >20° uppercut, <5° flat) + bat speed
+  const sp  = savant.swing_path;
+  const bt  = savant.bat_tracking;
+  const swingParts = [];
+  if (sp?.attack_angle != null)  swingParts.push(`AttackAngle: ${f1(sp.attack_angle)}°`);
+  if (bt?.bat_speed    != null)  swingParts.push(`BatSpeed: ${f1(bt.bat_speed)}mph`);
+  if (savant.sprint_speed != null) swingParts.push(`SprintSpd: ${f1(savant.sprint_speed)}ft/s`);
+  if (swingParts.length) parts.push(`    ${swingParts.join(' | ')}`);
+
+  // HR profile — hr_per_fb (prompt: > .20 → boost HR prop +10%)
+  const hrp = savant.home_run_profile;
+  if (hrp?.hr_per_fb != null) {
+    parts.push(`    HR/FB: ${f3(hrp.hr_per_fb)}${hrp.pull_pct != null ? ` | Pull%: ${fp(hrp.pull_pct)}` : ''}`);
+  }
+
+  return parts.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -1120,6 +1309,33 @@ export async function buildContext(gameData, oddsData = null) {
     console.warn('[context-builder] Bullpen usage data unavailable — continuing:', err.message);
   }
 
+  // ── Umpire + schedule fatigue (parallel, non-blocking) ─────────────────────
+  let umpireData    = null;
+  let umpireStats   = null;
+  let homeFatigue   = null;
+  let awayFatigue   = null;
+  try {
+    const gamePkNum = gameData?.gamePk ?? null;
+    const [umpireResult, homeFatigueResult, awayFatigueResult] = await Promise.all([
+      gamePkNum ? getUmpireForGame(gamePkNum) : Promise.resolve(null),
+      home?.id  ? getTeamScheduleFatigue(home.id)  : Promise.resolve(null),
+      away?.id  ? getTeamScheduleFatigue(away.id)  : Promise.resolve(null),
+    ]);
+    umpireData  = umpireResult;
+    homeFatigue = homeFatigueResult;
+    awayFatigue = awayFatigueResult;
+    if (umpireData?.name) console.log(`[context-builder] Umpire: ${umpireData.name}`);
+  } catch (err) {
+    console.warn('[context-builder] Umpire/fatigue data unavailable:', err.message);
+  }
+
+  // Fetch umpire zone stats if we identified the umpire
+  if (umpireData?.name) {
+    try {
+      umpireStats = await getUmpireStats(umpireData.name);
+    } catch { /* non-blocking */ }
+  }
+
   const homePitcherTeam = settled(homeTeamVerifyResult);
   const awayPitcherTeam = settled(awayTeamVerifyResult);
 
@@ -1478,6 +1694,15 @@ export async function buildContext(gameData, oddsData = null) {
   // Bullpen / pitcheo del equipo
   blocks.push(buildBullpenBlock(homeName, awayName, homePitching, awayPitching, homeBullpenUsage, awayBullpenUsage));
   blocks.push('');
+
+  const teamFormBlock = buildTeamFormBlock(homeName, awayName, savantBatters);
+  if (teamFormBlock) blocks.push(teamFormBlock);
+
+  const umpireBlock = buildUmpireBlock(umpireData, umpireStats);
+  if (umpireBlock) blocks.push(umpireBlock);
+
+  const fatigueBlock = buildScheduleFatigueBlock(homeName, awayName, homeFatigue, awayFatigue);
+  if (fatigueBlock) blocks.push(fatigueBlock);
 
   // Ofensiva — cross-matched with rival pitcher's throwing hand for platoon splits
   // Home offense faces the Away pitcher → use awayPitcher.throwingHand

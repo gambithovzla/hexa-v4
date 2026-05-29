@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-26 — Pick Imperdible (Sprint 8b, PR #355) en main; Parlay Architect modo `safe` (Máx. Acierto) + distribución Poisson-binomial de aciertos. Sprint 5 Player Props MLB en progreso; Brand League × Kinetic v2.6 en main; NBA go-live gate mergeado.
+**Última actualización**: 2026-05-29 — Sprint 8c: ensemble multi-mercado (moneyline + overunder + runline + prop, frame pick-aligned), ensemble gap fix, parlay alt lines recortados, Oracle Chat null-line guard. Sprint 8d: Oracle context enrichment MLB (rich Savant — rolling wOBA, CSW%, active spin, attack angle, bat speed, sprint speed, HR/FB; avgIP/start; ERA/WHIP por relevista; LHP/RHP breakdown; umpire zone stats; team form block; schedule fatigue). Sprint 8b Pick Imperdible en main. Brand League × Kinetic v2.6 en main.
 
 ---
 
@@ -485,6 +485,9 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q3  Sprint 8a     — Monte Carlo bankroll sim        ████████████████████████ ✅
 2026 Q3  Brand v.2.6   — League × Kinetic skin           ████████████████████████ ✅
 2026 Q3   Sprint 5b    — Pick-aligned shadow + mlOpinion  ████████████████████████ ✅
+2026 Q3  Sprint 8b     — Pick Imperdible (lock-of-slate)  ████████████████████████ ✅
+2026 Q3  Sprint 8c     — Ensemble multi-mkt + props fix   ████████████████████████ ✅
+2026 Q3  Sprint 8d     — Oracle context enrichment MLB    ████████████████████████ ✅
 2026 Q3-4 Sprint 5     — Player Props MLB                ██████████████░░░░░░░░░░ 🔄 (board + resolver base)
 2027 Feb  🎯 MVP NBA público listo para All-Star Break
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)    ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳
@@ -493,6 +496,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 **Próximo en cola**:
 - Completar Sprint 5 Player Props MLB (resolver lifecycle a escala + Brier gate + `MLB_PROPS_ML_PUBLIC_ENABLED`).
 - Acumular picks props resueltos para retrain `prop_*` en sidecar y calibración por mercado.
+- Deploy hexa-v4 con cambios 8d; verificar bloques UMPIRE/TEAM FORM/SCHEDULE FATIGUE en análisis real.
 - Brand follow-ups: re-skin Admin ML/Parlay; PNG iOS; splash screens.
 - Sprint 7a parts: basketball-reference scraper, tablas dedicadas `nba_games`/`nba_player_stats`/`nba_team_stats`.
 - Tier S backlog: S2 prompt versioning, S3 audit feature store, S4 Telegram publisher, S5 Newsletter recap, S6 Postmortem dashboard cuantitativo.
