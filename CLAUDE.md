@@ -53,7 +53,7 @@ hexa-v4/
 - [server/context-builder.js](server/context-builder.js) — arma payload por partido. **FROZEN.**
 - [server/market-intelligence.js](server/market-intelligence.js) — `buildDeterministicSafePayload`, `buildValueBreakdown`. **FROZEN.**
 - [server/services/xgboostValidator.js](server/services/xgboostValidator.js) — validador determinístico (no es XGBoost real, es scoring con pesos hardcodeados). **FROZEN.**
-- [server/shadow-model.js](server/shadow-model.js) — runner del validator + persistencia pick-aligned (`pick_market_type`, `python_pick_prob`, `pick_agree_python`, etc.).
+- [server/shadow-model.js](server/shadow-model.js) — runner del validator + persistencia pick-aligned (`pick_market_type`, `python_pick_prob`, `pick_agree_python`, etc.). Bug fix 2026-05-29: `_enrichWithPythonScore` ya no tiene el guard `python_pick_prob == null` que impedía guardar `python_model_score` cuando el sidecar respondía bien — esto causaba que el ensemble tuviera 0 filas elegibles.
 - [server/services/pickAlignedMl.js](server/services/pickAlignedMl.js) — parsea el pick Oracle, predice el **mismo mercado** en legacy/Python, expone `mlOpinion` (admin) y `shadowFields`. Usa [pickParser.js](server/parsers/pickParser.js) (incl. español: `Bajo 4.5 Ponches`).
 - [server/prompts/x-content-prompts.js](server/prompts/x-content-prompts.js) — prompts de content. **FROZEN** los existentes; añadir nuevos sí se puede.
 
@@ -92,6 +92,7 @@ hexa-v4/
 - Brief técnico maestro: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 - **Modos**: `safe`, `conservative`, `balanced`, `aggressive`, `dreamer`. Los modos value (conservative→dreamer) optimizan por **edge** (valor vs mercado). El modo **`safe` (Máx. Acierto)** optimiza por **probabilidad de que peguen las patas**, no por edge: `composer.js` usa scoring por probabilidad conjunta (`Σ log(modelProbability)`), ordena semillas por probabilidad cruda, usa el acuerdo del XGBoost como desempate, **elimina el piso de edge** (admite favoritos eficientes con edge ≤ 0) y sube el piso de confianza a 62% y data-quality a 60%. El override de safe vive en `prompts.js` (`SAFE MODE OVERRIDE`, condicional a `MODE=safe` en el user message — no reescribe el prompt de los modos value).
 - [server/services/parlayEngine/hitMath.js](server/services/parlayEngine/hitMath.js) — distribución Poisson-binomial (`computeHitDistribution`): patas esperadas, P(pegan todas), P(≥N-1). Expuesta en `chosen_parlay.hit_distribution` y como warning honesto para N≥6 (la matemática que ningún prompt vence).
+- [server/services/extendedMarketCandidates.js](server/services/extendedMarketCandidates.js) — genera candidatos de alt lines matemáticamente. **Caps actuales (2026-05-29)**: alt totals ±2 del proyectado (era ±4 — generaba Under 13.5 al ~95% que bet365 no ofrece); alt runlines máximo ±3.5 (era ±5.5). Solo rangos que aparecen en libros mainstream como bet365.
 
 ### Pick Imperdible (admin-only, MLB)
 "Lock of the slate": analiza 1..N juegos con lineup confirmado y devuelve **un solo** pick de máxima convicción (o PASS). **Invierte la lógica de value/edge a propósito**: la convicción premia el ACUERDO entre el modelo determinístico, el mercado y el sidecar ML, penaliza varianza de mercado y exige lineup confirmado — el edge nunca es input positivo. Un gate duro fuerza PASS si ningún candidato es near-certain; un árbitro Opus audita los finalistas y confirma o vetea.
@@ -146,17 +147,19 @@ Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos 
 ### Admin ML Control Center (Sprint 5 UI)
 - [client/src/pages/AdminMLControlCenter.jsx](client/src/pages/AdminMLControlCenter.jsx) — página `/admin/ml-control` con HUD de circuit breaker, cards por mercado, retrain on-demand, ensemble panel, chat-picks bucket stats, retrain audit log.
 - [client/src/components/AdminEnsembleBadge.jsx](client/src/components/AdminEnsembleBadge.jsx) — chip lazy-loaded que aparece bajo cada PickCard (admin-only) y muestra Oracle/Legacy/Python/Ensemble probs por pick.
-- [server/services/chatPickExtractor.js](server/services/chatPickExtractor.js) — captura picks de Oracle Chat con JSON tail + Haiku fallback, persiste en `picks` con `source='oracle_chat'`.
+- [server/services/chatPickExtractor.js](server/services/chatPickExtractor.js) — captura picks de Oracle Chat con JSON tail + Haiku fallback, persiste en `picks` con `source='oracle_chat'`. Guard 2026-05-29: si el mercado es `overunder`, `runline` o `prop` y `line == null`, `normalizeExtracted()` devuelve `null` y descarta el pick en lugar de guardar el string del matchup ("ATL @ BOS") como texto del pick.
 
 ### ML sidecar Python
 - [ml/hexa_ml/serve.py](ml/hexa_ml/serve.py) — FastAPI app (endpoints: /health, /predict/\*, /calibration, /retrain, /retrain/ensemble).
 - [ml/hexa_ml/train.py](ml/hexa_ml/train.py) — pipeline de entrenamiento XGBoost (temporal split, Brier eval).
 - [ml/hexa_ml/models/ensemble.py](ml/hexa_ml/models/ensemble.py) — meta-learner LogReg que combina oracle + legacy + python.
-- [ml/hexa_ml/predict.py](ml/hexa_ml/predict.py) — ModelRegistry singleton (thread-safe).
+- [ml/hexa_ml/predict.py](ml/hexa_ml/predict.py) — ModelRegistry singleton (thread-safe). `ENSEMBLE_MARKETS = ("moneyline", "overunder", "runline", "prop")`.
 - [ml/hexa_ml/features.py](ml/hexa_ml/features.py) — feature engineering desde pick_features.
 - [ml/hexa_ml/calibration.py](ml/hexa_ml/calibration.py) — PlattCalibrator + Brier score.
 - [ml/Dockerfile](ml/Dockerfile) — imagen multi-stage Python 3.11.
 - [ml/railway.json](ml/railway.json) — config deploy Railway del sidecar.
+
+**Ensemble markets (2026-05-29)**: `moneyline`, `overunder`, `runline`, `prop`. Todos usan el frame pick-aligned (`oracle_pick_prob` / `legacy_pick_prob` / `python_pick_prob`) — P(pick gana) independiente del mercado. Props necesita `JOIN picks ON pick_id` para `y_true` (no se puede derivar de scores del partido). El ensemble `prop` agrupa todos los prop kinds (hits, strikeouts, total_bases, home_runs, rbis) en un solo modelo — suficientes datos por separado hay ~10-20 filas por kind, insuficiente; pooled llega antes al mínimo de 50.
 
 ### Scripts de training / dataset
 - [scripts/training/export-dataset.js](scripts/training/export-dataset.js) — exporta pick_features a CSV/Parquet.
@@ -374,8 +377,14 @@ Estado del pipeline ML:
 - ✅ Post-6 — parlay resolve/AUTO (`parlayResolver.js`, `parlayRunOutcome.js`); NBA team-map + output guard (`nba-team-map.js`, `nbaOutputGuard.js`).
 - ✅ Sprint 8a — Monte Carlo bankroll (`monteCarloBankroll.js`). ✅ Brand League × Kinetic v2.6 (skin alternable, dark-only).
 - ✅ Sprint 8b — **Pick Imperdible** (PR #355, 2026-05-26): lock-of-the-slate mode, admin-only, MLB. Pipeline de 7 fases: context + features → convicción Stage-1 (model + market + variance + data quality) → top-K candidates → ML sidecar alineado al pick → hard gate → LLM arbiter → persistencia `type='imperdible'` + tabla `imperdible_runs`. Feature-flagged por `IMPERDIBLE_ENABLED`. Equity summary en `/api/imperdible/history`. Herramientas: `server/routes/imperdible.js`, `server/services/imperdibleEngine.js`, `server/services/imperdibleArbiter.js`, `server/services/imperdibleSelector.js`.
+- ✅ Sprint 8c — **Ensemble multi-mercado + props + hotfixes UX** (2026-05-29):
+  - **Ensemble gap fix**: `shadow-model.js` corregido — `_enrichWithPythonScore` ya no tiene guard `python_pick_prob == null`; ahora siempre guarda `python_model_score`. Migración de backfill en `migrate.js` (`runEnsembleBackfillMigration`) para backfill de filas históricas existentes.
+  - **Ensemble multi-mercado**: expandido de solo moneyline a `moneyline + overunder + runline + prop` usando frame pick-aligned. `data.py`, `train_ensemble.py`, `predict.py`, `serve.py` actualizados en consecuencia. El endpoint `/api/analyze/game-ensemble` en Node también actualizado para leer columnas pick-aligned por mercado.
+  - **Props ensemble**: `data.py` rama especial para `market='prop'` — JOIN con `picks` para `y_true` desde `picks.result`; props pooled (todos los kinds juntos, ~50 filas mínimo para entrenar).
+  - **Parlay alt lines**: `extendedMarketCandidates.js` — alt totals capeados a ±2 (era ±4); alt runlines máx ±3.5 (era ±5.5). Rangos realistas para bet365.
+  - **Oracle Chat pick null-line**: `chatPickExtractor.js` `normalizeExtracted()` descarta picks `overunder/runline/prop` con `line == null` en vez de guardar el matchup string como texto de pick.
 
-**Estado en producción (2026-05-26)**:
+**Estado en producción (2026-05-29)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
 - Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".
@@ -480,7 +489,9 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 - Historial, logos, resolver, jobs, dataset admin y shadow runs aislados por `sport`. ✅
 - Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
-**Foco docs / ops (2026-05-17)**:
+**Foco docs / ops (2026-05-29)**:
+- **Ensemble**: deploy ML sidecar con los cambios de 8c → reentrenar `all` desde `/admin/ml-control` → verificar que `ensembles_available` en `/health` muestre los 4 mercados cuando haya datos suficientes.
+- **Props ensemble**: el modelo `prop` entrena cuando `shadow_model_runs` tenga ≥50 filas `pick_market_type='prop'` resueltas con los 3 probs. Monitorear en panel "Chat-sourced picks" de `/admin/ml-control`.
 - Completar Sprint 5 props: resolver lifecycle + validación Brier; `MLB_PROPS_ML_PUBLIC_ENABLED` cuando pase el gate.
 - NBA: validación E2E en prod con `NBA_ANALYSIS_ENABLED`; equity en bottom nav (menor).
 - Brand: re-skin Admin ML / ParlayArchitect; assets PWA iOS.
