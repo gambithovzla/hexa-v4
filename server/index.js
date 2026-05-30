@@ -26,8 +26,10 @@ import picksRouter from './routes/picks.js';
 import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-history.js';
 import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
+import nflRouter from './routes/nfl.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
+import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
@@ -35,6 +37,7 @@ import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
 import { buildNbaPickLiveProgressEntry } from './pick-tracker-nba.js';
+import { buildNflPickLiveProgressEntry } from './pick-tracker-nfl.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
@@ -76,7 +79,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -91,6 +94,12 @@ import {
   getNbaStandings,
   getNbaPlayoffBracket,
 } from './nba-api.js';
+import {
+  getNflGamesForWeek,
+  getNflTeamStats,
+  getNflStandings,
+  getCurrentNflWeek,
+} from './nfl-api.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -637,6 +646,7 @@ app.use('/api/picks',        picksRouter);
 app.use('/api/oracle',       oracleHistoryRouter);
 app.use('/api/insights',     insightsRouter);
 app.use('/api/nba',          nbaRouter);
+app.use('/api/nfl',          nflRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -999,6 +1009,62 @@ app.get('/api/nba/playoffs', async (req, res) => {
       return res.status(400).json({ success: false, error: 'season must be YYYY-YY (e.g. 2025-26)' });
     }
     const data = await getNbaPlayoffBracket(season);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── NFL endpoints (Sprint 9a scaffolding — public, read-only) ─────────────────
+// GET /api/nfl/games?season=&seasonType=&week=  — by week (NFL cadence). No params → current week.
+app.get('/api/nfl/games', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    const seasonType = req.query.seasonType != null ? Number(req.query.seasonType) : null;
+    const week = req.query.week != null ? Number(req.query.week) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    if (seasonType != null && ![1, 2, 3].includes(seasonType)) {
+      return res.status(400).json({ success: false, error: 'seasonType must be 1 (pre), 2 (regular) or 3 (post)' });
+    }
+    const games = await getNflGamesForWeek({ season, seasonType, week });
+    const resolved = (season == null || seasonType == null || week == null) ? await getCurrentNflWeek() : null;
+    res.json({
+      success: true,
+      season: season ?? resolved?.season ?? null,
+      seasonType: seasonType ?? resolved?.seasonType ?? null,
+      week: week ?? resolved?.week ?? null,
+      count: games.length,
+      data: games,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nfl/teams?season=2025  — season team stats (standings-derived)
+app.get('/api/nfl/teams', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    const teams = await getNflTeamStats(season);
+    res.json({ success: true, season: season ?? (teams[0]?.season ?? null), count: teams.length, data: teams });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nfl/standings?season=2025
+app.get('/api/nfl/standings', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    const data = await getNflStandings(season);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -2711,7 +2777,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
        WHERE p.user_id = $1
          AND p.result = 'pending'
          AND p.deleted_at IS NULL
-         AND COALESCE(p.sport, 'mlb') IN ('mlb', 'nba')
+         AND COALESCE(p.sport, 'mlb') IN ('mlb', 'nba', 'nfl')
        ORDER BY created_at DESC
        LIMIT 20`,
       [userId]
@@ -2723,6 +2789,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
 
     const results = [];
     const nbaGamesByDate = new Map();
+    const nflGamesByDate = new Map();
 
     for (const pick of pendingPicks) {
       try {
@@ -2732,6 +2799,15 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
             game_date: normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at),
           };
           results.push(await buildNbaPickLiveProgressEntry(nbaPick, nbaGamesByDate));
+          continue;
+        }
+
+        if (pick.sport === 'nfl') {
+          const nflPick = {
+            ...pick,
+            game_date: normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at),
+          };
+          results.push(await buildNflPickLiveProgressEntry(nflPick, nflGamesByDate));
           continue;
         }
 
@@ -4154,9 +4230,9 @@ app.get('/api/admin/shadow-model', verifyToken, async (req, res) => {
   try {
     const limit = Number(req.query.limit ?? 50);
     const rawSport = String(req.query.sport ?? 'mlb').toLowerCase();
-    const sport = rawSport === 'nba' ? 'nba' : 'mlb';
-    // Only MLB shadow runs go through the live-game refresher (NBA resolver
-    // doesn't expose getLiveGameData yet — runs stay pending until the NBA
+    const sport = ['nba', 'nfl'].includes(rawSport) ? rawSport : 'mlb';
+    // Only MLB shadow runs go through the live-game refresher (NBA/NFL resolvers
+    // don't expose getLiveGameData yet — runs stay pending until the per-sport
     // pick resolver back-fills them).
     if (sport === 'mlb') {
       await refreshPendingShadowModelRuns(Math.min(limit, 50));
@@ -4436,11 +4512,29 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid month format. Use YYYY-MM.' });
     }
     const rawSport = String(req.query.sport ?? 'mlb').toLowerCase();
-    const sport = rawSport === 'nba' ? 'nba' : 'mlb';
+    const sport = ['nba', 'nfl'].includes(rawSport) ? rawSport : 'mlb';
     const sportFilterPf = `COALESCE(pf.sport,'mlb') = '${sport}'`;
     const datasetBaseWhere = `WHERE ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}`;
 
-    const summarySql = sport === 'nba'
+    const summarySql = sport === 'nfl'
+      ? `
+        SELECT
+          COUNT(*) as total_records,
+          COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+          COUNT(*) FILTER (WHERE pf.result = 'loss') as losses,
+          COUNT(*) FILTER (WHERE pf.result IS NULL) as pending,
+          COUNT(*) FILTER (WHERE pf.pick_id IS NOT NULL) as from_real_picks,
+          COUNT(*) FILTER (WHERE pf.backtest_id IS NOT NULL) as from_backtests,
+          ROUND(AVG(pf.home_epa_off)::numeric, 3) as avg_home_epa_off,
+          ROUND(AVG(pf.away_epa_off)::numeric, 3) as avg_away_epa_off,
+          ROUND(AVG(pf.wind_mph)::numeric, 1) as avg_wind_mph,
+          ROUND(AVG(pf.context_completeness)::numeric, 2) as avg_completeness,
+          MIN(pf.game_date) as earliest_date,
+          MAX(pf.game_date) as latest_date
+        FROM pick_features pf
+        ${datasetBaseWhere}
+      `
+      : sport === 'nba'
       ? `
         SELECT
           COUNT(*) as total_records,
@@ -4778,6 +4872,8 @@ runMigrations()
   .then(() => runAdminMLControlCenterMigrations())
   .then(() => runNbaScaffoldingMigrations())
   .then(() => runNbaDatasetMigrations())
+  .then(() => runNflScaffoldingMigrations())
+  .then(() => runNflDatasetMigrations())
   .then(() => runPickAlignedShadowMigrations())
   .then(() => runImperdibleMigrations())
   .then(() => runOddsCacheMigrations())
@@ -4868,6 +4964,22 @@ runMigrations()
           if (process.env.NBA_ANALYSIS_ENABLED === 'true') {
             resolveNbaPendingPicks().catch(err => {
               console.error('[pick-resolver-nba] Scheduled run failed:', err.message);
+            });
+          }
+        }
+
+        // NFL resolver — game-time-aware: NFL plays Thu/Sun/Mon. Sunday early
+        // games finish ~16:00 ET; primetime spills past midnight into the next
+        // morning. Run only on those days, from 16:00 ET through 05:59 ET, so we
+        // don't poll ESPN on the (idle) MLB/NBA-only days of the week.
+        if (process.env.NFL_ANALYSIS_ENABLED === 'true') {
+          const etWeekday = new Intl.DateTimeFormat('en-US', {
+            weekday: 'short', timeZone: 'America/New_York',
+          }).format(new Date());
+          const isNflDay = etWeekday === 'Thu' || etWeekday === 'Sun' || etWeekday === 'Mon';
+          if (isNflDay && (etHour >= 16 || etHour < 6)) {
+            resolveNflPendingPicks().catch(err => {
+              console.error('[pick-resolver-nfl] Scheduled run failed:', err.message);
             });
           }
         }

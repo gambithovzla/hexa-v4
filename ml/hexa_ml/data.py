@@ -56,6 +56,19 @@ OPTIONAL_FEATURE_COLUMNS = [
     "prop_opponent_pitcher_hand", "prop_opponent_pitcher_xwoba_against", "prop_opponent_pitcher_k_pct",
     "prop_odds_american", "prop_implied_prob",
     "source",
+    # NFL-specific columns (Sprint 9 — nfl_* markets)
+    "home_epa_off", "away_epa_off", "home_epa_def", "away_epa_def",
+    "home_success_rate", "away_success_rate",
+    "home_proe", "away_proe",
+    "home_pace", "away_pace",
+    "home_rest_days", "away_rest_days",
+    "home_is_short_week", "away_is_short_week",
+    "home_is_off_bye", "away_is_off_bye",
+    "qb_home_active", "qb_away_active",
+    "qb_home_tier", "qb_away_tier",
+    "wind_mph",
+    "spread_close", "total_close",
+    "injuries_home_severe", "injuries_away_severe",
 ]
 
 SELECT_COLUMNS = REQUIRED_COLUMNS + OPTIONAL_FEATURE_COLUMNS
@@ -78,8 +91,8 @@ def load_from_postgres(database_url: str | None = None, sport: str = "mlb") -> p
         )
 
     sport_norm = (sport or "mlb").lower()
-    if sport_norm not in {"mlb", "nba"}:
-        raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb' or 'nba'.")
+    if sport_norm not in {"mlb", "nba", "nfl"}:
+        raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb', 'nba', or 'nfl'.")
 
     cols = ", ".join(f"pf.{c}" for c in SELECT_COLUMNS)
     sql = f"""
@@ -173,6 +186,12 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
             (df["market_type"] == "prop")
             & (df["prop_kind"] == prop_market_map[market])
         ].copy()
+    elif market == "nfl_moneyline":
+        out = df[df["market_type"] == "moneyline"].copy()
+    elif market == "nfl_spread":
+        out = df[df["market_type"].isin(["spread", "runline"])].copy()
+    elif market == "nfl_total":
+        out = df[df["market_type"].isin(["overunder", "totals"])].copy()
     else:
         out = df[df["market_type"] == market].copy()
     out = out[out["result"].notna()]
@@ -186,6 +205,12 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         out = out[
             out["result"].astype(str).str.lower().isin(["win", "won", "loss", "lost"])
         ]
+    elif market == "nfl_moneyline":
+        out = out[out["home_score"].notna() & out["away_score"].notna()]
+    elif market == "nfl_spread":
+        out = out[out["home_score"].notna() & out["away_score"].notna() & out["spread_close"].notna()]
+    elif market == "nfl_total":
+        out = out[out["total_runs"].notna() & out["total_close"].notna()]
 
     return out.reset_index(drop=True)
 
@@ -198,14 +223,25 @@ def make_target(df: pd.DataFrame, market: str) -> pd.Series:
     runline   → 1 if home covered (home_score - away_score > -1.5)
                 Note: we encode "did home cover -1.5" as the target;
                 the side column tells us which side the pick was on.
+    nfl_moneyline → 1 if home won (same as moneyline)
+    nfl_spread    → 1 if home covers the closing spread
+    nfl_total     → 1 if total_runs > total_close (OVER hits)
     """
-    if market == "moneyline":
+    if market in {"moneyline", "nfl_moneyline"}:
         return (df["home_score"] > df["away_score"]).astype(int)
     if market == "overunder":
         return (df["total_runs"] > df["line"]).astype(int)
+    if market == "nfl_total":
+        return (df["total_runs"] > df["total_close"]).astype(int)
     if market == "runline":
         diff = df["home_score"].astype(float) - df["away_score"].astype(float)
         return (diff > 1.5).astype(int)
+    if market == "nfl_spread":
+        # 1 if home covers (home_score - away_score > -spread_close)
+        # spread_close is from the home team's perspective (negative = home favored)
+        diff = df["home_score"].astype(float) - df["away_score"].astype(float)
+        spread = df["spread_close"].astype(float)
+        return (diff > -spread).astype(int)
     if market.startswith("prop_"):
         normalized = df["result"].astype(str).str.lower()
         return normalized.isin(["win", "won"]).astype(int)

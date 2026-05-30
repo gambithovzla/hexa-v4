@@ -1,10 +1,10 @@
 export const ALL_SPORTS = ['mlb', 'nba', 'nfl', 'soccer', 'nhl', 'tennis'];
-export const ACTIVE_SPORTS = ['mlb', 'nba'];
+export const ACTIVE_SPORTS = ['mlb', 'nba', 'nfl'];
 
 export const SPORT_META = {
   mlb: { shortLabel: 'MLB', displayName: 'Baseball', active: true },
   nba: { shortLabel: 'NBA', displayName: 'Basketball', active: true },
-  nfl: { shortLabel: 'NFL', displayName: 'Football', active: false },
+  nfl: { shortLabel: 'NFL', displayName: 'Football', active: true },
   soccer: { shortLabel: 'SOCCER', displayName: 'Soccer', active: false },
   nhl: { shortLabel: 'NHL', displayName: 'Hockey', active: false },
   tennis: { shortLabel: 'TENNIS', displayName: 'Tennis', active: false },

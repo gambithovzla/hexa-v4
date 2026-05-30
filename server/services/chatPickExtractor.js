@@ -79,12 +79,13 @@ export function augmentChatQuestion(question, lang = 'en', sport = 'mlb', option
   const safe = String(question ?? '').trim();
   if (!safe) return safe;
 
-  const isNba = String(sport ?? 'mlb').toLowerCase() === 'nba';
+  // NBA and NFL share the team-spread market set (no run line / no props in phase 1).
+  const isSpreadSport = ['nba', 'nfl'].includes(String(sport ?? 'mlb').toLowerCase());
   const isMulti = Boolean(options?.multi || options?.mode === 'jornada');
-  const marketHint = isNba
+  const marketHint = isSpreadSport
     ? 'moneyline|overunder|spread'
     : 'moneyline|overunder|runline|prop';
-  const marketDesc = isNba
+  const marketDesc = isSpreadSport
     ? 'a team moneyline, point spread, or total over/under'
     : 'a team moneyline, run line, over/under total, or prop';
 
@@ -433,7 +434,8 @@ export async function saveExtractedChatPick({ extracted, pickJson, userId, gameD
   const matchup = gameData.matchup ?? `${away} @ ${home}`;
   const gamePk  = Number(gameData.gamePk ?? gameData.game_id);
   const gameDate = resolveGameCalendarDate(gameData);
-  const sportNorm = String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+  const sportLc = String(sport ?? 'mlb').toLowerCase();
+  const sportNorm = ['nba', 'nfl'].includes(sportLc) ? sportLc : 'mlb';
 
   const confidence = Number.isFinite(Number(pickJson?.confidence))
     ? Math.max(0, Math.min(100, Math.round(Number(pickJson.confidence))))

@@ -834,6 +834,143 @@ export async function runNbaDatasetMigrations() {
   }
 }
 
+/**
+ * Sprint 9a — NFL scaffolding. Mirrors runNbaScaffoldingMigrations.
+ *
+ * Reuses the `sport` discriminator already on picks/pick_features (default
+ * 'mlb'). Adds NFL cache tables keyed by week (not date) — the structural NFL
+ * difference. Idempotent.
+ */
+export async function runNflScaffoldingMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── NFL games cache (keyed by season/seasonType/week) ─────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nfl_games (
+        id              BIGSERIAL    PRIMARY KEY,
+        game_id         VARCHAR(20)  UNIQUE NOT NULL,
+        season          INTEGER,
+        season_type     SMALLINT,
+        week            SMALLINT,
+        game_date       DATE,
+        home_team_id    INTEGER      NOT NULL,
+        away_team_id    INTEGER      NOT NULL,
+        home_team_abbr  VARCHAR(5),
+        away_team_abbr  VARCHAR(5),
+        home_team_name  VARCHAR(60),
+        away_team_name  VARCHAR(60),
+        status          VARCHAR(40),
+        home_score      INTEGER,
+        away_score      INTEGER,
+        stadium         VARCHAR(100),
+        dome            BOOLEAN,
+        national_tv     VARCHAR(50),
+        created_at      TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nfl_games_week ON nfl_games(season, season_type, week)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nfl_games_date ON nfl_games(game_date DESC)`);
+
+    // ── NFL team stats cache (one row per team per season) ────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nfl_team_stats (
+        team_id           INTEGER      NOT NULL,
+        season            INTEGER      NOT NULL,
+        team_abbr         VARCHAR(5),
+        team_name         VARCHAR(60),
+        conference        VARCHAR(3),
+        division          VARCHAR(10),
+        wins              INTEGER,
+        losses            INTEGER,
+        ties              INTEGER,
+        points_for        INTEGER,
+        points_against    INTEGER,
+        epa_off           DECIMAL(7,4),
+        epa_def           DECIMAL(7,4),
+        success_rate_off  DECIMAL(6,4),
+        success_rate_def  DECIMAL(6,4),
+        proe              DECIMAL(7,4),
+        pace_sec_play     DECIMAL(7,3),
+        plays_per_game    DECIMAL(7,3),
+        redzone_td_pct    DECIMAL(6,4),
+        third_down_pct    DECIMAL(6,4),
+        pressure_rate     DECIMAL(6,4),
+        updated_at        TIMESTAMPTZ  DEFAULT NOW(),
+        PRIMARY KEY (team_id, season)
+      )
+    `);
+
+    await client.query('COMMIT');
+    console.log('[migrate] nfl-scaffolding ready (nfl_games, nfl_team_stats)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] nfl-scaffolding migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Sprint 9.1 — NFL dataset isolation. Mirrors runNbaDatasetMigrations.
+ *
+ * `shadow_model_runs.sport` and `pick_features.home/away_team_id/abbr` already
+ * exist from the NBA migrations — reused. This only tacks on NFL-specific
+ * feature columns (nullable + idempotent). MLB/NBA rows keep them NULL.
+ */
+export async function runNflDatasetMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── pick_features: NFL advanced team stats (nflverse) ───────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_epa_off DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_epa_off DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_epa_def DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_epa_def DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_success_rate DECIMAL(6,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_success_rate DECIMAL(6,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_proe DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_proe DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_pace DECIMAL(7,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_pace DECIMAL(7,3)`);
+
+    // ── pick_features: NFL rest / schedule context ──────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_rest_days INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_rest_days INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_is_short_week BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_is_short_week BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_is_off_bye BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_is_off_bye BOOLEAN`);
+
+    // ── pick_features: QB availability (the dominant NFL variable) ──────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS qb_home_tier SMALLINT`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS qb_away_tier SMALLINT`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS qb_home_active BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS qb_away_active BOOLEAN`);
+
+    // ── pick_features: weather + line + injuries ────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS wind_mph DECIMAL(5,1)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS is_dome BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS spread_close DECIMAL(5,1)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS total_close DECIMAL(5,1)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS injuries_home_severe INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS injuries_away_severe INTEGER`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] nfl-dataset ready (pick_features NFL columns)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] nfl-dataset migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function runPickAlignedShadowMigrations() {
   const client = await pool.connect();
   try {

@@ -3,6 +3,7 @@ import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import SportSwitcher from './SportSwitcher';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
+import { getNflLogoUrl } from '../utils/nflLogoUrl';
 import { useHexaTheme } from '../themeProvider';
 import { formatGameTimeLima } from '../utils/dateKeys.js';
 
@@ -161,6 +162,8 @@ function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
   const [failed, setFailed] = useState(false);
   const src = sport === 'nba'
     ? getNbaLogoUrl(teamId, abbr)
+    : sport === 'nfl'
+    ? getNflLogoUrl(teamId, abbr)
     : teamId
       ? `https://www.mlb.com/team-logos/${teamId}.svg`
       : null;
@@ -249,7 +252,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
 
   const awayColor = MLB_COLORS[away] ?? '#666';
   const homeColor = MLB_COLORS[home] ?? '#666';
-  const sportKey  = game._sport === 'nba' ? 'nba' : 'mlb';
+  const sportKey  = game._sport === 'nba' ? 'nba' : game._sport === 'nfl' ? 'nfl' : 'mlb';
 
   const leftBorderColor = isSelected ? C.accent : status === 'live' ? C.amber : 'transparent';
 
@@ -414,7 +417,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
       </Box>
 
       {/* Pitchers — MLB only */}
-      {game._sport !== 'nba' && (
+      {game._sport !== 'nba' && game._sport !== 'nfl' && (
         <Box
           sx={{
             display: 'flex',
@@ -609,6 +612,55 @@ function normalizeNbaGame(g) {
   };
 }
 
+function normalizeNflGame(g) {
+  let simplified = 'scheduled';
+  const sid = g.game_status_id;
+  if (sid != null) {
+    if (sid === 3) simplified = 'final';
+    else if (sid === 2) simplified = 'live';
+  } else {
+    const s = String(g.status ?? '').toLowerCase();
+    if (/final/i.test(s)) simplified = 'final';
+    else if (/in progress|halftime|qtr|quarter|ot|overtime|live/i.test(s)) simplified = 'live';
+  }
+
+  const homeScore = g.home_score ?? null;
+  const awayScore = g.away_score ?? null;
+
+  let displayTime = g.status ?? '';
+  if (simplified === 'scheduled' && g.game_datetime) {
+    try {
+      displayTime = new Date(g.game_datetime).toLocaleString('en-US', {
+        timeZone: 'America/Lima', weekday: 'short', hour: '2-digit', minute: '2-digit',
+      });
+    } catch { /* keep status text */ }
+  }
+
+  return {
+    gamePk:   String(g.game_id),
+    gameDate: g.game_date ? `${g.game_date}T00:00:00Z` : null,
+    _displayTime: displayTime,
+    _week: g.week ?? null,
+    status: { simplified },
+    teams: {
+      away: {
+        abbreviation: g.away_team_abbr ?? 'AWAY',
+        name:         g.away_team_name ?? g.away_team_abbr ?? 'Away',
+        id:           g.away_team_id ?? null,
+      },
+      home: {
+        abbreviation: g.home_team_abbr ?? 'HOME',
+        name:         g.home_team_name ?? g.home_team_abbr ?? 'Home',
+        id:           g.home_team_id ?? null,
+      },
+    },
+    linescore: (homeScore != null && awayScore != null) ? {
+      teams: { away: { runs: awayScore }, home: { runs: homeScore } },
+    } : null,
+    _sport: 'nfl',
+  };
+}
+
 export default function GameSelector({
   // New props
   mode = 'single',
@@ -650,7 +702,9 @@ export default function GameSelector({
     onSelect?.(null);
     onSelectMultiple?.([]);
 
-    const url = sport === 'nba'
+    const url = sport === 'nfl'
+      ? `${API_URL}/api/nfl/games`
+      : sport === 'nba'
       ? `${API_URL}/api/nba/games?date=${date}`
       : `${API_URL}/api/games?date=${date}`;
 
@@ -659,7 +713,9 @@ export default function GameSelector({
       .then(json => {
         if (cancelled) return;
         const raw = json.success ? json.data : [];
-        const list = sport === 'nba' ? raw.map(normalizeNbaGame) : raw;
+        const list = sport === 'nfl' ? raw.map(normalizeNflGame)
+          : sport === 'nba' ? raw.map(normalizeNbaGame)
+          : raw;
         setGames(list);
         // fullDay: auto-select only schedulable games on load
         if (mode === 'fullDay') {
@@ -761,23 +817,39 @@ export default function GameSelector({
           {t.title}
         </Typography>
 
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          style={{
-            background: C.surfaceAlt,
-            border: `1px solid ${C.border}`,
-            borderRadius: '2px',
-            color: C.textPrimary,
-            fontFamily: MONO,
-            fontSize: '0.72rem',
-            padding: '5px 9px',
-            cursor: 'pointer',
-            outline: 'none',
-            colorScheme: 'dark',
-          }}
-        />
+        {sport === 'nfl' ? (
+          <Box
+            sx={{
+              px: '9px', py: '5px',
+              border: `1px solid ${C.border}`,
+              borderRadius: '2px',
+              fontFamily: MONO,
+              fontSize: '0.72rem',
+              color: C.textMuted,
+              bgcolor: C.surfaceAlt,
+            }}
+          >
+            {language === 'es' ? 'Semana actual' : 'Current week'}
+          </Box>
+        ) : (
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            style={{
+              background: C.surfaceAlt,
+              border: `1px solid ${C.border}`,
+              borderRadius: '2px',
+              color: C.textPrimary,
+              fontFamily: MONO,
+              fontSize: '0.72rem',
+              padding: '5px 9px',
+              cursor: 'pointer',
+              outline: 'none',
+              colorScheme: 'dark',
+            }}
+          />
+        )}
       </Box>
 
       {/* ── Sport switcher (single mode only) ── */}

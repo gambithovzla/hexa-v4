@@ -29,6 +29,7 @@ import InsightsSemana from './InsightsSemana';
 import AdminEnsembleBadge from './AdminEnsembleBadge';
 import AdminMlOpinionCard from './AdminMlOpinionCard';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
+import { getNflLogoUrl } from '../utils/nflLogoUrl';
 import { groupHistoryByPeriod } from '../utils/historyPeriodStats.js';
 
 const TRANSLATIONS = { en, es };
@@ -87,9 +88,10 @@ function MatchupWithLogos({ matchup, sport = 'mlb' }) {
   const away = parts[0].trim();
   const home = parts[1].trim();
 
-  if (sport === 'nba') {
-    const awaySrc = getNbaLogoUrl(null, away);
-    const homeSrc = getNbaLogoUrl(null, home);
+  if (sport === 'nba' || sport === 'nfl') {
+    const logoFor = sport === 'nfl' ? getNflLogoUrl : getNbaLogoUrl;
+    const awaySrc = logoFor(null, away);
+    const homeSrc = logoFor(null, home);
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
         {awaySrc && <img src={awaySrc} width={18} height={18} alt="" style={{ flexShrink: 0, verticalAlign: 'middle', objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />}

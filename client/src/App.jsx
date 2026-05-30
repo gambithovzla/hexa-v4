@@ -48,6 +48,7 @@ import ImperdiblePage         from './pages/ImperdiblePage';
 import PostmortemDashboard    from './pages/PostmortemDashboard';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
+import NflLiveTracker      from './components/NflLiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
 import HexaBoardLeague     from './components/HexaBoardLeague';
@@ -713,9 +714,11 @@ export default function App() {
           {/* Live Tracker */}
           {activeTab === 'live' && (
             <Box sx={{ display: 'grid', gap: 2 }}>
-              {sport === 'nba'
-                ? <NBALiveTracker lang={lang} />
-                : <LiveTracker lang={lang} />}
+              {sport === 'nfl'
+                ? <NflLiveTracker lang={lang} />
+                : sport === 'nba'
+                  ? <NBALiveTracker lang={lang} />
+                  : <LiveTracker lang={lang} />}
             </Box>
           )}
 

@@ -372,8 +372,8 @@ function ModelPicker({ value, onChange, t, lang, isAdmin = false, sport = 'mlb' 
     <Box>
       <SectionLabel>{t.modelSelect.label}</SectionLabel>
       <Box sx={{ display: 'flex', gap: '4px' }}>
-        {/* Safe Pick button */}
-        {sport !== 'nba' && (
+        {/* Safe Pick button — MLB only */}
+        {sport === 'mlb' && (
           <Box
             component="button"
             onClick={() => onChange('safe')}
@@ -1124,7 +1124,7 @@ export default function AnalysisPanel({
   }, [isAdmin, modelMode]);
 
   useEffect(() => {
-    if (sport === 'nba' && modelMode === 'safe') {
+    if ((sport === 'nba' || sport === 'nfl') && modelMode === 'safe') {
       setModelMode('deep');
     }
   }, [sport, modelMode]);
@@ -1171,7 +1171,7 @@ export default function AnalysisPanel({
     }
 
     // Lineup confirmation gate — MLB only
-    if (sport !== 'nba' && unconfirmedGames.length > 0) {
+    if (sport === 'mlb' && unconfirmedGames.length > 0) {
       setLineupDialogOpen(true);
       return;
     }
@@ -1190,10 +1190,10 @@ export default function AnalysisPanel({
       let endpoint, body;
 
       if (modelMode === 'safe') {
-        if (sport === 'nba') {
+        if (sport === 'nba' || sport === 'nfl') {
           throw new Error(lang === 'es'
-            ? 'SAFE PICK no esta disponible en NBA por ahora.'
-            : 'SAFE PICK is not available for NBA yet.');
+            ? 'SAFE PICK no está disponible para este deporte.'
+            : 'SAFE PICK is not available for this sport.');
         }
         endpoint = `${API_URL}/api/analyze/safe`;
         if (mode === 'parlay' && selectedGames.length > 1) {
@@ -1215,6 +1215,16 @@ export default function AnalysisPanel({
             betType,
           };
         }
+      } else if (mode === 'single' && sport === 'nfl') {
+        const g = selectedGames[0];
+        endpoint = `${API_URL}/api/nfl/analyze/game`;
+        body = {
+          gameId:      g.gamePk,
+          date:        selectedDate,
+          lang,
+          riskProfile: 'balanced',
+          engine:      modelMode === 'premium' ? 'premium' : 'deep',
+        };
       } else if (mode === 'single' && sport === 'nba') {
         const g = selectedGames[0];
         endpoint = `${API_URL}/api/nba/analyze/game`;
@@ -1450,16 +1460,16 @@ export default function AnalysisPanel({
           <MatchupHeader games={selectedGames} mode={mode} />
         )}
 
-        {/* Bet type — MLB only (NBA Oracle selects best bet type internally) */}
-        {sport !== 'nba' && (
+        {/* Bet type — MLB only (NBA/NFL Oracle selects best bet type internally) */}
+        {sport === 'mlb' && (
           <BetTypeSelect value={betType} onChange={setBetType} t={t} />
         )}
 
         {/* Model picker */}
         <ModelPicker value={modelMode} onChange={setModelMode} t={t} lang={lang} isAdmin={isAdmin} sport={sport} />
 
-        {/* Engine picker — MLB only (NBA always uses Anthropic) */}
-        {isAdmin && sport !== 'nba' && (
+        {/* Engine picker — MLB only (NBA/NFL always use Anthropic) */}
+        {isAdmin && sport === 'mlb' && (
           <EnginePicker
             value={engineMode}
             onChange={setEngineMode}
@@ -1481,7 +1491,7 @@ export default function AnalysisPanel({
         )}
 
         {/* Web search toggle — MLB single game only, not in safe mode */}
-        {sport !== 'nba' && mode === 'single' && modelMode !== 'safe' && engineMode === 'sonnet' && (
+        {sport === 'mlb' && mode === 'single' && modelMode !== 'safe' && engineMode === 'sonnet' && (
           <WebSearchToggle value={webSearch} onChange={setWebSearch} t={t} />
         )}
 
@@ -1496,7 +1506,7 @@ export default function AnalysisPanel({
         />
 
         {/* Lineup status badges — MLB only */}
-        {sport !== 'nba' && selectedGames.length > 0 && (
+        {sport === 'mlb' && selectedGames.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             {selectedGames.map((g, i) => {
               const status = g.lineupStatus ?? 'unavailable';
@@ -1617,7 +1627,7 @@ export default function AnalysisPanel({
               lang={lang}
             />
           )}
-          {isAdmin && sport !== 'nba' && result?.mlOpinion && (
+          {isAdmin && sport === 'mlb' && result?.mlOpinion && (
             <AdminMlOpinionCard mlOpinion={result.mlOpinion} lang={lang} />
           )}
           <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} />
