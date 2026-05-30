@@ -242,7 +242,7 @@ Modo admin-only "lock of the slate" (MLB): analiza 1..N juegos con lineup confir
 Genera drafts editoriales con Claude Haiku, los encola, y los publica en X (Twitter) vía OAuth 1.0a HMAC-SHA1. Detalle: [docs/content-pipeline.md](docs/content-pipeline.md).
 
 ### Admin ML Control Center (`/admin/ml-control`)
-Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, **models loaded X/Y**, estado ensemble LIVE/READY/OFF), panel de **inferencia en vivo** por mercado (artefacto en disco, modelo en RAM, runline skipped/early), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d legacy-vs-python, pesos del ensemble meta-learner, y audit log de retrains. `GET /api/admin/ml/status` incluye bloque `observability` derivado del `/health` del sidecar.
+Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, **models loaded X/Y**, estado ensemble LIVE/READY/OFF), panel de **inferencia en vivo** por mercado (artefacto en disco, modelo en RAM, runline skipped/early), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d legacy-vs-python, pesos del ensemble meta-learner, y audit log de retrains. `GET /api/admin/ml/status` incluye bloque `observability` derivado del `/health` del sidecar. El toast "ENSEMBLE OMITIDO" muestra desglose por mercado (`moneyline: N/50 · overunder: N/50 · …`) para que sea claro cuántos picks faltan por mercado hasta el gate de entrenamiento (el sidecar entrena por mercado individualmente, no sobre el total).
 
 ### Bankroll — comparativa tú vs Hexa
 `GET /api/bankroll/equity-stats?period=90&sport=all|mlb|nba` compara ROI en unidades, win rate y delta de bankroll entre todas las apuestas registradas y el subconjunto `source=hexa`. Panel en tab **Oracle Stats** de [BankrollTracker](client/src/components/BankrollTracker.jsx).
@@ -296,6 +296,7 @@ Estado:
 - ✅ **Pick-aligned shadow + admin ML** (2026-05-17): `pickAlignedMl.js`, columnas en `shadow_model_runs`, `mlOpinion` en analyze game/safe, tokens `--outcome-*` para W/L/P en League mode (PRs #345–#347).
 - ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, `/api/nba/*`, resolver post-game, live tracker, sport shell. Feature-flag `NBA_ANALYSIS_ENABLED`. Go-live gate mergeado; validación E2E en prod según tráfico.
 - ✅ **Pick Imperdible** (2026-05-26): modo admin-only "lock of the slate" (MLB). Scorer de convicción (acuerdo modelo+mercado+ML, anti-varianza), gate duro con PASS, árbitro Opus, tabla `imperdible_runs`, página `/admin/imperdible`. Feature-flag `IMPERDIBLE_ENABLED`. Aislado del training default (`source='imperdible'`).
+- ✅ **Hotfix ensemble skip UX** (2026-05-30): `POST /retrain/ensemble` ahora agrupa filas elegibles por `pick_market_type`; el toast muestra `moneyline: N/50 · overunder: N/50 · …` en vez de un total global que parecía suficiente pero no lo era (el sidecar entrena por mercado individualmente).
 
 ### Estado NBA MVP (2026-05-17)
 

@@ -160,7 +160,7 @@ Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos 
 - [server/routes/content-admin.js](server/routes/content-admin.js)
 - [server/routes/insights.js](server/routes/insights.js)
 - [server/routes/oracle-history.js](server/routes/oracle-history.js)
-- [server/routes/admin-ml.js](server/routes/admin-ml.js) — Admin ML Control Center (status, retrain proxy con audit log, ensemble breakdown por pick, chat-picks stats).
+- [server/routes/admin-ml.js](server/routes/admin-ml.js) — Admin ML Control Center (status, retrain proxy con audit log, ensemble breakdown por pick, chat-picks stats). **Fix 2026-05-30**: el endpoint `POST /retrain/ensemble` ahora cuenta filas elegibles con `GROUP BY pick_market_type` (antes era COUNT(*) global sin filtrar por mercado, lo que mostraba un total ≥50 aunque ningún mercado individual lo alcanzara). Devuelve `eligible_by_market` en la respuesta; la UI muestra desglose `moneyline: N/50 · overunder: N/50 · …` en lugar del total engañoso.
 
 ### Frontend
 - [client/src/App.jsx](client/src/App.jsx) — root + routing. Tiene estado `sport` ('mlb'|'nba') que se pasa a GameSelector y AnalysisPanel en la tab de juego.

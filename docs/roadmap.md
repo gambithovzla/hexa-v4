@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-29 — B2 + B10 frontend cerrados: `LiveTracker` migrado de batch poll 30s a SSE per-game (`/api/games/:gamePk/live/stream`); `AltLinesModal` + `PlayerPropsPage` ya completos (estaban cerrados en código, roadmap desactualizado). `HexaLiveStream.jsx` (roto/huérfano) eliminado. Sprint 8f anterior: Railway hardening + Node 20.
+**Última actualización**: 2026-05-30 — Hotfix ensemble skip message: el endpoint `POST /retrain/ensemble` contaba filas elegibles sin filtrar por mercado (total ≥50 pero ningún mercado individual lo alcanzaba → "ENSEMBLE OMITIDO" confuso). Ahora agrupa por `pick_market_type` con `actual_status='resolved'` y devuelve `eligible_by_market`; la UI muestra desglose `moneyline: N/50 · overunder: N/50 · …`. Sprint 9 cerrado (2026-05-30): NFL completo (PRs #373–#378). B2+B10 frontend cerrados (2026-05-29).
 
 ---
 
@@ -535,6 +535,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 - ✅ B2 Hexa Live UI — `LiveTracker` SSE per-game (2026-05-29). Lag real ~1-2s vs 30s antes.
 - ✅ B10 Alt lines UI — `AltLinesModal` + botón en `PlayerPropsPage` cerrado.
 - ✅ **NFL Sprint 9 completo** (PRs #373–#378, 2026-05-30): Oracle + lifecycle + shadow/dataset + live tracker + UI (selector activo, pizarra placeholder) + ML scaffolding. Tres deportes operativos: MLB, NBA, NFL.
+- ✅ **Hotfix ensemble skip UX (2026-05-30)**: `POST /retrain/ensemble` en `admin-ml.js` — la query de filas elegibles ahora usa `GROUP BY pick_market_type` con `actual_status='resolved'`; devuelve `eligible_by_market`. Toast "ENSEMBLE OMITIDO" muestra desglose por mercado (`moneyline: N/50 · overunder: N/50 · …`) en vez del total global engañoso.
 
 **Pendiente operacional (no requiere nuevo sprint de código)**:
 - Props ML gate: acumular ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
