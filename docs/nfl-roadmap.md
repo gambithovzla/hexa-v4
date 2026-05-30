@@ -80,15 +80,17 @@ Espeja NBA 7d.
 - [ ] `HistoryPanel` + `useHistory` — logos y filtro `?sport=nfl`.
 - **Salida**: flujo visual completo MLB/NBA/NFL en la tab de juego (admin).
 
-### Sprint 9.1 — Dataset + shadow aislados 📋
+### Sprint 9.1 — Dataset + shadow aislados ✅ (backend)
 
-Espeja NBA 7.1.
+Espeja NBA 7.1. **Backend cerrado en código** (rama `feat/nfl-completion`). Toggles de frontend en `DatasetDashboardV2`/`ShadowModeDashboard` → 9d.
 
-- [ ] `server/services/nflShadowValidator.js` — scoring determinístico (EPA diff, QB tier, rest, injuries, weather, HFA).
-- [ ] `server/services/nflShadowPersistence.js` — `pick_features` + `shadow_model_runs` con `sport='nfl'`.
-- [ ] Migración `runNflDatasetMigrations()` — columnas NFL en `pick_features`.
-- [ ] `?sport=nfl` en APIs admin de dataset/shadow; toggles en `DatasetDashboardV2` + `ShadowModeDashboard`.
-- **Salida**: filas NFL en `pick_features`/`shadow_model_runs` sin contaminar MLB/NBA.
+- [x] `server/services/nflShadowValidator.js` — `calculateNflShadowScore`: scoring determinístico (fuerza EPA-diff o point-diff proxy, QB availability, rest/short-week/off-bye, injuries, recent form, home-field boost). Confianza 50–72 (cap NFL). 9 tests.
+- [x] `server/services/nflShadowPersistence.js` — `saveNflPickFeatures` (columnas NFL: epa, rest, short-week/off-bye, qb_active, wind, is_dome, spread/total close, severe injuries) + `recordNflShadowRun`, ambos `sport='nfl'`, fire-and-forget. Cableados en `routes/nfl.js` tras persistir el pick.
+- [x] Migración `runNflDatasetMigrations()` — ya entregada en 9a (columnas NFL en `pick_features`).
+- [x] Back-fill de shadow runs en `pick-resolver-nfl.js` (`updateShadowModelRunsForGame`).
+- [x] `?sport=nfl` en APIs admin: `GET /api/admin/shadow-model` + `getShadowModeDashboard` (whitelist mlb|nba|nfl); `GET /api/admin/feature-store` con branch NFL en el summary (counts + EPA/wind averages). Filas NFL aisladas vía `COALESCE(sport,'mlb')='nfl'`.
+- [ ] Toggles UI NFL en `DatasetDashboardV2` + `ShadowModeDashboard`, y columnas NFL-específicas en la vista detallada del dataset → **9d**.
+- **Salida**: filas NFL en `pick_features`/`shadow_model_runs` sin contaminar MLB/NBA; admin puede consultar dataset/shadow NFL por `?sport=nfl`.
 
 ### Sprint 9.2 — Live tracker NFL 📋
 

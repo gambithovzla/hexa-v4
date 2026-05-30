@@ -21,6 +21,7 @@ import { buildNflGameContext } from '../nfl-context-builder.js';
 import { analyzeNflGame, analyzeNflChat } from '../services/oracleNfl.js';
 import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
+import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
 import { upsertOracleSession } from './oracle-history.js';
 
@@ -213,8 +214,40 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireAdmin, async (req, 
       marketOdds: resolvedOdds,
     });
 
-    // NOTE: pick_features + shadow_model_runs persistence lands in Sprint 9.1
-    // (nflShadowPersistence). NFL picks resolve via pick-resolver-nfl.js today.
+    // Fire-and-forget: persist NFL pick_features + shadow_model_runs (Sprint 9.1).
+    // Errors are swallowed inside the helpers; never break the response.
+    if (savedPick?.id) {
+      const gameMeta = {
+        homeTeamId: game.home_team_id ?? null,
+        awayTeamId: game.away_team_id ?? null,
+        homeAbbr:   game.home_team_abbr ?? null,
+        awayAbbr:   game.away_team_abbr ?? null,
+      };
+      const gamePkInt = gameId ? parseInt(gameId, 10) : null;
+
+      saveNflPickFeatures({
+        pickId:    savedPick.id,
+        gamePk:    gamePkInt,
+        gameDate,
+        context,
+        gameMeta,
+        marketOdds: resolvedOdds,
+        pickText:  analysisData?.master_prediction?.pick ?? analysisData?.best_pick?.detail ?? null,
+        oracleConfidence: analysisData?.master_prediction?.oracle_confidence ?? null,
+        userEmail: req.user.email ?? null,
+      }).catch(err => console.warn(`[nfl-route] pick_features persist swallowed: ${err.message}`));
+
+      recordNflShadowRun({
+        userId:    req.user.id,
+        userEmail: req.user.email ?? null,
+        pickId:    savedPick.id,
+        gamePk:    gamePkInt,
+        gameDate,
+        context,
+        gameMeta,
+        analysisData,
+      }).catch(err => console.warn(`[nfl-route] shadow_model persist swallowed: ${err.message}`));
+    }
 
     console.log(`[nfl-route] pick saved id=${savedPick?.id} game=${gameId} conf=${analysisData?.master_prediction?.oracle_confidence} quality=${guard.quality} odds=${oddsSource ?? 'none'} flags=${context.context_meta?.staleFlags?.length ?? 0}`);
 

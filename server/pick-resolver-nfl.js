@@ -23,6 +23,7 @@
 import pool from './db.js';
 import { getNflGamesForDate } from './nfl-api.js';
 import { resolvePickFromFinalState, tokenMatchesTeam } from './pick-resolver.js';
+import { updateShadowModelRunsForGame } from './shadow-model.js';
 
 function nflGameToResolverGame(game) {
   return {
@@ -140,6 +141,22 @@ export async function resolveNflPendingPicks() {
         if (result === 'win')  summary.wins++;
         if (result === 'loss') summary.losses++;
         if (result === 'push') summary.pushes++;
+
+        // Back-fill any pending NFL shadow_model_runs row for this game so the
+        // admin shadow dashboard shows oracle vs shadow vs actual.
+        try {
+          await updateShadowModelRunsForGame({
+            gamePk:     parseInt(String(nflGame.game_id), 10),
+            homeTeamId: nflGame.home_team_id ?? null,
+            awayTeamId: nflGame.away_team_id ?? null,
+            homeAbbr:   nflGame.home_team_abbr ?? null,
+            awayAbbr:   nflGame.away_team_abbr ?? null,
+            homeScore:  nflGame.home_score,
+            awayScore:  nflGame.away_score,
+          });
+        } catch (err) {
+          console.warn(`[pick-resolver-nfl] shadow_model back-fill failed for game ${nflGame.game_id}: ${err.message}`);
+        }
 
         console.log(
           `[pick-resolver-nfl] Pick #${pick.id} "${pick.pick}" → ${result.toUpperCase()} ` +

@@ -4219,9 +4219,9 @@ app.get('/api/admin/shadow-model', verifyToken, async (req, res) => {
   try {
     const limit = Number(req.query.limit ?? 50);
     const rawSport = String(req.query.sport ?? 'mlb').toLowerCase();
-    const sport = rawSport === 'nba' ? 'nba' : 'mlb';
-    // Only MLB shadow runs go through the live-game refresher (NBA resolver
-    // doesn't expose getLiveGameData yet — runs stay pending until the NBA
+    const sport = ['nba', 'nfl'].includes(rawSport) ? rawSport : 'mlb';
+    // Only MLB shadow runs go through the live-game refresher (NBA/NFL resolvers
+    // don't expose getLiveGameData yet — runs stay pending until the per-sport
     // pick resolver back-fills them).
     if (sport === 'mlb') {
       await refreshPendingShadowModelRuns(Math.min(limit, 50));
@@ -4501,11 +4501,29 @@ app.get('/api/admin/feature-store', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid month format. Use YYYY-MM.' });
     }
     const rawSport = String(req.query.sport ?? 'mlb').toLowerCase();
-    const sport = rawSport === 'nba' ? 'nba' : 'mlb';
+    const sport = ['nba', 'nfl'].includes(rawSport) ? rawSport : 'mlb';
     const sportFilterPf = `COALESCE(pf.sport,'mlb') = '${sport}'`;
     const datasetBaseWhere = `WHERE ${sportFilterPf} ${DATASET_PICK_VISIBILITY_SQL}`;
 
-    const summarySql = sport === 'nba'
+    const summarySql = sport === 'nfl'
+      ? `
+        SELECT
+          COUNT(*) as total_records,
+          COUNT(*) FILTER (WHERE pf.result = 'win') as wins,
+          COUNT(*) FILTER (WHERE pf.result = 'loss') as losses,
+          COUNT(*) FILTER (WHERE pf.result IS NULL) as pending,
+          COUNT(*) FILTER (WHERE pf.pick_id IS NOT NULL) as from_real_picks,
+          COUNT(*) FILTER (WHERE pf.backtest_id IS NOT NULL) as from_backtests,
+          ROUND(AVG(pf.home_epa_off)::numeric, 3) as avg_home_epa_off,
+          ROUND(AVG(pf.away_epa_off)::numeric, 3) as avg_away_epa_off,
+          ROUND(AVG(pf.wind_mph)::numeric, 1) as avg_wind_mph,
+          ROUND(AVG(pf.context_completeness)::numeric, 2) as avg_completeness,
+          MIN(pf.game_date) as earliest_date,
+          MAX(pf.game_date) as latest_date
+        FROM pick_features pf
+        ${datasetBaseWhere}
+      `
+      : sport === 'nba'
       ? `
         SELECT
           COUNT(*) as total_records,
