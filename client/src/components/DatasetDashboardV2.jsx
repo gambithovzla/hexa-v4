@@ -298,7 +298,7 @@ export default function DatasetDashboard({ lang = 'en', onBack }) {
         background: isLeague ? 'rgba(0,0,0,0.35)' : 'transparent',
         p: isLeague ? '3px' : 0,
       }}>
-        {['mlb', 'nba'].map((s) => (
+        {['mlb', 'nba', 'nfl'].map((s) => (
           <Box
             key={s}
             component="button"

@@ -37,6 +37,7 @@ import { captureClosingLines } from './closing-line-capture.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
 import { buildNbaPickLiveProgressEntry } from './pick-tracker-nba.js';
+import { buildNflPickLiveProgressEntry } from './pick-tracker-nfl.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
@@ -2776,7 +2777,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
        WHERE p.user_id = $1
          AND p.result = 'pending'
          AND p.deleted_at IS NULL
-         AND COALESCE(p.sport, 'mlb') IN ('mlb', 'nba')
+         AND COALESCE(p.sport, 'mlb') IN ('mlb', 'nba', 'nfl')
        ORDER BY created_at DESC
        LIMIT 20`,
       [userId]
@@ -2788,6 +2789,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
 
     const results = [];
     const nbaGamesByDate = new Map();
+    const nflGamesByDate = new Map();
 
     for (const pick of pendingPicks) {
       try {
@@ -2797,6 +2799,15 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
             game_date: normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at),
           };
           results.push(await buildNbaPickLiveProgressEntry(nbaPick, nbaGamesByDate));
+          continue;
+        }
+
+        if (pick.sport === 'nfl') {
+          const nflPick = {
+            ...pick,
+            game_date: normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at),
+          };
+          results.push(await buildNflPickLiveProgressEntry(nflPick, nflGamesByDate));
           continue;
         }
 

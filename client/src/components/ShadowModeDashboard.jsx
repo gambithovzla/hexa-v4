@@ -172,7 +172,7 @@ export default function ShadowModeDashboard({ onBack }) {
 
       {/* Sport toggle */}
       <Box sx={{ display: 'inline-flex', border: `1px solid ${C.cyanLine}`, mb: 3, overflow: 'hidden' }}>
-        {['mlb', 'nba'].map(s => (
+        {['mlb', 'nba', 'nfl'].map(s => (
           <Box
             key={s}
             component="button"
