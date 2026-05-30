@@ -32,13 +32,20 @@ const RL_SIGNED = /(?:rl\s+)?([+-]\d+\.5)(?!\d)/i;
 // ── Over/Under patterns ───────────────────────────────────────────────────
 const OU_SIDE_PATTERN = '(?:over|under|o|u|más de|mas de|menos de|bajo|alto|arriba|abajo)';
 const OU_PATTERN = new RegExp(`\\b(${OU_SIDE_PATTERN})\\s+([\\d]+(?:\\.5)?)\\b`, 'i');
+// Bare over/under without an explicit numeric line — the Oracle sometimes emits
+// "Over (Total de Carreras)" with no number. Capture the side so the pick is at
+// least classified as overunder (line stays null) instead of falling through to
+// the moneyline default.
+const BARE_OU_PATTERN = /^\s*(over|under|más de|mas de|menos de|bajo|alto|arriba|abajo)\b/i;
 const STAT_FIRST_PROP_PATTERN =
   /^(.+?)\s+(hits?|strikeouts?|ponches?|total bases|bases totales|tb|hr|home runs?|jonrones?|rbis?|carreras impulsadas)\s+(over|under|o|u|más de|mas de|menos de|bajo|alto|arriba|abajo)\s+([\d]+(?:\.5)?)$/i;
 const LINE_LAST_PROP_PATTERN =
   new RegExp(`^(.+?)\\s+${OU_SIDE_PATTERN}\\s+([\\d]+(?:\\.5)?)\\s+(.+)$`, 'i');
 
 // ── Moneyline — plain team abbreviation or "Team ML" ─────────────────────
-const ML_EXPLICIT = /\bml\b/i;
+// Accept both the abbreviation "ML" and the spelled-out forms the Oracle uses
+// in Spanish/English prose ("Moneyline NYY", "NYY A ganar", "NYY Dinero").
+const ML_EXPLICIT = /\b(?:ml|moneyline)\b|\ba\s+ganar\b|\bdinero\b/i;
 
 // ── Props ─────────────────────────────────────────────────────────────────
 // "Aaron Judge Over 0.5 HR", "Shohei Ohtani Under 8.5 Strikeouts"
@@ -99,6 +106,18 @@ function resolvePropKind(raw) {
 function startsWithTeamAbbr(text) {
   const first = text.trim().toUpperCase().split(/\s+/)[0];
   return ALL_TEAM_ABBRS.has(first);
+}
+
+/**
+ * Returns true if any whitespace-delimited token is a known team abbreviation.
+ * Used as a moneyline fallback when the team is not the first token
+ * (e.g. "Jesús Luzardo Moneyline (PHI gana)").
+ */
+function containsTeamAbbr(text) {
+  return text
+    .toUpperCase()
+    .split(/[^A-Z]+/)
+    .some((tok) => ALL_TEAM_ABBRS.has(tok));
 }
 
 /**
@@ -202,6 +221,18 @@ export function parsePick(text, ctx = {}) {
     };
   }
 
+  // ── 1b. Bare Over/Under (no numeric line) ─────────────────────────────────
+  const bareOu = clean.match(BARE_OU_PATTERN);
+  if (bareOu) {
+    return {
+      market_type: 'overunder',
+      side: resolveOuSide(bareOu[1]),
+      line: null,
+      prop_kind: null,
+      prop_player_name: null,
+    };
+  }
+
   // ── 2. Run-line ───────────────────────────────────────────────────────────
   const rlMatch = clean.match(RL_SIGNED);
   if (rlMatch) {
@@ -216,8 +247,8 @@ export function parsePick(text, ctx = {}) {
     return { market_type: 'moneyline', side, line: null, prop_kind: null, prop_player_name: null };
   }
 
-  // ── 4. Bare team abbreviation → moneyline ─────────────────────────────────
-  if (startsWithTeamAbbr(clean)) {
+  // ── 4. Team abbreviation present → moneyline ──────────────────────────────
+  if (startsWithTeamAbbr(clean) || containsTeamAbbr(clean)) {
     const side = resolveMLSide(clean, ctx.homeAbbr, ctx.awayAbbr);
     return { market_type: 'moneyline', side, line: null, prop_kind: null, prop_player_name: null };
   }

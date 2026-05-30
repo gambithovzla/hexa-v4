@@ -198,9 +198,11 @@ export async function buildPickAlignedMlOpinion({
   }
 
   const oracleProb = extractOraclePickProb(analysisData);
-  const oracleSide = parsed.side ?? (marketType === 'moneyline' || marketType === 'runline'
-    ? inferSideFromProb(marketType, oracleProb, null)
-    : parsed.side);
+  // The Oracle's side IS whatever its pick text says — never infer it from the
+  // confidence number. Guessing "home" because prob ≥ 50% produced false
+  // "Home ML" labels (and spurious DISAGREE) for away/over picks the parser
+  // couldn't read. When the side is genuinely unknown, leave it null → "—".
+  const oracleSide = parsed.side ?? null;
 
   const legacy = buildLegacyOpinion(marketType, xgboostResult, gameData, parsed);
   legacy.agree = sidesAgree(oracleSide, legacy.side);
