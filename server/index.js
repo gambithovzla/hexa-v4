@@ -26,8 +26,10 @@ import picksRouter from './routes/picks.js';
 import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-history.js';
 import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
+import nflRouter from './routes/nfl.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
+import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
@@ -643,6 +645,7 @@ app.use('/api/picks',        picksRouter);
 app.use('/api/oracle',       oracleHistoryRouter);
 app.use('/api/insights',     insightsRouter);
 app.use('/api/nba',          nbaRouter);
+app.use('/api/nfl',          nflRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -4932,6 +4935,22 @@ runMigrations()
           if (process.env.NBA_ANALYSIS_ENABLED === 'true') {
             resolveNbaPendingPicks().catch(err => {
               console.error('[pick-resolver-nba] Scheduled run failed:', err.message);
+            });
+          }
+        }
+
+        // NFL resolver — game-time-aware: NFL plays Thu/Sun/Mon. Sunday early
+        // games finish ~16:00 ET; primetime spills past midnight into the next
+        // morning. Run only on those days, from 16:00 ET through 05:59 ET, so we
+        // don't poll ESPN on the (idle) MLB/NBA-only days of the week.
+        if (process.env.NFL_ANALYSIS_ENABLED === 'true') {
+          const etWeekday = new Intl.DateTimeFormat('en-US', {
+            weekday: 'short', timeZone: 'America/New_York',
+          }).format(new Date());
+          const isNflDay = etWeekday === 'Thu' || etWeekday === 'Sun' || etWeekday === 'Mon';
+          if (isNflDay && (etHour >= 16 || etHour < 6)) {
+            resolveNflPendingPicks().catch(err => {
+              console.error('[pick-resolver-nfl] Scheduled run failed:', err.message);
             });
           }
         }

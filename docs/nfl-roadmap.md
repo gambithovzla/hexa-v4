@@ -2,7 +2,7 @@
 
 Plan de construcción del **tercer deporte**, espejo exacto de la serie NBA (Sprint 7). Detalle técnico y de datos en [nfl-architecture.md](nfl-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md).
 
-**Estado**: 🔄 en build. **9a (scaffolding de datos) mergeado** (PR #373); **9b (Oracle NFL) cerrado en código** (rama `feat/nfl-oracle-9b`). `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active = false`, no está en `ACTIVE_SPORTS`); los endpoints de datos `GET /api/nfl/*` están vivos. El Oracle NFL (motor + prompts + guard) existe pero aún no hay endpoint que lo exponga. Falta: lifecycle/rutas (9c), UI (9d).
+**Estado**: 🔄 en build. **9a (scaffolding)** y **9b (Oracle NFL)** mergeados (PRs #373, #374); **9c (pick lifecycle: rutas + odds + resolver)** cerrado en código (rama `feat/nfl-lifecycle-9c`). `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active = false`); las rutas `POST /api/nfl/analyze/*` existen pero gateadas por `NFL_ANALYSIS_ENABLED=false`. Falta: dataset/shadow aislados (9.1), UI (9d), live tracker (9.2), ML sidecar (9e).
 
 ---
 
@@ -57,15 +57,17 @@ Espeja NBA 7b. **Cerrado en código (2026-05-29, rama `feat/nfl-oracle-9b`)** �
 - [ ] (Opcional) `server/nfl-advanced-fetcher.js` — stats nflverse semanales (diferido; el Oracle ya funciona con el proxy point-diff).
 - **Salida**: motor end-to-end listo. Verificado: prompt determinístico bien formado, guard correcto, 324 tests verdes. La llamada LLM real se valida cuando 9c exponga el endpoint (requiere `ANTHROPIC_API_KEY`).
 
-### Sprint 9c — Pick lifecycle NFL 📋
+### Sprint 9c — Pick lifecycle NFL ✅
 
-Espeja NBA 7c + 7c2.
+Espeja NBA 7c + 7c2. **Cerrado en código (rama `feat/nfl-lifecycle-9c`)** — pendiente smoke con tráfico real (ESPN/Odds API bloqueados desde el sandbox de dev).
 
-- [ ] `server/routes/nfl.js` — `POST /api/nfl/analyze/game` + `/chat` (admin-only, flag `NFL_ANALYSIS_ENABLED`). Persiste `sport='nfl'`. Resuelve odds server-side vía `nfl-odds.js`.
-- [ ] `server/nfl-odds.js` — The Odds API `americanfootball_nfl`, dual key, preserva key numbers.
-- [ ] `server/pick-resolver-nfl.js` — resuelve pendientes NFL (reusa `resolvePickFromFinalState`/`tokenMatchesTeam`). **Maneja push.**
-- [ ] Background job game-time-aware en `index.js` (solo ventanas Thu/Sun/Mon).
-- **Salida**: crear → resolver de un pick NFL contra score final, aislado de jobs MLB/NBA.
+- [x] `server/routes/nfl.js` — `POST /api/nfl/analyze/game` + `/chat` (admin-only, flag `NFL_ANALYSIS_ENABLED` → 503). Lookup **por semana** (`season`/`seasonType`/`week`, default semana actual) con fallback `date`. Persiste `sport='nfl'`. Resuelve odds server-side vía `nfl-odds.js`. (pick_features/shadow → 9.1.)
+- [x] `server/nfl-odds.js` — The Odds API `americanfootball_nfl`, dual key fallback. **Preserva key numbers** usando la MODA de spread/total entre books (no promedio — evita half-points falsos fuera del 3/7). `getNflGameOdds`, `matchNflOddsToGame`, `buildMarketOddsForGame` (spread-first).
+- [x] `server/pick-resolver-nfl.js` — resuelve pendientes `sport='nfl'` reusando `resolvePickFromFinalState`/`tokenMatchesTeam`. **Maneja push** (cuenta wins/losses/pushes). Sin shadow back-fill (9.1).
+- [x] Background job **game-time-aware** en `index.js`: corre cada 30 min solo Thu/Sun/Mon ET entre 16:00 y 05:59 (los días MLB/NBA-only no pollean ESPN NFL).
+- [x] `chatPickExtractor.js` extendido a `'nfl'` (sport normaliza nba/nfl/mlb; market hint spread/total/moneyline para deportes de spread).
+- [x] Tests: `server/__tests__/nfl-odds.test.js` (7 tests).
+- **Salida**: crear → resolver de un pick NFL contra score final, aislado de jobs MLB/NBA. Verificado: módulos cargan, router con 2 rutas, odds match/build correcto, 331 tests verdes. La llamada LLM/Odds reales se validan en prod (requieren keys + red).
 
 ### Sprint 9d — UI 📋
 
