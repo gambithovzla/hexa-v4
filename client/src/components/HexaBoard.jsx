@@ -546,22 +546,7 @@ export default function HexaBoard({ lang = 'es', sport = 'mlb' }) {
   const t = T[lang] ?? T.es;
   const { C, MONO, SCALE, SPACE, INTENT } = useHexaTheme();
 
-  if (isNfl) {
-    return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: '2rem', fontWeight: 800, color: 'var(--brand-field, #2e7d32)', letterSpacing: '0.08em', mb: 1 }}>
-          NFL
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.85rem', color: C.textMuted, mb: 0.5 }}>
-          {lang === 'es' ? 'Pizarra NFL disponible en septiembre 2026' : 'NFL Board available September 2026'}
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textMuted, opacity: 0.6 }}>
-          {lang === 'es' ? 'Usa la tab JUEGO para analizar partidos NFL.' : 'Use the GAME tab to analyze NFL matchups.'}
-        </Typography>
-      </Box>
-    );
-  }
-
+  // All hooks must be declared unconditionally before any early returns.
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState(null);
@@ -570,6 +555,7 @@ export default function HexaBoard({ lang = 'es', sport = 'mlb' }) {
   const [expandedKey, setExpandedKey] = useState(null);
 
   const fetchBoard = useCallback(async (force = false) => {
+    if (isNfl) return;
     if (force) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
@@ -584,7 +570,7 @@ export default function HexaBoard({ lang = 'es', sport = 'mlb' }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isNba]);
+  }, [isNba, isNfl]);
 
   useEffect(() => { fetchBoard(false); }, [fetchBoard]);
 
@@ -614,6 +600,22 @@ export default function HexaBoard({ lang = 'es', sport = 'mlb' }) {
 
   const heroTone = hero ? INTENT[TYPE_INTENT[hero.type]] ?? INTENT.action : INTENT.action;
   const heroText = hero ? (hero.text?.[lang] ?? hero.text?.en ?? '') : '';
+
+  if (isNfl) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography sx={{ fontFamily: MONO, fontSize: '2rem', fontWeight: 800, color: 'var(--brand-field, #2e7d32)', letterSpacing: '0.08em', mb: 1 }}>
+          NFL
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.85rem', color: C.textMuted, mb: 0.5 }}>
+          {lang === 'es' ? 'Pizarra NFL disponible en septiembre 2026' : 'NFL Board available September 2026'}
+        </Typography>
+        <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textMuted, opacity: 0.6 }}>
+          {lang === 'es' ? 'Usa la tab JUEGO para analizar partidos NFL.' : 'Use the GAME tab to analyze NFL matchups.'}
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ maxWidth: 1040, mx: 'auto', width: '100%' }}>
