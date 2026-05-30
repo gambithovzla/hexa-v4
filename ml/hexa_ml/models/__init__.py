@@ -16,6 +16,7 @@ from .props import (
     PropHomeRunsModel,
     PropRbisModel,
 )
+from .nfl import NflMoneylineModel, NflSpreadModel, NflTotalModel
 
 MARKET_MODELS = {
     "moneyline": MoneylineModel,
@@ -26,6 +27,9 @@ MARKET_MODELS = {
     "prop_total_bases": PropTotalBasesModel,
     "prop_home_runs": PropHomeRunsModel,
     "prop_rbis": PropRbisModel,
+    "nfl_moneyline": NflMoneylineModel,
+    "nfl_spread": NflSpreadModel,
+    "nfl_total": NflTotalModel,
 }
 
 __all__ = [
@@ -37,5 +41,8 @@ __all__ = [
     "PropTotalBasesModel",
     "PropHomeRunsModel",
     "PropRbisModel",
+    "NflMoneylineModel",
+    "NflSpreadModel",
+    "NflTotalModel",
     "MARKET_MODELS",
 ]

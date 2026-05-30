@@ -16,6 +16,11 @@ import {
   NFL_SHADOW_MODEL_KEY,
   NFL_SHADOW_MODEL_VERSION,
 } from './nflShadowValidator.js';
+import {
+  buildNflFeaturePayload,
+  predictNflMoneyline,
+  predictNflSpread,
+} from './nflMlClient.js';
 
 const SEVERE_QB = new Set(['out', 'out_for_season', 'doubtful']);
 
@@ -188,6 +193,23 @@ export async function recordNflShadowRun({
     ? String(oraclePredictedId) === String(shadow.predicted_winner)
     : null;
 
+  // Best-effort ML sidecar call — never throws
+  let pythonPickProb = null;
+  let pythonPickMarket = null;
+  try {
+    const marketType = normalizeMarketType(mp.pick ?? bp.detail ?? '');
+    const features = buildNflFeaturePayload(context, gameMeta, analysisData?.market_odds ?? {});
+    const pred = marketType === 'spread'
+      ? await predictNflSpread(features)
+      : await predictNflMoneyline(features);
+    if (pred?.probability != null) {
+      pythonPickProb = pred.probability;
+      pythonPickMarket = marketType === 'spread' ? 'nfl_spread' : 'nfl_moneyline';
+    }
+  } catch {
+    // sidecar unavailable — leave null
+  }
+
   const featureSnapshot = {
     home_point_diff: toNumber(home.pointDiff),
     away_point_diff: toNumber(away.pointDiff),
@@ -216,7 +238,8 @@ export async function recordNflShadowRun({
          shadow_score, shadow_confidence, shadow_home_win_prob,
          shadow_predicted_winner_id, shadow_predicted_winner_abbr,
          agree_with_oracle, actual_status, feature_snapshot,
-         sport, user_email, pick_time_lima
+         sport, user_email, pick_time_lima,
+         python_pick_prob, python_pick_market
        )
        VALUES (
          $1,$2,'analysis','single',$3,$4,
@@ -227,7 +250,8 @@ export async function recordNflShadowRun({
          $16,$17,$18,
          $19,$20,
          $21,'pending',$22,
-         'nfl',$23,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP
+         'nfl',$23,(NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP,
+         $24,$25
        )
        RETURNING id`,
       [
@@ -254,6 +278,8 @@ export async function recordNflShadowRun({
         agree,
         JSON.stringify(featureSnapshot),
         userEmail ?? null,
+        pythonPickProb,
+        pythonPickMarket,
       ]
     );
     return rows[0]?.id ?? null;

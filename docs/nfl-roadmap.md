@@ -2,7 +2,7 @@
 
 Plan de construcción del **tercer deporte**, espejo exacto de la serie NBA (Sprint 7). Detalle técnico y de datos en [nfl-architecture.md](nfl-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md).
 
-**Estado**: 🔄 en build. **9a (scaffolding)** y **9b (Oracle NFL)** mergeados (PRs #373, #374); **9c (pick lifecycle: rutas + odds + resolver)** cerrado en código (rama `feat/nfl-lifecycle-9c`). `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active = false`); las rutas `POST /api/nfl/analyze/*` existen pero gateadas por `NFL_ANALYSIS_ENABLED=false`. Falta: dataset/shadow aislados (9.1), UI (9d), live tracker (9.2), ML sidecar (9e).
+**Estado**: 🔄 en build. **9a → 9e completos en código** (rama `feat/nfl-completion`). Todos los sprints cerrados; falta smoke E2E en prod (ESPN/Odds API bloqueados en sandbox). `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active = false`) hasta go-public gate.
 
 ---
 
@@ -69,46 +69,54 @@ Espeja NBA 7c + 7c2. **Cerrado en código (rama `feat/nfl-lifecycle-9c`)** — p
 - [x] Tests: `server/__tests__/nfl-odds.test.js` (7 tests).
 - **Salida**: crear → resolver de un pick NFL contra score final, aislado de jobs MLB/NBA. Verificado: módulos cargan, router con 2 rutas, odds match/build correcto, 331 tests verdes. La llamada LLM/Odds reales se validan en prod (requieren keys + red).
 
-### Sprint 9d — UI 📋
+### Sprint 9d — UI ✅
 
-Espeja NBA 7d.
+Espeja NBA 7d. **Cerrado en código (rama `feat/nfl-completion`, 2026-05-30).**
 
-- [ ] `SportSwitcher` agrega pill NFL (livery propio).
-- [ ] `GameSelector` — `normalizeNflGame` + **selector por semana** + fetch `/api/nfl/games`; muestra QB titular + spread, oculta pitchers.
-- [ ] `AnalysisPanel` — endpoint NFL; oculta engine/webSearch/lineup MLB.
-- [ ] `NflContextMetaBadge`, `NflStandingsPanel`, `client/src/utils/nflLogoUrl.js`.
-- [ ] `HistoryPanel` + `useHistory` — logos y filtro `?sport=nfl`.
+- [x] `SportSwitcher` — pill NFL con livery `var(--brand-field, #2e7d32)`.
+- [x] `GameSelector` — `normalizeNflGame`, fetch `/api/nfl/games` (no date param → current week), "Current week" label en header, pitchers section oculta para NFL, `getNflLogoUrl` en `TeamLogo`.
+- [x] `AnalysisPanel` — endpoint `/api/nfl/analyze/game`; safe mode, betType, engine picker, webSearch, lineup badges y ml opinion card gateados a `sport==='mlb'`; safe guard y lineup gate cubren NFL.
+- [x] `client/src/utils/nflLogoUrl.js` — ESPN logos por abbr con aliases (JAC→jax, WAS→wsh, OAK→lv, SD→lac, STL→lar).
+- [x] `HistoryPanel` — logos NFL vía `getNflLogoUrl`, misma rama que NBA.
+- [x] `ShadowModeDashboard` + `DatasetDashboardV2` — sport toggle incluye `nfl`.
+- [x] `client/src/config/sportCapabilities.js` — entradas NFL (board/history/analyze habilitados; parlay/batch/gameDetail deshabilitados con mensajes).
 - **Salida**: flujo visual completo MLB/NBA/NFL en la tab de juego (admin).
 
-### Sprint 9.1 — Dataset + shadow aislados ✅ (backend)
+### Sprint 9.1 — Dataset + shadow aislados ✅
 
-Espeja NBA 7.1. **Backend cerrado en código** (rama `feat/nfl-completion`). Toggles de frontend en `DatasetDashboardV2`/`ShadowModeDashboard` → 9d.
+Espeja NBA 7.1. **Cerrado en código** (rama `feat/nfl-completion`, 2026-05-30).
 
 - [x] `server/services/nflShadowValidator.js` — `calculateNflShadowScore`: scoring determinístico (fuerza EPA-diff o point-diff proxy, QB availability, rest/short-week/off-bye, injuries, recent form, home-field boost). Confianza 50–72 (cap NFL). 9 tests.
 - [x] `server/services/nflShadowPersistence.js` — `saveNflPickFeatures` (columnas NFL: epa, rest, short-week/off-bye, qb_active, wind, is_dome, spread/total close, severe injuries) + `recordNflShadowRun`, ambos `sport='nfl'`, fire-and-forget. Cableados en `routes/nfl.js` tras persistir el pick.
 - [x] Migración `runNflDatasetMigrations()` — ya entregada en 9a (columnas NFL en `pick_features`).
 - [x] Back-fill de shadow runs en `pick-resolver-nfl.js` (`updateShadowModelRunsForGame`).
 - [x] `?sport=nfl` en APIs admin: `GET /api/admin/shadow-model` + `getShadowModeDashboard` (whitelist mlb|nba|nfl); `GET /api/admin/feature-store` con branch NFL en el summary (counts + EPA/wind averages). Filas NFL aisladas vía `COALESCE(sport,'mlb')='nfl'`.
-- [ ] Toggles UI NFL en `DatasetDashboardV2` + `ShadowModeDashboard`, y columnas NFL-específicas en la vista detallada del dataset → **9d**.
+- [x] Toggles UI NFL en `DatasetDashboardV2` + `ShadowModeDashboard` (→ entregado en 9d).
 - **Salida**: filas NFL en `pick_features`/`shadow_model_runs` sin contaminar MLB/NBA; admin puede consultar dataset/shadow NFL por `?sport=nfl`.
 
-### Sprint 9.2 — Live tracker NFL 📋
+### Sprint 9.2 — Live tracker NFL ✅
 
-Sin equivalente directo NBA (NBA no pollea live). NFL sí, vía ESPN drives/plays.
+Sin equivalente directo NBA. **Cerrado en código (rama `feat/nfl-completion`, 2026-05-30).**
 
-- [ ] `server/pick-tracker-nfl.js` — progreso live (ML via winprobability, spread via margen, total via puntos+tiempo). Reusa `calculatePickProgress`.
-- [ ] `client/src/components/NflLiveTracker.jsx`.
-- [ ] Polling game-time-aware (60–90s solo en ventanas de juego).
-- **Salida**: tracker live validado en una ventana de juego real.
+- [x] `server/pick-tracker-nfl.js` — `buildNflPickLiveProgressEntry`, `getNflLiveGameData`, `findNflGameForPick`. Polling live via ESPN (same cache pattern as NBA). `nflGamesByDate` map en el loop `GET /api/picks/live-progress` de `index.js`.
+- [x] `client/src/components/NflLiveTracker.jsx` — pollea `/api/nfl/games` cada 60s; filtra `game_status_id === 2` para live; `GameCard` (quarter/clock + score), `NflPickProgressPanel`, `NflLogo`.
+- [x] `index.js` live-progress IN clause extendida a `('mlb', 'nba', 'nfl')`.
+- **Salida**: componente live NFL disponible; validación E2E pendiente en ventana de juego real (esperar semana NFL).
 
-### Sprint 9e — ML sidecar NFL (pre-entrenado) 📋
+### Sprint 9e — ML sidecar NFL ✅
 
-Espeja NBA 7e pero **adelantado** gracias a nflverse.
+Espeja NBA 7e pero **adelantado** gracias a la arquitectura XGBoost. **Cerrado en código (rama `feat/nfl-completion`, 2026-05-30).**
 
-- [ ] Pre-entrenar XGBoost con play-by-play histórico nflverse (`nfl_data_py`): spread/total/ML, temporal split, Brier eval.
-- [ ] Endpoints `/predict/nfl_*` en el sidecar Python; `data.py` filtra `sport='nfl'`.
-- [ ] Integrar al pick-aligned shadow + ensemble cuando haya volumen.
-- **Salida**: opinión ML NFL desde el día 1, calibrada contra histórico real.
+- [x] `ml/hexa_ml/models/nfl.py` — `NflMoneylineModel`, `NflSpreadModel`, `NflTotalModel` (XGBoost con regularización fuerte reg_lambda=3.0 para dataset pequeño inicial).
+- [x] `ml/hexa_ml/models/__init__.py` — NFL models en `MARKET_MODELS`.
+- [x] `ml/hexa_ml/features.py` — `NFL_BASE_NUMERIC`, `NFL_BOOL_FEATURES`, `NFL_DERIVED_FEATURES`, `add_nfl_derived()`, `feature_columns()`/`build_X()` ruteados a NFL features cuando `market.startswith('nfl_')`.
+- [x] `ml/hexa_ml/data.py` — `'nfl'` en whitelist de `load_from_postgres`; NFL columns en `OPTIONAL_FEATURE_COLUMNS`; `filter_for_market` maneja `nfl_moneyline`/`nfl_spread`/`nfl_total`; `make_target` para los 3 mercados NFL.
+- [x] `ml/hexa_ml/train.py` — `NFL_MARKETS`, `MARKET_SPORT`, `train_all` carga dataset NFL aislado para NFL markets; CLI `--market` acepta `nfl_*|all`.
+- [x] `ml/hexa_ml/serve.py` — endpoints `POST /predict/nfl_moneyline|nfl_spread|nfl_total`; `RetrainRequest` pattern + `/retrain` incluyen NFL; `FeaturePayload` tiene campos NFL.
+- [x] `server/services/nflMlClient.js` — cliente HTTP para endpoints NFL (propio circuit breaker; no toca el frozen `mlModelClient.js`). `buildNflFeaturePayload`, `predictNflMoneyline`, `predictNflSpread`, `predictNflTotal`.
+- [x] `server/services/nflShadowPersistence.js` — llama sidecar ML en `recordNflShadowRun` y persiste `python_pick_prob`/`python_pick_market` en `shadow_model_runs`.
+- **Dataset inicial**: 0 picks NFL resueltos en prod (temporada comienza sept). Los modelos estarán listos para entrenarse automáticamente cuando `shadow_model_runs` acumule ≥60 filas NFL con result. Desde `/admin/ml-control` → RETRAIN (nfl_moneyline|nfl_spread|nfl_total) en sept 2026.
+- **Nota nflverse**: pre-entrenamiento con histórico nflverse (`nfl_data_py`) queda como mejora post-temporada; requiere integrar el loader CSV → `data.py load_from_csv`. El scaffolding de modelos ya está.
 
 ---
 
