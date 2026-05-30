@@ -529,18 +529,18 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
 
-**Próximo en cola** (actualizado 2026-05-29, post-B2/B10 frontend):
+**Estado al cierre de Sprint 9 (2026-05-30)**:
 - ✅ Sprint 8f Railway hardening — tres servicios Online, Node 20 activo, emails operativos.
 - ✅ A1–A9, B2–B11 completados. Todos los Tier A y Tier B cerrados en código y en frontend.
 - ✅ B2 Hexa Live UI — `LiveTracker` SSE per-game (2026-05-29). Lag real ~1-2s vs 30s antes.
-- ✅ B10 Alt lines UI — `AltLinesModal` + botón en `PlayerPropsPage` (ya estaba cerrado en código; roadmap sincronizado).
-- **Pendiente ops**:
-  - Props ML gate: acumular ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
-  - NBA validación E2E en prod con tráfico real → flip `NBA_ANALYSIS_ENABLED=true`.
-  - Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
-  - `OPENAI_EMBED_API_KEY` → activa RAG (pgvector embeddings de oracle_report en contexto).
-- ✅ **Frontend B2/B10 cerrados** (PR #372): `LiveTracker` migrado a SSE per-game; `AltLinesModal` + `PlayerPropsPage` ya completos.
-- ✅ **NFL Sprint 9 completo** (PRs #373–#377): Oracle, lifecycle, ML scaffolding, UI — selector NFL activo, pizarra con placeholder hasta sept 2026.
-- **Próximo**: NFL season arranca sept 2026 → activar `hexaNflBoardService`, acumular picks resueltos → entrenar modelos NFL.
+- ✅ B10 Alt lines UI — `AltLinesModal` + botón en `PlayerPropsPage` cerrado.
+- ✅ **NFL Sprint 9 completo** (PRs #373–#378, 2026-05-30): Oracle + lifecycle + shadow/dataset + live tracker + UI (selector activo, pizarra placeholder) + ML scaffolding. Tres deportes operativos: MLB, NBA, NFL.
+
+**Pendiente operacional (no requiere nuevo sprint de código)**:
+- Props ML gate: acumular ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
+- NBA validación E2E en prod con tráfico real.
+- Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
+- NFL sept 2026: activar `hexaNflBoardService`, acumular picks resueltos → entrenar `nfl_moneyline`/`nfl_spread`/`nfl_total`.
+- `OPENAI_EMBED_API_KEY` → activa RAG (pgvector embeddings de oracle_report en contexto).
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).
