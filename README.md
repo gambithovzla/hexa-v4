@@ -1,186 +1,145 @@
 # H.E.X.A. v4
 
-**H.E.X.A.** (Heuristic Evaluation & eXpert Analytics) es una plataforma de análisis predictivo de **MLB y NBA** que combina modelos de lenguaje (Claude y Grok/xAI), estadísticas avanzadas (Statcast / Baseball Savant para MLB; advanced team ratings, pace y rest analysis para NBA), líneas de casas de apuestas en tiempo real y un validador tabular propio para producir picks, parlays, análisis "safe" y contenido editorial.
+**H.E.X.A.** (Heuristic Evaluation & eXpert Analytics) es una plataforma de análisis predictivo de **MLB, NBA y NFL** que combina modelos de lenguaje (Claude y Grok/xAI), estadísticas avanzadas (Statcast/Savant para MLB; ratings avanzados + pace + rest para NBA; EPA, success rate, PROE para NFL), líneas en tiempo real y un pipeline ML propio (XGBoost + ensemble) para producir picks, parlays, análisis "safe", contenido editorial y el modo "Pick Imperdible".
 
-Monorepo: API en Node/Express + Postgres y cliente React/Vite.
+Monorepo: API Node/Express + Postgres · cliente React/Vite · sidecar Python FastAPI+XGBoost.
 
 ```
-┌────────────────────────┐        ┌─────────────────────────┐
-│  client/  (React+Vite) │◄──────►│  server/  (Express API) │
-│  MUI · Framer · Recharts│  HTTP  │  Node 20 · ESM modules  │
-└────────────────────────┘        └───────────┬─────────────┘
+┌────────────────────────┐        ┌─────────────────────────┐        ┌─────────────────────────┐
+│  client/  (React+Vite) │◄──────►│  server/  (Express API) │◄──────►│  ml/  (FastAPI+XGBoost) │
+│  MUI · Recharts · PWA  │  HTTP  │  Node 20 · ESM modules  │  HTTP  │  Python 3.11 · Railway  │
+└────────────────────────┘        └───────────┬─────────────┘        └─────────────────────────┘
                                               │
-        ┌──────────────┬──────────────┬───────┴───────┬──────────────┬──────────────┐
-        ▼              ▼              ▼               ▼              ▼              ▼
-   PostgreSQL     Anthropic API    xAI (Grok)     MLB Stats API   Odds API       Resend
-   (pg pool)      (Claude 4.x)     grok-4-fast    + Savant        (líneas)       (email)
-                                                  (Statcast)
+        ┌──────────────┬──────────┬───────────┼────────────┬──────────────┬──────────┐
+        ▼              ▼          ▼           ▼            ▼              ▼          ▼
+   PostgreSQL    Anthropic API  xAI (Grok)  MLB Stats    NBA/NFL       Odds API   Resend
+   (pg pool)     (Claude 4.x)  grok-4-fast  + Savant     ESPN API      dual-key   (email)
 ```
 
 ---
 
 ## 📚 Documentación
 
-Para profundidad técnica completa, ver carpeta [`docs/`](docs/):
-
 | Doc | Cubre |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Subsistemas, diagrama, flujos críticos, decisiones arquitectónicas |
-| [docs/ml-pipeline.md](docs/ml-pipeline.md) | Oracle dual LLM, shadow validator, feature store, CLV, plan modelo Python |
-| [docs/integrations.md](docs/integrations.md) | APIs externas (Claude, xAI, MLB, Savant, Odds, Weather, Resend, NowPayments, X) |
+| [docs/ml-pipeline.md](docs/ml-pipeline.md) | Oracle dual LLM, shadow validator, feature store, CLV, pipeline XGBoost |
+| [docs/integrations.md](docs/integrations.md) | APIs externas (Claude, xAI, MLB, Savant, NBA/NFL ESPN, Odds, Weather, Resend, NowPayments, X) |
 | [docs/content-pipeline.md](docs/content-pipeline.md) | Generación de drafts, cola editorial, OAuth 1.0a publisher para X |
-| [docs/admin-and-ops.md](docs/admin-and-ops.md) | DB explorer, backtest, jobs, logging, deployment, monitoring gaps |
-| [docs/data-schema.md](docs/data-schema.md) | 16 tablas Postgres — columnas, índices, FKs, estado para training |
-| [docs/roadmap.md](docs/roadmap.md) | Sprints en ejecución y backlog priorizado por tier |
-| [docs/sport-registry.md](docs/sport-registry.md) | Sport Shell, capability matrix y checklist para escalar a nuevos deportes |
+| [docs/admin-and-ops.md](docs/admin-and-ops.md) | DB explorer, backtest, jobs, logging, deployment, monitoring |
+| [docs/data-schema.md](docs/data-schema.md) | Tablas Postgres — columnas, índices, FKs, estado para training |
+| [docs/roadmap.md](docs/roadmap.md) | Estado de sprints y backlog priorizado |
+| [docs/nfl-architecture.md](docs/nfl-architecture.md) | Spec técnica NFL — data sources, Oracle, ML sidecar, live mapping |
+| [docs/nfl-roadmap.md](docs/nfl-roadmap.md) | Roadmap Sprint 9 por sub-sprint (9a–9e completados) |
+| [docs/sport-registry.md](docs/sport-registry.md) | Sport shell, capability matrix y checklist para escalar a nuevos deportes |
 
-Para Claude Code (convenciones, frozen files, patrones): ver [CLAUDE.md](CLAUDE.md).
-
+Para Claude Code (convenciones, frozen files, patrones): ver [CLAUDE.md](CLAUDE.md).  
 Para el motor Parlay Synergy: ver [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 
 ---
 
 ## Requisitos previos
 
-- **Node.js 20+** (usa ESM y `node --watch`)
+- **Node.js 20+** (ESM, `node --watch`)
 - **PostgreSQL 14+**
-- API keys (mínimo): Anthropic (Claude). Opcionales: xAI, The Odds API, Resend, NowPayments, X.
+- **Python 3.11+** (solo para el sidecar ML local; en prod corre en Railway separado)
+- API keys mínimas: Anthropic (Claude). Opcionales: xAI, The Odds API, Resend, NowPayments, X.
 
 ---
 
 ## Setup local
 
 ```bash
-# 1. Clonar e instalar raíz
-git clone <repo-url> hexa-v4
-cd hexa-v4
+# 1. Clonar e instalar
+git clone <repo-url> hexa-v4 && cd hexa-v4
 npm install
-
-# 2. Instalar cliente
 cd client && npm install && cd ..
 
-# 3. Configurar entorno
+# 2. Configurar entorno
 cp .env.example .env
 # editar .env con tus keys y DATABASE_URL
 
-# 4. Crear DB Postgres (una vez)
+# 3. Crear DB Postgres (una vez)
 createdb hexadb
 
-# 5. Correr migraciones (automático al iniciar el server)
-npm run dev         # arranca API en :3001 y aplica migraciones
+# 4. Iniciar (migraciones corren automáticamente)
+npm run dev:all   # API :3001 + Vite :5173 en paralelo
+```
 
-# 6. En otra terminal: cliente
-npm run client      # Vite dev server
-
-# O todo junto (concurrently)
-npm run dev:all
+Sidecar ML (opcional local):
+```bash
+cd ml && pip install -e ".[dev]" && uvicorn hexa_ml.serve:app --port 8000
 ```
 
 ---
 
-## Variables de entorno (resumen)
+## Variables de entorno
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Sí | Key de Anthropic para Claude |
+| `ANTHROPIC_API_KEY` | Sí | Claude |
 | `DATABASE_URL` | Sí | Connection string Postgres |
-| `JWT_SECRET` | Sí | Secreto para firmar tokens (cambiar en prod) |
-| `ODDS_API_KEY` | Si para cuotas reales | Key de The Odds API para moneyline/runline/totales MLB |
-| `XAI_API_KEY` | No | Key xAI para modos Grok / Dual |
-| `RESEND_API_KEY` | No | Si activas email verificado |
+| `JWT_SECRET` | Sí | Firma de tokens (cambiar en prod) |
+| `ODDS_API_KEY` | Para cuotas reales | The Odds API — MLB, NBA y NFL |
+| `XAI_API_KEY` | No | Grok / modo dual |
+| `RESEND_API_KEY` | No | Email verificado |
 | `NOWPAYMENTS_API_KEY` + `NOWPAYMENTS_IPN_SECRET` | No | Pagos cripto |
 | `X_CONSUMER_KEY` / `X_CONSUMER_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET` | No | OAuth 1.0a para publicar en X |
-| `SHADOW_MODE_ENABLED` | No | Activa el shadow validator |
-| `PARLAY_SYNERGY_ENABLED` | No | Motor parlay nuevo (default `false`) |
-| `NBA_ANALYSIS_ENABLED` | No | `true` para habilitar Oracle NBA y resolver automático (default `false`) |
-| `X_AUTO_PUBLISH_ENABLED` | No | `0`/`1` — habilita worker de publicación X |
-| `IMPERDIBLE_ENABLED` | No | `true` para habilitar Pick Imperdible (admin-only, MLB). Opcionales: `IMPERDIBLE_ARBITER_MODEL`, `IMPERDIBLE_TOP_K` |
-| `ML_SIDECAR_ENABLED` | No | `true` para activar llamadas al sidecar Python XGBoost |
-| `ENSEMBLE_ENABLED` | No | `true` para habilitar el meta-learner ensemble |
-| `HEXA_ML_API_URL` | No (con sidecar) | URL base del sidecar Python Railway |
-| `HEXA_ML_INTERNAL_TOKEN` | No (con sidecar) | Token de autenticación Node→Python |
-| `CHAT_EXTRACTOR_HAIKU_FALLBACK` | No | `0` para deshabilitar fallback Haiku del extractor de chat (default `1`) |
-| `CHAT_EXTRACTOR_HAIKU_MODEL` | No | Override del modelo Haiku usado (default `claude-haiku-4-5-20251001`) |
-| `ML_ADMIN_TIMEOUT_MS` | No | Timeout extendido del sidecar en analyze admin (pick-aligned; default `2500`) |
-| `MLB_PROPS_SAVANT_ENRICH_ENABLED` | No | Enriquecimiento Savant en tablero props (default `1`) |
-| `MLB_PROPS_ML_PUBLIC_ENABLED` | No | Scores ML visibles para usuarios no-admin en `/props` (default `0`) |
-| `MLB_PROPS_ML_MIN_RESOLVED` | No | Mínimo de picks resueltos por `prop_kind` antes de habilitar mercado (default `100`) |
+| `SHADOW_MODE_ENABLED` | No | Shadow validator activo |
+| `PARLAY_SYNERGY_ENABLED` | No | Motor parlay (default `false`) |
+| `NBA_ANALYSIS_ENABLED` | No | Oracle NBA + resolver (default `false`) |
+| `NFL_ANALYSIS_ENABLED` | No | Oracle NFL + resolver (default `false`; activo en Railway con `=true`) |
+| `IMPERDIBLE_ENABLED` | No | Pick Imperdible admin-only MLB (default `false`) |
+| `ML_SIDECAR_ENABLED` | No | Llamadas al sidecar Python XGBoost |
+| `HEXA_ML_API_URL` | Con sidecar | URL base del sidecar Railway |
+| `HEXA_ML_INTERNAL_TOKEN` | Con sidecar | Token auth Node→Python |
+| `X_AUTO_PUBLISH_ENABLED` | No | Worker publicación X (`0`/`1`) |
+| `MLB_PROPS_ML_PUBLIC_ENABLED` | No | Scores ML visibles en `/props` para no-admin |
+| `CHAT_EXTRACTOR_HAIKU_FALLBACK` | No | Fallback Haiku extractor de chat (default `1`) |
+| `ML_ADMIN_TIMEOUT_MS` | No | Timeout sidecar en analyze admin (default `2500`) |
 
-Lista completa con descripciones en [.env.example](.env.example) y [docs/integrations.md](docs/integrations.md).
+Lista completa en [.env.example](.env.example) y [docs/integrations.md](docs/integrations.md).
 
 ---
 
 ## Scripts disponibles
 
-Desde la raíz ([package.json](package.json)):
+Desde la raíz:
 
 | Script | Descripción |
 |---|---|
-| `npm run dev` | API con `node --watch` (recarga en cambios) |
-| `npm start` | API en modo producción |
-| `npm run client` | Dev server de Vite (`client/`) |
-| `npm run dev:all` | API + cliente en paralelo (`concurrently`) |
-| `npm run audit` | Diagnóstico del sistema ([scripts/system-audit.js](scripts/system-audit.js)) |
-| `npm run smoke:mlb` | Smoke test de release MLB (endpoints críticos `/api/games`, `/api/teams`, `/api/hexa/board`) |
-| `npm run smoke:nba` | Smoke test de release NBA (`/api/nba/games`, `/api/nba/teams`; con `SMOKE_ADMIN_TOKEN`+`SMOKE_NBA_GAME_ID` valida también `/api/nba/analyze/game` con `context_meta`) |
-| `npm run test:mlb:critical` | Suite anti-regresión MLB (resolver, closing-line, guardrails `/api/picks`, admin equity) |
-| `npm run verify:ml:persistence` | Post-deploy: valida `/health` del sidecar ML (`artifacts_persistent`, modelos cargados). Prod OK desde Sprint 6b (2026-05-15). |
-| `npm run test:parlay` | Tests del Parlay Synergy Engine |
-
-Desde `client/`:
-
-| Script | Descripción |
-|---|---|
-| `npm run dev` | Vite dev server |
-| `npm run build` | Build de producción |
-| `npm run preview` | Preview del build |
+| `npm run dev` | API con `node --watch` |
+| `npm start` | API producción |
+| `npm run client` | Vite dev server |
+| `npm run dev:all` | API + cliente en paralelo |
+| `npm run audit` | Diagnóstico del sistema |
+| `npm run smoke:mlb` | Smoke test release MLB |
+| `npm run smoke:nba` | Smoke test release NBA |
+| `npm run test:mlb:critical` | Suite anti-regresión MLB |
+| `npm run verify:ml:persistence` | Valida `/health` del sidecar ML en prod |
+| `npm run test:parlay` | Tests Parlay Synergy Engine |
 
 ---
-
-## Gate de release MLB (smoke)
-
-Antes de dar luz verde a producción, ejecutar desde la raíz:
-
-```bash
-npm run smoke:mlb
-```
-
-Configurable por env vars:
-
-- `SMOKE_BASE_URL` (default `http://127.0.0.1:3001`)
-- `SMOKE_WAIT_FOR_SERVER` (`1` por default, usa espera activa antes de probar)
-- `SMOKE_TIMEOUT_MS` (default `20000`)
-- `SMOKE_RETRIES` (default `3`)
-- `SMOKE_RETRY_DELAY_MS` (default `1000`)
-- `SMOKE_ADMIN_TOKEN` (opcional; si existe valida también `/api/admin/ml/equity?sport=mlb`)
-
-CI/CD:
-- Workflow automático: `.github/workflows/mlb-smoke.yml`
-- Corre en PRs y pushes a `main` cuando cambian archivos de `server/`, `scripts/smoke/` o `package.json`
-- Corre además en schedule diario (10:30 UTC) como early warning de integraciones externas
-- Pipeline en tres fases: build client (`client npm run build`), tests críticos (`npm run test:mlb:critical`) y luego smoke HTTP de release
-- Siempre sube artifact `server.log` en CI para diagnóstico rápido cuando hay fallas intermitentes
 
 ## Estructura del repo
 
 ```
 hexa-v4/
-├── client/                 React + Vite SPA (MUI, Framer Motion, Recharts, PWA)
-├── server/                 Node 20 ESM + Express
+├── client/                 React 18 + Vite SPA (MUI, Recharts, PWA)
+├── server/
 │   ├── index.js            entrypoint (rutas, jobs, rate limits)
-│   ├── oracle.js           motor LLM dual (Claude + Grok)
-│   ├── context-builder.js  arma payload por partido
-│   ├── feature-store.js    persistencia de features MLB para training
-│   ├── services/nbaShadow*.js  feature store + shadow NBA (sport='nba')
-│   ├── migrate.js          migraciones SQL embebidas
-│   ├── services/           xPublisher, contentDraftService, parlayEngine, etc.
-│   ├── routes/             picks, content, insights, oracle-history, mlb-props
-│   ├── props-resolver.js   resolución de player props MLB (boxscore GUMBO)
-│   ├── services/pickAlignedMl.js  opinión ML alineada al mercado del pick (shadow + admin)
-│   ├── middleware/         auth, content-api-key
-│   └── prompts/            x-content-prompts
-├── ml/                     sidecar Python FastAPI + XGBoost (desplegado en Railway)
-│   ├── hexa_ml/            módulo principal (serve, train, predict, features, models)
+│   ├── oracle.js           motor LLM dual MLB (Claude + Grok) — FROZEN
+│   ├── context-builder.js  payload de contexto MLB — FROZEN
+│   ├── migrate.js          migraciones SQL embebidas (idempotentes)
+│   ├── nba-api.js / nba-context-builder.js / nba-odds.js
+│   ├── nfl-api.js / nfl-context-builder.js / nfl-odds.js / nfl-team-map.js
+│   ├── pick-resolver.js / pick-resolver-nba.js / pick-resolver-nfl.js
+│   ├── pick-tracker.js / pick-tracker-nfl.js
+│   ├── services/           oracleNba, oracleNfl, shadow*, imperdible*, parlay*, ML clients
+│   ├── routes/             picks, nba, nfl, mlb-props, content, imperdible, admin-ml
+│   └── prompts/            oracle-nba-prompts, oracle-nfl-prompts, x-content-prompts
+├── ml/                     sidecar Python FastAPI + XGBoost (Railway separado)
+│   ├── hexa_ml/            serve, train, predict, features, models (MLB+NBA+NFL)
 │   └── Dockerfile
 ├── scripts/
 │   ├── system-audit.js
@@ -188,81 +147,129 @@ hexa-v4/
 ├── docs/                   documentación viva por tema
 ├── CLAUDE.md               convenciones para Claude Code
 ├── .env.example
-├── railway.json            config Railway (Nixpacks)
-└── README.md               (este archivo)
+├── railway.json
+└── README.md
 ```
-
-Estructura completa con descripciones: [docs/architecture.md](docs/architecture.md#3-subsistemas).
 
 ---
 
-## Endpoints principales (resumen)
+## Endpoints principales
 
-Todos bajo `/api`. Los protegidos requieren JWT (`🔒`); los admin requieren rol admin (`👑`).
+Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑`).
 
-- **Públicos**: `/games`, `/teams`, `/odds/today`, `/hexa/board`, `/nba/games`, `/nba/teams`.
+- **Públicos**: `/games`, `/teams`, `/odds/today`, `/hexa/board`, `/nba/games`, `/nba/teams`, `/nfl/games`, `/nfl/teams`, `/nfl/standings`.
 - **Auth** (`/auth/*`): register, login, me, verify-email, forgot-password.
 - **Análisis MLB** (`/analyze/*`) 🔒: game, parlay, safe, parlay-synergy (👑 beta).
 - **Análisis NBA** (`/nba/analyze/*`) 👑 (feature-flagged): game, chat.
+- **Análisis NFL** (`/nfl/analyze/*`) 👑 (feature-flagged `NFL_ANALYSIS_ENABLED`): game, chat.
 - **Picks** (`/picks/*`) 🔒: CRUD, postmortem, live-progress, clv-stats.
-- **Live** (`/games/:gamePk/*`): live, play-by-play, highlights-link.
-- **MLB Player Props** (`/mlb/*`) 🔒: `GET /mlb/props/board?date=YYYY-MM-DD&propKind=&minEdge=` — tablero del día (Odds API + Savant + scores ML admin; sección **Picks Oracle** desde tabla `picks`).
-- **Admin** (`/admin/*`) 👑: grant-credits, run-backtest, **shadow-model** (`?sport=mlb|nba`), **feature-store** (`?sport=mlb|nba&month=YYYY-MM`), db/tables, content/queue, parlay-synergy, **ml/status, ml/retrain, ml/retrain/ensemble, ml/retrain-log, ml/ensemble, ml/equity, ml/chat-picks-stats, picks/:id/ensemble-breakdown**.
-- **Pagos** (`/nowpayments/*`): checkout, webhook IPN HMAC-SHA512.
-- **Content API** (read-only, API key): `/content/v1/games`, `/board`, `/picks`, `/insights`, `/performance`.
-
-Listado exhaustivo: [docs/architecture.md sección 6](docs/architecture.md#6-endpoints--vista-panorámica).
+- **MLB Player Props** (`/mlb/props/board`) 🔒: Odds API + Savant + ML scores admin.
+- **Admin** (`/admin/*`) 👑: shadow-model (`?sport=mlb|nba|nfl`), feature-store, ml/status, ml/retrain, ml/ensemble, db/tables, content/queue, imperdible.
+- **Pagos** (`/nowpayments/*`): checkout + IPN HMAC-SHA512.
+- **Content API** (API key pública): `/content/v1/games`, `/board`, `/picks`, `/performance`.
 
 ---
 
 ## Features destacadas
 
-### Oracle multi-motor
-[server/oracle.js](server/oracle.js) soporta tres motores seleccionables por request: `sonnet` (Claude Sonnet 4.6), `grok` (xAI), `dual` (ambos en paralelo con detección de divergencia). Modelos: Opus 4.7 (premium), Sonnet 4.6 (deep), Haiku 4.5 (content drafts). Detalle: [docs/ml-pipeline.md sección 2](docs/ml-pipeline.md#2-oracle--motor-llm-dual).
+### Oracle multi-motor (MLB/NBA/NFL)
+- **MLB**: [oracle.js](server/oracle.js) — dual Claude + Grok, contexto rico con Statcast/Savant (rolling wOBA, CSW%, bat speed, umpire, bullpen ERA/WHIP individual, schedule fatigue). FROZEN.
+- **NBA**: [services/oracleNba.js](server/services/oracleNba.js) — Anthropic-only, net/off/def rating, pace, TS%, rest, injuries ESPN. Cap 68%.
+- **NFL**: [services/oracleNfl.js](server/services/oracleNfl.js) — Anthropic-only, EPA, success rate, PROE, QB status, rest/short-week/off-bye, weather (no-dome), spread primario con key numbers 3/7. Cap 72%.
 
-### Shadow validator + ML sidecar Python
-[server/services/xgboostValidator.js](server/services/xgboostValidator.js) corre el validador MLB (pesos hardcodeados). NBA usa módulo aparte [server/services/nbaShadowValidator.js](server/services/nbaShadowValidator.js) — misma idea, features de basketball. Runs en `shadow_model_runs` con `sport`. Admin: `ShadowModeDashboard` con toggle MLB/NBA; columnas **pick-aligned** (`pick_market_type`, `python_pick_prob`, `pick_agree_python`, etc.) vía [server/services/pickAlignedMl.js](server/services/pickAlignedMl.js) — compara Oracle / legacy / Python en el **mismo mercado** del pick (ML, O/U, runline, props). En analyze admin, la respuesta incluye `mlOpinion` ([AdminMlOpinionCard](client/src/components/AdminMlOpinionCard.jsx)). En paralelo, [server/services/mlModelClient.js](server/services/mlModelClient.js) consulta al sidecar Python (`ml/`) con XGBoost entrenado solo en MLB por default (`ml/hexa_ml/data.py` filtra `sport='mlb'`); mercados `prop_*` en sidecar para Sprint 5 props. Detalle: [docs/ml-pipeline.md](docs/ml-pipeline.md).
+### Pipeline ML propio (XGBoost + ensemble)
+Sidecar Python en `ml/` — desplegado en Railway como servicio independiente.
+- **Mercados MLB activos**: moneyline (Brier 0.205, ROI +18.3%), overunder (Brier 0.138, ROI +8.5%), runline, prop.
+- **Mercados NFL scaffoldeados**: `nfl_moneyline`, `nfl_spread`, `nfl_total` — modelos listos para entrenar cuando haya picks resueltos (temporada sept 2026).
+- **Ensemble**: meta-learner LogReg (Oracle + Legacy + Python) en logit space.
+- **Admin ML Control Center** (`/admin/ml-control`): HUD live (circuit breaker, latencia, modelos cargados), retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, retrain audit log.
 
-### Tablero Player Props MLB (`/props`)
-[client/src/pages/PlayerPropsPage.jsx](client/src/pages/PlayerPropsPage.jsx) consume `GET /api/mlb/props/board`: líneas del Odds API por juego del día, enriquecimiento Savant, edge vs implied (admin o `MLB_PROPS_ML_PUBLIC_ENABLED=1`), y bloque **Picks Oracle (guardados)** para props analizados antes de que existan líneas en el mercado. Parser español en [server/parsers/pickParser.js](server/parsers/pickParser.js) (`Bajo 4.5 Ponches`, etc.). Resolución post-game: [server/props-resolver.js](server/props-resolver.js).
+### Shadow validator (MLB/NBA/NFL)
+Validator determinístico por deporte — corre en paralelo al Oracle, persiste `shadow_model_runs` con `sport='mlb|nba|nfl'`. Cada pick almacena también `python_pick_prob` del sidecar (pick-aligned al mismo mercado). Dashboard en `/admin/shadow`.
 
-### Closing Line Value (CLV)
-Captura líneas iniciales y de cierre por pick. Stats en `/api/picks/clv-stats`.
-
-### Feature store
-Cada pick persiste sus features (Statcast, odds, clima, lineups) en tabla `pick_features` para backtesting y reentrenamiento.
-
-### Parlay Synergy Engine
-Motor combinatorial para parlays (correlación, ortogonalidad de riesgo, coherencia de game script). LLM como arquitecto-validador, no selector ciego. Admin-only en beta. Brief técnico: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
+### Pizarra del día — tres deportes
+- **MLB** (`/hexa/board`): señales rule-based sobre datos MLB API, 15+ juegos, 29 tipos de señal.
+- **NBA**: board lightweight con ratings, form y resto por equipo.
+- **NFL**: placeholder hasta temporada sept 2026 — UI activa con selector, board real pendiente.
 
 ### Pick Imperdible (`/admin/imperdible`)
-Modo admin-only "lock of the slate" (MLB): analiza 1..N juegos con lineup confirmado y devuelve **un solo** pick de máxima convicción (o PASS). La selección **invierte la lógica de value/edge**: premia el acuerdo entre el modelo determinístico, el mercado y el sidecar ML, penaliza varianza de mercado y exige lineup confirmado — el edge nunca es input positivo. Un gate duro fuerza PASS si nada es near-certain y un árbitro Opus audita los finalistas. Reusa el pipeline frozen solo por import; persiste el lock en `picks` (`type/source='imperdible'`, reusa resolver + equity, aislado del training) y una fila en `imperdible_runs`. Servicios: [imperdibleSelector.js](server/services/imperdibleSelector.js), [imperdibleArbiter.js](server/services/imperdibleArbiter.js), [imperdibleEngine.js](server/services/imperdibleEngine.js). Endpoints: `POST /api/imperdible/analyze`, `GET /api/imperdible/games`, `GET /api/imperdible/history`. Feature-flag `IMPERDIBLE_ENABLED`.
+Modo admin-only "lock of the slate" (MLB): analiza N juegos y devuelve **un solo** pick de máxima convicción (o PASS). Premia el acuerdo modelo+mercado+ML, penaliza varianza, exige lineup confirmado. Gate duro + árbitro Opus. Feature-flag `IMPERDIBLE_ENABLED`.
 
-### Content pipeline X
-Genera drafts editoriales con Claude Haiku, los encola, y los publica en X (Twitter) vía OAuth 1.0a HMAC-SHA1. Detalle: [docs/content-pipeline.md](docs/content-pipeline.md).
+### Parlay Synergy Engine
+Motor combinatorial para parlays con 5 modos (safe → dreamer). Correlación entre patas, game-script coherence, hit distribution Poisson-binomial. Admin beta. Brief: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 
-### Admin ML Control Center (`/admin/ml-control`)
-Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, **models loaded X/Y**, estado ensemble LIVE/READY/OFF), panel de **inferencia en vivo** por mercado (artefacto en disco, modelo en RAM, runline skipped/early), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d legacy-vs-python, pesos del ensemble meta-learner, y audit log de retrains. `GET /api/admin/ml/status` incluye bloque `observability` derivado del `/health` del sidecar.
-
-### Bankroll — comparativa tú vs Hexa
-`GET /api/bankroll/equity-stats?period=90&sport=all|mlb|nba` compara ROI en unidades, win rate y delta de bankroll entre todas las apuestas registradas y el subconjunto `source=hexa`. Panel en tab **Oracle Stats** de [BankrollTracker](client/src/components/BankrollTracker.jsx).
-
-### Parlay Architect — resolución automática
-Runs persistidos en servidor (`id` tipo `db_N`) soportan `POST /api/parlay-architect/:id/auto-resolve`: hidrata legs desde `candidate_pool`, busca partidos en fecha ±1 día, y persiste `leg_results` parciales mientras el parlay sigue en juego.
+### MLB Player Props (`/props`)
+Líneas Odds API + enriquecimiento Savant + edge vs implied. Picks Oracle guardados antes de que existan líneas en el mercado. Parser en español (`Bajo 4.5 Ponches`). ML scores gateados por `MLB_PROPS_ML_PUBLIC_ENABLED`.
 
 ### Oracle Chat → Training pipeline
-Los picks que el Oracle recomienda durante una sesión de chat se persisten automáticamente para alimentar el entrenamiento futuro. El extractor inyecta una instrucción interna que pide al Oracle terminar con `<<<HEXA_PICK_JSON>>>{...}<<<END>>>` cuando hay un pick concreto; si no aparece y la pregunta lo amerita, un Haiku fallback parsea la respuesta. Los picks se guardan con `source='oracle_chat'` y `chat_session_id` linkeado a `oracle_sessions` — están aislados del training default (`source='live'`) y son visibles en la sección "Chat-sourced picks" del Control Center. Opt-out por chat: checkbox "NO GUARDAR PARA ENTRENAMIENTO" o header `X-HEXA-Skip-Pick-Extract: 1`.
+Picks recomendados en chat se persisten con `source='oracle_chat'` (aislados del training default `source='live'`). JSON tail + Haiku fallback. Panel "Chat-sourced picks" en `/admin/ml-control`. Opt-out: header `X-HEXA-Skip-Pick-Extract: 1`.
+
+### Content pipeline X
+Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0a HMAC-SHA1. Detalle: [docs/content-pipeline.md](docs/content-pipeline.md).
+
+---
+
+## Estado del proyecto (2026-05-30)
+
+### Pipeline ML y sprints completados
+
+- ✅ **Sprint 0–4**: Documentación → Dataset → Sidecar Python → Integración Node↔Python → Ensemble meta-learner.
+- ✅ **Sprint 5**: Admin ML Control Center, Player Props MLB, pick-aligned shadow, `mlOpinion` admin.
+- ✅ **Sprint 6**: Equity/Sharpe/drawdown, comparativa bankroll, persistencia ML Railway Volumes.
+- ✅ **Sprint 8a**: Monte Carlo bankroll. Brand League × Kinetic v2.6.
+- ✅ **Sprint 8b**: Pick Imperdible (PR #355) — scorer de convicción, gate, árbitro Opus, tabla `imperdible_runs`.
+- ✅ **Sprint 8c**: Ensemble multi-mercado (moneyline+overunder+runline+prop pick-aligned). Parlay alt lines realistas (±2/±3.5). Oracle Chat pick null-line fix.
+- ✅ **Sprint 8d**: Oracle context enrichment MLB — Savant pitcher/batter rolling, umpire, bullpen ERA/WHIP individual + handedness, team form block, schedule fatigue.
+- ✅ **Sprint 8e**: Bullpen attribution guardrail — `[TeamName]` en línea crítica, mismatch detection server-side.
+- ✅ **Sprint 8f**: Railway hardening — Node 20, Sentry/email/Discord lazy import, tres servicios Online.
+- ✅ **Sprint 9 NFL completo** (PRs #373–#378, 2026-05-30):
+  - **9a**: `nfl-api.js`, `nfl-team-map.js`, `nfl-context-builder.js`, `nfl-odds.js`, migraciones DB, endpoints `GET /api/nfl/games|teams|standings`.
+  - **9b**: `oracleNfl.js` + `oracle-nfl-prompts.js` + `nflOutputGuard.js`. Cap 72%, key numbers 3/7, QB gate, guardrail anti-hallucination.
+  - **9c**: `routes/nfl.js` (`POST /api/nfl/analyze/game|chat`), `pick-resolver-nfl.js`, job game-time-aware Thu/Sun/Mon.
+  - **9.1**: `nflShadowValidator.js` + `nflShadowPersistence.js` — dataset/shadow con `sport='nfl'`.
+  - **9.2**: `pick-tracker-nfl.js` + `NflLiveTracker.jsx` — SSE per-game, drives + plays + win probability.
+  - **9d**: `GameSelector` + `AnalysisPanel` + `HexaBoard` extendidos a NFL; `nflLogoUrl.js`; `sports.js` con `ACTIVE_SPORTS=['mlb','nba','nfl']`.
+  - **9e**: `nflMlClient.js` (circuit breaker propio) + modelos `nfl_moneyline`/`nfl_spread`/`nfl_total` en sidecar Python.
+
+### Estado en producción
+
+- Sidecar ML: `https://hexa-ml-production.up.railway.app`
+- Modelos activos MLB: **moneyline** (Brier 0.205) · **overunder** (Brier 0.138) · **runline** (early model) · **prop** (gateado)
+- Modelos NFL: scaffolded — entrenan con temporada real sept 2026
+- Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC)
+- Variables Railway hexa-v4: `NIXPACKS_NODE_VERSION=20` · `ML_SIDECAR_ENABLED=true` · `NFL_ANALYSIS_ENABLED=true`
+
+### Pendiente operacional (no requiere sprint de código)
+
+- Props ML gate: ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
+- NBA validación E2E en prod con tráfico real.
+- Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
+- NFL sept 2026: `hexaNflBoardService`, picks reales → entrenar modelos NFL.
+
+### Matriz de calidad por deporte
+
+| Criterio | MLB | NBA | NFL | Gate |
+|---|---:|---:|---:|---:|
+| Data depth pregame | 9.5 | 6.5 | 6.0 | 8.0 |
+| Data quality live | 8.5 | 7.0 | 6.5 | 8.0 |
+| Lineup/Injury verification | 9.0 | 7.0 | 7.0 | 8.0 |
+| Market coverage | 9.0 | 6.0 | 7.0 | 8.0 |
+| Guardrails LLM | 8.5 | 7.5 | 8.0 | 8.0 |
+| Pick lifecycle | 9.0 | 7.5 | 7.0 | 8.0 |
+| Calibration/ROI observables | 8.5 | 6.0 | n/a | 8.0 |
+| Isolation por deporte | 8.5 | 8.0 | 8.0 | 8.5 |
+
+NFL: código completo, datos y calibración pendientes de temporada real.
 
 ---
 
 ## Base de datos y migraciones
 
-Las migraciones viven en [server/migrate.js](server/migrate.js) y se ejecutan automáticamente al arrancar el server. No hay herramienta externa (Knex / Prisma) — cada migración es una función SQL idempotente con `CREATE TABLE IF NOT EXISTS` y `ALTER TABLE ADD COLUMN IF NOT EXISTS`.
+Migraciones en [server/migrate.js](server/migrate.js) — corren automáticamente al iniciar el server. SQL idempotente (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN IF NOT EXISTS`). Sin herramienta externa.
 
-Para un reset local:
 ```bash
-dropdb hexadb && createdb hexadb
-npm run dev   # reaplica todo
+# Reset local
+dropdb hexadb && createdb hexadb && npm run dev
 ```
 
 Schema completo: [docs/data-schema.md](docs/data-schema.md).
@@ -271,107 +278,22 @@ Schema completo: [docs/data-schema.md](docs/data-schema.md).
 
 ## Despliegue
 
-- **API**: Railway con Nixpacks ([railway.json](railway.json)). Variables en Railway dashboard.
-- **Cliente**: Vercel ([client/vercel.json](client/vercel.json)). Build de `client/`.
+- **API**: Railway con Nixpacks ([railway.json](railway.json)). `NIXPACKS_NODE_VERSION=20` obligatorio.
+- **Cliente**: Vercel ([client/vercel.json](client/vercel.json)).
+- **Sidecar ML**: Railway servicio separado ([ml/railway.json](ml/railway.json)).
 - **Postgres**: Railway addon o externo (Neon, Supabase) vía `DATABASE_URL`.
 
-Detalle de deploy + rollback: [docs/admin-and-ops.md sección 10](docs/admin-and-ops.md#10-deployment).
-
----
-
-## Estado del proyecto y próximos pasos
-
-**Pipeline ML propio en producción** (Q2 2026): XGBoost entrenado con picks históricos resueltos, probabilidades calibradas con Platt, auto-retraining disponible vía `POST /retrain`, dashboard de calibración en `/admin/ml-calibration`.
-
-Estado:
-- ✅ **Sprint 0**: Documentación viva (este README + `/docs/` + CLAUDE.md).
-- ✅ **Sprint 1**: Dataset completo — 22 columnas nuevas en `pick_features`, pickParser, pickPostgameEnricher, export-dataset.js, backfill de 620+ picks históricos.
-- ✅ **Sprint 2**: Sidecar Python FastAPI + XGBoost real en `ml/`, desplegado en Railway como servicio separado (`hexa-ml`). Modelos activos: moneyline (Brier 0.205, ROI +18.3%), overunder (Brier 0.138, ROI +8.5%). URL: `https://hexa-ml-production.up.railway.app`.
-- ✅ **Sprint 3**: Integración Node↔Python activa (`ML_SIDECAR_ENABLED=true` en prod) con circuit breaker y fallback al validator legacy. Dashboard `/admin/ml-calibration` operativo.
-- ✅ **Sprint 4**: Ensemble meta-learner (LogReg sobre Oracle+Legacy+Python en logit space). Endpoints `/predict/ensemble` y `/calibration/ensemble`. Sólo se guarda artifact cuando supera a la mejor fuente individual.
-- ✅ **Sprint 5 UI**: Admin ML Control Center en `/admin/ml-control` — HUD live, retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, chat-picks bucket dashboard, retrain audit log (`ml_retrain_log`). Runline desbloqueado (`min_train_size=25`). Oracle Chat → Training pipeline (JSON tail + Haiku fallback, bucket `source='oracle_chat'`).
-- 🔄 **Sprint 5 Player Props MLB** (en progreso): Savant snapshots en feature store ✅; mercados `prop_*` en sidecar ✅; tablero `/props` + `GET /api/mlb/props/board` ✅; pick-aligned shadow + `mlOpinion` admin ✅; parser ES (`Bajo/Ariba Ponches`) ✅. Pendiente: resolver props en pick lifecycle a escala, Brier ≥100 picks/mercado, rollout público (`MLB_PROPS_ML_PUBLIC_ENABLED`).
-- ✅ **Sprint 6** (cerrado): 6a equity/Sharpe/drawdown + comparativa bankroll; 6b persistencia ML en Railway Volume (`npm run verify:ml:persistence`).
-- ✅ **Post-6 hardening** (código): Parlay AUTO/`leg_results`, ML observability HUD, mapeo ESPN↔NBA Stats (`nba-team-map.js`), guardrails salida Oracle NBA (`nbaOutputGuard.js`).
-- ✅ **Pick-aligned shadow + admin ML** (2026-05-17): `pickAlignedMl.js`, columnas en `shadow_model_runs`, `mlOpinion` en analyze game/safe, tokens `--outcome-*` para W/L/P en League mode (PRs #345–#347).
-- ✅ **Sprint 7 NBA (7a–7d)**: Oracle NBA, `/api/nba/*`, resolver post-game, live tracker, sport shell. Feature-flag `NBA_ANALYSIS_ENABLED`. Go-live gate mergeado; validación E2E en prod según tráfico.
-- ✅ **Pick Imperdible** (2026-05-26): modo admin-only "lock of the slate" (MLB). Scorer de convicción (acuerdo modelo+mercado+ML, anti-varianza), gate duro con PASS, árbitro Opus, tabla `imperdible_runs`, página `/admin/imperdible`. Feature-flag `IMPERDIBLE_ENABLED`. Aislado del training default (`source='imperdible'`).
-
-### Estado NBA MVP (2026-05-17)
-
-Sprint 7 completado en su mayor parte; hardening de datos/salida añadido post-6:
-
-- ✅ **Team ID mapping** — [server/nba-team-map.js](server/nba-team-map.js) normaliza IDs ESPN → stats.nba.com para recent games y season stats.
-- ✅ **Output guard** — [server/services/nbaOutputGuard.js](server/services/nbaOutputGuard.js) valida JSON Oracle antes de persistir; rechaza player props y picks ambiguos.
-
-Sprint 7 core:
-
-- ✅ **7a** — `nba-api.js`, `nba-context-builder.js`, columna `sport` en `picks`/`pick_features`, endpoints públicos `/api/nba/games` y `/api/nba/teams`.
-- ✅ **7b** — Oracle NBA (`oracleNba.js` + `oracle-nba-prompts.js`). Guardrail anti-hallucination. Validado end-to-end.
-- ✅ **7c** — `POST /api/nba/analyze/game` (admin, feature-flagged). Pick persistence con `sport='nba'`.
-- ✅ **7c2** — `pick-resolver-nba.js`: resolución automática post-game cada 30 min.
-- ✅ **7d** — UI sport switcher: `SportSwitcher.jsx`, `GameSelector` y `AnalysisPanel` con prop `sport`. Fetch y normalización de juegos NBA. Controles MLB-específicos ocultos en modo NBA.
-- ✅ **7.0 hotfix (aislamiento)** — historial y lifecycle separados por `sport`:
-  - `GET /api/picks?sport=mlb|nba` para historial/stats aislados
-  - `HistoryPanel` + `useHistory` filtrados por deporte
-  - resolver/tracking MLB ignora picks NBA pendientes
-- ✅ **7.0 hotfix (SAFE/props)** — SAFE bloqueado en NBA y Player Props NBA rechazado server-side.
-- ✅ **Sprint 7.0 hardening** — injuries/status + odds server-side + context_meta:
-  - `nba-api.js`: `getNbaLeagueInjuries()` vía ESPN con stale-cache fallback
-  - `nba-odds.js`: módulo NBA aislado (nunca toca frozen `odds-api.js`), dual-key fallback, fuzzy team matching
-  - `nba-context-builder.js`: bloque de injuries por equipo, `context_meta` (completeness, staleFlags, sources)
-  - `oracleNba.js`: `describeInjuriesBlock` en el contexto serializado, `DATA QUALITY` footer
-  - `routes/nba.js`: `resolveMarketOdds` client→server fallback, `meta.oddsSource` + `meta.context_meta` en respuesta
-  - `NbaContextMetaBadge.jsx`: panel admin-only (completeness%, oddsSource, injuries, stale flags)
-  - `scripts/smoke/nba-release-smoke.js` + `npm run smoke:nba`
-- ✅ **7.1 dataset + shadow aislados** (2026-05-15):
-  - APIs admin `?sport=mlb|nba` en feature-store y shadow-model
-  - `nbaShadowValidator.js` + `nbaShadowPersistence.js` en flujo analyze NBA
-  - Migración 7.1: `shadow_model_runs.sport` + columnas NBA en `pick_features`
-  - UI admin: toggles MLB/NBA en `DatasetDashboardV2` y `ShadowModeDashboard`
-- ⏳ **7e** — NBA ML sidecar: condicional, post ~500 picks NBA resueltos.
-
-### Próximas fases — hardening
-
-**Sprint 6 — Pre-lanzamiento público NBA (Q3 2026)** — ✅ cerrado (2026-05-15):
-
-- ✅ **Sprint 6a — Equity curve + Sharpe + drawdown**: [PerformanceDashboard](client/src/pages/PerformanceDashboard.jsx) (público), [EquityDashboard](client/src/pages/EquityDashboard.jsx) (admin `/admin/equity`), comparativa bankroll (`/api/bankroll/equity-stats`). Pendiente menor: enlace en bottom nav.
-- ✅ **Sprint 6b — Persistencia ML (Railway Volumes)**: prod en `hexa-ml-production` con `artifacts_dir=/data/artifacts`, `artifacts_persistent=true`, redeploy verificado sin retrain. Verificación: `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app npm run verify:ml:persistence`. Runbook: [docs/admin-and-ops.md](docs/admin-and-ops.md#11-ml-sidecar--persistencia-de-modelos-sprint-6b).
-
-### Matriz de calidad por deporte (operativa)
-
-Escala de referencia: 0-10 por criterio. Para apertura publica de un deporte: score global >= 8.5 y ningun criterio critico < 8.
-
-| Criterio | MLB (actual) | NBA (actual) | Gate minimo |
-|---|---:|---:|---:|
-| Data depth pregame (features contextuales) | 9.5 | 6.5 | 8.0 |
-| Data quality live (latencia + disponibilidad) | 8.5 | 7.0 | 8.0 |
-| Lineup/Injury verification estructurada | 9.0 | 7.0 | 8.0 |
-| Market coverage soportada por data real | 9.0 | 6.0 | 8.0 |
-| Guardrails LLM (schema + fallbacks + policy) | 8.5 | 7.5 | 8.0 |
-| Pick lifecycle (tracking -> resolver -> postmortem) | 9.0 | 7.5 | 8.0 |
-| Calibration/ROI observables por mercado | 8.5 | 6.0 | 8.0 |
-| Isolation por deporte (sin contaminacion cruzada) | 8.5 | 8.0 | 8.5 |
-
-#### Criterios de go-live NBA
-
-- SAFE PICK NBA aislado de endpoints MLB. ✅
-- Player Props NBA deshabilitado hasta tener dataset y resolver dedicados. ✅
-- Historial/jobs/resolver/UX/dataset/shadow aislados por `sport`. ✅ en código (Sprint 7.0 + 7.1)
-- Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
-
-Backlog priorizado completo: [docs/roadmap.md](docs/roadmap.md).
+Detalle: [docs/admin-and-ops.md](docs/admin-and-ops.md).
 
 ---
 
 ## Convenciones de contribución
 
-- **Branch main protegida** — trabajar siempre en feature branches y abrir PR.
-- Mensajes de commit estilo convencional (`feat:`, `fix:`, `chore:`, etc.).
-- **No commitear `.env`** ni credenciales — solo `.env.example`.
+- **Branch main protegida** — siempre en feature branches + PR.
+- Commits estilo convencional (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`).
+- **No commitear `.env`** — solo `.env.example`.
 - **ESM únicamente**: imports con extensión `.js` explícita.
-- Cambios que tocan prompts del LLM deberían pasar por `npm run audit` y validarse contra backtest antes de merge.
-- **Frozen files** (no modificar sin permiso explícito): `oracle.js`, `context-builder.js`, `market-intelligence.js`, `xgboostValidator.js`, `parlayEngine/*`. Ver [CLAUDE.md](CLAUDE.md) para lista completa y patrones para extender sin tocar.
+- **Frozen files** (no modificar sin permiso): `oracle.js`, `context-builder.js`, `market-intelligence.js`, `xgboostValidator.js`, `shadow-model.js`, `parlayEngine/*`, `mlModelClient.js`. Ver [CLAUDE.md](CLAUDE.md).
 
 ---
 
