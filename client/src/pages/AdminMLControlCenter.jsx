@@ -105,7 +105,13 @@ const STRINGS = {
     toastFail:        (m) => `RETRAIN FAILED · ${m}`,
     ensembleOk:       'ENSEMBLE RETRAINED',
     ensembleSkipped:  'ENSEMBLE SKIPPED',
-    ensembleSkippedMsg: (have, need) => `Only ${have ?? '?'} eligible rows in shadow_model_runs (need ≥${need}). Waiting for more resolved picks with all 3 sources.`,
+    ensembleSkippedMsg: (have, need, byMarket) => {
+      if (byMarket && Object.keys(byMarket).length > 0) {
+        const parts = Object.entries(byMarket).map(([m, n]) => `${m}: ${n}/${need}`).join(' · ');
+        return `Eligible rows per market: ${parts}. Each market needs ≥${need} resolved picks with all 3 sources.`;
+      }
+      return `Only ${have ?? '?'} total eligible rows across all markets (need ≥${need} per market). Waiting for more resolved picks with all 3 sources.`;
+    },
     ensembleFail:     'ENSEMBLE RETRAIN FAILED',
     allOk:            'RETRAIN ALL OK',
     allFail:          'RETRAIN ALL FAILED',
@@ -205,7 +211,13 @@ const STRINGS = {
     toastFail:        (m) => `FALLO REENTRENAMIENTO · ${m}`,
     ensembleOk:       'ENSEMBLE REENTRENADO',
     ensembleSkipped:  'ENSEMBLE OMITIDO',
-    ensembleSkippedMsg: (have, need) => `Solo ${have ?? '?'} filas elegibles en shadow_model_runs (se necesitan ≥${need}). Faltan picks resueltos con las 3 fuentes.`,
+    ensembleSkippedMsg: (have, need, byMarket) => {
+      if (byMarket && Object.keys(byMarket).length > 0) {
+        const parts = Object.entries(byMarket).map(([m, n]) => `${m}: ${n}/${need}`).join(' · ');
+        return `Filas elegibles por mercado: ${parts}. Se necesitan ≥${need} por mercado para entrenar el ensemble.`;
+      }
+      return `Solo ${have ?? '?'} filas en total entre todos los mercados (se necesitan ≥${need} por mercado). Faltan picks resueltos con las 3 fuentes.`;
+    },
     ensembleFail:     'FALLO ENSEMBLE',
     allOk:            'REENTRENADO TODO OK',
     allFail:          'FALLO REENTRENAMIENTO GLOBAL',
@@ -1272,7 +1284,7 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
       if (j?.skipped) {
         setToast({
           kind: 'warn', title: T.ensembleSkipped,
-          message: T.ensembleSkippedMsg(j?.eligible_rows, j?.min_rows_required ?? 50),
+          message: T.ensembleSkippedMsg(j?.eligible_rows, j?.min_rows_required ?? 50, j?.eligible_by_market),
         });
       } else {
         setToast({

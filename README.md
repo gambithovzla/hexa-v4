@@ -198,6 +198,9 @@ Modo admin-only "lock of the slate" (MLB): analiza N juegos y devuelve **un solo
 ### Parlay Synergy Engine
 Motor combinatorial para parlays con 5 modos (safe → dreamer). Correlación entre patas, game-script coherence, hit distribution Poisson-binomial. Admin beta. Brief: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 
+### Admin ML Control Center (`/admin/ml-control`)
+Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, **models loaded X/Y**, estado ensemble LIVE/READY/OFF), panel de **inferencia en vivo** por mercado (artefacto en disco, modelo en RAM, runline skipped/early), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d legacy-vs-python, pesos del ensemble meta-learner, y audit log de retrains. El toast "ENSEMBLE OMITIDO" muestra desglose por mercado (`moneyline: N/50 · overunder: N/50 · …`) — el sidecar entrena por mercado individualmente, no sobre el total.
+
 ### MLB Player Props (`/props`)
 Líneas Odds API + enriquecimiento Savant + edge vs implied. Picks Oracle guardados antes de que existan líneas en el mercado. Parser en español (`Bajo 4.5 Ponches`). ML scores gateados por `MLB_PROPS_ML_PUBLIC_ENABLED`.
 
