@@ -157,6 +157,31 @@ class FeaturePayload(BaseModel):
     prop_player_barrel_pct: float | None = None
     prop_player_hard_hit_pct: float | None = None
     prop_player_rolling_woba_14d: float | None = None
+    # NFL features (Sprint 9e)
+    home_epa_off: float | None = None
+    away_epa_off: float | None = None
+    home_epa_def: float | None = None
+    away_epa_def: float | None = None
+    home_success_rate: float | None = None
+    away_success_rate: float | None = None
+    home_proe: float | None = None
+    away_proe: float | None = None
+    home_rest_days: float | None = None
+    away_rest_days: float | None = None
+    home_is_short_week: float | None = None
+    away_is_short_week: float | None = None
+    home_is_off_bye: float | None = None
+    away_is_off_bye: float | None = None
+    qb_home_active: float | None = None
+    qb_away_active: float | None = None
+    wind_mph: float | None = None
+    spread_close: float | None = None
+    total_close: float | None = None
+    injuries_home_severe: float | None = None
+    injuries_away_severe: float | None = None
+    oracle_confidence: float | None = None
+    data_quality_score: float | None = None
+    signal_coherence_score: float | None = None
 
     model_config = {"extra": "allow"}
 
@@ -200,7 +225,7 @@ class HealthResponse(BaseModel):
 class RetrainRequest(BaseModel):
     market: str = Field(
         default="all",
-        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|all)$",
+        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|nfl_moneyline|nfl_spread|nfl_total|all)$",
     )
     csv: str | None = None
     # Optional admin override — bypasses the per-market `min_train_size` floor.
@@ -318,6 +343,33 @@ def predict_overunder(payload: FeaturePayload) -> PredictionOut:
 )
 def predict_runline(payload: FeaturePayload) -> PredictionOut:
     return _predict_one("runline", payload)
+
+
+@app.post(
+    "/predict/nfl_moneyline",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_nfl_moneyline(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("nfl_moneyline", payload)
+
+
+@app.post(
+    "/predict/nfl_spread",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_nfl_spread(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("nfl_spread", payload)
+
+
+@app.post(
+    "/predict/nfl_total",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_nfl_total(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("nfl_total", payload)
 
 
 @app.post(
@@ -440,9 +492,9 @@ async def retrain(payload: RetrainRequest) -> RetrainResponse:
 
     Wrapped in a thread because XGBoost holds the GIL during fit().
     """
-    from .train import MARKETS, train_all
+    from .train import MARKETS, NFL_MARKETS, train_all
 
-    markets = MARKETS if payload.market == "all" else (payload.market,)
+    markets = (*MARKETS, *NFL_MARKETS) if payload.market == "all" else (payload.market,)
 
     def _run() -> dict:
         return train_all(

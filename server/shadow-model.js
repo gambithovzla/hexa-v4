@@ -603,8 +603,9 @@ export async function refreshPendingShadowModelRuns(limit = 25) {
 
 export async function getShadowModeDashboard(limit = 50, sport = 'mlb') {
   const safeLimit = Math.max(10, Math.min(200, toNumber(limit) ?? 50));
-  const sportNorm = String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
-  // Inline literal — sportNorm comes from a normalized whitelist (mlb|nba),
+  const sportLc = String(sport ?? 'mlb').toLowerCase();
+  const sportNorm = ['nba', 'nfl'].includes(sportLc) ? sportLc : 'mlb';
+  // Inline literal — sportNorm comes from a normalized whitelist (mlb|nba|nfl),
   // safe to interpolate (no user input ever reaches here unescaped).
   const sportClause = `COALESCE(sport,'mlb') = '${sportNorm}'`;
 

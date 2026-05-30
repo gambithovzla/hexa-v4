@@ -50,7 +50,38 @@ DERIVED_FEATURES = [
     "implied_prob_away",
 ]
 
-# Player-prop snapshot features (Sprint 5 deferred resumed)
+# ── NFL features ──────────────────────────────────────────────────────────────
+
+NFL_BASE_NUMERIC = [
+    "home_epa_off", "away_epa_off",
+    "home_epa_def", "away_epa_def",
+    "home_success_rate", "away_success_rate",
+    "home_proe", "away_proe",
+    "home_rest_days", "away_rest_days",
+    "injuries_home_severe", "injuries_away_severe",
+    "wind_mph",
+    "oracle_confidence",
+    "data_quality_score",
+    "signal_coherence_score",
+]
+
+NFL_BOOL_FEATURES = [
+    "home_is_short_week", "away_is_short_week",
+    "home_is_off_bye", "away_is_off_bye",
+    "qb_home_active", "qb_away_active",
+    "is_dome",
+]
+
+NFL_DERIVED_FEATURES = [
+    "epa_off_diff",
+    "epa_def_diff",
+    "epa_composite_diff",
+    "rest_diff",
+    "injury_diff",
+]
+
+# ── Player-prop snapshot features (Sprint 5 deferred resumed) ─────────────────
+
 PROP_NUMERIC_FEATURES = [
     "prop_player_xwoba", "prop_player_xba", "prop_player_xslg",
     "prop_player_k_pct", "prop_player_bb_pct",
@@ -132,7 +163,16 @@ def feature_columns(market: str) -> list[str]:
 
     overunder gets the line itself as a feature (since the target depends on it).
     runline / moneyline don't need the line.
+    NFL markets use NFL-specific columns.
     """
+    if market.startswith("nfl_"):
+        cols = list(NFL_BASE_NUMERIC) + list(NFL_BOOL_FEATURES) + list(NFL_DERIVED_FEATURES)
+        if market == "nfl_spread":
+            cols.append("spread_close")
+        if market == "nfl_total":
+            cols.append("total_close")
+        return cols
+
     cols = list(BASE_NUMERIC_FEATURES) + list(BOOL_FEATURES) + list(DERIVED_FEATURES)
     if market == "overunder":
         cols.append("line")
@@ -142,6 +182,35 @@ def feature_columns(market: str) -> list[str]:
     return cols
 
 
+def add_nfl_derived(df: pd.DataFrame) -> pd.DataFrame:
+    """Append NFL-specific computed features."""
+    out = df.copy()
+
+    h_epa_off = _col_or_nan(out, "home_epa_off")
+    a_epa_off = _col_or_nan(out, "away_epa_off")
+    h_epa_def = _col_or_nan(out, "home_epa_def")
+    a_epa_def = _col_or_nan(out, "away_epa_def")
+
+    out["epa_off_diff"] = h_epa_off - a_epa_off
+    # Lower epa_def = better defense; positive diff = home defense advantage
+    out["epa_def_diff"] = a_epa_def - h_epa_def
+    out["epa_composite_diff"] = out["epa_off_diff"] + out["epa_def_diff"]
+
+    h_rest = _col_or_nan(out, "home_rest_days")
+    a_rest = _col_or_nan(out, "away_rest_days")
+    out["rest_diff"] = h_rest - a_rest
+
+    h_inj = _col_or_nan(out, "injuries_home_severe")
+    a_inj = _col_or_nan(out, "injuries_away_severe")
+    out["injury_diff"] = a_inj - h_inj  # positive = away more injured = home advantage
+
+    for col in NFL_BOOL_FEATURES:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    return out
+
+
 def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
     """Build the feature matrix for the given market.
 
@@ -149,7 +218,7 @@ def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
     Columns missing from the input are filled with NaN so older snapshots
     still produce the right schema.
     """
-    enriched = add_derived(df)
+    enriched = add_nfl_derived(df) if market.startswith("nfl_") else add_derived(df)
     cols = feature_columns(market)
 
     for c in cols:

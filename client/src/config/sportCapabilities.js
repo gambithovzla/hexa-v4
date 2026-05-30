@@ -5,34 +5,46 @@ const DEFAULT_LOCKED_MSG = {
   en: 'This module will be available for this sport in a future sprint.',
 };
 
+const NFL_PARLAY_MSG = {
+  es: 'Parlay/SGP NFL llega en una fase posterior. Para NFL usa Analisis de juego u Oracle Chat.',
+  en: 'NFL parlay/SGP arrives in a later phase. For NFL use Game Analysis or Oracle Chat.',
+};
+
 const CAPABILITY_MAP = {
   board: {
     mlb: { enabled: true },
     nba: { enabled: true },
+    nfl: { enabled: true },
   },
   history: {
     mlb: { enabled: true },
     nba: { enabled: true },
+    nfl: { enabled: true },
   },
   gameAnalysis: {
     mlb: { enabled: true },
     nba: { enabled: true },
+    nfl: { enabled: true, requiresAdmin: true },
   },
   standings: {
     mlb: { enabled: true },
     nba: { enabled: true },
+    nfl: { enabled: true },
   },
   liveTracker: {
     mlb: { enabled: true },
     nba: { enabled: true },
+    nfl: { enabled: true },
   },
   gameDetail: {
     mlb: { enabled: true },
     nba: { enabled: false, message: { es: 'Detalles NBA (box score + play-by-play) llegan en el proximo sprint.', en: 'NBA details (box score + play-by-play) ship in the next sprint.' } },
+    nfl: { enabled: false, message: { es: 'Detalles NFL (drives + play-by-play) llegan en una fase posterior.', en: 'NFL details (drives + play-by-play) ship in a later phase.' } },
   },
   oracleChat: {
     mlb: { enabled: true, requiresAdmin: true },
     nba: { enabled: true, requiresAdmin: true },
+    nfl: { enabled: true, requiresAdmin: true },
   },
   parlayBuilder: {
     mlb: { enabled: true, requiresAdmin: true },
@@ -44,14 +56,17 @@ const CAPABILITY_MAP = {
         en: 'Parlay Synergy uses the MLB candidate pool. For NBA use Game Analysis or Oracle Chat.',
       },
     },
+    nfl: { enabled: false, requiresAdmin: true, message: NFL_PARLAY_MSG },
   },
   parlayArchitect: {
     mlb: { enabled: true, requiresAdmin: true },
     nba: { enabled: true, requiresAdmin: true },
+    nfl: { enabled: false, requiresAdmin: true, message: NFL_PARLAY_MSG },
   },
   batchScan: {
     mlb: { enabled: true, requiresAdmin: true },
     nba: { enabled: false, requiresAdmin: true, message: { es: 'Batch scan NBA llegara en una fase posterior.', en: 'NBA batch scan will arrive in a later phase.' } },
+    nfl: { enabled: false, requiresAdmin: true, message: { es: 'Batch scan NFL llegara en una fase posterior.', en: 'NFL batch scan will arrive in a later phase.' } },
   },
 };
 

@@ -38,6 +38,11 @@ MARKETS = (
     "prop_rbis",
 )
 
+NFL_MARKETS = ("nfl_moneyline", "nfl_spread", "nfl_total")
+
+# Market → sport (for dataset loading)
+MARKET_SPORT = {m: "nfl" for m in NFL_MARKETS}
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -157,21 +162,43 @@ def train_all(
     `min_train_size_override` overrides the global and per-market floors
     when set — useful for admin-triggered retrains that want to force a
     training run even with very few samples (e.g. probing a new market).
+
+    NFL markets (nfl_moneyline, nfl_spread, nfl_total) load their own
+    sport='nfl' dataset, keeping it isolated from MLB/NBA training data.
     """
     settings = get_settings()
     out_path = Path(out_dir or settings.artifacts_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading dataset…")
-    df = load_dataset(csv_path=csv_path)
-    logger.info("Loaded %d rows; %d resolved", len(df), int(df["result"].notna().sum()))
+    # Separate NFL and non-NFL markets
+    nfl_markets = [m for m in markets if m in NFL_MARKETS]
+    std_markets = [m for m in markets if m not in NFL_MARKETS]
+
+    # Load standard dataset once for all non-NFL markets
+    df = None
+    if std_markets:
+        logger.info("Loading MLB dataset…")
+        df = load_dataset(csv_path=csv_path)
+        logger.info("Loaded %d rows; %d resolved", len(df), int(df["result"].notna().sum()))
+
+    # Load NFL dataset separately if any NFL market requested
+    nfl_df = None
+    if nfl_markets and not csv_path:
+        logger.info("Loading NFL dataset…")
+        try:
+            nfl_df = load_dataset(sport="nfl")
+            logger.info("NFL: Loaded %d rows; %d resolved", len(nfl_df), int(nfl_df["result"].notna().sum()))
+        except Exception as exc:
+            logger.warning("NFL dataset load failed (%s) — skipping NFL markets", exc)
+            nfl_markets = []
 
     summary: dict[str, dict | None] = {}
-    for market in markets:
+
+    def _train_market(market_df: pd.DataFrame, market: str) -> None:
         effective_min = min_train_size_for_market(market, override=min_train_size_override)
         try:
             metrics = train_one_market(
-                df,
+                market_df,
                 market,
                 out_path,
                 test_days=settings.test_days,
@@ -193,6 +220,14 @@ def train_all(
         except Exception as exc:
             logger.exception("Training failed for %s", market)
             summary[market] = {"error": str(exc), "min_train_size_used": effective_min}
+
+    if df is not None:
+        for market in std_markets:
+            _train_market(df, market)
+
+    if nfl_df is not None:
+        for market in nfl_markets:
+            _train_market(nfl_df, market)
 
     manifest_path = out_path / "manifest.json"
     # Merge with any existing manifest so partial retrains (e.g. only
@@ -224,7 +259,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train H.E.X.A. ML models")
     parser.add_argument(
         "--market",
-        choices=[*MARKETS, "all"],
+        choices=[*MARKETS, *NFL_MARKETS, "all"],
         default="all",
         help="Which market(s) to train",
     )
@@ -250,7 +285,7 @@ def main() -> None:
         level=args.log_level.upper(),
         format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
     )
-    markets = MARKETS if args.market == "all" else (args.market,)
+    markets = (*MARKETS, *NFL_MARKETS) if args.market == "all" else (args.market,)
     train_all(
         csv_path=args.csv,
         out_dir=args.out_dir,

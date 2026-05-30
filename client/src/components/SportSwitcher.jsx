@@ -14,7 +14,9 @@ export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
   // Each button must compute its own accent locally so the *inactive* side
   // also previews its livery on hover — not just the active one.
   const liveryFor = (s) =>
-    isLeague ? (s === 'nba' ? 'var(--brand-volt)' : 'var(--brand-lava)') : C.cyan;
+    isLeague
+      ? (s === 'nba' ? 'var(--brand-volt)' : s === 'nfl' ? 'var(--brand-field, #2e7d32)' : 'var(--brand-lava)')
+      : C.cyan;
   const liveryText = (s) =>
     isLeague ? (s === 'nba' ? 'var(--brand-ink)' : '#fff') : '#0a0d14';
 
