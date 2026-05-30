@@ -6,13 +6,13 @@ Este archivo se lee automáticamente al inicio de cada sesión. **Antes de tocar
 
 ## TL;DR del proyecto
 
-H.E.X.A. v4 es una plataforma de **análisis predictivo de MLB y NBA**:
+H.E.X.A. v4 es una plataforma de **análisis predictivo de MLB, NBA y NFL**:
 
-- Motor LLM dual (Claude + Grok) que genera picks con contexto rico (Statcast, weather, park factors, lineups, line movement para MLB; advanced team stats + rest/pace/net-rating para NBA).
+- Motor LLM dual (Claude + Grok) que genera picks con contexto rico (Statcast, weather, park factors, lineups, line movement para MLB; advanced team stats + rest/pace/net-rating para NBA; EPA, success rate, QB status, weather para NFL).
 - Pick lifecycle: create → tracking en vivo → resolución automática post-game → postmortem por LLM.
 - Pipeline de contenido editorial a X (Twitter) con OAuth 1.0a.
 - Monetización con cripto vía NowPayments.
-- Frontend React 18 + Vite + MUI con PWA. Sport switcher MLB/NBA en la tab de juego.
+- Frontend React 18 + Vite + MUI con PWA. Sport switcher MLB/NBA/NFL en la tab de juego.
 - Deploy: Railway (server) + Vercel (client).
 
 Cubertura completa en [docs/architecture.md](docs/architecture.md).
@@ -124,8 +124,8 @@ hexa-v4/
 - [server/prompts/oracle-nba-prompts.js](server/prompts/oracle-nba-prompts.js) — Prompts NBA: `NBA_SYSTEM_PROMPT` (pick + JSON output) y `NBA_CHAT_PROMPT` (chat libre). Guardrail anti-hallucination: prohíbe explícitamente simular tool calls o web search.
 - [server/routes/nba.js](server/routes/nba.js) — `POST /api/nba/analyze/game` y `POST /api/nba/analyze/chat`. Feature-flagged por `NBA_ANALYSIS_ENABLED`. Admin-only. Resuelve `marketOdds` server-side vía [nba-odds.js](server/nba-odds.js) cuando el cliente no las envía y propaga `context_meta` + `oddsSource` en `meta` de la respuesta.
 
-### NFL (🔄 en build — tercer deporte)
-Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos que importan los frozen, `sport='nfl'` en toda persistencia, cero ediciones a frozen. `nfl` sigue **inactivo** en el registry (`SPORT_META.nfl.active=false` en [client/src/config/sports.js](client/src/config/sports.js); no está en `ACTIVE_SPORTS`). **Sprint 9a (scaffolding datos) mergeado** (PR #373); **9b (Oracle NFL) en build**.
+### NFL (✅ Sprint 9 completo — tercer deporte activo)
+Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos que importan los frozen, `sport='nfl'` en toda persistencia, cero ediciones a frozen. `nfl` está **activo** en el registry (`SPORT_META.nfl.active=true`, `ACTIVE_SPORTS=['mlb','nba','nfl']` en [client/src/config/sports.js](client/src/config/sports.js)). **Sprints 9a–9e mergeados** (PRs #373–#377 + #378); selector NFL visible en UI; pizarra muestra placeholder hasta temporada sept 2026.
 - **Spec maestra**: [docs/nfl-architecture.md](docs/nfl-architecture.md) — data sources, mapeo live tipo GUMBO, diseño del Oracle prompt, parlay, imperdible, ML sidecar.
 - **Roadmap por sprints**: [docs/nfl-roadmap.md](docs/nfl-roadmap.md) (serie Sprint 9, espejo de la serie 7 NBA).
 - **Datos** (decidido): ESPN hidden API (gratis, sin key — como NBA) para juegos/scores/drives/plays/injuries/rosters; The Odds API `americanfootball_nfl` (dual key) para líneas; **nflverse / nfl_data_py** para stats avanzadas (EPA, success rate, PROE) — el análogo a Statcast/Savant.
@@ -143,7 +143,11 @@ Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos 
   - [server/nfl-odds.js](server/nfl-odds.js) — The Odds API `americanfootball_nfl`, dual key. **Preserva key numbers** vía MODA de spread/total (no promedio). `getNflGameOdds`, `matchNflOddsToGame`, `buildMarketOddsForGame`.
   - [server/pick-resolver-nfl.js](server/pick-resolver-nfl.js) — resuelve pendientes `sport='nfl'` (reusa `resolvePickFromFinalState`/`tokenMatchesTeam`), maneja push. Job game-time-aware en index.js: Thu/Sun/Mon ET 16:00–05:59.
   - `chatPickExtractor.js` extendido a `'nfl'` (normalización sport nba/nfl/mlb; market hints spread/total/moneyline).
-- **Pendiente (9.1+)**: `server/services/nflShadowValidator.js` + `nflShadowPersistence.js` (dataset/shadow), `server/pick-tracker-nfl.js` + `NflLiveTracker.jsx` (live, 9.2), `server/services/hexaNflBoardService.js` + UI (9d), ML sidecar (9e).
+- **Completo (9.1)**: `server/services/nflShadowValidator.js` + `nflShadowPersistence.js` — dataset/shadow para NFL; columnas NFL en `pick_features`/`shadow_model_runs` (`sport='nfl'`).
+- **Completo (9.2)**: `server/pick-tracker-nfl.js` + `client/src/components/NflLiveTracker.jsx` — live tracker game-time-aware (Thu/Sun/Mon ET), drives + plays + win probability desde ESPN.
+- **Completo (9d)**: `GameSelector` + `AnalysisPanel` extendidos a NFL; `client/src/utils/nflLogoUrl.js`; `HexaBoard` muestra placeholder NFL hasta temporada sept 2026.
+- **Completo (9e)**: `server/services/nflMlClient.js` + modelos `nfl_moneyline`/`nfl_spread`/`nfl_total` en sidecar Python — scaffolding completo; entrena cuando haya picks resueltos en temporada real.
+- **Pendiente operacional**: `hexaNflBoardService.js` (sept 2026), entrenamiento real de modelos NFL, `NFL_LIVE_TRACKER_ENABLED` / `NFL_PROPS_ENABLED`.
 
 ### MLB Player Props (Sprint 5)
 - [server/routes/mlb-props.js](server/routes/mlb-props.js) — `GET /api/mlb/props/board` (auth). Odds API + Savant + ML batch; `oraclePropPicks` desde tabla `picks` por `game_date` / `game_pk`.
@@ -362,7 +366,7 @@ npm run preview      # preview del build
 - `X_AUTO_PUBLISH_ENABLED` — worker publica en X (default `0`)
 - `X_AUTO_PUBLISH_INTERVAL_MINUTES` — intervalo (default `5`)
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
-- `NFL_ANALYSIS_ENABLED` — habilita endpoints Oracle NFL + resolver NFL (default `false`; gateará `routes/nfl.js` en 9c). Opcionales planificados: `NFL_LIVE_TRACKER_ENABLED`, `NFL_PROPS_ENABLED`, `IMPERDIBLE_NFL_ENABLED`. Ver [docs/nfl-roadmap.md](docs/nfl-roadmap.md).
+- `NFL_ANALYSIS_ENABLED` — habilita endpoints Oracle NFL + resolver NFL (default `false`; activo en Railway con `=true`). Opcionales planificados: `NFL_LIVE_TRACKER_ENABLED`, `NFL_PROPS_ENABLED`, `IMPERDIBLE_NFL_ENABLED`. Ver [docs/nfl-roadmap.md](docs/nfl-roadmap.md).
 - `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
 - `IMPERDIBLE_ENABLED` — habilita Pick Imperdible (admin-only, MLB; default `false`). Opcionales: `IMPERDIBLE_ARBITER_MODEL` (default Opus), `IMPERDIBLE_TOP_K` (default `5`)
@@ -385,7 +389,7 @@ Lista completa en [.env.example](.env.example).
 
 El pipeline de ML propio está **completo y en producción**. Los modelos XGBoost están entrenados y sirviendo predicciones en tiempo real. Backlog en [docs/roadmap.md](docs/roadmap.md).
 
-**Próximo deporte — NFL (🔄 en build, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Spec maestra en [docs/nfl-architecture.md](docs/nfl-architecture.md), roadmap por sprints en [docs/nfl-roadmap.md](docs/nfl-roadmap.md). Datos: ESPN + The Odds API + nflverse. **9a + 9b mergeados; 9c (lifecycle: rutas + odds + resolver) cerrado** — ver sección NFL arriba. Falta 9.1 (dataset/shadow), 9d (UI), 9.2 (live), 9e (ML).
+**NFL — ✅ Sprint 9 completo (2026-05-30, PRs #373–#378)**: tercer deporte operativo. Spec en [docs/nfl-architecture.md](docs/nfl-architecture.md), roadmap en [docs/nfl-roadmap.md](docs/nfl-roadmap.md). Todo el código está mergeado: Oracle, lifecycle, shadow/dataset, live tracker, UI (selector + AnalysisPanel + GameSelector), ML scaffolding. Pendiente operacional: temporada NFL arranca sept 2026 → `hexaNflBoardService`, picks reales → entrenar modelos.
 
 Estado del pipeline ML:
 - ✅ Sprint 0 — documentación viva (este archivo + `/docs/`).
@@ -431,7 +435,17 @@ Estado del pipeline ML:
   - **`ml/hexa_ml/serve.py`**: import de `fangraphs_scraper` envuelto en `try/except ImportError`; si falla, los endpoints `/fangraphs/*` devuelven HTTP 503 en vez de hundir todo el servicio al arrancar.
   - Resultado: los tres servicios Railway (Postgres, hexa-v4, Hexa ML) en **Online** tras el deploy; `NIXPACKS_NODE_VERSION=20` confirmado activo — emails de verificación operativos.
 
-**Estado en producción (2026-05-29, post-8f)**:
+- ✅ **Sprint 9 — NFL completo** (2026-05-30, PRs #373–#378):
+  - **9a scaffolding**: `nfl-api.js`, `nfl-team-map.js`, `nfl-context-builder.js`, `nfl-odds.js`, migraciones DB, endpoints `GET /api/nfl/games|teams|standings`.
+  - **9b Oracle NFL**: `oracle-nfl-prompts.js` + `oracleNfl.js` + `nflOutputGuard.js`. Cap 72%, key numbers 3/7, QB gate, guardrail anti-hallucination.
+  - **9c lifecycle**: `routes/nfl.js` (`POST /api/nfl/analyze/game|chat`), `pick-resolver-nfl.js`, job game-time-aware Thu/Sun/Mon.
+  - **9.1 dataset/shadow**: `nflShadowValidator.js` + `nflShadowPersistence.js`; columnas NFL en `pick_features` / `shadow_model_runs`.
+  - **9.2 live tracker**: `pick-tracker-nfl.js` + `NflLiveTracker.jsx` — SSE per-game, drives + plays + win probability desde ESPN.
+  - **9d UI**: `GameSelector` + `AnalysisPanel` extendidos a NFL; `nflLogoUrl.js`; `HexaBoard` placeholder NFL; `sports.js` `ACTIVE_SPORTS` incluye `'nfl'`.
+  - **9e ML scaffolding**: `nflMlClient.js` (circuit breaker propio); modelos `nfl_moneyline`/`nfl_spread`/`nfl_total` en Python; endpoints `/predict/nfl_*` en sidecar.
+  - **post-9 fix**: `HexaBoard` early-return NFL (PR #378, 2026-05-30) — evita que pizarra muestre datos MLB cuando `sport='nfl'`.
+
+**Estado en producción (2026-05-30, post-Sprint 9)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
 - Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
 - Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".
@@ -546,7 +560,7 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 - **Context enrichment (8d)**: deploy hexa-v4 con los cambios de 8d → verificar en análisis real que los bloques UMPIRE, TEAM FORM y SCHEDULE FATIGUE aparecen en el contexto; si Savant umpire-scorecard cambia el CSV header, actualizar `getUmpireStats` en `savant-fetcher.js`.
 - Completar Sprint 5 props: resolver lifecycle + validación Brier; `MLB_PROPS_ML_PUBLIC_ENABLED` cuando pase el gate.
 - NBA: validación E2E en prod con `NBA_ANALYSIS_ENABLED`; equity en bottom nav (menor).
-- **Próximo**: NFL Sprint 9 (tercer deporte). Todo el Tier A + B está cerrado en código y frontend — no hay más pendientes de UI.
+- ✅ **NFL Sprint 9 completo** (PRs #373–#378, 2026-05-30): Oracle, lifecycle, shadow/dataset, live tracker, UI selector activo, ML scaffolding. Sin pendientes de código — solo operacionales (temporada sept 2026).
 
 **Shadow dashboard — lectura de fechas**:
 - Columna **Hora Lima** = `pick_time_lima` / `created_at` (cuándo se corrió el análisis).
