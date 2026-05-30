@@ -189,3 +189,27 @@ describe('pickParser — edge cases', () => {
   test('RL alias ATH', () =>
     assertPick('ATH -1.5', { market_type: 'runline', line: -1.5 }));
 });
+
+// Real-world Oracle (Spanish) pick strings that previously parsed as all-null and
+// then defaulted to a fabricated "Home ML" in the ML opinion card.
+describe('pickParser — spelled-out Spanish/English Oracle phrasing', () => {
+  test('"Moneyline NYY (Visitante)" resolves away when NYY is the away team', () =>
+    assertPick('Moneyline NYY (Visitante)', { market_type: 'moneyline', side: 'away' },
+      { homeAbbr: 'ATH', awayAbbr: 'NYY' }));
+
+  test('pitcher-prefixed moneyline finds the team anywhere in the text', () =>
+    assertPick('Jesús Luzardo Moneyline (PHI gana)', { market_type: 'moneyline', side: 'away' },
+      { homeAbbr: 'LAD', awayAbbr: 'PHI' }));
+
+  test('"NYY A ganar" is moneyline', () =>
+    assertPick('NYY A ganar', { market_type: 'moneyline' }));
+
+  test('bare Over with no numeric line is overunder, line null', () =>
+    assertPick('Over (Total de Carreras)', { market_type: 'overunder', side: 'over', line: null }));
+
+  test('bare Under with no numeric line is overunder/under', () =>
+    assertPick('Under', { market_type: 'overunder', side: 'under', line: null }));
+
+  test('over/under with a number still keeps the line', () =>
+    assertPick('Over 12.5 (estimado)', { market_type: 'overunder', side: 'over', line: 12.5 }));
+});
