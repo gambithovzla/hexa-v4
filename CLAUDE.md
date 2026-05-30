@@ -139,7 +139,11 @@ Espeja **exactamente** el patrón NBA (que espeja MLB): archivos `nfl-*` nuevos 
   - [server/services/oracleNfl.js](server/services/oracleNfl.js) — `analyzeNflGame`, `analyzeNflChat`, `serializeNflContext` (Anthropic propio, sin Grok). **No toca oracle.js.**
   - [server/services/nflOutputGuard.js](server/services/nflOutputGuard.js) — `validateNflAnalysisOutput`: rechaza props/ABSTAIN/parse fallido, confianza 50–72, degrada con `alert_flags`.
   - Migraciones `runNflScaffoldingMigrations()` + `runNflDatasetMigrations()` en [server/migrate.js](server/migrate.js); endpoints `GET /api/nfl/games|teams|standings` en [server/index.js](server/index.js).
-- **Pendiente (9c+)**: `server/routes/nfl.js` (analyze endpoints), `server/nfl-odds.js`, `server/services/nflShadow*.js`, `server/pick-resolver-nfl.js`, `server/pick-tracker-nfl.js`, `server/services/hexaNflBoardService.js`, UI.
+  - [server/routes/nfl.js](server/routes/nfl.js) — `POST /api/nfl/analyze/game` + `/chat` (admin-only, flag `NFL_ANALYSIS_ENABLED`). Lookup **por semana** (season/seasonType/week, default actual) con fallback date. Persiste `sport='nfl'`, resuelve odds server-side. (pick_features/shadow → 9.1.)
+  - [server/nfl-odds.js](server/nfl-odds.js) — The Odds API `americanfootball_nfl`, dual key. **Preserva key numbers** vía MODA de spread/total (no promedio). `getNflGameOdds`, `matchNflOddsToGame`, `buildMarketOddsForGame`.
+  - [server/pick-resolver-nfl.js](server/pick-resolver-nfl.js) — resuelve pendientes `sport='nfl'` (reusa `resolvePickFromFinalState`/`tokenMatchesTeam`), maneja push. Job game-time-aware en index.js: Thu/Sun/Mon ET 16:00–05:59.
+  - `chatPickExtractor.js` extendido a `'nfl'` (normalización sport nba/nfl/mlb; market hints spread/total/moneyline).
+- **Pendiente (9.1+)**: `server/services/nflShadowValidator.js` + `nflShadowPersistence.js` (dataset/shadow), `server/pick-tracker-nfl.js` + `NflLiveTracker.jsx` (live, 9.2), `server/services/hexaNflBoardService.js` + UI (9d), ML sidecar (9e).
 
 ### MLB Player Props (Sprint 5)
 - [server/routes/mlb-props.js](server/routes/mlb-props.js) — `GET /api/mlb/props/board` (auth). Odds API + Savant + ML batch; `oraclePropPicks` desde tabla `picks` por `game_date` / `game_pk`.
@@ -381,7 +385,7 @@ Lista completa en [.env.example](.env.example).
 
 El pipeline de ML propio está **completo y en producción**. Los modelos XGBoost están entrenados y sirviendo predicciones en tiempo real. Backlog en [docs/roadmap.md](docs/roadmap.md).
 
-**Próximo deporte — NFL (🔄 en build, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Spec maestra en [docs/nfl-architecture.md](docs/nfl-architecture.md), roadmap por sprints en [docs/nfl-roadmap.md](docs/nfl-roadmap.md). Datos: ESPN + The Odds API + nflverse. **9a (scaffolding) mergeado, 9b (Oracle) en build** — ver sección NFL arriba.
+**Próximo deporte — NFL (🔄 en build, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Spec maestra en [docs/nfl-architecture.md](docs/nfl-architecture.md), roadmap por sprints en [docs/nfl-roadmap.md](docs/nfl-roadmap.md). Datos: ESPN + The Odds API + nflverse. **9a + 9b mergeados; 9c (lifecycle: rutas + odds + resolver) cerrado** — ver sección NFL arriba. Falta 9.1 (dataset/shadow), 9d (UI), 9.2 (live), 9e (ML).
 
 Estado del pipeline ML:
 - ✅ Sprint 0 — documentación viva (este archivo + `/docs/`).
