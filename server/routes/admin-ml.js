@@ -348,15 +348,21 @@ router.post('/ml/retrain/ensemble', async (req, res) => {
     if (allNull || metrics.nTrain == null) {
       skipped = true;
       try {
-        const { rows } = await pool.query(
-          `SELECT COUNT(*)::INT AS eligible
+        const { rows: mktRows } = await pool.query(
+          `SELECT COALESCE(pick_market_type, 'unknown') AS market,
+                  COUNT(*)::INT AS eligible
              FROM shadow_model_runs
-            WHERE oracle_pick_prob  IS NOT NULL
-              AND legacy_pick_prob  IS NOT NULL
-              AND python_pick_prob  IS NOT NULL
-              AND actual_winner_id  IS NOT NULL`
+            WHERE oracle_pick_prob IS NOT NULL
+              AND legacy_pick_prob IS NOT NULL
+              AND python_pick_prob IS NOT NULL
+              AND actual_status    = 'resolved'
+              AND pick_market_type IN ('moneyline','overunder','runline','prop')
+            GROUP BY pick_market_type`
         );
-        eligibleRows = rows?.[0]?.eligible ?? 0;
+        const byMarket = Object.fromEntries(mktRows.map((r) => [r.market, r.eligible]));
+        eligibleRows = mktRows.reduce((s, r) => s + r.eligible, 0);
+        // attach per-market breakdown so the UI can show it
+        response = { ...(response ?? {}), eligible_by_market: byMarket };
       } catch (err) {
         console.warn(`[admin-ml] eligible-rows query failed: ${err.message}`);
       }
@@ -391,6 +397,7 @@ router.post('/ml/retrain/ensemble', async (req, res) => {
     success: true,
     skipped,
     eligible_rows: eligibleRows,
+    eligible_by_market: response?.eligible_by_market ?? null,
     min_rows_required: minRowsRequired,
     duration_ms: durationMs,
     metrics,
