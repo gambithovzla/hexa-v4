@@ -15,7 +15,10 @@ export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
   // also previews its livery on hover — not just the active one.
   const liveryFor = (s) =>
     isLeague
-      ? (s === 'nba' ? 'var(--brand-volt)' : s === 'nfl' ? 'var(--brand-field, #2e7d32)' : 'var(--brand-lava)')
+      ? (s === 'nba' ? 'var(--brand-volt)'
+        : s === 'nfl' ? 'var(--brand-field, #2e7d32)'
+        : s === 'nhl' ? 'var(--brand-ice, #29b6f6)'
+        : 'var(--brand-lava)')
       : C.cyan;
   const liveryText = (s) =>
     isLeague ? (s === 'nba' ? 'var(--brand-ink)' : '#fff') : '#0a0d14';

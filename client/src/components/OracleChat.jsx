@@ -281,6 +281,9 @@ function getEasternDateString(value = new Date()) {
 export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   const { C, isLeague } = useHexaTheme();
   const isNba = sport === 'nba';
+  const isNhl = sport === 'nhl';
+  // NBA and NHL share the date-based games shape and the per-sport chat route.
+  const isDateSportNonMlb = isNba || isNhl;
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
   const [view, setView] = useState('chat'); // 'chat' | 'history'
@@ -311,12 +314,14 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
     const date = getEasternDateString();
     const url = isNba
       ? `${API_URL}/api/nba/games?date=${date}`
+      : isNhl
+      ? `${API_URL}/api/nhl/games?date=${date}`
       : `${API_URL}/api/games?date=${date}`;
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
         let gameList = data.data || data.games || data || [];
-        if (isNba && Array.isArray(gameList)) {
+        if (isDateSportNonMlb && Array.isArray(gameList)) {
           gameList = gameList.map((g) => ({
             gamePk: String(g.game_id),
             game_id: g.game_id,
@@ -330,7 +335,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         setGames(Array.isArray(gameList) ? gameList : []);
       })
       .catch(() => {});
-  }, [isNba]);
+  }, [isNba, isNhl, isDateSportNonMlb]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -399,6 +404,8 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
       if (skipExtract) headers['X-HEXA-Skip-Pick-Extract'] = '1';
       const chatUrl = isNba
         ? `${API_URL}/api/nba/analyze/chat`
+        : isNhl
+        ? `${API_URL}/api/nhl/analyze/chat`
         : `${API_URL}/api/analyze/chat`;
       const res = await fetch(chatUrl, {
         method: 'POST',

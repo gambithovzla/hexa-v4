@@ -4,6 +4,7 @@ import { C, BARLOW, MONO, SANS } from '../theme';
 import SportSwitcher from './SportSwitcher';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 import { getNflLogoUrl } from '../utils/nflLogoUrl';
+import { getNhlLogoUrl } from '../utils/nhlLogoUrl';
 import { useHexaTheme } from '../themeProvider';
 import { formatGameTimeLima } from '../utils/dateKeys.js';
 
@@ -164,6 +165,8 @@ function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
     ? getNbaLogoUrl(teamId, abbr)
     : sport === 'nfl'
     ? getNflLogoUrl(teamId, abbr)
+    : sport === 'nhl'
+    ? getNhlLogoUrl(teamId, abbr)
     : teamId
       ? `https://www.mlb.com/team-logos/${teamId}.svg`
       : null;
@@ -252,7 +255,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
 
   const awayColor = MLB_COLORS[away] ?? '#666';
   const homeColor = MLB_COLORS[home] ?? '#666';
-  const sportKey  = game._sport === 'nba' ? 'nba' : game._sport === 'nfl' ? 'nfl' : 'mlb';
+  const sportKey  = game._sport === 'nba' ? 'nba' : game._sport === 'nfl' ? 'nfl' : game._sport === 'nhl' ? 'nhl' : 'mlb';
 
   const leftBorderColor = isSelected ? C.accent : status === 'live' ? C.amber : 'transparent';
 
@@ -417,7 +420,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
       </Box>
 
       {/* Pitchers — MLB only */}
-      {game._sport !== 'nba' && game._sport !== 'nfl' && (
+      {game._sport !== 'nba' && game._sport !== 'nfl' && game._sport !== 'nhl' && (
         <Box
           sx={{
             display: 'flex',
@@ -661,6 +664,55 @@ function normalizeNflGame(g) {
   };
 }
 
+// NHL is date-based like NBA; goals occupy the `runs` slot for score display.
+function normalizeNhlGame(g) {
+  let simplified = 'scheduled';
+  const sid = g.game_status_id;
+  if (sid != null) {
+    if (sid === 3) simplified = 'final';
+    else if (sid === 2) simplified = 'live';
+  } else {
+    const s = String(g.status ?? '').toLowerCase();
+    if (/final/i.test(s)) simplified = 'final';
+    else if (/in progress|intermission|period|ot|overtime|so|live/i.test(s)) simplified = 'live';
+  }
+
+  const homeScore = g.home_score ?? null;
+  const awayScore = g.away_score ?? null;
+
+  let displayTime = g.status ?? '';
+  if (simplified === 'scheduled' && g.game_datetime) {
+    try {
+      displayTime = new Date(g.game_datetime).toLocaleTimeString('es-PE', {
+        timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+    } catch { /* keep status text */ }
+  }
+
+  return {
+    gamePk:   String(g.game_id),
+    gameDate: g.game_date ? `${g.game_date}T00:00:00Z` : null,
+    _displayTime: displayTime,
+    status: { simplified },
+    teams: {
+      away: {
+        abbreviation: g.away_team_abbr ?? 'AWAY',
+        name:         g.away_team_name ?? g.away_team_abbr ?? 'Away',
+        id:           g.away_team_id ?? null,
+      },
+      home: {
+        abbreviation: g.home_team_abbr ?? 'HOME',
+        name:         g.home_team_name ?? g.home_team_abbr ?? 'Home',
+        id:           g.home_team_id ?? null,
+      },
+    },
+    linescore: (homeScore != null && awayScore != null) ? {
+      teams: { away: { runs: awayScore }, home: { runs: homeScore } },
+    } : null,
+    _sport: 'nhl',
+  };
+}
+
 export default function GameSelector({
   // New props
   mode = 'single',
@@ -706,6 +758,8 @@ export default function GameSelector({
       ? `${API_URL}/api/nfl/games`
       : sport === 'nba'
       ? `${API_URL}/api/nba/games?date=${date}`
+      : sport === 'nhl'
+      ? `${API_URL}/api/nhl/games?date=${date}`
       : `${API_URL}/api/games?date=${date}`;
 
     fetch(url)
@@ -715,6 +769,7 @@ export default function GameSelector({
         const raw = json.success ? json.data : [];
         const list = sport === 'nfl' ? raw.map(normalizeNflGame)
           : sport === 'nba' ? raw.map(normalizeNbaGame)
+          : sport === 'nhl' ? raw.map(normalizeNhlGame)
           : raw;
         setGames(list);
         // fullDay: auto-select only schedulable games on load

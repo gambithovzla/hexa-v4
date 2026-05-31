@@ -450,6 +450,8 @@ export default function App() {
   const parlayArchitectCapability = getSportCapability('parlayArchitect', sport, lang);
   const batchCapability = getSportCapability('batchScan', sport, lang);
   const gameDetailCapability = getSportCapability('gameDetail', sport, lang);
+  const standingsCapability = getSportCapability('standings', sport, lang);
+  const liveTrackerCapability = getSportCapability('liveTracker', sport, lang);
   const sportLabel = SPORT_META[sport]?.shortLabel ?? sport.toUpperCase();
 
   // When mobile switches into analysis view (game selected), jump to top so the
@@ -609,7 +611,13 @@ export default function App() {
 
           {activeTab === 'standings' && (
             <Box sx={{ display: 'grid', gap: 2 }}>
-              {sport === 'nba'
+              {!standingsCapability.enabled
+                ? <SportComingSoon
+                    lang={lang}
+                    title={lang === 'es' ? `Posiciones ${sportLabel}` : `${sportLabel} Standings`}
+                    subtitle={standingsCapability.message}
+                  />
+                : sport === 'nba'
                 ? <NBAStandingsPanel lang={lang} />
                 : <MLBStandingsPanel lang={lang} />}
             </Box>
@@ -714,7 +722,13 @@ export default function App() {
           {/* Live Tracker */}
           {activeTab === 'live' && (
             <Box sx={{ display: 'grid', gap: 2 }}>
-              {sport === 'nfl'
+              {!liveTrackerCapability.enabled
+                ? <SportComingSoon
+                    lang={lang}
+                    title={lang === 'es' ? `Live ${sportLabel}` : `${sportLabel} Live`}
+                    subtitle={liveTrackerCapability.message}
+                  />
+                : sport === 'nfl'
                 ? <NflLiveTracker lang={lang} />
                 : sport === 'nba'
                   ? <NBALiveTracker lang={lang} />

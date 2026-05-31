@@ -460,6 +460,7 @@ function InsightCard({ ins, lang, t }) {
 export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
   const isNba = sport === 'nba';
   const isNfl = sport === 'nfl';
+  const isNhl = sport === 'nhl';
   const t = T[lang] ?? T.es;
   const { C } = useHexaTheme();
 
@@ -469,7 +470,7 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchBoard = useCallback(async (force = false) => {
-    if (isNfl) return;
+    if (isNfl || isNhl) return;
     if (force) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
@@ -484,12 +485,28 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isNba, isNfl]);
+  }, [isNba, isNfl, isNhl]);
 
   useEffect(() => { fetchBoard(false); }, [fetchBoard]);
 
   const ageMin = data ? minutesAgo(data.lastUpdatedAt) : null;
   const rest   = useMemo(() => data?.insights?.slice(1) ?? [], [data]);
+
+  if (isNhl) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '2rem', fontWeight: 800, color: 'var(--brand-ice, #29b6f6)', letterSpacing: '0.08em', mb: 1 }}>
+          NHL
+        </Typography>
+        <Typography sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.85rem', color: C.textMuted, mb: 0.5 }}>
+          {lang === 'es' ? 'Pizarra NHL llega en una fase posterior' : 'NHL Board ships in a later phase'}
+        </Typography>
+        <Typography sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', color: C.textMuted, opacity: 0.6 }}>
+          {lang === 'es' ? 'Usa la tab JUEGO para analizar partidos NHL.' : 'Use the GAME tab to analyze NHL matchups.'}
+        </Typography>
+      </Box>
+    );
+  }
 
   if (isNfl) {
     return (

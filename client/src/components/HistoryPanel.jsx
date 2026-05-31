@@ -30,6 +30,7 @@ import AdminEnsembleBadge from './AdminEnsembleBadge';
 import AdminMlOpinionCard from './AdminMlOpinionCard';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 import { getNflLogoUrl } from '../utils/nflLogoUrl';
+import { getNhlLogoUrl } from '../utils/nhlLogoUrl';
 import { groupHistoryByPeriod } from '../utils/historyPeriodStats.js';
 
 const TRANSLATIONS = { en, es };
@@ -88,8 +89,8 @@ function MatchupWithLogos({ matchup, sport = 'mlb' }) {
   const away = parts[0].trim();
   const home = parts[1].trim();
 
-  if (sport === 'nba' || sport === 'nfl') {
-    const logoFor = sport === 'nfl' ? getNflLogoUrl : getNbaLogoUrl;
+  if (sport === 'nba' || sport === 'nfl' || sport === 'nhl') {
+    const logoFor = sport === 'nfl' ? getNflLogoUrl : sport === 'nhl' ? getNhlLogoUrl : getNbaLogoUrl;
     const awaySrc = logoFor(null, away);
     const homeSrc = logoFor(null, home);
     return (
