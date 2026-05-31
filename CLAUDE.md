@@ -54,7 +54,7 @@ hexa-v4/
 - [server/market-intelligence.js](server/market-intelligence.js) — `buildDeterministicSafePayload`, `buildValueBreakdown`. **FROZEN.**
 - [server/services/xgboostValidator.js](server/services/xgboostValidator.js) — validador determinístico (no es XGBoost real, es scoring con pesos hardcodeados). **FROZEN.**
 - [server/shadow-model.js](server/shadow-model.js) — runner del validator + persistencia pick-aligned (`pick_market_type`, `python_pick_prob`, `pick_agree_python`, etc.). Bug fix 2026-05-29: `_enrichWithPythonScore` ya no tiene el guard `python_pick_prob == null` que impedía guardar `python_model_score` cuando el sidecar respondía bien — esto causaba que el ensemble tuviera 0 filas elegibles.
-- [server/services/pickAlignedMl.js](server/services/pickAlignedMl.js) — parsea el pick Oracle, predice el **mismo mercado** en legacy/Python, expone `mlOpinion` (admin) y `shadowFields`. Usa [pickParser.js](server/parsers/pickParser.js) (incl. español: `Bajo 4.5 Ponches`).
+- [server/services/pickAlignedMl.js](server/services/pickAlignedMl.js) — parsea el pick Oracle, predice el **mismo mercado** en legacy/Python, expone `mlOpinion` (admin) y `shadowFields`. Usa [pickParser.js](server/parsers/pickParser.js) (incl. español: `Bajo 4.5 Ponches`). **Fix 2026-05-31**: infiere `prop_kind` y `side` del texto del pick cuando el parser no los extrae (picks en formato invertido sin número de línea, e.g. "Jacob Misiorowski Strikeouts OVER").
 - [server/prompts/x-content-prompts.js](server/prompts/x-content-prompts.js) — prompts de content. **FROZEN** los existentes; añadir nuevos sí se puede.
 
 ### Pick lifecycle
@@ -99,7 +99,7 @@ hexa-v4/
 "Lock of the slate": analiza 1..N juegos con lineup confirmado y devuelve **un solo** pick de máxima convicción (o PASS). **Invierte la lógica de value/edge a propósito**: la convicción premia el ACUERDO entre el modelo determinístico, el mercado y el sidecar ML, penaliza varianza de mercado y exige lineup confirmado — el edge nunca es input positivo. Un gate duro fuerza PASS si ningún candidato es near-certain; un árbitro Opus audita los finalistas y confirma o vetea.
 - [server/services/imperdibleSelector.js](server/services/imperdibleSelector.js) — scorer puro de convicción + gate + ranking (unit-tested). `MARKET_VARIANCE` + `DEFAULT_THRESHOLDS`.
 - [server/services/imperdibleArbiter.js](server/services/imperdibleArbiter.js) + [server/prompts/imperdible-prompts.js](server/prompts/imperdible-prompts.js) — auditor LLM de riesgo (modelo override `IMPERDIBLE_ARBITER_MODEL`).
-- [server/services/imperdibleEngine.js](server/services/imperdibleEngine.js) — orquestación: reusa el pipeline frozen (Oracle/market/sidecar) **solo por import**, persiste el lock en `picks` (`type='imperdible'`, `source='imperdible'`) — reusa resolver + equity pero aislado del training default — y una fila completa en `imperdible_runs` (dataset de slate para un futuro modelo).
+- [server/services/imperdibleEngine.js](server/services/imperdibleEngine.js) — orquestación: reusa el pipeline frozen (Oracle/market/sidecar) **solo por import**, persiste el lock en `picks` (`type='imperdible'`, `source='imperdible'`) — reusa resolver + equity pero aislado del training default — y una fila completa en `imperdible_runs` (dataset de slate para un futuro modelo). **Fix 2026-05-31**: candidatos `auto_resolvable: false` (team_total) se separan ANTES del ranking Stage 1/2 para que no ocupen los slots top-K bloqueando picks válidos. El slate de salida los incluye al final como informativos.
 - [server/routes/imperdible.js](server/routes/imperdible.js) — `POST /api/imperdible/analyze`, `GET /api/imperdible/games`, `GET /api/imperdible/history`. Admin + feature-flag `IMPERDIBLE_ENABLED`.
 - [client/src/pages/ImperdiblePage.jsx](client/src/pages/ImperdiblePage.jsx) — ruta `/admin/imperdible` + link en sidebar.
 
@@ -186,7 +186,7 @@ Cuarto deporte **activo**. Espeja **exactamente** el patrón NBA (date-based) qu
 ### Frontend
 - [client/src/App.jsx](client/src/App.jsx) — root + routing. Tiene estado `sport` ('mlb'|'nba') que se pasa a GameSelector y AnalysisPanel en la tab de juego.
 - [client/src/components/SportSwitcher.jsx](client/src/components/SportSwitcher.jsx) — pill toggle MLB/NBA. Se renderiza dentro del header de GameSelector (modo single).
-- [client/src/components/GameSelector.jsx](client/src/components/GameSelector.jsx) — acepta `sport` prop. Cuando `sport='nba'` fetcha `/api/nba/games` y normaliza al shape MLB-compatible. Oculta la sección de pitchers para NBA.
+- [client/src/components/GameSelector.jsx](client/src/components/GameSelector.jsx) — acepta `sport` prop. Cuando `sport='nba'` fetcha `/api/nba/games` y normaliza al shape MLB-compatible. Oculta la sección de pitchers para NBA. Muestra badge verde **"✓ Analizado"** en cada GameCard que ya tiene un pick del usuario para esa fecha+deporte (via `GET /api/picks/analyzed-pks`, autenticado).
 - [client/src/components/AnalysisPanel.jsx](client/src/components/AnalysisPanel.jsx) — acepta `sport` prop. Cuando `sport='nba'` usa `/api/nba/analyze/game`. Oculta betType, engine picker (grok/dual), webSearch toggle y lineup badges para NBA. Admin MLB: muestra [AdminMlOpinionCard.jsx](client/src/components/AdminMlOpinionCard.jsx) con `mlOpinion` del analyze.
 - [client/src/theme/outcomeStyles.js](client/src/theme/outcomeStyles.js) — helpers W/L/P usando tokens CSS `--outcome-win|loss|pending` (League + Classic).
 - [client/src/pages/](client/src/pages/) — pages (PerformanceDashboard, ParlayArchitect, DevUIShowcase, MLCalibrationDashboard, AdminMLControlCenter).
@@ -573,9 +573,10 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 - Historial, logos, resolver, jobs, dataset admin y shadow runs aislados por `sport`. ✅
 - Contexto NBA con injuries/status + odds server-side + metadata de completitud. ✅
 
-**Foco docs / ops (2026-05-29, post-B2/B10)**:
-- **B2 Hexa Live SSE** ✅: `LiveTracker.jsx` migrado a SSE per-game. Descubrimiento cada 3 min + EventSource por gamePk (evento `message` default, cadencia 15s). `HexaLiveStream.jsx` eliminado. Lag real ~1-2s vs 30s anterior.
-- **B10 Alt lines UI** ✅: `AltLinesModal.jsx` + botón en `PlayerPropsPage.jsx` ya estaban completos; roadmap sincronizado.
+**Foco docs / ops (2026-05-31, post-fixes UX)**:
+- ✅ **Badge "✓ Analizado" en GameSelector** (2026-05-31): `GET /api/picks/analyzed-pks?date=YYYY-MM-DD&sport=` devuelve los `game_pk` que ya tienen picks del usuario en esa fecha. `GameSelector.jsx` hace un fetch secundario (autenticado con Bearer token vía `useAuth`) y muestra un chip verde en cada `GameCard` analizado. Requiere deploy para activarse.
+- ✅ **Fix prop ML Opinion "No disponible"** (2026-05-31): `pickAlignedMl.js` infiere `prop_kind` y `side` del texto del pick cuando el parser no los extrae (e.g., picks en formato invertido "Jacob Misiorowski Strikeouts OVER" sin número de línea). Permite que el sidecar Python prediga y que el label Oracle muestre "Over (62%)" en vez de "— (62%)".
+- ✅ **Fix Imperdible nunca selecciona** (2026-05-31): `imperdibleEngine.js` separa candidatos auto-resolvables de los informativos (team_total, `auto_resolvable: false`) ANTES del ranking Stage 1/2. Los team_total tenían probabilidades modelo 88-91% y ocupaban los 5 slots top-K, dejando fuera picks válidos de moneyline/O-U/runline. Ahora compiten solo los resolvables; los team_total aparecen al final del slate para observabilidad.
 - **Ensemble**: deploy ML sidecar con los cambios de 8c → reentrenar `all` desde `/admin/ml-control` → verificar que `ensembles_available` en `/health` muestre los 4 mercados cuando haya datos suficientes.
 - **Props ensemble**: el modelo `prop` entrena cuando `shadow_model_runs` tenga ≥50 filas `pick_market_type='prop'` resueltas con los 3 probs. Monitorear en panel "Chat-sourced picks" de `/admin/ml-control`.
 - **Context enrichment (8d)**: deploy hexa-v4 con los cambios de 8d → verificar en análisis real que los bloques UMPIRE, TEAM FORM y SCHEDULE FATIGUE aparecen en el contexto; si Savant umpire-scorecard cambia el CSV header, actualizar `getUmpireStats` en `savant-fetcher.js`.
