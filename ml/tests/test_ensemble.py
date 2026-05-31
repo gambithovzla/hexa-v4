@@ -8,10 +8,12 @@ import numpy as np
 import pytest
 
 from hexa_ml.models.ensemble import (
+    MARKET_SOURCES,
     SOURCE_NAMES,
     EnsembleMetaLearner,
     EnsembleMetrics,
     _logit,
+    sources_for_market,
 )
 
 
@@ -134,3 +136,95 @@ def test_ensemble_beats_or_matches_best_individual_source():
     # The ensemble should at worst tie the best individual source
     # (within a small tolerance to handle finite-sample noise).
     assert brier_ens <= brier_python + 0.005
+
+
+# ── Adaptive source count — value markets (2026-05-31) ────────────────────────
+
+
+def test_market_sources_map():
+    """Moneyline uses 3 sources; value markets use oracle + python only."""
+    assert MARKET_SOURCES["moneyline"] == ("oracle", "legacy", "python")
+    assert MARKET_SOURCES["overunder"] == ("oracle", "python")
+    assert MARKET_SOURCES["runline"] == ("oracle", "python")
+    assert MARKET_SOURCES["prop"] == ("oracle", "python")
+
+
+def test_sources_for_market_unknown_defaults_to_three():
+    assert sources_for_market("totally_unknown") == ("oracle", "legacy", "python")
+
+
+def test_value_market_ensemble_has_two_sources():
+    ens = EnsembleMetaLearner(market="overunder")
+    assert ens.source_columns == ("oracle", "python")
+    assert ens.n_sources == 2
+
+
+def _make_two_source_dataset(n: int = 200, seed: int = 11):
+    rng = np.random.default_rng(seed)
+    y = rng.integers(0, 2, size=n)
+    oracle = np.where(y == 1, rng.uniform(0.45, 0.85, n), rng.uniform(0.15, 0.55, n))
+    python = np.where(y == 1, rng.uniform(0.55, 0.95, n), rng.uniform(0.05, 0.45, n))
+    return np.stack([oracle, python], axis=1), y
+
+
+def test_two_source_fit_predict_and_weights():
+    X, y = _make_two_source_dataset(n=250)
+    ens = EnsembleMetaLearner(market="overunder").fit(X, y)
+    probs = ens.predict_proba(X)
+    assert np.all((probs >= 0) & (probs <= 1))
+    weights = ens.weights()
+    assert set(weights.keys()) == {"oracle", "python", "intercept"}
+    assert "legacy" not in weights
+
+
+def test_two_source_fit_rejects_three_columns():
+    """A 2-source ensemble must reject a 3-wide matrix."""
+    ens = EnsembleMetaLearner(market="overunder")
+    with pytest.raises(ValueError):
+        ens.fit(np.zeros((10, 3)), np.zeros(10))
+
+
+def test_predict_sources_reads_only_relevant_sources():
+    """For a 2-source ensemble, a stray legacy value is ignored."""
+    X, y = _make_two_source_dataset(n=120)
+    ens = EnsembleMetaLearner(market="overunder").fit(X, y)
+    via_mapping = ens.predict_sources({"oracle": X[0, 0], "legacy": 0.99, "python": X[0, 1]})
+    via_array = ens.predict_proba(X[0:1])[0]
+    np.testing.assert_allclose(via_mapping, via_array, atol=1e-9)
+
+
+def test_predict_sources_missing_required_raises():
+    X, y = _make_two_source_dataset(n=80)
+    ens = EnsembleMetaLearner(market="overunder").fit(X, y)
+    with pytest.raises(ValueError):
+        ens.predict_sources({"oracle": 0.6})  # python missing
+
+
+def test_two_source_save_load_round_trip(tmp_path: Path):
+    X, y = _make_two_source_dataset(n=150)
+    ens = EnsembleMetaLearner(market="overunder").fit(X, y)
+    saved = ens.save(tmp_path)
+    assert saved.name == "ensemble_overunder.pkl"
+    reloaded = EnsembleMetaLearner.load(saved)
+    assert reloaded.source_columns == ("oracle", "python")
+    assert reloaded.n_sources == 2
+    p_orig = ens.predict_proba(X[:5])
+    p_reloaded = reloaded.predict_proba(X[:5])
+    np.testing.assert_allclose(p_orig, p_reloaded, atol=1e-12)
+
+
+def test_legacy_pkl_without_source_columns_defaults_to_three(tmp_path: Path):
+    """A pre-adaptive .pkl (no source_columns key) loads as a 3-source moneyline."""
+    import joblib
+    from sklearn.linear_model import LogisticRegression
+
+    X, y = _make_dataset(n=120)
+    model = LogisticRegression(max_iter=1000).fit(_logit(X), y)
+    legacy_path = tmp_path / "ensemble_moneyline.pkl"
+    joblib.dump(
+        {"market": "moneyline", "model": model, "fitted": True, "metrics": None},
+        legacy_path,
+    )
+    reloaded = EnsembleMetaLearner.load(legacy_path)
+    assert reloaded.source_columns == ("oracle", "legacy", "python")
+    assert reloaded.n_sources == 3

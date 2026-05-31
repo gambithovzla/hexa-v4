@@ -596,17 +596,34 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
     }
 
     const r = shadowRes.rows[0];
-    const sources = {
-      oracle:  r.oracle_home_win_prob != null ? Number(r.oracle_home_win_prob) : null,
-      legacy:  r.shadow_home_win_prob != null ? Number(r.shadow_home_win_prob) : null,
-      python:  r.python_model_score   != null ? Number(r.python_model_score)   : null,
-    };
+    const market = r.pick_market_type || 'moneyline';
 
+    // Prefer the pick-aligned frame — P(pick wins), valid for every market.
+    // Fall back to the home-win frame for legacy rows predating pick-aligned
+    // columns (those only make sense for moneyline).
+    const hasPickAligned = r.oracle_pick_prob != null && r.python_pick_prob != null;
+    const frame = hasPickAligned ? 'pick' : 'home_win';
+
+    const sources = hasPickAligned
+      ? {
+          oracle: r.oracle_pick_prob != null ? Number(r.oracle_pick_prob) : null,
+          legacy: r.legacy_pick_prob != null ? Number(r.legacy_pick_prob) : null,
+          python: r.python_pick_prob != null ? Number(r.python_pick_prob) : null,
+        }
+      : {
+          oracle: r.oracle_home_win_prob != null ? Number(r.oracle_home_win_prob) : null,
+          legacy: r.shadow_home_win_prob != null ? Number(r.shadow_home_win_prob) : null,
+          python: r.python_model_score != null ? Number(r.python_model_score) : null,
+        };
+
+    // Adaptive ensemble: moneyline needs all 3; value markets need oracle +
+    // python. The client omits legacy when null so the 2-source ensemble runs.
     let ensemble = null;
-    const haveAll = sources.oracle != null && sources.legacy != null && sources.python != null;
-    if (haveAll && isMlEnsembleEnabled()) {
+    const haveRequired = sources.oracle != null && sources.python != null
+      && (market === 'moneyline' ? sources.legacy != null : true);
+    if (haveRequired && isMlEnsembleEnabled()) {
       const result = await predictMlEnsemble({
-        market: 'moneyline',
+        market,
         oracle_prob: sources.oracle,
         legacy_prob: sources.legacy,
         python_prob: sources.python,
@@ -621,11 +638,32 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
       }
     }
 
-    // Resolution check — was the home side correct?
+    // Resolution check. In the pick-aligned frame each source prob is
+    // P(pick wins), so "correct" means (prob >= 0.5) matches whether the pick
+    // actually won. In the legacy home-win frame it means matching home_won.
     let resolution = null;
-    if (r.actual_winner_id) {
+    if (frame === 'pick') {
+      const pr = String(pick.result || '').toLowerCase();
+      const pickWon = ['win', 'won'].includes(pr) ? true
+        : ['loss', 'lost'].includes(pr) ? false : null;
+      if (pickWon != null) {
+        const correct = (p) => (p != null ? (p >= 0.5) === pickWon : null);
+        resolution = {
+          frame: 'pick',
+          pick_result: pr,
+          pick_won: pickWon,
+          actual_home_score: r.actual_home_score,
+          actual_away_score: r.actual_away_score,
+          oracle_correct:   correct(sources.oracle),
+          legacy_correct:   correct(sources.legacy),
+          python_correct:   correct(sources.python),
+          ensemble_correct: correct(ensemble?.probability),
+        };
+      }
+    } else if (r.actual_winner_id) {
       const homeWon = String(r.actual_winner_id) === String(r.home_team_id);
       resolution = {
+        frame: 'home_win',
         actual_winner_id: r.actual_winner_id,
         actual_home_score: r.actual_home_score,
         actual_away_score: r.actual_away_score,
@@ -640,6 +678,8 @@ router.get('/picks/:pickId/ensemble-breakdown', async (req, res) => {
     res.json({
       success: true,
       pick,
+      market,
+      frame,
       teams: { home: r.home_team_abbr, away: r.away_team_abbr },
       sources,
       ensemble,

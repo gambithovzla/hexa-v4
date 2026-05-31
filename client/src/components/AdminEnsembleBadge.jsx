@@ -167,7 +167,9 @@ export default function AdminEnsembleBadge({ pickId, token }) {
           {!loading && !error && data?.sources && (
             <>
               <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: C.ink2, letterSpacing: '2px', mb: 1 }}>
-                P(HOME WIN) — PER SOURCE
+                {data.frame === 'pick'
+                  ? `P(PICK WINS) — PER SOURCE${data.market ? ` · ${data.market.toUpperCase()}` : ''}`
+                  : 'P(HOME WIN) — PER SOURCE'}
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <ProbBar
@@ -233,7 +235,9 @@ export default function AdminEnsembleBadge({ pickId, token }) {
 
               {!data.ensemble && data.sources && (
                 <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: C.amber, mt: 1.5 }}>
-                  Ensemble not applied — need all 3 sources + ENSEMBLE_ENABLED=true.
+                  {data.market && data.market !== 'moneyline'
+                    ? 'Ensemble not applied — need Oracle + Python, ENSEMBLE_ENABLED=true, and a trained model for this market.'
+                    : 'Ensemble not applied — need all 3 sources + ENSEMBLE_ENABLED=true.'}
                 </Typography>
               )}
             </>

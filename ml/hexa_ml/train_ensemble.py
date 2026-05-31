@@ -32,7 +32,12 @@ import pandas as pd
 from .config import get_settings
 from .data import load_ensemble_training_data, temporal_split
 from .calibration import brier
-from .models.ensemble import EnsembleMetaLearner, EnsembleMetrics
+from .models.ensemble import (
+    EnsembleMetaLearner,
+    EnsembleMetrics,
+    SOURCE_COLUMN,
+    sources_for_market,
+)
 
 logger = logging.getLogger("hexa_ml.train_ensemble")
 
@@ -43,13 +48,14 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _extract_sources(df: pd.DataFrame) -> np.ndarray:
-    """Build the (n, 3) array of [oracle, legacy, python] pick-aligned probabilities."""
-    return df[[
-        "oracle_pick_prob",
-        "legacy_pick_prob",
-        "python_pick_prob",
-    ]].to_numpy(dtype=float)
+def _extract_sources(df: pd.DataFrame, source_columns: tuple[str, ...]) -> np.ndarray:
+    """Build the (n, k) array of pick-aligned probabilities for the given sources.
+
+    k is 3 for moneyline (oracle/legacy/python) and 2 for the value markets
+    (oracle/python). Column order matches `source_columns`.
+    """
+    cols = [SOURCE_COLUMN[s] for s in source_columns]
+    return df[cols].to_numpy(dtype=float)
 
 
 def train_ensemble_one(
@@ -87,12 +93,14 @@ def train_ensemble_one(
         )
         return None
 
-    X_train = _extract_sources(train_df)
+    source_columns = sources_for_market(market)
+
+    X_train = _extract_sources(train_df, source_columns)
     y_train = train_df["y_true"].to_numpy(dtype=int)
-    X_test = _extract_sources(test_df)
+    X_test = _extract_sources(test_df, source_columns)
     y_test = test_df["y_true"].to_numpy(dtype=int)
 
-    ensemble = EnsembleMetaLearner(market=market)
+    ensemble = EnsembleMetaLearner(market=market, source_columns=source_columns)
     ensemble.fit(X_train, y_train)
 
     p_train = ensemble.predict_proba(X_train)
@@ -101,12 +109,11 @@ def train_ensemble_one(
     brier_train = brier(y_train, p_train)
     brier_test = brier(y_test, p_test)
 
-    # Per-source baselines on the test set
-    brier_oracle = brier(y_test, X_test[:, 0])
-    brier_legacy = brier(y_test, X_test[:, 1])
-    brier_python = brier(y_test, X_test[:, 2])
-
-    best_source = min(brier_oracle, brier_legacy, brier_python)
+    # Per-source baselines on the test set — only for the sources in play.
+    brier_by_source = {
+        name: brier(y_test, X_test[:, i]) for i, name in enumerate(source_columns)
+    }
+    best_source = min(brier_by_source.values())
     beats_best = brier_test < best_source
 
     coefs = ensemble.weights()
@@ -116,20 +123,22 @@ def train_ensemble_one(
         n_test=len(X_test),
         brier_train=brier_train,
         brier_test=brier_test,
-        brier_oracle=brier_oracle,
-        brier_legacy=brier_legacy,
-        brier_python=brier_python,
-        coef_oracle=coefs["oracle"],
-        coef_legacy=coefs["legacy"],
-        coef_python=coefs["python"],
+        brier_oracle=brier_by_source.get("oracle", 0.0),
+        brier_legacy=brier_by_source.get("legacy", 0.0),
+        brier_python=brier_by_source.get("python", 0.0),
+        coef_oracle=coefs.get("oracle", 0.0),
+        coef_legacy=coefs.get("legacy", 0.0),
+        coef_python=coefs.get("python", 0.0),
         intercept=coefs["intercept"],
         trained_at=_now_iso(),
+        source_columns=list(source_columns),
     )
     ensemble.metrics = metrics
 
     logger.info(
-        "[ensemble:%s] brier_test=%.4f | oracle=%.4f legacy=%.4f python=%.4f | beats_best=%s",
-        market, brier_test, brier_oracle, brier_legacy, brier_python, beats_best,
+        "[ensemble:%s] sources=%s brier_test=%.4f | %s | beats_best=%s",
+        market, ",".join(source_columns), brier_test,
+        " ".join(f"{k}={v:.4f}" for k, v in brier_by_source.items()), beats_best,
     )
 
     if not beats_best and not force_save:
@@ -180,6 +189,7 @@ def train_ensemble(
                     "coef_python": metrics.coef_python,
                     "intercept": metrics.intercept,
                     "trained_at": metrics.trained_at,
+                    "source_columns": metrics.source_columns,
                 }
                 if metrics
                 else None
@@ -212,7 +222,11 @@ def train_ensemble(
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Train H.E.X.A. ensemble meta-learner")
-    p.add_argument("--market", choices=["moneyline", "all"], default="all")
+    p.add_argument(
+        "--market",
+        choices=["moneyline", "overunder", "runline", "prop", "all"],
+        default="all",
+    )
     p.add_argument("--out-dir", default=None)
     p.add_argument("--min-rows", type=int, default=50)
     p.add_argument(

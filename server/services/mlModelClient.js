@@ -124,10 +124,16 @@ async function _fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
   }
 }
 
-async function _post(path, body, attempt = 0, timeoutMs = TIMEOUT_MS) {
+async function _post(path, body, attempt = 0, timeoutMs = TIMEOUT_MS, opts = {}) {
   if (_isCircuitOpen()) {
     return null;
   }
+
+  // Status codes that mean "expected, not a sidecar fault" — e.g. an ensemble
+  // market that simply hasn't been trained yet (503 ModelNotAvailable). These
+  // return null WITHOUT counting toward the circuit breaker so a cold-start
+  // ensemble never trips the breaker for the primary prediction path.
+  const softStatuses = opts.softStatuses ?? [];
 
   const url = `${ML_API_URL}${path}`;
   try {
@@ -138,6 +144,10 @@ async function _post(path, body, attempt = 0, timeoutMs = TIMEOUT_MS) {
     }, timeoutMs);
 
     if (!response.ok) {
+      if (softStatuses.includes(response.status)) {
+        // Expected absence — do not record a circuit failure.
+        return null;
+      }
       // 4xx/5xx from the server — record failure, no retry
       _recordFailure();
       const text = await response.text().catch(() => '');
@@ -152,7 +162,7 @@ async function _post(path, body, attempt = 0, timeoutMs = TIMEOUT_MS) {
     const isRetryable = attempt < MAX_RETRIES && err.name !== 'AbortError';
     if (isRetryable) {
       // One immediate retry without delay (we're already within a single request)
-      return _post(path, body, attempt + 1, timeoutMs);
+      return _post(path, body, attempt + 1, timeoutMs, opts);
     }
     _recordFailure();
     if (err.name === 'AbortError') {
@@ -298,38 +308,53 @@ export async function getEnsembleCalibration() {
 }
 
 /**
- * Combine the 3 source probabilities through the trained meta-learner.
+ * Combine the source probabilities through the trained meta-learner.
+ *
+ * Adaptive source count: moneyline uses 3 sources (oracle + legacy + python),
+ * while the value markets (over/under, runline, prop) use a 2-source ensemble
+ * of oracle + python because the Legacy validator only scores moneyline.
+ * oracle_prob and python_prob are always required; legacy_prob is sent only
+ * when present and valid.
+ *
  * Returns null when the sidecar is unavailable, the ensemble hasn't been
- * trained yet, or any source probability is missing.
+ * trained for the market, or the required source probabilities are missing.
  *
  * @param {Object} payload
  * @param {string} [payload.market='moneyline']
- * @param {number} payload.oracle_prob  — home win prob from the LLM Oracle
- * @param {number} payload.legacy_prob  — home win prob from xgboostValidator.js
- * @param {number} payload.python_prob  — home win prob from the Python XGBoost
+ * @param {number} payload.oracle_prob  — pick-aligned prob from the LLM Oracle
+ * @param {number} [payload.legacy_prob] — pick-aligned prob from xgboostValidator.js (moneyline only)
+ * @param {number} payload.python_prob  — pick-aligned prob from the Python XGBoost
  * @returns {Promise<{
  *   market: string,
  *   probability: number,
  *   confidence: number,
- *   sources: {oracle: number, legacy: number, python: number},
- *   weights: {oracle: number, legacy: number, python: number, intercept: number},
+ *   sources: Object,
+ *   weights: Object,
  *   model_version: string|null
  * }|null>}
  */
 export async function predictEnsemble(payload) {
   if (!_guard()) return null;
   if (!payload) return null;
-  const required = ['oracle_prob', 'legacy_prob', 'python_prob'];
+  // oracle + python are always required; legacy is optional (value markets).
+  const required = ['oracle_prob', 'python_prob'];
   for (const key of required) {
     const v = Number(payload[key]);
     if (!Number.isFinite(v) || v < 0 || v > 1) return null;
   }
-  return _post('/predict/ensemble', {
+  const body = {
     market: payload.market ?? 'moneyline',
     oracle_prob: Number(payload.oracle_prob),
-    legacy_prob: Number(payload.legacy_prob),
     python_prob: Number(payload.python_prob),
-  });
+  };
+  const legacy = Number(payload.legacy_prob);
+  if (Number.isFinite(legacy) && legacy >= 0 && legacy <= 1) {
+    body.legacy_prob = legacy;
+  }
+  // 503 = ensemble not trained for this market yet (cold start); 422 = required
+  // source missing. Both are expected states, not sidecar faults — keep them
+  // out of the circuit breaker.
+  return _post('/predict/ensemble', body, 0, TIMEOUT_MS, { softStatuses: [503, 422] });
 }
 
 /** Whether the sidecar integration is enabled via env var. */
