@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-30 — Hotfix ensemble skip message: el endpoint `POST /retrain/ensemble` contaba filas elegibles sin filtrar por mercado (total ≥50 pero ningún mercado individual lo alcanzaba → "ENSEMBLE OMITIDO" confuso). Ahora agrupa por `pick_market_type` con `actual_status='resolved'` y devuelve `eligible_by_market`; la UI muestra desglose `moneyline: N/50 · overunder: N/50 · …`. Sprint 9 cerrado (2026-05-30): NFL completo (PRs #373–#378). B2+B10 frontend cerrados (2026-05-29).
+**Última actualización**: 2026-05-31 — **Sprint 11a (Soccer scaffolding de datos) en build**: `soccer-league-map.js` (6 ligas: EPL, La Liga, Serie A, Bundesliga, Ligue 1, MLS), `soccer-team-map.js` (88 clubes seed + aliases + accent-strip), `soccer-api.js` (wrapper ESPN league-aware), `soccer-odds.js` (The Odds API multi-liga, mercado 3-vías 1X2 + totals + BTTS). Rama `claude/soccer-sprint-11`. Fixes UX 2026-05-31 mergeados (badge analizado, prop ML, imperdible gate). Sprint 9 NFL cerrado (PRs #373–#378). B2+B10 frontend cerrados.
 
 ---
 
@@ -508,9 +508,18 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ---
 
-### ⏳ Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
+### 🔄 Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
 
-**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 10 cerrado.
+**Status**: 🔄 **en build** (2026-05-31). Sprint 11a (scaffolding de datos) en progreso en rama `claude/soccer-sprint-11`.
+
+**Progreso 11a — scaffolding de datos** (4 archivos creados, `node --check` OK):
+- ✅ `server/soccer-league-map.js` — registro de las 6 ligas (`slug`, `oddsApiSlug`, `country`, `name`, `season`, `avgGoals`, `drawPct`, `style`). Helpers: `getSoccerLeague`, `isSupportedLeague`, `getSoccerLeagueByOddsSlug`, `SOCCER_LEAGUE_SLUGS`.
+- ✅ `server/soccer-team-map.js` — 88 clubes seed across las 6 ligas, keyed por nombre canónico + `short` + `aliases`. Sin ids ESPN numéricos (no confiables, patrón NHL). `findSoccerTeam(name, league)` con normalización (accent-strip + drop sufijos FC/CF/etc) y fallback graceful al nombre crudo para clubes no-seedeados. Validado: `Man United`, `Spurs`, `Atlético de Madrid`, `Bayern München`, `Gladbach`, `PSG`, `Wolves` resuelven.
+- ✅ `server/soccer-api.js` — wrapper ESPN league-aware (`getSoccerGamesForDate(league, date)`, `getSoccerStandings`, `getSoccerGameSummary`, `getSoccerTeams`). Cache 5min + stale fallback. Status `pre/in/post` → `scheduled/live/final`.
+- ✅ `server/soccer-odds.js` — The Odds API multi-liga, dual key. **Mercado 3-vías 1X2** (`threeWay: {home, draw, away}` — el Draw es outcome real, nunca push) + totals (MODA, no promedio) + **BTTS**. `getSoccerGameOdds({leagueSlug, date})`, `matchSoccerOddsToGame`, `buildMarketOddsForGame`.
+- ⏳ Pendiente 11a: `soccer-context-builder.js`, migraciones (`runSoccerScaffoldingMigrations` + columna `league VARCHAR(32)` en `picks`/`pick_features`), endpoints `GET /api/soccer/games|teams|standings`.
+
+**Inicio recomendado siguientes fases**: 11b Oracle (prompts + `oracleSoccer.js` + `soccerOutputGuard.js`), 11c lifecycle (`routes/soccer.js` + `pick-resolver-soccer.js`), 11.1 shadow/dataset, 11d UI.
 
 **Alcance**: las **6 ligas principales** desde el día 1. La arquitectura es league-aware desde la base — un solo `soccer-api.js` con `leagueSlug` como parámetro, no 6 wrappers separados.
 
@@ -728,8 +737,8 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
 ```
 
-2026 Q3-4 Sprint 10    — NHL Hockey                        ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (inicio jul 2026, patrón espejo NFL/NBA)
-2026 Q4-1 Sprint 11    — Soccer (Premier League)           ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (mercado 3-vías, tras Sprint 10)
+2026 Q3-4 Sprint 10    — NHL Hockey                        ████████████████████████ ✅ (backend + UI; ML sidecar diferido)
+2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████░░░░░░░░░░░░░░░░░░░░ 🔄 (11a scaffolding datos en build; mercado 3-vías)
 2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (año redondo, tras Sprint 11)
 2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```

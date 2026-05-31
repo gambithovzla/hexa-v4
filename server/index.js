@@ -81,7 +81,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -107,6 +107,12 @@ import {
   getNhlTeamStats,
   getNhlStandings,
 } from './nhl-api.js';
+import {
+  getSoccerGamesForDate,
+  getSoccerStandings,
+  getSoccerTeams,
+} from './soccer-api.js';
+import { SOCCER_LEAGUE_SLUGS } from './soccer-league-map.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -1117,6 +1123,62 @@ app.get('/api/nhl/standings', async (req, res) => {
     }
     const data = await getNhlStandings(season);
     res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Soccer endpoints ──────────────────────────────────────────────────────────
+// GET /api/soccer/games?league=eng.1&date=YYYY-MM-DD
+app.get('/api/soccer/games', async (req, res) => {
+  try {
+    const { league, date } = req.query;
+    if (!league || !SOCCER_LEAGUE_SLUGS.includes(league)) {
+      return res.status(400).json({
+        success: false,
+        error: `league required; supported: ${SOCCER_LEAGUE_SLUGS.join(', ')}`,
+      });
+    }
+    const dateStr = date || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ success: false, error: 'date must be YYYY-MM-DD' });
+    }
+    const games = await getSoccerGamesForDate(league, dateStr);
+    res.json({ success: true, league, date: dateStr, count: games.length, data: games });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/soccer/teams?league=eng.1
+app.get('/api/soccer/teams', async (req, res) => {
+  try {
+    const { league } = req.query;
+    if (!league || !SOCCER_LEAGUE_SLUGS.includes(league)) {
+      return res.status(400).json({
+        success: false,
+        error: `league required; supported: ${SOCCER_LEAGUE_SLUGS.join(', ')}`,
+      });
+    }
+    const teams = await getSoccerTeams(league);
+    res.json({ success: true, league, count: teams.length, data: teams });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/soccer/standings?league=eng.1
+app.get('/api/soccer/standings', async (req, res) => {
+  try {
+    const { league } = req.query;
+    if (!league || !SOCCER_LEAGUE_SLUGS.includes(league)) {
+      return res.status(400).json({
+        success: false,
+        error: `league required; supported: ${SOCCER_LEAGUE_SLUGS.join(', ')}`,
+      });
+    }
+    const data = await getSoccerStandings(league);
+    res.json({ success: true, league, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -4958,6 +5020,8 @@ runMigrations()
   .then(() => runPgvectorMigrations())
   .then(() => runFeatureFlagsMigrations())
   .then(() => runJobQueueMigrations())
+  .then(() => runSoccerScaffoldingMigrations())
+  .then(() => runSoccerDatasetMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
