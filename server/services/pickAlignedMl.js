@@ -198,6 +198,26 @@ export async function buildPickAlignedMlOpinion({
     }
   }
 
+  // For prop picks the parser requires a numeric line — picks like
+  // "Jacob Misiorowski Strikeouts OVER" (no number) fall through unparsed.
+  // Recover prop_kind and side from a plain keyword scan so the Python sidecar
+  // can still predict and the Oracle label shows "Over" instead of "—".
+  if (marketType === 'prop') {
+    if (!parsed.prop_kind) {
+      const t = String(pickText ?? '').toLowerCase();
+      if (/\b(strikeouts?|ponches?)\b/.test(t))          parsed = { ...parsed, prop_kind: 'strikeouts' };
+      else if (/\b(total bases|bases totales|tb)\b/.test(t)) parsed = { ...parsed, prop_kind: 'total_bases' };
+      else if (/\b(home runs?|jonrones?|hr)\b/.test(t))  parsed = { ...parsed, prop_kind: 'home_runs' };
+      else if (/\brbis?\b/.test(t))                      parsed = { ...parsed, prop_kind: 'rbis' };
+      else if (/\bhits?\b/.test(t))                      parsed = { ...parsed, prop_kind: 'hits' };
+    }
+    if (!parsed.side) {
+      const t = String(pickText ?? '').toLowerCase();
+      if (/\b(over|alto|arriba)\b/.test(t))      parsed = { ...parsed, side: 'over' };
+      else if (/\b(under|bajo|abajo)\b/.test(t)) parsed = { ...parsed, side: 'under' };
+    }
+  }
+
   const oracleProb = extractOraclePickProb(analysisData);
   // The Oracle's side IS whatever its pick text says — never infer it from the
   // confidence number. Guessing "home" because prob ≥ 50% produced false

@@ -3368,6 +3368,26 @@ app.get('/api/picks', verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/picks/analyzed-pks — returns game_pks with picks for a given date+sport
+app.get('/api/picks/analyzed-pks', verifyToken, async (req, res) => {
+  try {
+    const { date, sport } = req.query;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ success: false, error: 'date (YYYY-MM-DD) required' });
+    }
+    const sp = normalizeKnownSportFilter(sport, { allowAll: false, fallback: 'mlb' });
+    const { rows } = await pool.query(
+      `SELECT DISTINCT game_pk FROM picks
+       WHERE user_id = $1 AND game_date = $2 AND COALESCE(sport,'mlb') = $3
+       AND game_pk IS NOT NULL AND deleted_at IS NULL`,
+      [req.user.id, date, sp],
+    );
+    return res.json({ success: true, data: rows.map(r => Number(r.game_pk)) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
 // PATCH /api/picks/:id — actualiza resultado (win/loss/pending) — solo admins
 app.patch('/api/picks/:id', verifyToken, async (req, res) => {
   if (!req.user.is_admin) {

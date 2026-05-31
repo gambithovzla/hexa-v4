@@ -7,6 +7,7 @@ import { getNflLogoUrl } from '../utils/nflLogoUrl';
 import { getNhlLogoUrl } from '../utils/nhlLogoUrl';
 import { useHexaTheme } from '../themeProvider';
 import { formatGameTimeLima } from '../utils/dateKeys.js';
+import { useAuth } from '../store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -238,7 +239,7 @@ function StatusBadge({ status, t }) {
 }
 
 // ── GameCard ──────────────────────────────────────────────────────────────────
-function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t }) {
+function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, analyzed, t }) {
   const { C, isLeague } = useHexaTheme();
   const away    = getAbbr(game.teams?.away);
   const home    = getAbbr(game.teams?.home);
@@ -303,9 +304,29 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, t
         </Box>
       )}
 
-      {/* Header row: [STATUS BADGE]  ────  [TIME PILL] [CHECKBOX] */}
+      {/* Header row: [STATUS BADGE] [ANALIZADO?]  ────  [TIME PILL] [CHECKBOX] */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mb: '12px' }}>
         <StatusBadge status={status} t={t} />
+        {analyzed && (
+          <Box
+            component="span"
+            sx={{
+              px: '5px',
+              py: '1px',
+              border: '1px solid rgba(34,197,94,0.4)',
+              bgcolor: 'rgba(34,197,94,0.08)',
+              color: '#22c55e',
+              fontFamily: MONO,
+              fontSize: '0.52rem',
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              flexShrink: 0,
+            }}
+          >
+            ✓ Analizado
+          </Box>
+        )}
         <Box sx={{ flex: 1 }} />
         <Box
           component="span"
@@ -729,11 +750,13 @@ export default function GameSelector({
 }) {
   const { C, isLeague } = useHexaTheme();
   const t = L[language] ?? L.en;
+  const { token } = useAuth();
 
-  const [date, setDate]         = useState(todayStr);
-  const [games, setGames]       = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [fetchErr, setFetchErr] = useState(null);
+  const [date, setDate]               = useState(todayStr);
+  const [games, setGames]             = useState([]);
+  const [loading, setLoading]         = useState(false);
+  const [fetchErr, setFetchErr]       = useState(null);
+  const [analyzedPks, setAnalyzedPks] = useState(new Set());
 
   // single selection
   const [singleGame, setSingleGame] = useState(null);
@@ -742,6 +765,24 @@ export default function GameSelector({
 
   // ── Notify parent of date changes ────────────────────────────────────────
   useEffect(() => { onDateChange?.(date); }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch analyzed game pks for the current date ──────────────────────────
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const queryDate = sport === 'nfl' ? new Date().toISOString().split('T')[0] : date;
+    fetch(`${API_URL}/api/picks/analyzed-pks?date=${queryDate}&sport=${sport}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(json => {
+        if (!cancelled && json.success) {
+          setAnalyzedPks(new Set(json.data.map(String)));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [date, sport, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch games ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1043,6 +1084,7 @@ export default function GameSelector({
                 isSelected={isSelected}
                 showCheckbox={mode !== 'single'}
                 checkboxDisabled={checkboxDisabled}
+                analyzed={analyzedPks.has(String(game.gamePk))}
                 onClick={
                   mode === 'single'
                     ? () => handleSingleClick(game)
