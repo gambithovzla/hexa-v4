@@ -6,9 +6,9 @@ Este archivo se lee automáticamente al inicio de cada sesión. **Antes de tocar
 
 ## TL;DR del proyecto
 
-H.E.X.A. v4 es una plataforma de **análisis predictivo de MLB, NBA y NFL**:
+H.E.X.A. v4 es una plataforma de **análisis predictivo multideporte** (MLB, NBA, NFL, NHL activos; Soccer en build):
 
-- Motor LLM dual (Claude + Grok) que genera picks con contexto rico (Statcast, weather, park factors, lineups, line movement para MLB; advanced team stats + rest/pace/net-rating para NBA; EPA, success rate, QB status, weather para NFL).
+- Motor LLM dual (Claude + Grok) que genera picks con contexto rico (Statcast, weather, park factors, lineups, line movement para MLB; advanced team stats + rest/pace/net-rating para NBA; EPA, success rate, QB status, weather para NFL; goal diff, special teams, goalie, rest/B2B para NHL; xG + perfil de liga + mercado 3-vías para Soccer).
 - Pick lifecycle: create → tracking en vivo → resolución automática post-game → postmortem por LLM.
 - Pipeline de contenido editorial a X (Twitter) con OAuth 1.0a.
 - Monetización con cripto vía NowPayments.
@@ -169,6 +169,18 @@ Cuarto deporte **activo**. Espeja **exactamente** el patrón NBA (date-based) qu
   - `chatPickExtractor.js` extendido a `'nhl'` (puck line parsea por el path spread; persiste `sport='nhl'` sin contaminar mlb).
 - **UI 10d (completo)**: `sports.js` (`ACTIVE_SPORTS` + `SPORT_META.nhl.active=true`); `sportCapabilities.js` (board/history/gameAnalysis/oracleChat habilitados para NHL; standings/live/parlay/batch/gameDetail con mensaje "fase posterior"); `SportSwitcher` livery NHL (ice blue); `GameSelector` (`normalizeNhlGame`, fetch `/api/nhl/games?date=`, logos NHL, oculta pitchers); `AnalysisPanel` (endpoint `/api/nhl/analyze/game`, SAFE bloqueado, controles MLB-only ya gateados por `sport==='mlb'`); `OracleChat` (games + `/api/nhl/analyze/chat` generalizados); `HistoryPanel`/`HexaBoard`/`HexaBoardLeague` con logos/placeholder NHL; `App.jsx` guards standings/live → SportComingSoon para NHL.
 - **Pendiente**: **10e ML sidecar** (diferido como NBA 7e), `hexaNhlBoardService` (pizarra), live tracker NHL, validación E2E en prod. La tab Live/Standings/Parlay muestran "fase posterior" hasta entonces.
+
+### Soccer (🔄 Sprint 11 — scaffolding de datos en build)
+Quinto deporte, **el más distinto de los cuatro previos**: mercado primario de **3 vías** (1X2: Home/Draw/Away — el empate es outcome real ~25-30%, NUNCA push), **league-aware desde la base** (un solo wrapper con `leagueSlug` como parámetro, no 6 wrappers). Seis ligas desde el día 1: Premier League, La Liga, Serie A, Bundesliga, Ligue 1, MLS. Rama `claude/soccer-sprint-11`. Espeja el patrón NHL/NFL/NBA (importa frozen, `sport='soccer'`, cero ediciones a frozen) pero con `league` como segunda dimensión en toda persistencia. Spec maestra: [docs/roadmap.md](docs/roadmap.md) Sprint 11.
+- **Diferencias estructurales clave** (NO copy-paste): mercado **3-vías** (resolver y output guard tratan el Draw explícitamente); **cap de confianza ~62%** (el más bajo de todos — mercado más eficiente); **sin "starter confirmado"** (alineaciones ~1h pre-kick); **xG** (Expected Goals) = el Statcast del fútbol; **perfil de liga** ajusta el sesgo del Oracle (Bundesliga→Over ~3.1 g/p, Serie A→Under/Draw ~2.4 g/p); mercados: 1X2 + over/under 2.5 + BTTS (both teams to score).
+- **Datos** (decidido): ESPN hidden API (`site.api.espn.com/.../soccer/{leagueSlug}/`, gratis sin key — como NBA/NFL/NHL) para juegos/scores/standings; The Odds API por slug de liga (dual key) para líneas; **FBref / Understat** para xG (análogo a Statcast/nflverse) — pendiente fases posteriores.
+- **Ya en código (11a)**:
+  - [server/soccer-league-map.js](server/soccer-league-map.js) — registro de las 6 ligas (`slug` interno = ESPN slug, `oddsApiSlug`, `country`, `name`, `season`, `avgGoals`, `drawPct`, `style`). Helpers `getSoccerLeague`, `isSupportedLeague`, `getSoccerLeagueByOddsSlug`.
+  - [server/soccer-team-map.js](server/soccer-team-map.js) — 88 clubes seed keyed por nombre canónico + `short` + `aliases` (sin ids ESPN numéricos, patrón NHL). `findSoccerTeam(name, league)` con accent-strip + drop de sufijos (FC/CF/SC/etc) y fallback graceful al nombre crudo para clubes no-seedeados (extensible sin romper el pipeline).
+  - [server/soccer-api.js](server/soccer-api.js) — wrapper ESPN league-aware: `getSoccerGamesForDate(league, date)`, `getSoccerStandings`, `getSoccerGameSummary`, `getSoccerTeams`. Cache 5min + stale fallback; status `pre/in/post`→`scheduled/live/final`.
+  - [server/soccer-odds.js](server/soccer-odds.js) — The Odds API multi-liga, dual key. **1X2 three-way** (`threeWay: {home, draw, away}`) + totals (MODA preserva la línea real, no promedio) + BTTS. `getSoccerGameOdds({leagueSlug, date})`, `matchSoccerOddsToGame`, `buildMarketOddsForGame`.
+- **Pendiente 11a**: `soccer-context-builder.js` (form, xG/xGA, H2H, lineup status, perfil de liga, `context_meta`); migraciones `runSoccerScaffoldingMigrations()` + columna `league VARCHAR(32)` en `picks`/`pick_features`; endpoints `GET /api/soccer/games|teams|standings`.
+- **Pendiente fases**: 11b Oracle (`oracle-soccer-prompts.js`, `oracleSoccer.js`, `soccerOutputGuard.js`), 11c lifecycle (`routes/soccer.js`, `pick-resolver-soccer.js`), 11.1 shadow/dataset, 11d UI. Flag `SOCCER_ANALYSIS_ENABLED` (default `false`).
 
 ### MLB Player Props (Sprint 5)
 - [server/routes/mlb-props.js](server/routes/mlb-props.js) — `GET /api/mlb/props/board` (auth). Odds API + Savant + ML batch; `oraclePropPicks` desde tabla `picks` por `game_date` / `game_pk`.
