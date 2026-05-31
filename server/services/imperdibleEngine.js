@@ -283,12 +283,20 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
   const bundleByGamePk = new Map(gameBundles.map((b) => [String(b.gamePk), b]));
 
   const allCandidates = gameBundles.flatMap((b) => b.candidates);
-  if (allCandidates.length === 0) {
+
+  // Split: candidates that can become the lock vs informational-only entries
+  // (e.g. team_total — pick-resolver doesn't handle them yet). The info-only
+  // set was dominating the top-K ranking because team totals hit 88-91%
+  // model probability, leaving no room for moneyline / O-U / runline picks.
+  const resolvableCandidates = allCandidates.filter((c) => c.autoResolvable !== false);
+  const infoOnlyCandidates   = allCandidates.filter((c) => c.autoResolvable === false);
+
+  if (resolvableCandidates.length === 0) {
     return { verdict: 'PASS', reason: 'no_candidates', imperdible: null, slate: [], excluded, slateSize: confirmed.length };
   }
 
-  // Stage 1: deterministic conviction without ML.
-  const stage1 = rankCandidates(allCandidates.map(scoreStage1));
+  // Stage 1: deterministic conviction without ML (resolvable only).
+  const stage1 = rankCandidates(resolvableCandidates.map(scoreStage1));
   const topK = stage1.slice(0, TOP_K);
 
   // Stage 2: ML-aligned conviction for the survivors only. Skip for
@@ -307,15 +315,24 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
   }
   const ranked = rankCandidates(stage2);
 
-  // Hard gate. Filter out candidates whose market type cannot be resolved
-  // automatically yet (e.g. team_total) — they remain in the slate dataset
-  // for the future model but cannot become the final lock.
+  // Hard gate on resolvable candidates only (no market_not_auto_resolvable needed
+  // here since we already excluded info-only candidates above).
   const gated = ranked.map((c) => {
     const baseGate = evaluateGate(c, gateOverrides);
-    const failed = [...baseGate.failedReasons];
-    if (c.autoResolvable === false) failed.push('market_not_auto_resolvable');
-    return { ...c, gate: { pass: failed.length === 0, failedReasons: failed } };
+    return { ...c, gate: baseGate };
   });
+
+  // Info-only candidates appear in the slate for observability but never pass
+  // the gate — mark them explicitly so the UI can show the reason.
+  const infoOnlyGated = infoOnlyCandidates.map((c) => ({
+    ...scoreStage1(c),
+    mlOpinion: null,
+    gate: { pass: false, failedReasons: ['market_not_auto_resolvable'] },
+  }));
+
+  // Full slate for the dataset (resolvable ranked + info-only at the end).
+  const fullSlate = [...gated, ...infoOnlyGated];
+
   const eligible = gated.filter((c) => c.gate.pass);
 
   if (eligible.length === 0) {
@@ -323,7 +340,7 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
       verdict: 'PASS',
       reason: 'gate_not_cleared',
       imperdible: null,
-      slate: gated,
+      slate: fullSlate,
       excluded,
       slateSize: confirmed.length,
       bestRejected: gated[0] ?? null,
@@ -344,7 +361,7 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
       verdict: 'PASS',
       reason: 'arbiter_veto',
       imperdible: null,
-      slate: gated,
+      slate: fullSlate,
       excluded,
       slateSize: confirmed.length,
       arbiter: verdict,
@@ -366,7 +383,7 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
       recommendedStakeFraction: stakeFraction,
     },
     arbiter: verdict,
-    slate: gated,
+    slate: fullSlate,
     excluded,
     slateSize: confirmed.length,
     bundle,
