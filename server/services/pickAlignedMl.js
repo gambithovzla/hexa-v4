@@ -3,6 +3,7 @@ import {
   buildMLFeaturePayload,
   buildPropMLFeaturePayload,
   isEnabled as isMlSidecarEnabled,
+  predictEnsemble,
   predictMoneyline,
   predictOverUnder,
   predictProp,
@@ -220,6 +221,39 @@ export async function buildPickAlignedMlOpinion({
 
   const oracleSideLabel = formatSideLabel(oracleSide, marketType, parsed.line);
 
+  // Ensemble: requires all 3 pick-aligned probs. Legacy only covers moneyline,
+  // so for over/under/runline/prop the ensemble cannot run.
+  let ensembleProb = null;
+  let ensembleStatus = 'unavailable';
+  let ensembleAgree = null;
+
+  if (oracleProb != null && legacy.prob != null && pythonProb != null) {
+    try {
+      const ensResult = await predictEnsemble({
+        market: marketType,
+        oracle_prob: oracleProb,
+        legacy_prob: legacy.prob,
+        python_prob: pythonProb,
+      });
+      if (ensResult?.probability != null) {
+        ensembleProb = Math.max(0, Math.min(1, ensResult.probability));
+        ensembleStatus = 'ok';
+        ensembleAgree = ensembleProb >= 0.5;
+      }
+    } catch {
+      // ensemble failed — degrade silently
+    }
+  } else {
+    ensembleStatus = legacy.prob == null ? 'no_legacy' : 'missing_inputs';
+  }
+
+  const ensembleSideLabel = oracleSide ? oracleSideLabel : '—';
+  const ensembleLabel = ensembleProb != null
+    ? formatProbLabel(ensembleSideLabel, ensembleProb)
+    : ensembleStatus === 'no_legacy'
+      ? 'N/A — Legacy no cubre este mercado'
+      : 'No disponible';
+
   const mlOpinion = {
     pickText,
     market_type: marketType,
@@ -247,9 +281,15 @@ export async function buildPickAlignedMlOpinion({
         ? formatProbLabel(pythonSideLabel, pythonProb)
         : (pythonRun.status === 'disabled' ? 'Sidecar deshabilitado' : 'No disponible'),
     },
+    ensemble: {
+      prob: ensembleProb,
+      status: ensembleStatus,
+      label: ensembleLabel,
+    },
     agree: {
       legacy: legacy.agree,
       python: sidesAgree(oracleSide, pythonSide),
+      ensemble: ensembleAgree,
     },
     gameMl: {
       oracle_home_win_prob: deriveOracleHomeWinProb(analysisData),

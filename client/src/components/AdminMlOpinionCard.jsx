@@ -83,6 +83,42 @@ export default function AdminMlOpinionCard({ mlOpinion, lang = 'es' }) {
       <SourceRow label="LEGACY" source={mlOpinion.legacy} agree={mlOpinion.agree?.legacy} />
       <SourceRow label="PYTHON" source={mlOpinion.python} agree={mlOpinion.agree?.python} />
 
+      {/* Ensemble row — combined verdict, always shown */}
+      <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: '72px 1fr auto',
+        gap: '8px',
+        alignItems: 'center',
+        py: '6px',
+        mt: '4px',
+        borderTop: `1px solid ${C.green}44`,
+        borderBottom: `1px solid ${C.border}`,
+      }}>
+        <Typography sx={{
+          fontFamily: isLeague ? "'Oswald', sans-serif" : MONO,
+          fontSize: '0.62rem',
+          color: mlOpinion.ensemble?.prob != null ? C.green : C.textMuted,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          fontWeight: mlOpinion.ensemble?.prob != null ? 700 : 400,
+        }}>
+          ENSEMBLE
+        </Typography>
+        <Typography sx={{
+          fontFamily: MONO,
+          fontSize: '0.68rem',
+          color: mlOpinion.ensemble?.prob != null ? C.green : C.textMuted,
+          lineHeight: 1.4,
+        }}>
+          {mlOpinion.ensemble?.label ?? '—'}
+        </Typography>
+        {mlOpinion.ensemble?.prob != null ? (
+          <AgreeChip agree={mlOpinion.agree?.ensemble} />
+        ) : (
+          <Typography sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.textMuted }}>N/A</Typography>
+        )}
+      </Box>
+
       {mlOpinion.gameMl && (
         <Box sx={{ mt: '8px' }}>
           <Box
