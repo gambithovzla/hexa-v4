@@ -243,14 +243,16 @@ class RetrainResponse(BaseModel):
 class EnsembleRequest(BaseModel):
     """Inputs for the meta-learner — one probability per source.
 
-    All three sources are required so the meta-learner can apply the
-    weights it was trained with. The Node side only calls this when all
-    three are available; otherwise it should fall back to the Oracle.
+    oracle_prob and python_prob are always required. legacy_prob is optional:
+    moneyline uses the 3-source ensemble (legacy required), while over/under,
+    run line and prop use a 2-source ensemble (oracle + python) because the
+    Legacy validator only scores moneyline. The meta-learner reads only the
+    sources it was trained with for the given market.
     """
 
     market: str = Field(default="moneyline", pattern="^(moneyline|overunder|runline|prop)$")
     oracle_prob: float = Field(..., ge=0, le=1)
-    legacy_prob: float = Field(..., ge=0, le=1)
+    legacy_prob: float | None = Field(default=None, ge=0, le=1)
     python_prob: float = Field(..., ge=0, le=1)
 
 
@@ -441,6 +443,11 @@ def predict_ensemble_endpoint(payload: EnsembleRequest) -> EnsembleResponse:
     except ModelNotAvailable as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
     return EnsembleResponse(

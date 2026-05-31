@@ -17,6 +17,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 
 from .config import get_settings
+from .models.ensemble import sources_for_market
 
 # Columns the Sprint 1 migration adds to pick_features. The loader will
 # tolerate missing optional columns (e.g. umpire_id) so an older CSV still
@@ -281,6 +282,13 @@ def load_ensemble_training_data(
             "shadow_model_runs lives in Postgres and is not exported to CSV."
         )
 
+    # Legacy validator only scores moneyline. For the value markets the
+    # ensemble is 2-source (oracle + python), so we must NOT require
+    # legacy_pick_prob — that filter is exactly why over/under/runline/prop
+    # never had an ensemble.
+    needs_legacy = "legacy" in sources_for_market(market)
+    legacy_filter = "\n                  AND {prefix}legacy_pick_prob IS NOT NULL" if needs_legacy else ""
+
     engine = create_engine(url)
     try:
         if market == "prop":
@@ -299,13 +307,12 @@ def load_ensemble_training_data(
                 WHERE smr.actual_status = 'resolved'
                   AND smr.pick_market_type = 'prop'
                   AND smr.oracle_pick_prob IS NOT NULL
-                  AND smr.legacy_pick_prob IS NOT NULL
-                  AND smr.python_pick_prob IS NOT NULL
+                  AND smr.python_pick_prob IS NOT NULL{legacy_clause}
                   AND LOWER(p.result) IN ('win', 'won', 'loss', 'lost')
                 ORDER BY smr.created_at ASC
-            """
+            """.format(legacy_clause=legacy_filter.format(prefix="smr."))
         else:
-            sql = f"""
+            sql = """
                 SELECT
                   id,
                   game_pk,
@@ -324,10 +331,9 @@ def load_ensemble_training_data(
                 WHERE actual_status = 'resolved'
                   AND pick_market_type = '{market}'
                   AND oracle_pick_prob IS NOT NULL
-                  AND legacy_pick_prob IS NOT NULL
-                  AND python_pick_prob IS NOT NULL
+                  AND python_pick_prob IS NOT NULL{legacy_clause}
                 ORDER BY created_at ASC
-            """
+            """.format(market=market, legacy_clause=legacy_filter.format(prefix=""))
         df = pd.read_sql(sql, engine)
     finally:
         engine.dispose()

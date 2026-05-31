@@ -210,26 +210,41 @@ class ModelRegistry:
         self,
         market: str,
         oracle_prob: float,
-        legacy_prob: float,
-        python_prob: float,
+        legacy_prob: float | None = None,
+        python_prob: float | None = None,
     ) -> EnsemblePrediction:
-        """Combine the 3 source probabilities through the meta-learner."""
+        """Combine the source probabilities through the meta-learner.
+
+        legacy_prob is optional: moneyline uses all 3 sources, but the value
+        markets (over/under, run line, prop) use a 2-source ensemble of
+        oracle + python, so legacy may be None there.
+        """
         ensemble = self.get_ensemble(market)
-        prob = ensemble.predict_one(oracle_prob, legacy_prob, python_prob)
+        source_map = {
+            "oracle": oracle_prob,
+            "legacy": legacy_prob,
+            "python": python_prob,
+        }
+        missing = [s for s in ensemble.source_columns if source_map.get(s) is None]
+        if missing:
+            raise ValueError(
+                f"Ensemble {market} requires sources {ensemble.source_columns}; "
+                f"missing {missing}"
+            )
+        prob = ensemble.predict_sources(source_map)
         confidence = round(abs(prob - 0.5) * 200, 2)
         weights = ensemble.weights()
         version = (
             (self.ensemble_manifest.get("markets", {}) or {}).get(market) or {}
         ).get("trained_at")
+        sources_out = {
+            s: float(source_map[s]) for s in ensemble.source_columns
+        }
         return EnsemblePrediction(
             market=market,
             probability=round(prob, 4),
             confidence=confidence,
-            sources={
-                "oracle": float(oracle_prob),
-                "legacy": float(legacy_prob),
-                "python": float(python_prob),
-            },
+            sources=sources_out,
             weights=weights,
             model_version=version,
         )

@@ -221,38 +221,46 @@ export async function buildPickAlignedMlOpinion({
 
   const oracleSideLabel = formatSideLabel(oracleSide, marketType, parsed.line);
 
-  // Ensemble: requires all 3 pick-aligned probs. Legacy only covers moneyline,
-  // so for over/under/runline/prop the ensemble cannot run.
+  // Ensemble: adaptive source count. Moneyline uses oracle + legacy + python;
+  // the value markets (over/under, runline, prop) use a 2-source ensemble of
+  // oracle + python because the Legacy validator only scores moneyline. We
+  // always have oracle + python here, so the ensemble runs for every market
+  // the sidecar has a trained artifact for.
   let ensembleProb = null;
   let ensembleStatus = 'unavailable';
   let ensembleAgree = null;
 
-  if (oracleProb != null && legacy.prob != null && pythonProb != null) {
+  if (oracleProb != null && pythonProb != null) {
     try {
       const ensResult = await predictEnsemble({
         market: marketType,
         oracle_prob: oracleProb,
-        legacy_prob: legacy.prob,
+        legacy_prob: legacy.prob,  // null for value markets — client omits it
         python_prob: pythonProb,
       });
       if (ensResult?.probability != null) {
         ensembleProb = Math.max(0, Math.min(1, ensResult.probability));
         ensembleStatus = 'ok';
         ensembleAgree = ensembleProb >= 0.5;
+      } else {
+        // sidecar reachable but no trained artifact for this market yet
+        ensembleStatus = 'untrained';
       }
     } catch {
       // ensemble failed — degrade silently
     }
   } else {
-    ensembleStatus = legacy.prob == null ? 'no_legacy' : 'missing_inputs';
+    ensembleStatus = 'missing_inputs';
   }
 
   const ensembleSideLabel = oracleSide ? oracleSideLabel : '—';
   const ensembleLabel = ensembleProb != null
     ? formatProbLabel(ensembleSideLabel, ensembleProb)
-    : ensembleStatus === 'no_legacy'
-      ? 'N/A — Legacy no cubre este mercado'
-      : 'No disponible';
+    : ensembleStatus === 'untrained'
+      ? 'Modelo aún no entrenado para este mercado'
+      : ensembleStatus === 'missing_inputs'
+        ? 'No disponible — falta Oracle o Python'
+        : 'No disponible';
 
   const mlOpinion = {
     pickText,
