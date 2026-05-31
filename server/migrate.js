@@ -1457,3 +1457,97 @@ export async function runJobQueueMigrations() {
     throw err;
   }
 }
+
+/**
+ * Sprint 11a — Soccer scaffolding.
+ *
+ * Adds:
+ *   - `league VARCHAR(32)` on `picks` and `pick_features` — second dimension
+ *     alongside `sport='soccer'` so every soccer pick is tied to a specific league.
+ *   - `soccer_games` cache table (keyed by league + date).
+ */
+export async function runSoccerScaffoldingMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── league column on picks + pick_features ────────────────────────────────
+    await client.query(`ALTER TABLE picks         ADD COLUMN IF NOT EXISTS league VARCHAR(32)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS league VARCHAR(32)`);
+
+    // ── soccer_games cache (league-aware, keyed by league+game_id) ────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS soccer_games (
+        id              BIGSERIAL    PRIMARY KEY,
+        game_id         VARCHAR(20)  NOT NULL,
+        league          VARCHAR(32)  NOT NULL,
+        game_date       DATE,
+        home_team_id    VARCHAR(20),
+        away_team_id    VARCHAR(20),
+        home_team_abbr  VARCHAR(10),
+        away_team_abbr  VARCHAR(10),
+        home_team_name  VARCHAR(80),
+        away_team_name  VARCHAR(80),
+        status          VARCHAR(40),
+        home_score      INTEGER,
+        away_score      INTEGER,
+        venue           VARCHAR(120),
+        created_at      TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ  DEFAULT NOW(),
+        UNIQUE (game_id, league)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_soccer_games_date_league ON soccer_games(game_date DESC, league)`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] soccer-scaffolding ready (league column, soccer_games)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] soccer-scaffolding migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Sprint 11.1 — Soccer dataset isolation.
+ *
+ * Adds soccer-specific feature columns to `pick_features`. Other sports keep NULL.
+ * Mirrors runNhlDatasetMigrations.
+ */
+export async function runSoccerDatasetMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── team form / goals ─────────────────────────────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_goals_for     DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_goals_for     DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_goals_against DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_goals_against DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_goal_diff     INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_goal_diff     INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_points        INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_points        INTEGER`);
+
+    // ── xG (null until FBref/Understat integration) ───────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_xg  DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_xg  DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_xga DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_xga DECIMAL(5,2)`);
+
+    // ── odds market ───────────────────────────────────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS draw_price DECIMAL(6,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS btts_yes_price DECIMAL(6,2)`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] soccer-dataset ready (pick_features soccer columns)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] soccer-dataset migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
