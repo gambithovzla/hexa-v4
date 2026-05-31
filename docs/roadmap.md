@@ -462,9 +462,9 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ---
 
-### ⏳ Sprint 10 — NHL (Hockey sobre hielo)
+### 🟡 Sprint 10 — NHL (Hockey sobre hielo)
 
-**Status**: ⏳ planificado. Inicio recomendado: julio 2026 (off-season NHL, datos de temporada disponibles).
+**Status**: 🟡 backend (10a–10c + shadow/dataset) **completo en código**; UI (10d) e ML sidecar (10e) pendientes. Flag `NHL_ANALYSIS_ENABLED` (default `false`); selector NHL aún inactivo en `client/src/config/sports.js`. Archivos: `nhl-team-map.js`, `nhl-api.js`, `nhl-context-builder.js`, `nhl-odds.js`, `oracle-nhl-prompts.js`, `oracleNhl.js`, `nhlOutputGuard.js`, `routes/nhl.js`, `pick-resolver-nhl.js`, `nhlShadowValidator.js` + `nhlShadowPersistence.js`, `nhlLogoUrl.js`, migraciones `runNhlScaffoldingMigrations`/`runNhlDatasetMigrations`. Decisiones de implementación vs el plan original: identidad keyed por **abbr** (los ids ESPN numéricos NHL no son confiables); **sin weather** (todo indoor); ML sidecar diferido como en NBA 7e.
 
 **Por qué NHL primero**: ESPN API ya está integrada (mismo wrapper que NBA y NFL). The Odds API ya tiene `icehockey_nhl`. El patrón de código existe tres veces — es un espejo, no arquitectura nueva. Llena el hueco de invierno que NFL deja (ene–mar).
 

@@ -971,6 +971,128 @@ export async function runNflDatasetMigrations() {
   }
 }
 
+/**
+ * Sprint 10a — NHL scaffolding. Mirrors runNflScaffoldingMigrations but keyed by
+ * DATE (the NBA cadence), not week. Reuses the `sport` discriminator already on
+ * picks/pick_features (default 'mlb'). Idempotent.
+ */
+export async function runNhlScaffoldingMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── NHL games cache (keyed by date) ───────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nhl_games (
+        id              BIGSERIAL    PRIMARY KEY,
+        game_id         VARCHAR(20)  UNIQUE NOT NULL,
+        season          INTEGER,
+        season_type     SMALLINT,
+        game_date       DATE,
+        home_team_id    INTEGER      NOT NULL,
+        away_team_id    INTEGER      NOT NULL,
+        home_team_abbr  VARCHAR(5),
+        away_team_abbr  VARCHAR(5),
+        home_team_name  VARCHAR(60),
+        away_team_name  VARCHAR(60),
+        status          VARCHAR(40),
+        home_score      INTEGER,
+        away_score      INTEGER,
+        arena           VARCHAR(100),
+        national_tv     VARCHAR(50),
+        created_at      TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ  DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nhl_games_date ON nhl_games(game_date DESC)`);
+
+    // ── NHL team stats cache (one row per team per season) ─────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nhl_team_stats (
+        team_id           INTEGER,
+        team_abbr         VARCHAR(5)   NOT NULL,
+        season            INTEGER      NOT NULL,
+        team_name         VARCHAR(60),
+        conference        VARCHAR(10),
+        division          VARCHAR(16),
+        wins              INTEGER,
+        losses            INTEGER,
+        ot_losses         INTEGER,
+        points            INTEGER,
+        points_pct        DECIMAL(5,3),
+        goals_for         INTEGER,
+        goals_against     INTEGER,
+        goal_diff         INTEGER,
+        gf_per_game       DECIMAL(5,2),
+        ga_per_game       DECIMAL(5,2),
+        pp_pct            DECIMAL(5,2),
+        pk_pct            DECIMAL(5,2),
+        shots_for_per_game     DECIMAL(5,2),
+        shots_against_per_game DECIMAL(5,2),
+        faceoff_pct       DECIMAL(5,2),
+        updated_at        TIMESTAMPTZ  DEFAULT NOW(),
+        PRIMARY KEY (team_abbr, season)
+      )
+    `);
+
+    await client.query('COMMIT');
+    console.log('[migrate] nhl-scaffolding ready (nhl_games, nhl_team_stats)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] nhl-scaffolding migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Sprint 10.1 — NHL dataset isolation. Mirrors runNflDatasetMigrations.
+ *
+ * `shadow_model_runs.sport`, `pick_features.home/away_team_id/abbr`,
+ * `home/away_rest_days`, `home/away_injuries_severe` and `home/away_last10_wins`
+ * already exist from the NBA/NFL migrations — reused. This only tacks on
+ * NHL-specific feature columns (nullable + idempotent). Other sports keep NULL.
+ */
+export async function runNhlDatasetMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── pick_features: NHL team strength ──────────────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_goal_diff INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_goal_diff INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_gf_per_game DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_gf_per_game DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_ga_per_game DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_ga_per_game DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_points_pct DECIMAL(5,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_points_pct DECIMAL(5,3)`);
+
+    // ── pick_features: NHL special teams ──────────────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_pp_pct DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_pp_pct DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_pk_pct DECIMAL(5,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_pk_pct DECIMAL(5,2)`);
+
+    // ── pick_features: NHL schedule + goalie + line ───────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_is_b2b BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_is_b2b BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS goalie_home_confirmed BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS goalie_away_confirmed BOOLEAN`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS puck_line_close DECIMAL(4,1)`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] nhl-dataset ready (pick_features NHL columns)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] nhl-dataset migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function runPickAlignedShadowMigrations() {
   const client = await pool.connect();
   try {

@@ -27,9 +27,11 @@ import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-histor
 import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
+import nhlRouter from './routes/nhl.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
+import { resolveNhlPendingPicks } from './pick-resolver-nhl.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
@@ -79,7 +81,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -100,6 +102,11 @@ import {
   getNflStandings,
   getCurrentNflWeek,
 } from './nfl-api.js';
+import {
+  getNhlGamesForDate,
+  getNhlTeamStats,
+  getNhlStandings,
+} from './nhl-api.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -647,6 +654,7 @@ app.use('/api/oracle',       oracleHistoryRouter);
 app.use('/api/insights',     insightsRouter);
 app.use('/api/nba',          nbaRouter);
 app.use('/api/nfl',          nflRouter);
+app.use('/api/nhl',          nhlRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -1065,6 +1073,49 @@ app.get('/api/nfl/standings', async (req, res) => {
       return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
     }
     const data = await getNflStandings(season);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── NHL endpoints (Sprint 10a scaffolding — public, read-only) ────────────────
+// GET /api/nhl/games?date=YYYY-MM-DD  — by date (NHL cadence). No date → today.
+app.get('/api/nhl/games', async (req, res) => {
+  try {
+    const dateStr = req.query.date || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ success: false, error: 'date must be YYYY-MM-DD' });
+    }
+    const games = await getNhlGamesForDate(dateStr);
+    res.json({ success: true, date: dateStr, count: games.length, data: games });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nhl/teams?season=2026  — season team stats (standings-derived)
+app.get('/api/nhl/teams', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    const teams = await getNhlTeamStats(season);
+    res.json({ success: true, season: season ?? null, count: teams.length, data: teams });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nhl/standings?season=2026
+app.get('/api/nhl/standings', async (req, res) => {
+  try {
+    const season = req.query.season != null ? Number(req.query.season) : null;
+    if (season != null && !/^\d{4}$/.test(String(season))) {
+      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
+    }
+    const data = await getNhlStandings(season);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
@@ -4874,6 +4925,8 @@ runMigrations()
   .then(() => runNbaDatasetMigrations())
   .then(() => runNflScaffoldingMigrations())
   .then(() => runNflDatasetMigrations())
+  .then(() => runNhlScaffoldingMigrations())
+  .then(() => runNhlDatasetMigrations())
   .then(() => runPickAlignedShadowMigrations())
   .then(() => runImperdibleMigrations())
   .then(() => runOddsCacheMigrations())
@@ -4964,6 +5017,14 @@ runMigrations()
           if (process.env.NBA_ANALYSIS_ENABLED === 'true') {
             resolveNbaPendingPicks().catch(err => {
               console.error('[pick-resolver-nba] Scheduled run failed:', err.message);
+            });
+          }
+
+          // NHL plays daily (Oct–Jun); games finish late evening into early
+          // morning ET — same window as MLB/NBA, gated by its own flag.
+          if (process.env.NHL_ANALYSIS_ENABLED === 'true') {
+            resolveNhlPendingPicks().catch(err => {
+              console.error('[pick-resolver-nhl] Scheduled run failed:', err.message);
             });
           }
         }
