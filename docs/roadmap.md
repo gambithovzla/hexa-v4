@@ -458,7 +458,206 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 | C1 | **Reinforcement Learning para staking** | Requiere >5k picks resueltos para converger. Hoy 500. Volver a evaluar cuando se acumule. |
 | C2 | **Chain-of-Thought validation con 3er modelo** | 3x cost para ganancia marginal sobre el ensemble. Evaluar tras Sprint 4. |
 | C3 | **Migración a TypeScript** | El repo está estable. Mover ahora interrumpe velocity sin beneficio inmediato. Revisitar si el equipo crece a >3 devs. |
-| C4 | **Expansión Soccer / NHL / Tennis** | Cada deporte requiere context-builder propio. NBA va primero (Sprint 7). Después de NBA, revisitar — NHL tiene timing similar a NBA (oct-jun) y podría ser el siguiente. Soccer es mercado masivo pero fragmentado (50+ ligas, cada una con su data API). |
+| C4 | **Expansión deportiva — NHL, Soccer, Tennis, Caballos** | Orden de ataque: **NHL primero** (Sprint 10, ESPN API ya funciona, patrón NFL/NBA directo, llena el hueco ene–mar); **Soccer** segundo (Sprint 11, mercado 3-vías, empezar con una sola liga); **Tennis** tercero (Sprint 12, deporte individual, ATP/WTA, año redondo); **Caballos** cuarto (Sprint 13, modelo de contexto distinto — form/going/jockey/draw, mercado muy eficiente). Promovidos a sprints planificados — ver sección 2. |
+
+---
+
+### ⏳ Sprint 10 — NHL (Hockey sobre hielo)
+
+**Status**: ⏳ planificado. Inicio recomendado: julio 2026 (off-season NHL, datos de temporada disponibles).
+
+**Por qué NHL primero**: ESPN API ya está integrada (mismo wrapper que NBA y NFL). The Odds API ya tiene `icehockey_nhl`. El patrón de código existe tres veces — es un espejo, no arquitectura nueva. Llena el hueco de invierno que NFL deja (ene–mar).
+
+**Temporada**: octubre–junio. Complementa MLB (abr–oct) sin solapar peak NFL.
+
+**Diferencias estructurales vs NBA/NFL**:
+- Mercado primario: **moneyline** (como NBA). Puck line = ±1.5 goles (análogo al runline MLB, no spread).
+- **Key numbers**: 0, 1, 2, 3 goles — juego de baja anotación, el total importa mucho.
+- **Cap de confianza**: ~70% (mercado algo más eficiente que MLB, menos que NBA).
+- **Goalie confirmado** = el gate de disponibilidad (análogo al "starter confirmado" MLB / "QB titular" NFL). Si el goalie de inicio no está confirmado → PASS o confianza degradada.
+- **Shootout**: posible resultado después del OT → resolver debe manejar win by SO vs regulation/OT.
+- **Power play %** y **penalty kill %**: las métricas equivalentes a ERA/WHIP en pitch. Son el principal predictor de ventaja situacional.
+- **Back-to-back y road trip fatigue**: calendario NHL es denso (82 partidos), el fatigue block importa como en NBA.
+
+**Fuentes de datos**:
+- ESPN hidden API (juegos, scores, injuries, standings) — mismo endpoint pattern que NFL/NBA.
+- NHL Stats API (`api.nhle.com`) — gratuito, sin key. Endpoints: `/schedule`, `/standings`, `/teams/{id}/stats`, `/game/{id}/feed/live`.
+- The Odds API `icehockey_nhl` — dual key fallback ya existe en el patrón.
+- Hockey Reference (scraping opcional, stats históricos avanzados).
+
+**Archivos a crear (patrón espejo)**:
+- `server/nhl-team-map.js` — 32 equipos ESPN id↔abbr↔nombre + conf/división + coords estadio + `arena_type`.
+- `server/nhl-api.js` — wrapper ESPN + NHL Stats API. `getNhlGamesForDate`, `getNhlGameSummary`, `getNhlTeamStats`, `getNhlInjuries`.
+- `server/nhl-context-builder.js` — `buildNhlGameContext`: records, GF/GA, PP%, PK%, recent form, goalie confirmado, rest/B2B, `context_meta`.
+- `server/nhl-odds.js` — The Odds API `icehockey_nhl`, dual key. **Preserva puck line** vía MODA (no promedio). `getNhlGameOdds`, `matchNhlOddsToGame`, `buildMarketOddsForGame`.
+- `server/prompts/oracle-nhl-prompts.js` — `NHL_SYSTEM_PROMPT` + `NHL_CHAT_PROMPT`. Cap 70%, key numbers 0/1/2/3, prioridad goalie→PP%→PK%, guardrail anti-hallucination.
+- `server/services/oracleNhl.js` — `analyzeNhlGame`, `analyzeNhlChat` (Anthropic propio, sin Grok). No toca `oracle.js`.
+- `server/services/nhlOutputGuard.js` — rechaza props/ABSTAIN/parse fallido, confianza 50–70, degrada con `alert_flags`.
+- `server/routes/nhl.js` — `POST /api/nhl/analyze/game|chat` (admin-only, flag `NHL_ANALYSIS_ENABLED`).
+- `server/pick-resolver-nhl.js` — resuelve `sport='nhl'`, maneja regulation/OT/SO win, puck line, over/under.
+- `server/services/nhlShadowValidator.js` + `nhlShadowPersistence.js` — dataset/shadow para NHL.
+- `client/src/utils/nhlLogoUrl.js` — `https://cdn.nhl.com/images/upload/team/primary/en/${teamAbbr}`.
+- Migraciones en `server/migrate.js`: `runNhlScaffoldingMigrations()`.
+
+**Esfuerzo estimado**: ~2–3 semanas (Sprint 10a scaffolding + 10b Oracle + 10c lifecycle + 10d UI).
+
+**Criterio de éxito**:
+- Pick NHL admin-only: creado → tracked en vivo → resuelto → postmortem.
+- `sport='nhl'` aislado en historial, dataset, shadow — sin contaminar MLB/NBA/NFL.
+- Goalie no confirmado → Oracle emite alerta en `alert_flags`.
+
+---
+
+### ⏳ Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
+
+**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 10 cerrado.
+
+**Alcance**: las **6 ligas principales** desde el día 1. La arquitectura es league-aware desde la base — un solo `soccer-api.js` con `leagueSlug` como parámetro, no 6 wrappers separados.
+
+| Liga | País | ESPN slug | Odds API slug | Temporada |
+|------|------|-----------|---------------|-----------|
+| **Premier League** | Inglaterra | `eng.1` | `soccer_epl` | ago–may |
+| **La Liga** | España | `esp.1` | `soccer_spain_la_liga` | ago–may |
+| **Serie A** | Italia | `ita.1` | `soccer_italy_serie_a` | ago–may |
+| **Bundesliga** | Alemania | `ger.1` | `soccer_germany_bundesliga` | ago–may |
+| **Ligue 1** | Francia | `fra.1` | `soccer_france_ligue_1` | ago–may |
+| **MLS** | USA/CAN | `usa.1` | `soccer_usa_mls` | mar–nov |
+
+**Por qué las 6 juntas y no una por vez**: ESPN API y The Odds API usan el mismo endpoint shape para todas — solo cambia el slug. `soccer-team-map.js` se construye una vez con todos los equipos. El Oracle prompt es el mismo para todas las ligas (1X2 + xG + form), solo varía el bloque de contexto de liga. Construir la arquitectura multi-liga desde el inicio cuesta ~10% más que una sola liga y evita reescribir después.
+
+**Diferencias estructurales críticas vs otros deportes**:
+- **Mercado de 3 vías**: Home / Draw / Away (1X2). El Draw es resultado válido con probabilidad real (~25–30%). El Oracle y el resolver lo tratan explícitamente — no hay push accidental, hay tres outcomes.
+- **Baja anotación**: 0–0 es posible. Key numbers: 0, 1, 2, 3 goles. Over/Under más común en 2.5.
+- **BTTS** (Both Teams to Score): mercado popular, binario, no requiere predecir ganador.
+- **Mercado muy eficiente**: casas tienen bots dedicados. Cap de confianza Oracle: **~62%** (el más bajo de todos los deportes — honestidad con el usuario es crítica).
+- **Sin "starter confirmado"**: alineaciones ~1h antes del kick-off (team sheet oficial). Oracle advierte si analiza sin lineup confirmado.
+- **xG (Expected Goals)**: el Statcast del fútbol. Predice con más precisión que goles reales.
+- **Estilos de liga diferentes**: la Bundesliga es la liga más alta en anotación (Over es más viable), la Serie A históricamente baja en goles (Under + Draw frecuente), la Premier League es la más equilibrada. El Oracle prompt incluye un bloque de perfil de liga.
+
+**Perfiles de liga para el Oracle**:
+| Liga | Goles/partido promedio | Draw% | Estilo |
+|------|----------------------|-------|--------|
+| Bundesliga | ~3.1 | ~23% | Alta anotación, presión alta |
+| Premier League | ~2.8 | ~25% | Físico, equilibrado |
+| La Liga | ~2.6 | ~26% | Técnico, posesión |
+| Ligue 1 | ~2.5 | ~27% | Variable, PSG-dominado |
+| Serie A | ~2.4 | ~29% | Defensivo, estructura |
+| MLS | ~2.9 | ~22% | Atlético, menos táctico |
+
+**Fuentes de datos**:
+- ESPN hidden API (`site.api.espn.com/apis/site/v2/sports/soccer/{leagueSlug}/`) — juegos, scores, standings, injuries, lineups parciales. Misma estructura para las 6 ligas.
+- The Odds API — slug por liga (tabla arriba), dual key fallback.
+- **FBref** (scraping, cache 6h) — xG, xGA, progressive passes, PPDA por equipo y partido. Soporta las 5 ligas europeas y MLS.
+- **Understat** (scraping alternativo, solo Big 5) — xG por partido histórico, más fácil de parsear que FBref.
+- **API-Football** (freemium, 100 calls/día gratis) — alineaciones confirmadas ~60 min pre-kick para las 6 ligas.
+
+**Archivos a crear**:
+- `server/soccer-league-map.js` — registro de las 6 ligas: `{ slug, oddsApiSlug, country, name, avgGoals, drawPct, styleProfile }`. Un solo archivo, no 6 mapas.
+- `server/soccer-team-map.js` — todos los equipos de las 6 ligas: ESPN id↔abbr↔nombre↔liga + estadio + coords. ~120 equipos total.
+- `server/soccer-api.js` — wrapper ESPN soccer league-aware. `getSoccerGamesForDate(leagueSlug)`, `getSoccerTeamStats(teamId, leagueSlug)`, `getSoccerLineup(gameId)`, `getSoccerInjuries(teamId, leagueSlug)`. Único archivo para las 6 ligas.
+- `server/soccer-context-builder.js` — `buildSoccerGameContext(game, league)`: form, xG/xGA, PPDA, H2H, lineup status, perfil de liga, `context_meta`. El bloque de perfil de liga ajusta el tono del análisis (Bundesliga → sesgo Over; Serie A → sesgo Under/Draw).
+- `server/soccer-odds.js` — The Odds API multi-liga, dual key. `getSoccerGameOdds(leagueSlug)`, `matchSoccerOddsToGame`, `buildMarketOddsForGame`. **Tres mercados**: 1X2, over/under 2.5, BTTS.
+- `server/prompts/oracle-soccer-prompts.js` — `SOCCER_SYSTEM_PROMPT` + `SOCCER_CHAT_PROMPT`. Cap 62% global (con nota de que Bundesliga puede llegar a 65% en mercados Over/Under por mayor anotación), mercado 3-vías explícito, prioridad xG→form→H2H→perfil-liga, guardrail. Oracle **debe** elegir Home/Draw/Away o PASS — nunca "equipo local favorito" sin pick explícito.
+- `server/services/oracleSoccer.js` — `analyzeSoccerGame`, `analyzeSoccerChat`. No toca `oracle.js`. Recibe `league` en el payload.
+- `server/services/soccerOutputGuard.js` — valida `pick_side` exactamente `home|draw|away`, confianza 50–62, liga válida.
+- `server/routes/soccer.js` — `POST /api/soccer/analyze/game|chat` (admin-only, flag `SOCCER_ANALYSIS_ENABLED`). `league` en body/query — valida contra `soccer-league-map.js`. `GET /api/soccer/games?league=eng.1&date=` para el GameSelector.
+- `server/pick-resolver-soccer.js` — resuelve `sport='soccer'` por score final: home_goals vs away_goals → 1X2 + over/under + BTTS. Sin push (en 90 min hay resultado siempre). Filtra por `league` para jobs multi-liga.
+- `server/services/soccerShadowValidator.js` + `soccerShadowPersistence.js` — dataset/shadow con `league` como campo.
+- Migraciones: `runSoccerScaffoldingMigrations()`. Columna `league VARCHAR(32)` en `picks` y `pick_features` (compartida con Tennis y Horse Racing también).
+
+**Feature flag**: `SOCCER_ANALYSIS_ENABLED` global. Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` — lista las ligas activas (default todas).
+
+**Esfuerzo estimado**: ~4–5 semanas. El mercado 3-vías más el soporte multi-liga añaden complejidad real, pero construir las 6 ligas a la vez es ~20% más trabajo que solo una — vale la pena.
+
+**Criterio de éxito**:
+- Oracle puede analizar un partido de cualquiera de las 6 ligas y emite Home/Draw/Away con confianza calibrada.
+- El contexto para un partido del Bundesliga menciona explícitamente el perfil de alta anotación; para Serie A, el perfil defensivo.
+- Resolver maneja 1X2 + BTTS + over/under para las 6 ligas desde score final ESPN.
+- `sport='soccer'`, `league='eng.1'` (etc.) aislados en historial, dataset y shadow sin contaminar otros deportes.
+
+---
+
+### ⏳ Sprint 12 — Tennis
+
+**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 11; torneos Grand Slam como hito de validación.
+
+**Por qué Tennis**: único deporte **año redondo** (Australian Open ene, Roland Garros may, Wimbledon jun, US Open ago + ATP/WTA tours continuos). Llena todos los huecos de calendario que los otros deportes no cubren.
+
+**Diferencias estructurales**:
+- **Deporte individual**: no hay "equipo". El contexto es jugador A vs jugador B — H2H, ranking, forma en surface, fatiga de torneo (rounds jugados, minutos en cancha).
+- **Surface importa como park factors en MLB**: arcilla (Roland Garros) ↔ hierba (Wimbledon) ↔ dura (AO/USO) cambian radicalmente los matchups. Un jugador top en dura puede ser mediocre en arcilla.
+- **Retiros y walkovers**: un jugador puede retirarse mid-match por lesión. El resolver debe marcar como `void` o `walkover` si el partido no se completó (política de la casa = no acción).
+- **Mercados**: match winner (2-vías, no hay empate), set handicap (ej. +1.5 sets), over/under games totales.
+- **Cap de confianza Oracle**: ~72% (el mercado ATP top-10 es muy eficiente; torneos menores/qualies tienen más edge).
+- **Ranking ATP/WTA + ELO superficial**: más predictivo que el ranking oficial en superficies específicas.
+
+**Fuentes de datos**:
+- ESPN API soccer-style para Tennis (`/apis/site/v2/sports/tennis/`) — juegos del día, scores en vivo, draw del torneo.
+- The Odds API `tennis` — dual key fallback.
+- Tennis Abstract (Jeff Sackmann, GitHub gratuito) — ELO por superficie, H2H histórico, stats de juego. Scraping o descarga CSV.
+- ATP/WTA sitios oficiales — rankings oficiales (scraping con cache 24h).
+
+**Archivos a crear**:
+- `server/tennis-api.js` — wrapper ESPN tennis. `getTennisMatchesForDate`, `getTennisTournamentDraw`, `getTennisLiveScore`.
+- `server/tennis-context-builder.js` — `buildTennisMatchContext`: ranking, ELO superficie, H2H (últimos 5), rounds jugados en torneo actual, injury flags, `context_meta`.
+- `server/tennis-odds.js` — The Odds API `tennis`, dual key.
+- `server/prompts/oracle-tennis-prompts.js` — `TENNIS_SYSTEM_PROMPT`. Cap 72%, prioridad ELO-surface→H2H→fatigue, guardrail anti-retiro.
+- `server/services/oracleTennis.js` — `analyzeTennisMatch`, `analyzeTennisChat`. No toca `oracle.js`.
+- `server/services/tennisOutputGuard.js` — valida `pick_side` sea `player_a|player_b`, maneja set handicap.
+- `server/routes/tennis.js` — `POST /api/tennis/analyze/match|chat` (admin-only, flag `TENNIS_ANALYSIS_ENABLED`).
+- `server/pick-resolver-tennis.js` — resuelve por score final sets. Walkover/retiro → `result='void'`, créditos devueltos.
+- `server/services/tennisShadowValidator.js` + `tennisShadowPersistence.js`.
+- Migraciones: columnas tennis en `pick_features` (elo_surface_home/away, h2h_surface_wins, tournament_round, fatigue_minutes).
+
+**Esfuerzo estimado**: ~2–3 semanas. El resolver de walkover/retiro es el punto más delicado.
+
+**Criterio de éxito**:
+- Oracle distingue comportamiento en superficie (no da el mismo pick en arcilla vs dura para el mismo matchup).
+- Retiro mid-match → pick anulado automáticamente, crédito devuelto.
+- Grand Slam como torneo de validación (Australian Open o Roland Garros).
+
+---
+
+### ⏳ Sprint 13 — Carreras de Caballos
+
+**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 12. Foco inicial en US (Triple Corona + Breeders' Cup) o UK/IRE (Cheltenham + Royal Ascot).
+
+**Diferencias estructurales — el más distinto de todos**:
+- **Múltiples participantes por evento**: no es A vs B sino 8–20 caballos por carrera. El Oracle analiza un campo completo, no un matchup.
+- **Mercados únicos**: Win (ganador), Place (top 2-3), Each-Way (Win + Place combinado), Exacta (1°+2° en orden), Trifecta.
+- **Contexto de forma** ("form"): los últimos 5–10 carreras del caballo, distancia preferida, going (track condition: firm/good/soft/heavy), jockey actual, entrenador, peso asignado, posición de cajón (draw).
+- **Going es crítico**: un caballo que gana en "good" puede correr mal en "soft". Equivalente al viento en NFL.
+- **Mercado extremadamente eficiente** en UK/IRE: las casas tienen décadas de data y modelos propios. El edge real existe principalmente en **value en cada-vías de favoritos de mercado medio** (no el favorito absoluto, no el outsider).
+- **Cap de confianza Oracle**: ~65% (único deporte donde el LLM puede razonar sobre forma individual de cada competidor — pero el mercado también lo hace).
+- **Resolución**: múltiples outcomes posibles. El resolver necesita parsear el resultado final (1°, 2°, 3°) y determinar Win/Place por separado.
+
+**Fuentes de datos**:
+- The Odds API `horse_racing` — dual key fallback. Odds pre-carrera y SP (Starting Price).
+- **Equibase** (US) — data oficial de carreras US, gratuito para datos básicos (`equibase.com/stats/`).
+- **Racing Post** (UK/IRE) — la fuente más completa para caballos europeos. Scraping con cache o API de pago.
+- **Racing API** (UK, freemium) — form, going, jockeys, resultados. 100 calls/día gratis.
+- ESPN no cubre caballos — fuente de datos completamente diferente a los otros deportes.
+
+**Archivos a crear**:
+- `server/horse-racing-api.js` — wrapper Equibase (US) + Racing API (UK). `getRacesForDate`, `getRaceCard`, `getHorseForm`, `getTrackCondition`.
+- `server/horse-racing-context-builder.js` — `buildRaceContext`: card completo (nombre, jockey, entrenador, peso, draw, form últimas 5 carreras, going preference, `context_meta`).
+- `server/horse-racing-odds.js` — The Odds API `horse_racing`. Múltiples runners → estructura diferente a los otros deportes (objeto por runner, no por equipo).
+- `server/prompts/oracle-horse-prompts.js` — `HORSE_RACING_SYSTEM_PROMPT`. Cap 65%, análisis de campo completo, prioridad form→going→jockey→draw. El Oracle elige **un runner** como pick o PASS si el campo es demasiado abierto.
+- `server/services/oracleHorse.js` — `analyzeRace`, `analyzeRaceChat`. Sin Grok. No toca `oracle.js`.
+- `server/services/horseOutputGuard.js` — valida que el pick identifique un runner válido del card, market_type `win|place|each_way`.
+- `server/routes/horse-racing.js` — `POST /api/horse/analyze/race|chat` (admin-only, flag `HORSE_RACING_ENABLED`).
+- `server/pick-resolver-horse.js` — resuelve Win/Place desde resultado oficial. Each-Way = Win resuelve si ganó, Place resuelve si terminó en los puestos pagados (varía por número de runners).
+- `server/services/horseShadowValidator.js` + `horseShadowPersistence.js`.
+- Migraciones: columnas horse en `pick_features` (going, draw_position, field_size, jockey_wins_pct, trainer_wins_pct, horse_form_string).
+
+**Esfuerzo estimado**: ~4–5 semanas. La fuente de datos (Equibase/Racing API) y el resolver de each-way son la mayor complejidad.
+
+**Criterio de éxito**:
+- Oracle analiza un card completo y produce pick con runner identificado, market Win/Place/EW, y justificación basada en form/going.
+- Resolver distingue Win vs Place vs EW y determina resultado correcto desde el resultado oficial.
+- Triple Corona (Kentucky Derby, Preakness, Belmont) como hito de validación US; Cheltenham para UK.
+
+---
 
 ### Tier D — Rechazado o no recomendado
 
@@ -527,6 +726,12 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 2026 Q3-4              — Tier S: S3/S4/S5/S6             ████████████████████████ ✅
 2027 Feb  🎯 MVP NBA público listo para All-Star Break
 2027 Q1-2 Sprint 7e    — NBA ML sidecar (condicional)     ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (~500 picks NBA resueltos)
+```
+
+2026 Q3-4 Sprint 10    — NHL Hockey                        ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (inicio jul 2026, patrón espejo NFL/NBA)
+2026 Q4-1 Sprint 11    — Soccer (Premier League)           ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (mercado 3-vías, tras Sprint 10)
+2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (año redondo, tras Sprint 11)
+2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```
 
 **Estado al cierre de Sprint 9 (2026-05-30)**:
