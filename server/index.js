@@ -28,10 +28,12 @@ import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
 import nhlRouter from './routes/nhl.js';
+import soccerRouter from './routes/soccer.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
 import { resolveNhlPendingPicks } from './pick-resolver-nhl.js';
+import { resolveSoccerPendingPicks } from './pick-resolver-soccer.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
@@ -661,6 +663,7 @@ app.use('/api/insights',     insightsRouter);
 app.use('/api/nba',          nbaRouter);
 app.use('/api/nfl',          nflRouter);
 app.use('/api/nhl',          nhlRouter);
+app.use('/api/soccer',       soccerRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -5109,6 +5112,13 @@ runMigrations()
           if (process.env.NHL_ANALYSIS_ENABLED === 'true') {
             resolveNhlPendingPicks().catch(err => {
               console.error('[pick-resolver-nhl] Scheduled run failed:', err.message);
+            });
+          }
+
+          // Soccer plays daily across six leagues; games span daytime through evening.
+          if (process.env.SOCCER_ANALYSIS_ENABLED === 'true') {
+            resolveSoccerPendingPicks().catch(err => {
+              console.error('[pick-resolver-soccer] Scheduled run failed:', err.message);
             });
           }
         }
