@@ -1124,7 +1124,7 @@ export default function AnalysisPanel({
   }, [isAdmin, modelMode]);
 
   useEffect(() => {
-    if ((sport === 'nba' || sport === 'nfl') && modelMode === 'safe') {
+    if ((sport === 'nba' || sport === 'nfl' || sport === 'nhl') && modelMode === 'safe') {
       setModelMode('deep');
     }
   }, [sport, modelMode]);
@@ -1190,7 +1190,7 @@ export default function AnalysisPanel({
       let endpoint, body;
 
       if (modelMode === 'safe') {
-        if (sport === 'nba' || sport === 'nfl') {
+        if (sport === 'nba' || sport === 'nfl' || sport === 'nhl') {
           throw new Error(lang === 'es'
             ? 'SAFE PICK no está disponible para este deporte.'
             : 'SAFE PICK is not available for this sport.');
@@ -1228,6 +1228,16 @@ export default function AnalysisPanel({
       } else if (mode === 'single' && sport === 'nba') {
         const g = selectedGames[0];
         endpoint = `${API_URL}/api/nba/analyze/game`;
+        body = {
+          gameId:      g.gamePk,
+          date:        selectedDate,
+          lang,
+          riskProfile: 'balanced',
+          engine:      modelMode === 'premium' ? 'premium' : 'deep',
+        };
+      } else if (mode === 'single' && sport === 'nhl') {
+        const g = selectedGames[0];
+        endpoint = `${API_URL}/api/nhl/analyze/game`;
         body = {
           gameId:      g.gamePk,
           date:        selectedDate,
