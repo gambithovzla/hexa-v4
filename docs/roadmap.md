@@ -508,48 +508,72 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ---
 
-### ⏳ Sprint 11 — Soccer (Fútbol)
+### ⏳ Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
 
-**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 10 cerrado; liga inicial decidida antes de arrancar.
+**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 10 cerrado.
 
-**Decisión de alcance antes de codificar**: elegir **una sola liga** de entrada. Candidatos:
-- **Premier League** (ago–may): la de mayor volumen de apuestas global, datos ESPN excelentes, The Odds API `soccer_epl`.
-- **MLS** (mar–nov): temporada complementa MLB, ESPN API nativo para US market, `soccer_usa_mls`.
-- Recomendación: Premier League primero (mercado más profundo → más edge detectable).
+**Alcance**: las **6 ligas principales** desde el día 1. La arquitectura es league-aware desde la base — un solo `soccer-api.js` con `leagueSlug` como parámetro, no 6 wrappers separados.
+
+| Liga | País | ESPN slug | Odds API slug | Temporada |
+|------|------|-----------|---------------|-----------|
+| **Premier League** | Inglaterra | `eng.1` | `soccer_epl` | ago–may |
+| **La Liga** | España | `esp.1` | `soccer_spain_la_liga` | ago–may |
+| **Serie A** | Italia | `ita.1` | `soccer_italy_serie_a` | ago–may |
+| **Bundesliga** | Alemania | `ger.1` | `soccer_germany_bundesliga` | ago–may |
+| **Ligue 1** | Francia | `fra.1` | `soccer_france_ligue_1` | ago–may |
+| **MLS** | USA/CAN | `usa.1` | `soccer_usa_mls` | mar–nov |
+
+**Por qué las 6 juntas y no una por vez**: ESPN API y The Odds API usan el mismo endpoint shape para todas — solo cambia el slug. `soccer-team-map.js` se construye una vez con todos los equipos. El Oracle prompt es el mismo para todas las ligas (1X2 + xG + form), solo varía el bloque de contexto de liga. Construir la arquitectura multi-liga desde el inicio cuesta ~10% más que una sola liga y evita reescribir después.
 
 **Diferencias estructurales críticas vs otros deportes**:
-- **Mercado de 3 vías**: Home / Draw / Away (1X2). El Draw es un resultado válido con probabilidad real (~25–30%). El Oracle y el resolver deben tratarlo explícitamente — no hay "push" accidental, hay tres outcomes.
-- **Baja anotación**: 0–0 es pick posible. Key numbers: 0, 1, 2, 3 goles totales. Over/Under más común en 2.5.
+- **Mercado de 3 vías**: Home / Draw / Away (1X2). El Draw es resultado válido con probabilidad real (~25–30%). El Oracle y el resolver lo tratan explícitamente — no hay push accidental, hay tres outcomes.
+- **Baja anotación**: 0–0 es posible. Key numbers: 0, 1, 2, 3 goles. Over/Under más común en 2.5.
 - **BTTS** (Both Teams to Score): mercado popular, binario, no requiere predecir ganador.
-- **Mercado muy eficiente**: casas tienen bots dedicados. Cap de confianza Oracle: **~62%** (el más bajo de todos los deportes — ser honesto con el usuario es clave).
-- **No hay "starter confirmado"**: las alineaciones se conocen ~1h antes del partido (team sheet oficial). Oracle debe advertir si analiza sin lineup confirmado.
-- **xG (Expected Goals)**: el equivalente a Statcast/EPA en soccer. Fuente: FBref (scraping), Understat (scraping), o API-Football (freemium).
+- **Mercado muy eficiente**: casas tienen bots dedicados. Cap de confianza Oracle: **~62%** (el más bajo de todos los deportes — honestidad con el usuario es crítica).
+- **Sin "starter confirmado"**: alineaciones ~1h antes del kick-off (team sheet oficial). Oracle advierte si analiza sin lineup confirmado.
+- **xG (Expected Goals)**: el Statcast del fútbol. Predice con más precisión que goles reales.
+- **Estilos de liga diferentes**: la Bundesliga es la liga más alta en anotación (Over es más viable), la Serie A históricamente baja en goles (Under + Draw frecuente), la Premier League es la más equilibrada. El Oracle prompt incluye un bloque de perfil de liga.
+
+**Perfiles de liga para el Oracle**:
+| Liga | Goles/partido promedio | Draw% | Estilo |
+|------|----------------------|-------|--------|
+| Bundesliga | ~3.1 | ~23% | Alta anotación, presión alta |
+| Premier League | ~2.8 | ~25% | Físico, equilibrado |
+| La Liga | ~2.6 | ~26% | Técnico, posesión |
+| Ligue 1 | ~2.5 | ~27% | Variable, PSG-dominado |
+| Serie A | ~2.4 | ~29% | Defensivo, estructura |
+| MLS | ~2.9 | ~22% | Atlético, menos táctico |
 
 **Fuentes de datos**:
-- ESPN hidden API (`site.api.espn.com/apis/site/v2/sports/soccer/{league.slug}/`) — juegos, scores, standings, injuries, lineups parciales.
-- The Odds API `soccer_epl` / `soccer_usa_mls` — dual key fallback.
-- FBref / Understat — xG, xGA, progressive passes, PPDA (scraping con cache 6h).
-- API-Football (freemium, 100 calls/día gratis) — alineaciones confirmadas ~60 min pre-kick.
+- ESPN hidden API (`site.api.espn.com/apis/site/v2/sports/soccer/{leagueSlug}/`) — juegos, scores, standings, injuries, lineups parciales. Misma estructura para las 6 ligas.
+- The Odds API — slug por liga (tabla arriba), dual key fallback.
+- **FBref** (scraping, cache 6h) — xG, xGA, progressive passes, PPDA por equipo y partido. Soporta las 5 ligas europeas y MLS.
+- **Understat** (scraping alternativo, solo Big 5) — xG por partido histórico, más fácil de parsear que FBref.
+- **API-Football** (freemium, 100 calls/día gratis) — alineaciones confirmadas ~60 min pre-kick para las 6 ligas.
 
 **Archivos a crear**:
-- `server/soccer-team-map.js` — equipos liga seleccionada: ESPN id↔abbr↔nombre + estadio + coords.
-- `server/soccer-api.js` — wrapper ESPN soccer. `getSoccerGamesForDate`, `getSoccerTeamStats`, `getSoccerLineup`, `getSoccerInjuries`.
-- `server/soccer-context-builder.js` — `buildSoccerGameContext`: form, xG, PPDA, H2H, lineup status, `context_meta`.
-- `server/soccer-odds.js` — The Odds API soccer, dual key. **Tres mercados**: 1X2, over/under, BTTS. Preserva líneas sin promediar.
-- `server/prompts/oracle-soccer-prompts.js` — `SOCCER_SYSTEM_PROMPT` + `SOCCER_CHAT_PROMPT`. Cap 62%, mercado 3-vías explícito, prioridad xG→form→H2H, guardrail. El Oracle **debe** elegir entre Home/Draw/Away — no puede devolver "favor local" sin pick explícito.
-- `server/services/oracleSoccer.js` — `analyzeSoccerGame`, `analyzeSoccerChat`. No toca `oracle.js`.
-- `server/services/soccerOutputGuard.js` — valida que `pick_side` sea exactamente `home|draw|away`, confianza 50–62.
-- `server/routes/soccer.js` — `POST /api/soccer/analyze/game|chat` (admin-only, flag `SOCCER_ANALYSIS_ENABLED`). Liga en query param.
-- `server/pick-resolver-soccer.js` — resuelve por score final: home_goals vs away_goals → determina 1X2 y over/under. Push no existe (en 90 min hay ganador o empate).
-- `server/services/soccerShadowValidator.js` + `soccerShadowPersistence.js`.
-- Migraciones: `runSoccerScaffoldingMigrations()`. Liga como columna en `picks` (`league VARCHAR(32)`).
+- `server/soccer-league-map.js` — registro de las 6 ligas: `{ slug, oddsApiSlug, country, name, avgGoals, drawPct, styleProfile }`. Un solo archivo, no 6 mapas.
+- `server/soccer-team-map.js` — todos los equipos de las 6 ligas: ESPN id↔abbr↔nombre↔liga + estadio + coords. ~120 equipos total.
+- `server/soccer-api.js` — wrapper ESPN soccer league-aware. `getSoccerGamesForDate(leagueSlug)`, `getSoccerTeamStats(teamId, leagueSlug)`, `getSoccerLineup(gameId)`, `getSoccerInjuries(teamId, leagueSlug)`. Único archivo para las 6 ligas.
+- `server/soccer-context-builder.js` — `buildSoccerGameContext(game, league)`: form, xG/xGA, PPDA, H2H, lineup status, perfil de liga, `context_meta`. El bloque de perfil de liga ajusta el tono del análisis (Bundesliga → sesgo Over; Serie A → sesgo Under/Draw).
+- `server/soccer-odds.js` — The Odds API multi-liga, dual key. `getSoccerGameOdds(leagueSlug)`, `matchSoccerOddsToGame`, `buildMarketOddsForGame`. **Tres mercados**: 1X2, over/under 2.5, BTTS.
+- `server/prompts/oracle-soccer-prompts.js` — `SOCCER_SYSTEM_PROMPT` + `SOCCER_CHAT_PROMPT`. Cap 62% global (con nota de que Bundesliga puede llegar a 65% en mercados Over/Under por mayor anotación), mercado 3-vías explícito, prioridad xG→form→H2H→perfil-liga, guardrail. Oracle **debe** elegir Home/Draw/Away o PASS — nunca "equipo local favorito" sin pick explícito.
+- `server/services/oracleSoccer.js` — `analyzeSoccerGame`, `analyzeSoccerChat`. No toca `oracle.js`. Recibe `league` en el payload.
+- `server/services/soccerOutputGuard.js` — valida `pick_side` exactamente `home|draw|away`, confianza 50–62, liga válida.
+- `server/routes/soccer.js` — `POST /api/soccer/analyze/game|chat` (admin-only, flag `SOCCER_ANALYSIS_ENABLED`). `league` en body/query — valida contra `soccer-league-map.js`. `GET /api/soccer/games?league=eng.1&date=` para el GameSelector.
+- `server/pick-resolver-soccer.js` — resuelve `sport='soccer'` por score final: home_goals vs away_goals → 1X2 + over/under + BTTS. Sin push (en 90 min hay resultado siempre). Filtra por `league` para jobs multi-liga.
+- `server/services/soccerShadowValidator.js` + `soccerShadowPersistence.js` — dataset/shadow con `league` como campo.
+- Migraciones: `runSoccerScaffoldingMigrations()`. Columna `league VARCHAR(32)` en `picks` y `pick_features` (compartida con Tennis y Horse Racing también).
 
-**Esfuerzo estimado**: ~3–4 semanas. El mercado 3-vías añade complejidad real al resolver y al Oracle prompt.
+**Feature flag**: `SOCCER_ANALYSIS_ENABLED` global. Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` — lista las ligas activas (default todas).
+
+**Esfuerzo estimado**: ~4–5 semanas. El mercado 3-vías más el soporte multi-liga añaden complejidad real, pero construir las 6 ligas a la vez es ~20% más trabajo que solo una — vale la pena.
 
 **Criterio de éxito**:
-- Oracle puede emitir Home / Draw / Away con confianza real (no inflada).
-- Resolver maneja 1X2 + BTTS + over/under correctamente desde score final ESPN.
-- Liga seleccionada funciona end-to-end admin-only antes de abrir más ligas.
+- Oracle puede analizar un partido de cualquiera de las 6 ligas y emite Home/Draw/Away con confianza calibrada.
+- El contexto para un partido del Bundesliga menciona explícitamente el perfil de alta anotación; para Serie A, el perfil defensivo.
+- Resolver maneja 1X2 + BTTS + over/under para las 6 ligas desde score final ESPN.
+- `sport='soccer'`, `league='eng.1'` (etc.) aislados en historial, dataset y shadow sin contaminar otros deportes.
 
 ---
 
