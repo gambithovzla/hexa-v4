@@ -28,6 +28,7 @@ import { getSoccerGameOdds, matchSoccerOddsToGame, buildMarketOddsForGame } from
 import { validateSoccerAnalysisOutput } from '../services/soccerOutputGuard.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
 import { upsertOracleSession } from './oracle-history.js';
+import { saveSoccerPickFeatures, recordSoccerShadowRun } from '../services/soccerShadowPersistence.js';
 
 const router = Router();
 
@@ -224,6 +225,43 @@ router.post('/analyze/game', soccerEnabled, verifyToken, requireAdmin, async (re
       leagueSlug,
       marketOdds: resolvedOdds,
     });
+
+    // Fire-and-forget: persist soccer pick_features + shadow_model_runs.
+    if (savedPick?.id) {
+      const gameMeta = {
+        homeTeamId: game.teams?.home?.id ?? null,
+        awayTeamId: game.teams?.away?.id ?? null,
+        homeAbbr:   homeAbbr,
+        awayAbbr:   awayAbbr,
+      };
+      const gamePkInt = gameId ? parseInt(gameId, 10) : null;
+
+      saveSoccerPickFeatures({
+        pickId:           savedPick.id,
+        gamePk:           gamePkInt,
+        gameDate,
+        leagueSlug,
+        context,
+        gameMeta,
+        marketOdds:       resolvedOdds,
+        pickText:         analysisData?.master_prediction?.pick ?? analysisData?.best_pick?.detail ?? null,
+        oracleConfidence: analysisData?.master_prediction?.oracle_confidence ?? null,
+        userEmail:        req.user.email ?? null,
+      }).catch(err => console.warn(`[soccer-route] pick_features persist swallowed: ${err.message}`));
+
+      recordSoccerShadowRun({
+        userId:       req.user.id,
+        userEmail:    req.user.email ?? null,
+        pickId:       savedPick.id,
+        gamePk:       gamePkInt,
+        gameDate,
+        leagueSlug,
+        context,
+        gameMeta,
+        marketOdds:   resolvedOdds,
+        analysisData,
+      }).catch(err => console.warn(`[soccer-route] shadow_model persist swallowed: ${err.message}`));
+    }
 
     console.log(
       `[soccer-route] pick saved id=${savedPick?.id} game=${gameId} league=${leagueSlug} ` +
