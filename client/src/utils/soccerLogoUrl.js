@@ -8,7 +8,7 @@
 export function getSoccerLogoUrl(teamId, abbr, size = 500) {
   const n = Number(teamId);
   if (Number.isFinite(n) && n > 0) {
-    return `https://a.espncdn.com/i/teamlogos/soccer/${size}/${n}.png`;
+    return `https://a.espncdn.com/i/teamlogos/soccer/${size}/h/${n}.png`;
   }
   return null;
 }
