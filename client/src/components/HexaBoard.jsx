@@ -557,11 +557,13 @@ export default function HexaBoard({ lang = 'es', sport = 'mlb' }) {
   const [expandedKey, setExpandedKey] = useState(null);
 
   const fetchBoard = useCallback(async (force = false) => {
-    if (isNfl || isNhl || isSoccer) return;
+    if (isNfl || isNhl) return;
     if (force) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
-      const boardPath = isNba ? '/api/nba/board' : '/api/hexa/board';
+      const boardPath = isNba ? '/api/nba/board'
+        : isSoccer ? '/api/soccer/board'
+        : '/api/hexa/board';
       const res = await fetch(`${API_URL}${boardPath}${force ? '?force=1' : ''}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Unknown error');
@@ -630,22 +632,6 @@ export default function HexaBoard({ lang = 'es', sport = 'mlb' }) {
         </Typography>
         <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textMuted, opacity: 0.6 }}>
           {lang === 'es' ? 'Usa la tab JUEGO para analizar partidos NHL.' : 'Use the GAME tab to analyze NHL matchups.'}
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (isSoccer) {
-    return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography sx={{ fontFamily: MONO, fontSize: '2rem', fontWeight: 800, color: 'var(--brand-grass, #388e3c)', letterSpacing: '0.08em', mb: 1 }}>
-          SOCCER
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.85rem', color: C.textMuted, mb: 0.5 }}>
-          {lang === 'es' ? 'Pizarra Soccer llega en una fase posterior' : 'Soccer Board ships in a later phase'}
-        </Typography>
-        <Typography sx={{ fontFamily: MONO, fontSize: '0.72rem', color: C.textMuted, opacity: 0.6 }}>
-          {lang === 'es' ? 'Usa la tab JUEGO para analizar partidos de fútbol.' : 'Use the GAME tab to analyze soccer matchups.'}
         </Typography>
       </Box>
     );

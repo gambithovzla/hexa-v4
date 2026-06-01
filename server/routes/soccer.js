@@ -29,6 +29,7 @@ import { validateSoccerAnalysisOutput } from '../services/soccerOutputGuard.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
 import { upsertOracleSession } from './oracle-history.js';
 import { saveSoccerPickFeatures, recordSoccerShadowRun } from '../services/soccerShadowPersistence.js';
+import { buildHexaSoccerBoard } from '../services/hexaSoccerBoardService.js';
 
 const router = Router();
 
@@ -455,6 +456,20 @@ router.post('/analyze/chat', soccerEnabled, verifyToken, requireAdmin, async (re
     });
   } catch (err) {
     console.error(`[soccer-route] analyze/chat error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// GET /api/soccer/board?league=eng.1&date=YYYY-MM-DD
+router.get('/board', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const leagueSlug = req.query.league || null;
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const data = await buildHexaSoccerBoard({ date, leagueSlug, force });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error(`[soccer-route] board error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });
   }
 });

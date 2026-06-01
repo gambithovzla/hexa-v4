@@ -36,7 +36,7 @@ const CAPABILITY_MAP = {
     nba: { enabled: true },
     nfl: { enabled: true },
     nhl: { enabled: true },
-    soccer: { enabled: false, message: SOCCER_SOON_MSG },
+    soccer: { enabled: true },
   },
   history: {
     mlb: { enabled: true },
@@ -64,7 +64,7 @@ const CAPABILITY_MAP = {
     nba: { enabled: true },
     nfl: { enabled: true },
     nhl: { enabled: false, message: { es: 'Live tracker NHL llega en una fase posterior.', en: 'NHL live tracker ships in a later phase.' } },
-    soccer: { enabled: false, message: { es: 'Live tracker Soccer llega en una fase posterior.', en: 'Soccer live tracker ships in a later phase.' } },
+    soccer: { enabled: true },
   },
   gameDetail: {
     mlb: { enabled: true },
