@@ -67,6 +67,7 @@ function mapCompetitor(c, leagueSlug) {
     abbreviation: seeded?.short ?? c?.team?.abbreviation ?? null,
     name: seeded?.name ?? espnName,
     id: c?.team?.id ?? null,
+    logo: c?.team?.logo ?? c?.team?.logos?.[0]?.href ?? null,
     score: c?.score != null ? Number(c.score) : null,
     record: c?.records?.[0]?.summary ?? null,
     winner: c?.winner ?? null,

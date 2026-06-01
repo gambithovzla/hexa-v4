@@ -161,7 +161,7 @@ function isSelectable(game) {
 }
 
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
-function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
+function TeamLogo({ teamId, abbr, logo, color, sport = 'mlb' }) {
   const [failed, setFailed] = useState(false);
   const src = sport === 'nba'
     ? getNbaLogoUrl(teamId, abbr)
@@ -170,7 +170,7 @@ function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
     : sport === 'nhl'
     ? getNhlLogoUrl(teamId, abbr)
     : sport === 'soccer'
-    ? getSoccerLogoUrl(teamId, abbr)
+    ? (logo ?? getSoccerLogoUrl(teamId, abbr))
     : teamId
       ? `https://www.mlb.com/team-logos/${teamId}.svg`
       : null;
@@ -244,10 +244,12 @@ function StatusBadge({ status, t }) {
 // ── GameCard ──────────────────────────────────────────────────────────────────
 function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, analyzed, t }) {
   const { C, isLeague } = useHexaTheme();
-  const away    = getAbbr(game.teams?.away);
-  const home    = getAbbr(game.teams?.home);
-  const awayId  = getTeamId(game.teams?.away);
-  const homeId  = getTeamId(game.teams?.home);
+  const away     = getAbbr(game.teams?.away);
+  const home     = getAbbr(game.teams?.home);
+  const awayId   = getTeamId(game.teams?.away);
+  const homeId   = getTeamId(game.teams?.home);
+  const awayLogo = game.teams?.away?.logo ?? null;
+  const homeLogo = game.teams?.home?.logo ?? null;
   const awayP   = getPitcher(game.teams?.away) ?? t.tbd;
   const homeP   = getPitcher(game.teams?.home) ?? t.tbd;
   const time    = getTime(game);
@@ -376,7 +378,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
       >
         {/* Away team */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <TeamLogo teamId={awayId} abbr={away} color={awayColor} sport={sportKey} />
+          <TeamLogo teamId={awayId} abbr={away} logo={awayLogo} color={awayColor} sport={sportKey} />
           <Typography
             sx={{
               fontFamily: MONO,
@@ -439,7 +441,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
           >
             {home}
           </Typography>
-          <TeamLogo teamId={homeId} abbr={home} color={homeColor} sport={sportKey} />
+          <TeamLogo teamId={homeId} abbr={home} logo={homeLogo} color={homeColor} sport={sportKey} />
         </Box>
       </Box>
 
@@ -776,11 +778,13 @@ function normalizeSoccerGame(g, leagueSlug) {
         abbreviation: g.teams?.away?.abbreviation ?? 'AWAY',
         name:         g.teams?.away?.name ?? g.teams?.away?.abbreviation ?? 'Away',
         id:           g.teams?.away?.id ?? null,
+        logo:         g.teams?.away?.logo ?? null,
       },
       home: {
         abbreviation: g.teams?.home?.abbreviation ?? 'HOME',
         name:         g.teams?.home?.name ?? g.teams?.home?.abbreviation ?? 'Home',
         id:           g.teams?.home?.id ?? null,
+        logo:         g.teams?.home?.logo ?? null,
       },
     },
     linescore: (homeScore != null && awayScore != null) ? {
