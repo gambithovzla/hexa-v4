@@ -458,9 +458,10 @@ function InsightCard({ ins, lang, t }) {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
-  const isNba = sport === 'nba';
-  const isNfl = sport === 'nfl';
-  const isNhl = sport === 'nhl';
+  const isNba    = sport === 'nba';
+  const isNfl    = sport === 'nfl';
+  const isNhl    = sport === 'nhl';
+  const isSoccer = sport === 'soccer';
   const t = T[lang] ?? T.es;
   const { C } = useHexaTheme();
 
@@ -470,7 +471,7 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchBoard = useCallback(async (force = false) => {
-    if (isNfl || isNhl) return;
+    if (isNfl || isNhl || isSoccer) return;
     if (force) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
@@ -485,7 +486,7 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isNba, isNfl, isNhl]);
+  }, [isNba, isNfl, isNhl, isSoccer]);
 
   useEffect(() => { fetchBoard(false); }, [fetchBoard]);
 
@@ -519,6 +520,22 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
         </Typography>
         <Typography sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', color: C.textMuted, opacity: 0.6 }}>
           {lang === 'es' ? 'Usa la tab JUEGO para analizar partidos NFL.' : 'Use the GAME tab to analyze NFL matchups.'}
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (isSoccer) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '2rem', fontWeight: 800, color: 'var(--brand-grass, #388e3c)', letterSpacing: '0.08em', mb: 1 }}>
+          SOCCER
+        </Typography>
+        <Typography sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.85rem', color: C.textMuted, mb: 0.5 }}>
+          {lang === 'es' ? 'Pizarra Soccer llega en una fase posterior' : 'Soccer Board ships in a later phase'}
+        </Typography>
+        <Typography sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', color: C.textMuted, opacity: 0.6 }}>
+          {lang === 'es' ? 'Usa la tab JUEGO para analizar partidos de fútbol.' : 'Use the GAME tab to analyze soccer matchups.'}
         </Typography>
       </Box>
     );

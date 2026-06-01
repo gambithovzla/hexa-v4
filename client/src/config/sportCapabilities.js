@@ -20,48 +20,65 @@ const NHL_SOON_MSG = {
   en: 'This NHL module ships in a later phase. Use Game Analysis or Oracle Chat.',
 };
 
+const SOCCER_SOON_MSG = {
+  es: 'Este modulo Soccer llega en una fase posterior. Usa Analisis de juego u Oracle Chat.',
+  en: 'This Soccer module ships in a later phase. Use Game Analysis or Oracle Chat.',
+};
+
+const SOCCER_PARLAY_MSG = {
+  es: 'Parlay Soccer llega en una fase posterior. Para Soccer usa Analisis de juego u Oracle Chat.',
+  en: 'Soccer parlay arrives in a later phase. For Soccer use Game Analysis or Oracle Chat.',
+};
+
 const CAPABILITY_MAP = {
   board: {
     mlb: { enabled: true },
     nba: { enabled: true },
     nfl: { enabled: true },
     nhl: { enabled: true },
+    soccer: { enabled: false, message: SOCCER_SOON_MSG },
   },
   history: {
     mlb: { enabled: true },
     nba: { enabled: true },
     nfl: { enabled: true },
     nhl: { enabled: true },
+    soccer: { enabled: true },
   },
   gameAnalysis: {
     mlb: { enabled: true },
     nba: { enabled: true },
     nfl: { enabled: true, requiresAdmin: true },
     nhl: { enabled: true, requiresAdmin: true },
+    soccer: { enabled: true, requiresAdmin: true },
   },
   standings: {
     mlb: { enabled: true },
     nba: { enabled: true },
     nfl: { enabled: true },
     nhl: { enabled: false, message: { es: 'Tabla de posiciones NHL llega en una fase posterior.', en: 'NHL standings ship in a later phase.' } },
+    soccer: { enabled: false, message: { es: 'Tabla de posiciones Soccer llega en una fase posterior.', en: 'Soccer standings ship in a later phase.' } },
   },
   liveTracker: {
     mlb: { enabled: true },
     nba: { enabled: true },
     nfl: { enabled: true },
     nhl: { enabled: false, message: { es: 'Live tracker NHL llega en una fase posterior.', en: 'NHL live tracker ships in a later phase.' } },
+    soccer: { enabled: false, message: { es: 'Live tracker Soccer llega en una fase posterior.', en: 'Soccer live tracker ships in a later phase.' } },
   },
   gameDetail: {
     mlb: { enabled: true },
     nba: { enabled: false, message: { es: 'Detalles NBA (box score + play-by-play) llegan en el proximo sprint.', en: 'NBA details (box score + play-by-play) ship in the next sprint.' } },
     nfl: { enabled: false, message: { es: 'Detalles NFL (drives + play-by-play) llegan en una fase posterior.', en: 'NFL details (drives + play-by-play) ship in a later phase.' } },
     nhl: { enabled: false, message: { es: 'Detalles NHL (play-by-play) llegan en una fase posterior.', en: 'NHL details (play-by-play) ship in a later phase.' } },
+    soccer: { enabled: false, message: SOCCER_SOON_MSG },
   },
   oracleChat: {
     mlb: { enabled: true, requiresAdmin: true },
     nba: { enabled: true, requiresAdmin: true },
     nfl: { enabled: true, requiresAdmin: true },
     nhl: { enabled: true, requiresAdmin: true },
+    soccer: { enabled: true, requiresAdmin: true },
   },
   parlayBuilder: {
     mlb: { enabled: true, requiresAdmin: true },
@@ -75,18 +92,21 @@ const CAPABILITY_MAP = {
     },
     nfl: { enabled: false, requiresAdmin: true, message: NFL_PARLAY_MSG },
     nhl: { enabled: false, requiresAdmin: true, message: NHL_PARLAY_MSG },
+    soccer: { enabled: false, requiresAdmin: true, message: SOCCER_PARLAY_MSG },
   },
   parlayArchitect: {
     mlb: { enabled: true, requiresAdmin: true },
     nba: { enabled: true, requiresAdmin: true },
     nfl: { enabled: false, requiresAdmin: true, message: NFL_PARLAY_MSG },
     nhl: { enabled: false, requiresAdmin: true, message: NHL_PARLAY_MSG },
+    soccer: { enabled: false, requiresAdmin: true, message: SOCCER_PARLAY_MSG },
   },
   batchScan: {
     mlb: { enabled: true, requiresAdmin: true },
     nba: { enabled: false, requiresAdmin: true, message: { es: 'Batch scan NBA llegara en una fase posterior.', en: 'NBA batch scan will arrive in a later phase.' } },
     nfl: { enabled: false, requiresAdmin: true, message: { es: 'Batch scan NFL llegara en una fase posterior.', en: 'NFL batch scan will arrive in a later phase.' } },
     nhl: { enabled: false, requiresAdmin: true, message: NHL_SOON_MSG },
+    soccer: { enabled: false, requiresAdmin: true, message: SOCCER_SOON_MSG },
   },
 };
 

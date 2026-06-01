@@ -280,10 +280,12 @@ function getEasternDateString(value = new Date()) {
 
 export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   const { C, isLeague } = useHexaTheme();
-  const isNba = sport === 'nba';
-  const isNhl = sport === 'nhl';
-  // NBA and NHL share the date-based games shape and the per-sport chat route.
-  const isDateSportNonMlb = isNba || isNhl;
+  const isNba    = sport === 'nba';
+  const isNhl    = sport === 'nhl';
+  const isSoccer = sport === 'soccer';
+  // NBA, NHL and Soccer share the date-based games shape and per-sport chat route.
+  const isDateSportNonMlb = isNba || isNhl || isSoccer;
+  const [soccerLeague, setSoccerLeague] = useState('eng.1');
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
   const [view, setView] = useState('chat'); // 'chat' | 'history'
@@ -316,6 +318,8 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
       ? `${API_URL}/api/nba/games?date=${date}`
       : isNhl
       ? `${API_URL}/api/nhl/games?date=${date}`
+      : isSoccer
+      ? `${API_URL}/api/soccer/games?league=${soccerLeague}&date=${date}`
       : `${API_URL}/api/games?date=${date}`;
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -323,9 +327,10 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         let gameList = data.data || data.games || data || [];
         if (isDateSportNonMlb && Array.isArray(gameList)) {
           gameList = gameList.map((g) => ({
-            gamePk: String(g.game_id),
-            game_id: g.game_id,
-            gameTime: g.status,
+            gamePk:      String(g.game_id),
+            game_id:     g.game_id,
+            gameTime:    g.status,
+            _leagueSlug: isSoccer ? soccerLeague : undefined,
             teams: {
               away: { abbreviation: g.away_team_abbr, name: g.away_team_name },
               home: { abbreviation: g.home_team_abbr, name: g.home_team_name },
@@ -335,7 +340,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         setGames(Array.isArray(gameList) ? gameList : []);
       })
       .catch(() => {});
-  }, [isNba, isNhl, isDateSportNonMlb]);
+  }, [isNba, isNhl, isSoccer, soccerLeague, isDateSportNonMlb]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -406,12 +411,15 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         ? `${API_URL}/api/nba/analyze/chat`
         : isNhl
         ? `${API_URL}/api/nhl/analyze/chat`
+        : isSoccer
+        ? `${API_URL}/api/soccer/analyze/chat`
         : `${API_URL}/api/analyze/chat`;
       const res = await fetch(chatUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           gameId: selectedGame.gamePk || selectedGame.id || selectedGame.game_id,
+          ...(isSoccer ? { leagueSlug: selectedGame._leagueSlug ?? soccerLeague } : {}),
           question: q,
           conversationHistory: buildHistory(),
           lang,
@@ -433,6 +441,13 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
           text: lang === 'es'
             ? 'Oracle Chat NBA requiere NBA_ANALYSIS_ENABLED=true en el servidor.'
             : 'NBA Oracle Chat requires NBA_ANALYSIS_ENABLED=true on the server.',
+        }]);
+      } else if (res.status === 503 && isSoccer) {
+        setConversation(prev => [...prev, {
+          role: 'assistant',
+          text: lang === 'es'
+            ? 'Oracle Chat Soccer requiere SOCCER_ANALYSIS_ENABLED=true en el servidor.'
+            : 'Soccer Oracle Chat requires SOCCER_ANALYSIS_ENABLED=true on the server.',
         }]);
       } else {
         setConversation(prev => [...prev, { role: 'assistant', text: data.error || 'Error getting response.' }]);
@@ -629,6 +644,30 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
             }}>
               {lang === 'es' ? 'SELECCIONA UN PARTIDO' : 'SELECT A GAME'}
             </div>
+            {isSoccer && (
+              <select
+                value={soccerLeague}
+                onChange={e => setSoccerLeague(e.target.value)}
+                style={{
+                  width: '100%', marginBottom: '10px',
+                  background: C.surface, border: `1px solid ${C.border}`,
+                  color: C.textPrimary, fontFamily: MONO, fontSize: '11px',
+                  padding: '7px 10px', cursor: 'pointer', outline: 'none',
+                  colorScheme: 'dark', appearance: 'none',
+                }}
+              >
+                {[
+                  { slug: 'eng.1', label: 'Premier League' },
+                  { slug: 'esp.1', label: 'La Liga'        },
+                  { slug: 'ita.1', label: 'Serie A'        },
+                  { slug: 'ger.1', label: 'Bundesliga'     },
+                  { slug: 'fra.1', label: 'Ligue 1'        },
+                  { slug: 'usa.1', label: 'MLS'            },
+                ].map(l => (
+                  <option key={l.slug} value={l.slug}>{l.label}</option>
+                ))}
+              </select>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {games.map((game, i) => (
                 <div key={i} onClick={() => setSelectedGame(game)} style={{
