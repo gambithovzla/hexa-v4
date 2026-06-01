@@ -28,10 +28,12 @@ import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
 import nhlRouter from './routes/nhl.js';
+import soccerRouter from './routes/soccer.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
 import { resolveNhlPendingPicks } from './pick-resolver-nhl.js';
+import { resolveSoccerPendingPicks } from './pick-resolver-soccer.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
@@ -40,6 +42,7 @@ import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
 import { buildNbaPickLiveProgressEntry } from './pick-tracker-nba.js';
 import { buildNflPickLiveProgressEntry } from './pick-tracker-nfl.js';
+import { buildSoccerPickLiveProgressEntry } from './pick-tracker-soccer.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
@@ -661,6 +664,7 @@ app.use('/api/insights',     insightsRouter);
 app.use('/api/nba',          nbaRouter);
 app.use('/api/nfl',          nflRouter);
 app.use('/api/nhl',          nhlRouter);
+app.use('/api/soccer',       soccerRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -2890,7 +2894,7 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
        WHERE p.user_id = $1
          AND p.result = 'pending'
          AND p.deleted_at IS NULL
-         AND COALESCE(p.sport, 'mlb') IN ('mlb', 'nba', 'nfl')
+         AND COALESCE(p.sport, 'mlb') IN ('mlb', 'nba', 'nfl', 'soccer')
        ORDER BY created_at DESC
        LIMIT 20`,
       [userId]
@@ -2921,6 +2925,15 @@ app.post('/api/picks/live-progress', verifyToken, async (req, res) => {
             game_date: normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at),
           };
           results.push(await buildNflPickLiveProgressEntry(nflPick, nflGamesByDate));
+          continue;
+        }
+
+        if (pick.sport === 'soccer') {
+          const soccerPick = {
+            ...pick,
+            game_date: normalizeDateInput(pick.game_date) ?? getEasternDateString(pick.created_at),
+          };
+          results.push(await buildSoccerPickLiveProgressEntry(soccerPick, new Map()));
           continue;
         }
 
@@ -5109,6 +5122,13 @@ runMigrations()
           if (process.env.NHL_ANALYSIS_ENABLED === 'true') {
             resolveNhlPendingPicks().catch(err => {
               console.error('[pick-resolver-nhl] Scheduled run failed:', err.message);
+            });
+          }
+
+          // Soccer plays daily across six leagues; games span daytime through evening.
+          if (process.env.SOCCER_ANALYSIS_ENABLED === 'true') {
+            resolveSoccerPendingPicks().catch(err => {
+              console.error('[pick-resolver-soccer] Scheduled run failed:', err.message);
             });
           }
         }

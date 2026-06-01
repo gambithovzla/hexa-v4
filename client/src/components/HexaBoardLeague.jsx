@@ -458,9 +458,10 @@ function InsightCard({ ins, lang, t }) {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
-  const isNba = sport === 'nba';
-  const isNfl = sport === 'nfl';
-  const isNhl = sport === 'nhl';
+  const isNba    = sport === 'nba';
+  const isNfl    = sport === 'nfl';
+  const isNhl    = sport === 'nhl';
+  const isSoccer = sport === 'soccer';
   const t = T[lang] ?? T.es;
   const { C } = useHexaTheme();
 
@@ -474,7 +475,9 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
     if (force) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
-      const boardPath = isNba ? '/api/nba/board' : '/api/hexa/board';
+      const boardPath = isNba ? '/api/nba/board'
+        : isSoccer ? '/api/soccer/board'
+        : '/api/hexa/board';
       const res = await fetch(`${API_URL}${boardPath}${force ? '?force=1' : ''}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Unknown error');
@@ -485,7 +488,7 @@ export default function HexaBoardLeague({ lang = 'es', sport = 'mlb' }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isNba, isNfl, isNhl]);
+  }, [isNba, isNfl, isNhl, isSoccer]);
 
   useEffect(() => { fetchBoard(false); }, [fetchBoard]);
 

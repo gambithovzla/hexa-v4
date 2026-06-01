@@ -38,10 +38,14 @@ MARKETS = (
     "prop_rbis",
 )
 
-NFL_MARKETS = ("nfl_moneyline", "nfl_spread", "nfl_total")
+NFL_MARKETS    = ("nfl_moneyline", "nfl_spread", "nfl_total")
+SOCCER_MARKETS = ("soccer_moneyline", "soccer_total", "soccer_btts")
 
 # Market → sport (for dataset loading)
-MARKET_SPORT = {m: "nfl" for m in NFL_MARKETS}
+MARKET_SPORT = {
+    **{m: "nfl"    for m in NFL_MARKETS},
+    **{m: "soccer" for m in SOCCER_MARKETS},
+}
 
 
 def _now_iso() -> str:
@@ -170,11 +174,12 @@ def train_all(
     out_path = Path(out_dir or settings.artifacts_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # Separate NFL and non-NFL markets
-    nfl_markets = [m for m in markets if m in NFL_MARKETS]
-    std_markets = [m for m in markets if m not in NFL_MARKETS]
+    # Separate markets by sport
+    nfl_markets    = [m for m in markets if m in NFL_MARKETS]
+    soccer_markets = [m for m in markets if m in SOCCER_MARKETS]
+    std_markets    = [m for m in markets if m not in NFL_MARKETS and m not in SOCCER_MARKETS]
 
-    # Load standard dataset once for all non-NFL markets
+    # Load standard dataset once for all non-NFL/soccer markets
     df = None
     if std_markets:
         logger.info("Loading MLB dataset…")
@@ -191,6 +196,17 @@ def train_all(
         except Exception as exc:
             logger.warning("NFL dataset load failed (%s) — skipping NFL markets", exc)
             nfl_markets = []
+
+    # Load Soccer dataset separately
+    soccer_df = None
+    if soccer_markets and not csv_path:
+        logger.info("Loading Soccer dataset…")
+        try:
+            soccer_df = load_dataset(sport="soccer")
+            logger.info("Soccer: Loaded %d rows; %d resolved", len(soccer_df), int(soccer_df["result"].notna().sum()))
+        except Exception as exc:
+            logger.warning("Soccer dataset load failed (%s) — skipping soccer markets", exc)
+            soccer_markets = []
 
     summary: dict[str, dict | None] = {}
 
@@ -228,6 +244,10 @@ def train_all(
     if nfl_df is not None:
         for market in nfl_markets:
             _train_market(nfl_df, market)
+
+    if soccer_df is not None:
+        for market in soccer_markets:
+            _train_market(soccer_df, market)
 
     manifest_path = out_path / "manifest.json"
     # Merge with any existing manifest so partial retrains (e.g. only
