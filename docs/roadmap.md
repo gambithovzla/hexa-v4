@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-06-01 — **Sprint 11 Soccer completo** (11a–11d + 11.1, rama `claude/soccer-sprint-11c`): scaffolding de datos (6 ligas, 88 clubes, ESPN API, The Odds API 3-vías), Oracle + output guard, lifecycle (routes, resolver, migraciones), UI (SportSwitcher grass-green, GameSelector multi-liga, AnalysisPanel, HexaBoard/OracleChat placeholders), shadow validator + pick_features/shadow_model_runs isolation (`sport='soccer'`). Flag `SOCCER_ANALYSIS_ENABLED` (default `false`); selector Soccer visible en UI. Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
+**Última actualización**: 2026-06-01 — **Sprint 11 Soccer completo al 100%** (11a–11d + 11.1 + board + live tracker + xG + ML sidecar, rama `claude/soccer-sprint-11c`): scaffolding de datos (6 ligas, 88 clubes, ESPN API, The Odds API 3-vías), Oracle + output guard, lifecycle (routes, resolver, migraciones), UI (SportSwitcher grass-green, GameSelector multi-liga, AnalysisPanel, OracleChat, SoccerLiveTracker), shadow validator + pick_features isolation, hexaSoccerBoardService, pick-tracker-soccer, soccerMlClient (circuit breaker), soccer-xg-fetcher (Understat), ML sidecar Python completo (soccer_moneyline/total/btts), HexaBoard wired. Flag `SOCCER_ANALYSIS_ENABLED` (default `false`); selector Soccer activo en UI. Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
 
 ---
 
@@ -510,7 +510,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ### ✅ Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
 
-**Status**: ✅ **completo** (2026-06-01). Rama `claude/soccer-sprint-11c`. Flag `SOCCER_ANALYSIS_ENABLED` (default `false`); selector Soccer visible en UI.
+**Status**: ✅ **completo** (2026-06-01). Rama `claude/soccer-sprint-11c`. Flag `SOCCER_ANALYSIS_ENABLED` (default `false`); selector Soccer visible en UI. Board + live tracker + xG + ML sidecar completos. Pendiente operacional: flip flag en Railway + E2E.
 
 **Progreso completo — todos los sub-sprints cerrados**:
 
@@ -539,13 +539,30 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 - ✅ `client/src/components/SportSwitcher.jsx` — livery soccer grass-green (`var(--brand-grass, #388e3c)`); `clipFor()` helper para 5-button adaptive layout.
 - ✅ `client/src/components/GameSelector.jsx` — `normalizeSoccerGame(g, leagueSlug)`; `selectedLeague` state; league dropdown (6 ligas); fetch `/api/soccer/games?league=&date=`; logos por `getSoccerLogoUrl`; pitchers ocultos.
 - ✅ `client/src/components/AnalysisPanel.jsx` — soccer endpoint `/api/soccer/analyze/game`; SAFE bloqueado; reset useEffect incluye soccer.
-- ✅ `client/src/components/HexaBoard.jsx` + `HexaBoardLeague.jsx` — early-return placeholder soccer (grass green) hasta que exista `hexaSoccerBoardService`.
+- ✅ `client/src/components/HexaBoard.jsx` + `HexaBoardLeague.jsx` — usan `/api/soccer/board` cuando `sport='soccer'`; eliminado early-return placeholder.
 - ✅ `client/src/components/OracleChat.jsx` — `isSoccer`; `soccerLeague` state; fetch games + chat `/api/soccer/analyze/chat`; league dropdown en partido picker.
 
 **11.1 — Shadow/Dataset isolation** ✅
 - ✅ `server/services/soccerShadowValidator.js` — validador determinístico 3-vías. De-vig de odds 1X2 (home+draw+away normalizado). Pesos: `W_WITH_ODDS={strength:0.25, form:0.20, odds:0.55}`, `W_WITHOUT_ODDS={strength:0.50, form:0.50}`. Confianza capped 50–62%. `agree=null` para picks Draw.
-- ✅ `server/services/soccerShadowPersistence.js` — `saveSoccerPickFeatures` + `recordSoccerShadowRun`. Fire-and-forget. `sport='soccer'`, `league=leagueSlug`. `draw_price`, `btts_yes_price`, `home/away_goals_for/against/goal_diff/points`, `xg=null` hasta FBref.
+- ✅ `server/services/soccerShadowPersistence.js` — `saveSoccerPickFeatures` + `recordSoccerShadowRun`. Fire-and-forget. `sport='soccer'`, `league=leagueSlug`. `draw_price`, `btts_yes_price`, `home/away_goals_for/against/goal_diff/points`, `xg` desde Understat.
 - ✅ `server/routes/soccer.js` — wired en `/analyze/game`: extrae `gameMeta` del juego ESPN, llama ambas funciones con `.catch()` tras `persistSoccerPick`.
+
+**Post-11d — Board + Live Tracker + xG + ML sidecar** ✅
+- ✅ `server/services/hexaSoccerBoardService.js` — pizarra diaria soccer: itera las 6 ligas en paralelo; insights de juegos live+upcoming + top-2 standings por liga; cache hasta 04:00 ET.
+- ✅ `server/pick-tracker-soccer.js` — `buildSoccerPickLiveProgressEntry`: lookup league-aware (`leagueSlug:date`); `findSoccerGameForPick`; `formatSoccerDetails` (score + período).
+- ✅ `server/services/soccerMlClient.js` — circuit breaker propio (3f→open 2min); `buildSoccerFeaturePayload` (17 features); `predictSoccerMoneyline|Total|Btts`.
+- ✅ `server/soccer-xg-fetcher.js` — scraper Understat; regex extrae `teamsData` JSON del HTML; Big 5 leagues soportadas, MLS=null; cache 6h; `getSoccerTeamXg` + `getSoccerGameXg`.
+- ✅ `server/soccer-context-builder.js` — integra xG via Promise.all; enriquece `home.xG/xGA`, `away.xG/xGA`; actualiza `context_meta.completeness.xG` y `staleFlags`.
+- ✅ `ml/hexa_ml/models/soccer.py` — `SoccerMoneylineModel`, `SoccerTotalModel`, `SoccerBttsModel` (reg_lambda=3.0).
+- ✅ `ml/hexa_ml/features.py` — `SOCCER_BASE_NUMERIC` (17 cols) + `SOCCER_DERIVED_FEATURES` (7) + `add_soccer_derived()` con de-vig 3-way odds.
+- ✅ `ml/hexa_ml/data.py` — soccer columns en OPTIONAL_FEATURE_COLUMNS; `filter_for_market` para soccer markets; `make_target` soccer (btts/total/moneyline).
+- ✅ `ml/hexa_ml/train.py` — `SOCCER_MARKETS` + `load_dataset(sport="soccer")` isolado de MLB/NFL.
+- ✅ `ml/hexa_ml/serve.py` — FeaturePayload con 18 campos soccer; 3 predict routes; retrain incluye soccer markets.
+- ✅ `client/src/components/SoccerLiveTracker.jsx` — 6 ligas en paralelo (Promise.allSettled), 60s poll, grass-green livery, `SoccerPickProgressPanel`.
+- ✅ `client/src/config/sportCapabilities.js` — liveTracker + board habilitados para soccer.
+- ✅ `server/routes/soccer.js` — `GET /api/soccer/board` → `buildHexaSoccerBoard`.
+- ✅ `server/index.js` — import `buildSoccerPickLiveProgressEntry`; SQL filter `IN ('mlb','nba','nfl','soccer')`; rama soccer en live-progress loop.
+- ✅ `client/src/App.jsx` — `SoccerLiveTracker` importado y enrutado en Live tab.
 
 **Alcance**: las **6 ligas principales** desde el día 1. La arquitectura es league-aware desde la base — un solo `soccer-api.js` con `leagueSlug` como parámetro, no 6 wrappers separados.
 
@@ -589,12 +606,10 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 **Pendiente operacional** (no código — solo flags + datos):
 - Flip `SOCCER_ANALYSIS_ENABLED=true` en Railway cuando se valide E2E en prod.
 - E2E validation: análisis de un partido EPL y Bundesliga; verificar que `picks`, `pick_features`, `shadow_model_runs` se insertan con `sport='soccer'` y `league` correctos.
-- `hexaSoccerBoardService.js` — pizarra del día Soccer (análogo a `hexaNbaBoardService`). Placeholder en HexaBoard hasta entonces.
-- Live tracker Soccer — análogo a `pick-tracker-nfl.js`. ESPN soccer summary polling.
-- xG integration — FBref/Understat scraping para `home_xg`, `away_xg` (actualmente null hasta esta fase).
-- ML sidecar Soccer — `nflMlClient.js` → `soccerMlClient.js`, modelos `soccer_moneyline`/`soccer_total`/`soccer_btts`. Diferido como NHL 10e / NBA 7e. Entrena cuando haya picks resueltos en prod.
+- Entrenamiento ML: soccer_moneyline/total/btts entrenan automáticamente vía `/retrain` cuando haya picks resueltos en prod (mismo pipeline que MLB/NFL). Usar `/admin/ml-control` cuando haya ≥25 picks resueltos por mercado.
+- xG MLS: Understat no cubre la MLS — `getSoccerGameXg` devuelve null para `usa.1`. Considerar API-Football como fuente alternativa en una fase posterior.
 - `SOCCER_LEAGUES_ENABLED` — lista las ligas activas (default todas). Pendiente si se necesita rollout gradual.
-- Pick Imperdible Soccer — diferido como NFL; requiere `auto_resolvable` check + resolver integrado.
+- Pick Imperdible Soccer — diferido; requiere `auto_resolvable` check + resolver integrado.
 
 **Feature flag**: `SOCCER_ANALYSIS_ENABLED` global. Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` — lista las ligas activas (default todas).
 
@@ -760,7 +775,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 ```
 
 2026 Q3-4 Sprint 10    — NHL Hockey                        ████████████████████████ ✅ (backend + UI; ML sidecar diferido)
-2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████████████████████████ ✅ (11a–11d+11.1 completo; SOCCER_ANALYSIS_ENABLED=false; E2E pendiente)
+2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████████████████████████ ✅ (11a–11d+11.1+board+live+xG+ML completo; SOCCER_ANALYSIS_ENABLED=false; E2E pendiente)
 2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (año redondo, tras Sprint 11)
 2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```
