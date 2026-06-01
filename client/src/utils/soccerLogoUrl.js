@@ -5,9 +5,10 @@
  * The team ID comes from the ESPN scoreboard API (g.teams.home.id / g.teams.away.id).
  * When the ID is null (unseeded club), returns null and TeamLogo renders nothing.
  */
-export function getSoccerLogoUrl(teamId, abbr, size = 40) {
-  if (teamId != null && String(teamId).match(/^\d+$/)) {
-    return `https://a.espncdn.com/i/teamlogos/soccer/${size}/h/${teamId}.png`;
+export function getSoccerLogoUrl(teamId, abbr, size = 500) {
+  const n = Number(teamId);
+  if (Number.isFinite(n) && n > 0) {
+    return `https://a.espncdn.com/i/teamlogos/soccer/${size}/${n}.png`;
   }
   return null;
 }
