@@ -747,45 +747,40 @@ const SOCCER_LEAGUES = [
 ];
 
 function normalizeSoccerGame(g, leagueSlug) {
+  // soccer-api.js already returns g.status as 'scheduled'|'live'|'final'
+  const statusStr = g.status ?? '';
   let simplified = 'scheduled';
-  const sid = g.game_status_id;
-  if (sid != null) {
-    if (sid === 3) simplified = 'final';
-    else if (sid === 2) simplified = 'live';
-  } else {
-    const s = String(g.status ?? '').toLowerCase();
-    if (/final/i.test(s)) simplified = 'final';
-    else if (/in progress|halftime|live/i.test(s)) simplified = 'live';
-  }
+  if (/^final$/i.test(statusStr)) simplified = 'final';
+  else if (/^live$/i.test(statusStr)) simplified = 'live';
 
-  const homeScore = g.home_score ?? null;
-  const awayScore = g.away_score ?? null;
+  const homeScore = g.teams?.home?.score ?? null;
+  const awayScore = g.teams?.away?.score ?? null;
 
-  let displayTime = g.status ?? '';
-  if (simplified === 'scheduled' && g.game_datetime) {
+  let displayTime = g.statusDetail ?? statusStr;
+  if (simplified === 'scheduled' && g.gameDate) {
     try {
-      displayTime = new Date(g.game_datetime).toLocaleTimeString('es-PE', {
+      displayTime = new Date(g.gameDate).toLocaleTimeString('es-PE', {
         timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false,
       });
     } catch { /* keep status text */ }
   }
 
   return {
-    gamePk:       String(g.game_id),
-    gameDate:     g.game_date ? `${g.game_date}T00:00:00Z` : null,
+    gamePk:       String(g.gameId ?? g.gamePk ?? ''),
+    gameDate:     g.gameDate ?? null,
     _displayTime: displayTime,
     _leagueSlug:  leagueSlug,
     status:       { simplified },
     teams: {
       away: {
-        abbreviation: g.away_team_abbr ?? 'AWAY',
-        name:         g.away_team_name ?? g.away_team_abbr ?? 'Away',
-        id:           g.away_team_id   ?? null,
+        abbreviation: g.teams?.away?.abbreviation ?? 'AWAY',
+        name:         g.teams?.away?.name ?? g.teams?.away?.abbreviation ?? 'Away',
+        id:           g.teams?.away?.id ?? null,
       },
       home: {
-        abbreviation: g.home_team_abbr ?? 'HOME',
-        name:         g.home_team_name ?? g.home_team_abbr ?? 'Home',
-        id:           g.home_team_id   ?? null,
+        abbreviation: g.teams?.home?.abbreviation ?? 'HOME',
+        name:         g.teams?.home?.name ?? g.teams?.home?.abbreviation ?? 'Home',
+        id:           g.teams?.home?.id ?? null,
       },
     },
     linescore: (homeScore != null && awayScore != null) ? {
