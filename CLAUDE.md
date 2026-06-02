@@ -171,7 +171,7 @@ Cuarto deporte **activo**. Espeja **exactamente** el patrón NBA (date-based) qu
 - **Pendiente**: **10e ML sidecar** (diferido como NBA 7e), `hexaNhlBoardService` (pizarra), live tracker NHL, validación E2E en prod. La tab Live/Standings/Parlay muestran "fase posterior" hasta entonces.
 
 ### Soccer (🟢 Sprint 11 — completo: backend + UI + board + live tracker + xG + ML sidecar)
-Quinto deporte **activo**. Espeja **exactamente** el patrón NHL/NFL/NBA (importa frozen, `sport='soccer'`, cero ediciones a frozen) pero con `league` como segunda dimensión en toda persistencia. **Sprint 11 completo** (11a–11d + 11.1 + board + live tracker + xG + ML sidecar) en rama `claude/soccer-sprint-11c`; flag `SOCCER_ANALYSIS_ENABLED` (default `false`); selector Soccer **activo** en `client/src/config/sports.js`. Pendiente operacional: flip `SOCCER_ANALYSIS_ENABLED=true` en Railway + validación E2E. Spec maestra: [docs/roadmap.md](docs/roadmap.md) Sprint 11.
+Quinto deporte **activo**. Espeja **exactamente** el patrón NHL/NFL/NBA (importa frozen, `sport='soccer'`, cero ediciones a frozen) pero con `league` como segunda dimensión en toda persistencia. **Sprint 11 completo** (11a–11d + 11.1 + board + live tracker + xG + ML sidecar) en rama `claude/soccer-sprint-11c`; `SOCCER_ANALYSIS_ENABLED=true` activo en Railway; selector Soccer **activo** en `client/src/config/sports.js`. Spec maestra: [docs/roadmap.md](docs/roadmap.md) Sprint 11.
 - **Diferencias estructurales clave** (NO copy-paste): mercado **3-vías** (resolver y output guard tratan el Draw explícitamente — `pick_side` es exactamente `home|draw|away`, NUNCA push); **cap de confianza ~62%** (el más bajo de todos — mercado más eficiente); **sin "starter confirmado"** (alineaciones ~1h pre-kick); **xG** (Expected Goals) = el Statcast del fútbol; **perfil de liga** ajusta el sesgo del Oracle (Bundesliga→Over ~3.1 g/p, Serie A→Under/Draw ~2.4 g/p); mercados: 1X2 + over/under 2.5 + BTTS; **league-aware desde la base** (un solo wrapper con `leagueSlug` como parámetro, no 6 wrappers — 6 ligas: EPL, La Liga, Serie A, Bundesliga, Ligue 1, MLS).
 - **Datos**: ESPN hidden API (`site.api.espn.com/.../soccer/{leagueSlug}/`, gratis sin key) para juegos/scores/standings; The Odds API multi-liga (dual key) para líneas; **Understat** para xG (Big 5 leagues — MLS null) vía `soccer-xg-fetcher.js`.
 - **Ya en código**:
@@ -202,7 +202,7 @@ Quinto deporte **activo**. Espeja **exactamente** el patrón NHL/NFL/NBA (import
   - `HexaBoard.jsx` + `HexaBoardLeague.jsx`: eliminado placeholder soccer; `fetchBoard` usa `/api/soccer/board` cuando `sport='soccer'`.
   - `routes/soccer.js`: `GET /api/soccer/board` → `buildHexaSoccerBoard`.
   - `index.js`: import `buildSoccerPickLiveProgressEntry`; SQL filter incluye 'soccer'; rama soccer en live-progress loop.
-- **Pendiente operacional**: flip `SOCCER_ANALYSIS_ENABLED=true` en Railway tras validación E2E; standings Soccer (ESPN slugs verificados); entrenamiento ML cuando haya picks resueltos; xG MLS (Understat no cubre).
+- **Pendiente operacional**: entrenamiento ML cuando haya picks resueltos (soccer_moneyline/total/btts, ≥25 filas); xG MLS (Understat no cubre).
 
 ### MLB Player Props (Sprint 5)
 - [server/routes/mlb-props.js](server/routes/mlb-props.js) — `GET /api/mlb/props/board` (auth). Odds API + Savant + ML batch; `oraclePropPicks` desde tabla `picks` por `game_date` / `game_pk`.
@@ -422,7 +422,7 @@ npm run preview      # preview del build
 - `X_AUTO_PUBLISH_INTERVAL_MINUTES` — intervalo (default `5`)
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
 - `NFL_ANALYSIS_ENABLED` — habilita endpoints Oracle NFL + resolver NFL (default `false`; activo en Railway con `=true`). Opcionales planificados: `NFL_LIVE_TRACKER_ENABLED`, `NFL_PROPS_ENABLED`, `IMPERDIBLE_NFL_ENABLED`. Ver [docs/nfl-roadmap.md](docs/nfl-roadmap.md).
-- `SOCCER_ANALYSIS_ENABLED` — habilita Oracle Soccer + resolver Soccer (default `false`). Flip a `true` en Railway tras validación E2E en prod. Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` (default todas).
+- `SOCCER_ANALYSIS_ENABLED` — habilita Oracle Soccer + resolver Soccer (`true` en Railway prod). Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` (default todas).
 - `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
 - `IMPERDIBLE_ENABLED` — habilita Pick Imperdible (admin-only, MLB; default `false`). Opcionales: `IMPERDIBLE_ARBITER_MODEL` (default Opus), `IMPERDIBLE_TOP_K` (default `5`)
@@ -625,7 +625,7 @@ Usar esta matriz antes de abrir/expandir un deporte. Escala sugerida: 0-10 por c
 - Completar Sprint 5 props: resolver lifecycle + validación Brier; `MLB_PROPS_ML_PUBLIC_ENABLED` cuando pase el gate.
 - NBA: validación E2E en prod con `NBA_ANALYSIS_ENABLED`; equity en bottom nav (menor).
 - ✅ **NFL Sprint 9 completo** (PRs #373–#378, 2026-05-30): Oracle, lifecycle, shadow/dataset, live tracker, UI selector activo, ML scaffolding. Sin pendientes de código — solo operacionales (temporada sept 2026).
-- ✅ **Soccer Sprint 11 completo** (2026-06-01, rama `claude/soccer-sprint-11c`): Oracle 3-vías, lifecycle multi-liga, shadow/dataset isolation, UI 5-sport, board service, live tracker, xG Understat, ML sidecar Python completo. Pendiente operacional: flip `SOCCER_ANALYSIS_ENABLED=true` en Railway tras validación E2E; entrenamiento ML cuando haya picks resueltos (soccer_moneyline/total/btts); xG MLS (Understat no cubre).
+- ✅ **Soccer Sprint 11 completo + en prod** (2026-06-02, `SOCCER_ANALYSIS_ENABLED=true` en Railway): Oracle 3-vías, lifecycle multi-liga, shadow/dataset isolation, UI 5-sport, board service, live tracker, xG Understat, ML sidecar Python completo, logos vía ESPN CDN directo. Pendiente: entrenamiento ML cuando haya picks resueltos (≥25); xG MLS (Understat no cubre).
 
 **Shadow dashboard — lectura de fechas**:
 - Columna **Hora Lima** = `pick_time_lima` / `created_at` (cuándo se corrió el análisis).

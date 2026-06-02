@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-06-01 — **Sprint 11 Soccer completo al 100%** (11a–11d + 11.1 + board + live tracker + xG + ML sidecar, rama `claude/soccer-sprint-11c`): scaffolding de datos (6 ligas, 88 clubes, ESPN API, The Odds API 3-vías), Oracle + output guard, lifecycle (routes, resolver, migraciones), UI (SportSwitcher grass-green, GameSelector multi-liga, AnalysisPanel, OracleChat, SoccerLiveTracker), shadow validator + pick_features isolation, hexaSoccerBoardService, pick-tracker-soccer, soccerMlClient (circuit breaker), soccer-xg-fetcher (Understat), ML sidecar Python completo (soccer_moneyline/total/btts), HexaBoard wired. Flag `SOCCER_ANALYSIS_ENABLED` (default `false`); selector Soccer activo en UI. Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
+**Última actualización**: 2026-06-02 — **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true` en Railway, logos vía ESPN CDN directo validados). Sprint 11 completo al 100%: scaffolding de datos (6 ligas, 88 clubes, ESPN API, The Odds API 3-vías), Oracle + output guard, lifecycle (routes, resolver, migraciones), UI (SportSwitcher grass-green, GameSelector multi-liga, AnalysisPanel, OracleChat, SoccerLiveTracker), shadow validator + pick_features isolation, hexaSoccerBoardService, pick-tracker-soccer, soccerMlClient (circuit breaker), soccer-xg-fetcher (Understat), ML sidecar Python completo (soccer_moneyline/total/btts), HexaBoard wired. Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
 
 ---
 
@@ -510,7 +510,7 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ### ✅ Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
 
-**Status**: ✅ **completo** (2026-06-01). Rama `claude/soccer-sprint-11c`. Flag `SOCCER_ANALYSIS_ENABLED` (default `false`); selector Soccer visible en UI. Board + live tracker + xG + ML sidecar completos. Pendiente operacional: flip flag en Railway + E2E.
+**Status**: ✅ **completo + en prod** (2026-06-02). Rama `claude/soccer-sprint-11c`. `SOCCER_ANALYSIS_ENABLED=true` en Railway; selector Soccer activo en UI con logos ESPN CDN. Board + live tracker + xG + ML sidecar completos. Pendiente: ML training cuando haya ≥25 picks resueltos; xG MLS (Understat no cubre).
 
 **Progreso completo — todos los sub-sprints cerrados**:
 
@@ -603,12 +603,9 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 - **Understat** (scraping alternativo, solo Big 5) — xG por partido histórico, más fácil de parsear que FBref.
 - **API-Football** (freemium, 100 calls/día gratis) — alineaciones confirmadas ~60 min pre-kick para las 6 ligas.
 
-**Pendiente operacional** (no código — solo flags + datos):
-- Flip `SOCCER_ANALYSIS_ENABLED=true` en Railway cuando se valide E2E en prod.
-- E2E validation: análisis de un partido EPL y Bundesliga; verificar que `picks`, `pick_features`, `shadow_model_runs` se insertan con `sport='soccer'` y `league` correctos.
-- Entrenamiento ML: soccer_moneyline/total/btts entrenan automáticamente vía `/retrain` cuando haya picks resueltos en prod (mismo pipeline que MLB/NFL). Usar `/admin/ml-control` cuando haya ≥25 picks resueltos por mercado.
+**Pendiente operacional** (no código — solo datos):
+- Entrenamiento ML: soccer_moneyline/total/btts entrenan automáticamente vía `/retrain` cuando haya picks resueltos en prod. Usar `/admin/ml-control` cuando haya ≥25 picks resueltos por mercado.
 - xG MLS: Understat no cubre la MLS — `getSoccerGameXg` devuelve null para `usa.1`. Considerar API-Football como fuente alternativa en una fase posterior.
-- `SOCCER_LEAGUES_ENABLED` — lista las ligas activas (default todas). Pendiente si se necesita rollout gradual.
 - Pick Imperdible Soccer — diferido; requiere `auto_resolvable` check + resolver integrado.
 
 **Feature flag**: `SOCCER_ANALYSIS_ENABLED` global. Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` — lista las ligas activas (default todas).
@@ -775,7 +772,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 ```
 
 2026 Q3-4 Sprint 10    — NHL Hockey                        ████████████████████████ ✅ (backend + UI; ML sidecar diferido)
-2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████████████████████████ ✅ (11a–11d+11.1+board+live+xG+ML completo; SOCCER_ANALYSIS_ENABLED=false; E2E pendiente)
+2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████████████████████████ ✅ (completo + en prod; SOCCER_ANALYSIS_ENABLED=true; logos ESPN CDN)
 2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (año redondo, tras Sprint 11)
 2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```

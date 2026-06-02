@@ -1,6 +1,6 @@
 # H.E.X.A. v4
 
-**H.E.X.A.** (Heuristic Evaluation & eXpert Analytics) es una plataforma de análisis predictivo de **MLB, NBA y NFL** que combina modelos de lenguaje (Claude y Grok/xAI), estadísticas avanzadas (Statcast/Savant para MLB; ratings avanzados + pace + rest para NBA; EPA, success rate, PROE para NFL), líneas en tiempo real y un pipeline ML propio (XGBoost + ensemble) para producir picks, parlays, análisis "safe", contenido editorial y el modo "Pick Imperdible".
+**H.E.X.A.** (Heuristic Evaluation & eXpert Analytics) es una plataforma de análisis predictivo de **MLB, NBA, NFL, NHL y Soccer** (5 deportes activos) que combina modelos de lenguaje (Claude y Grok/xAI), estadísticas avanzadas (Statcast/Savant para MLB; ratings avanzados + pace + rest para NBA; EPA, success rate, PROE para NFL; goal diff + special teams + goalie para NHL; xG + perfil de liga + mercado 3-vías para Soccer), líneas en tiempo real y un pipeline ML propio (XGBoost + ensemble) para producir picks, parlays, análisis "safe", contenido editorial y el modo "Pick Imperdible".
 
 Monorepo: API Node/Express + Postgres · cliente React/Vite · sidecar Python FastAPI+XGBoost.
 
@@ -12,8 +12,8 @@ Monorepo: API Node/Express + Postgres · cliente React/Vite · sidecar Python Fa
                                               │
         ┌──────────────┬──────────┬───────────┼────────────┬──────────────┬──────────┐
         ▼              ▼          ▼           ▼            ▼              ▼          ▼
-   PostgreSQL    Anthropic API  xAI (Grok)  MLB Stats    NBA/NFL       Odds API   Resend
-   (pg pool)     (Claude 4.x)  grok-4-fast  + Savant     ESPN API      dual-key   (email)
+   PostgreSQL    Anthropic API  xAI (Grok)  MLB Stats   NBA/NFL/NHL   Odds API   Resend
+   (pg pool)     (Claude 4.x)  grok-4-fast  + Savant   Soccer ESPN    dual-key   (email)
 ```
 
 ---
