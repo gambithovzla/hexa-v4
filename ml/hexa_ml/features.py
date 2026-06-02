@@ -80,6 +80,37 @@ NFL_DERIVED_FEATURES = [
     "injury_diff",
 ]
 
+# ── Tennis features (individual sport — player A = "home" slot) ────────────────
+
+TENNIS_BASE_NUMERIC = [
+    "home_elo_surface", "away_elo_surface",
+    "home_elo_overall", "away_elo_overall",
+    "home_rank", "away_rank",
+    "h2h_surface_wins_home", "h2h_surface_wins_away",
+    "h2h_total_wins_home", "h2h_total_wins_away",
+    "home_rest_days", "away_rest_days",
+    "home_sets_played_tourney", "away_sets_played_tourney",
+    "best_of",
+    "oracle_confidence",
+    "data_quality_score",
+    "signal_coherence_score",
+]
+
+# Surface is the tennis "park factor"; one-hot it so the model can learn
+# surface-conditional behaviour even within a single pooled model.
+TENNIS_SURFACE_ONEHOT = [
+    "surface_hard", "surface_clay", "surface_grass", "surface_carpet",
+]
+
+TENNIS_DERIVED_FEATURES = [
+    "elo_surface_diff",
+    "elo_overall_diff",
+    "rank_diff",
+    "h2h_surface_diff",
+    "h2h_total_diff",
+    "fatigue_diff",
+]
+
 # ── Player-prop snapshot features (Sprint 5 deferred resumed) ─────────────────
 
 PROP_NUMERIC_FEATURES = [
@@ -173,6 +204,14 @@ def feature_columns(market: str) -> list[str]:
             cols.append("total_close")
         return cols
 
+    if market.startswith("tennis_"):
+        cols = list(TENNIS_BASE_NUMERIC) + list(TENNIS_SURFACE_ONEHOT) + list(TENNIS_DERIVED_FEATURES)
+        if market == "tennis_set_handicap":
+            cols.append("set_handicap_close")
+        if market == "tennis_total_games":
+            cols.append("total_games_close")
+        return cols
+
     cols = list(BASE_NUMERIC_FEATURES) + list(BOOL_FEATURES) + list(DERIVED_FEATURES)
     if market == "overunder":
         cols.append("line")
@@ -211,6 +250,44 @@ def add_nfl_derived(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def add_tennis_derived(df: pd.DataFrame) -> pd.DataFrame:
+    """Append tennis-specific computed features (player A = "home" slot).
+
+    Diffs are A-minus-B (positive = player A favored), so the model predicts
+    P(player A wins). Surface is one-hot encoded.
+    """
+    out = df.copy()
+
+    h_elos = _col_or_nan(out, "home_elo_surface")
+    a_elos = _col_or_nan(out, "away_elo_surface")
+    out["elo_surface_diff"] = h_elos - a_elos
+
+    h_eloo = _col_or_nan(out, "home_elo_overall")
+    a_eloo = _col_or_nan(out, "away_elo_overall")
+    out["elo_overall_diff"] = h_eloo - a_eloo
+
+    # Lower rank number = better player; positive diff = player A higher-ranked.
+    h_rank = _col_or_nan(out, "home_rank")
+    a_rank = _col_or_nan(out, "away_rank")
+    out["rank_diff"] = a_rank - h_rank
+
+    out["h2h_surface_diff"] = _col_or_nan(out, "h2h_surface_wins_home") - _col_or_nan(out, "h2h_surface_wins_away")
+    out["h2h_total_diff"]   = _col_or_nan(out, "h2h_total_wins_home")   - _col_or_nan(out, "h2h_total_wins_away")
+
+    # Higher own fatigue (more sets played) is a disadvantage; positive diff =
+    # player B more fatigued = player A advantage.
+    h_sets = _col_or_nan(out, "home_sets_played_tourney")
+    a_sets = _col_or_nan(out, "away_sets_played_tourney")
+    out["fatigue_diff"] = a_sets - h_sets
+
+    # Surface one-hot
+    surf = out.get("surface", pd.Series([None] * len(out), index=out.index)).astype(str).str.lower()
+    for s in ("hard", "clay", "grass", "carpet"):
+        out[f"surface_{s}"] = (surf == s).astype(float)
+
+    return out
+
+
 def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
     """Build the feature matrix for the given market.
 
@@ -218,7 +295,12 @@ def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
     Columns missing from the input are filled with NaN so older snapshots
     still produce the right schema.
     """
-    enriched = add_nfl_derived(df) if market.startswith("nfl_") else add_derived(df)
+    if market.startswith("nfl_"):
+        enriched = add_nfl_derived(df)
+    elif market.startswith("tennis_"):
+        enriched = add_tennis_derived(df)
+    else:
+        enriched = add_derived(df)
     cols = feature_columns(market)
 
     for c in cols:

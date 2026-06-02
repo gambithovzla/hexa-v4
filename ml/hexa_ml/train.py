@@ -39,9 +39,11 @@ MARKETS = (
 )
 
 NFL_MARKETS = ("nfl_moneyline", "nfl_spread", "nfl_total")
+TENNIS_MARKETS = ("tennis_moneyline", "tennis_set_handicap", "tennis_total_games")
 
 # Market → sport (for dataset loading)
 MARKET_SPORT = {m: "nfl" for m in NFL_MARKETS}
+MARKET_SPORT.update({m: "tennis" for m in TENNIS_MARKETS})
 
 
 def _now_iso() -> str:
@@ -170,9 +172,11 @@ def train_all(
     out_path = Path(out_dir or settings.artifacts_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # Separate NFL and non-NFL markets
+    # Separate NFL, tennis and standard markets — each sport loads its own
+    # isolated dataset (sport='nfl' / 'tennis' / 'mlb').
     nfl_markets = [m for m in markets if m in NFL_MARKETS]
-    std_markets = [m for m in markets if m not in NFL_MARKETS]
+    tennis_markets = [m for m in markets if m in TENNIS_MARKETS]
+    std_markets = [m for m in markets if m not in NFL_MARKETS and m not in TENNIS_MARKETS]
 
     # Load standard dataset once for all non-NFL markets
     df = None
@@ -191,6 +195,16 @@ def train_all(
         except Exception as exc:
             logger.warning("NFL dataset load failed (%s) — skipping NFL markets", exc)
             nfl_markets = []
+
+    tennis_df = None
+    if tennis_markets and not csv_path:
+        logger.info("Loading Tennis dataset…")
+        try:
+            tennis_df = load_dataset(sport="tennis")
+            logger.info("Tennis: Loaded %d rows; %d resolved", len(tennis_df), int(tennis_df["result"].notna().sum()))
+        except Exception as exc:
+            logger.warning("Tennis dataset load failed (%s) — skipping tennis markets", exc)
+            tennis_markets = []
 
     summary: dict[str, dict | None] = {}
 
@@ -229,6 +243,10 @@ def train_all(
         for market in nfl_markets:
             _train_market(nfl_df, market)
 
+    if tennis_df is not None:
+        for market in tennis_markets:
+            _train_market(tennis_df, market)
+
     manifest_path = out_path / "manifest.json"
     # Merge with any existing manifest so partial retrains (e.g. only
     # "overunder") don't wipe metrics for markets that weren't retrained
@@ -259,7 +277,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train H.E.X.A. ML models")
     parser.add_argument(
         "--market",
-        choices=[*MARKETS, *NFL_MARKETS, "all"],
+        choices=[*MARKETS, *NFL_MARKETS, *TENNIS_MARKETS, "all"],
         default="all",
         help="Which market(s) to train",
     )
@@ -285,7 +303,7 @@ def main() -> None:
         level=args.log_level.upper(),
         format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
     )
-    markets = (*MARKETS, *NFL_MARKETS) if args.market == "all" else (args.market,)
+    markets = (*MARKETS, *NFL_MARKETS, *TENNIS_MARKETS) if args.market == "all" else (args.market,)
     train_all(
         csv_path=args.csv,
         out_dir=args.out_dir,

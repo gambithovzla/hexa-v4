@@ -70,6 +70,16 @@ OPTIONAL_FEATURE_COLUMNS = [
     "wind_mph",
     "spread_close", "total_close",
     "injuries_home_severe", "injuries_away_severe",
+    # Tennis-specific columns (Sprint 12 — tennis_* markets; player A = home slot)
+    "home_elo_surface", "away_elo_surface",
+    "home_elo_overall", "away_elo_overall",
+    "home_rank", "away_rank",
+    "h2h_surface_wins_home", "h2h_surface_wins_away",
+    "h2h_total_wins_home", "h2h_total_wins_away",
+    "home_sets_played_tourney", "away_sets_played_tourney",
+    "surface", "tournament_round", "best_of",
+    "set_handicap_close", "total_games_close",
+    "pick_side",
 ]
 
 SELECT_COLUMNS = REQUIRED_COLUMNS + OPTIONAL_FEATURE_COLUMNS
@@ -92,8 +102,8 @@ def load_from_postgres(database_url: str | None = None, sport: str = "mlb") -> p
         )
 
     sport_norm = (sport or "mlb").lower()
-    if sport_norm not in {"mlb", "nba", "nfl"}:
-        raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb', 'nba', or 'nfl'.")
+    if sport_norm not in {"mlb", "nba", "nfl", "tennis"}:
+        raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb', 'nba', 'nfl', or 'tennis'.")
 
     cols = ", ".join(f"pf.{c}" for c in SELECT_COLUMNS)
     sql = f"""
@@ -193,6 +203,12 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         out = df[df["market_type"].isin(["spread", "runline"])].copy()
     elif market == "nfl_total":
         out = df[df["market_type"].isin(["overunder", "totals"])].copy()
+    elif market == "tennis_moneyline":
+        out = df[df["market_type"] == "moneyline"].copy()
+    elif market == "tennis_set_handicap":
+        out = df[df["market_type"].isin(["set_handicap", "spread"])].copy()
+    elif market == "tennis_total_games":
+        out = df[df["market_type"].isin(["total_games", "overunder", "totals"])].copy()
     else:
         out = df[df["market_type"] == market].copy()
     out = out[out["result"].notna()]
@@ -212,6 +228,12 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         out = out[out["home_score"].notna() & out["away_score"].notna() & out["spread_close"].notna()]
     elif market == "nfl_total":
         out = out[out["total_runs"].notna() & out["total_close"].notna()]
+    elif market.startswith("tennis_"):
+        # Tennis has no box-score columns; the binary outcome lives in `result`
+        # (win/loss) plus `pick_side` to orient it to player A. Drop voids
+        # (retirements/walkovers) and unresolved rows.
+        out = out[out["result"].astype(str).str.lower().isin(["win", "won", "loss", "lost"])]
+        out = out[out["pick_side"].notna()]
 
     return out.reset_index(drop=True)
 
@@ -246,6 +268,13 @@ def make_target(df: pd.DataFrame, market: str) -> pd.Series:
     if market.startswith("prop_"):
         normalized = df["result"].astype(str).str.lower()
         return normalized.isin(["win", "won"]).astype(int)
+    if market.startswith("tennis_"):
+        # Features are A-minus-B (predict P(player A wins)). The stored result is
+        # "did the pick win"; pick_side says which player it was on. So
+        #   A_won = (pick on A) == (pick won).
+        pick_won = df["result"].astype(str).str.lower().isin(["win", "won"])
+        pick_on_a = df["pick_side"].astype(str).str.lower() == "player_a"
+        return (pick_on_a == pick_won).astype(int)
     raise ValueError(f"Unknown market: {market}")
 
 

@@ -2,7 +2,7 @@
 
 Plan de construcción del **sexto deporte** (Sprint 12) y el **primero individual**. Detalle técnico y de datos en [tennis-architecture.md](tennis-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md). Espeja la serie Soccer (Sprint 11) que a su vez espejó NFL/NBA, con las adaptaciones de "deporte individual" documentadas en la spec.
 
-**Estado**: 🔄 en build. **12a + 12b + 12c + 12.1 + 12d cerrados en código** (rama `claude/tennis-sprint-12`); solo 12e (ML sidecar) pendiente. `tennis` **activo en UI** (`SPORT_META.tennis.active=true`, `ACTIVE_SPORTS` incluye `tennis`); el Oracle/resolver siguen gated por `TENNIS_ANALYSIS_ENABLED` (default `false`).
+**Estado**: ✅ **Sprint 12 completo en código** (12a + 12b + 12c + 12.1 + 12d + 12e, rama `claude/tennis-sprint-12`). `tennis` **activo en UI** (`SPORT_META.tennis.active=true`, `ACTIVE_SPORTS` incluye `tennis`); el Oracle/resolver/ML siguen gated por `TENNIS_ANALYSIS_ENABLED` (default `false`). Pendiente operacional: flip de la flag en Railway + validación E2E en un Grand Slam; entrenamiento ML cuando acumulen picks resueltos (o pre-entrenamiento Sackmann).
 
 ---
 
@@ -97,16 +97,18 @@ Espeja Soccer 11d. **Cerrado en código (rama `claude/tennis-sprint-12`)** — s
 - [x] `App.jsx` — tabs standings/live/board caen en `SportComingSoon` para tennis vía capabilities (sin fall-through a componentes MLB).
 - **Salida**: Tennis seleccionable en el switcher (5º deporte activo), análisis y chat funcionales end-to-end con tour ATP/WTA; tabs no soportadas muestran "fase posterior".
 
-### Sprint 12e — ML sidecar 📋 (puede pre-entrenarse)
+### Sprint 12e — ML sidecar ✅ (cerrado en código)
 
-Espeja Soccer 11 ML + ventaja nflverse/Sackmann.
+Espeja NFL 9e (scaffolding completo; entrena cuando haya picks resueltos). **Cerrado en código (rama `claude/tennis-sprint-12`)** — sin Python en sandbox; validación de entrenamiento en Railway.
 
-- [ ] `ml/hexa_ml/models/tennis.py` — `TennisMoneylineModel` (XGBoost, L2 fuerte). Set handicap/total después.
-- [ ] `features.py` TENNIS_BASE_NUMERIC (elo-surface diff, elo-overall diff, rank diff, h2h diff, form diff, fatiga diff, best_of, surface one-hot) + `add_tennis_derived()` (de-vig 2-way).
-- [ ] `data.py` columnas tennis + `filter_for_market` + `make_target`; `train.py` TENNIS_MARKETS + `load_dataset(sport="tennis")`; `serve.py` predict routes.
-- [ ] `server/services/tennisMlClient.js` — circuit breaker propio (patrón `soccerMlClient.js`).
-- [ ] **Pre-entrenamiento con histórico Sackmann** (ELO-surface → resultados) en vez de esperar picks resueltos.
-- **Salida**: modelo `tennis_moneyline` útil desde el día 1; ensemble cuando haya picks reales.
+- [x] `ml/hexa_ml/models/tennis.py` — `TennisMoneylineModel` + `TennisSetHandicapModel` + `TennisTotalGamesModel` (XGBoost, L2 fuerte como NFL). Registrados en `models/__init__.py` `MARKET_MODELS`.
+- [x] `features.py` — `TENNIS_BASE_NUMERIC` (ELO surface/overall, rank, H2H surface/total, rest, sets played, best_of) + `TENNIS_SURFACE_ONEHOT` + `TENNIS_DERIVED_FEATURES` (elo_surface_diff, elo_overall_diff, rank_diff, h2h_surface/total_diff, fatigue_diff — todos A−B); `feature_columns` y `build_X` con rama `tennis_*`; `add_tennis_derived()` (diffs + surface one-hot).
+- [x] `data.py` — sport `'tennis'` permitido; columnas tennis en `OPTIONAL_FEATURE_COLUMNS` (+ `pick_side`); `filter_for_market` (tennis_moneyline/set_handicap/total_games) + `make_target` — **frame "¿ganó el jugador A?"** derivado de `result` + `pick_side` (`A_won = (pick on A) == (pick won)`), sin columnas de box-score.
+- [x] `train.py` — `TENNIS_MARKETS` + `MARKET_SPORT` tennis + carga `load_dataset(sport="tennis")` aislada; parser y tupla `all` incluyen tennis.
+- [x] `serve.py` — rutas `/predict/tennis_moneyline|set_handicap|total_games`; patrón de `/retrain` y `RetrainRequest` incluyen los mercados tennis.
+- [x] `server/services/tennisMlClient.js` — circuit breaker propio (patrón `nflMlClient.js`) + `buildTennisFeaturePayload` (A→home).
+- [x] Migración: `pick_side VARCHAR(10)` en `pick_features` (necesaria para el target sin box-score); `saveTennisPickFeatures` la persiste.
+- **Salida**: scaffolding completo del sidecar; `tennis_moneyline` entrena cuando `pick_features sport='tennis'` acumule resueltos. **Pre-entrenamiento Sackmann** (ELO-surface → resultado histórico) queda como paso operacional documentado — el `tennis-elo-fetcher.js` ya produce el ELO; un script de export histórico lo alimentaría.
 
 ### Fase posterior (no MVP Sprint 12)
 

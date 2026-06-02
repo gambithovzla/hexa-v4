@@ -56,6 +56,7 @@ export async function saveTennisPickFeatures({
   context,
   marketOdds,
   pickText,
+  pickSide,
   oracleConfidence,
   userEmail,
 }) {
@@ -87,7 +88,7 @@ export async function saveTennisPickFeatures({
          set_handicap_close, total_games_close,
          context_completeness,
          oracle_confidence, market_type,
-         pick, source, sport, league, user_email
+         pick, pick_side, source, sport, league, user_email
        )
        VALUES (
          $1,$2,$3,
@@ -103,7 +104,7 @@ export async function saveTennisPickFeatures({
          $23,$24,
          $25,
          $26,$27,
-         $28,'live','tennis',$29,$30
+         $28,$29,'live','tennis',$30,$31
        )
        RETURNING id`,
       [
@@ -124,6 +125,7 @@ export async function saveTennisPickFeatures({
         toNumber(oracleConfidence),
         marketType,
         pickText ?? null,
+        pickSide ?? null,
         tour ?? null,
         userEmail ?? null,
       ]

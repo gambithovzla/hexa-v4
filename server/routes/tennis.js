@@ -219,6 +219,7 @@ router.post('/analyze/match', tennisEnabled, verifyToken, requireAdmin, async (r
         context,
         marketOdds: resolvedOdds,
         pickText:  analysisData?.master_prediction?.pick ?? analysisData?.best_pick?.detail ?? null,
+        pickSide:  analysisData?.master_prediction?.pick_side ?? null,
         oracleConfidence: analysisData?.master_prediction?.oracle_confidence ?? null,
         userEmail: req.user.email ?? null,
       }).catch(err => console.warn(`[tennis-route] pick_features persist swallowed: ${err.message}`));

@@ -1651,6 +1651,10 @@ export async function runTennisDatasetMigrations() {
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS set_handicap_close DECIMAL(4,1)`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS total_games_close  DECIMAL(4,1)`);
 
+    // ── pick orientation — needed to derive "player A won" from result for ML ──
+    // (tennis has no box-score columns; pick_side + result give the binary target)
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS pick_side VARCHAR(10)`);
+
     await client.query('COMMIT');
     console.log('[migrate] tennis-dataset ready (pick_features tennis columns)');
   } catch (err) {
