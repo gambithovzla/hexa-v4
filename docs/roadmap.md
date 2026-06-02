@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-06-02 — **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true` en Railway, logos vía ESPN CDN directo validados). Sprint 11 completo al 100%: scaffolding de datos (6 ligas, 88 clubes, ESPN API, The Odds API 3-vías), Oracle + output guard, lifecycle (routes, resolver, migraciones), UI (SportSwitcher grass-green, GameSelector multi-liga, AnalysisPanel, OracleChat, SoccerLiveTracker), shadow validator + pick_features isolation, hexaSoccerBoardService, pick-tracker-soccer, soccerMlClient (circuit breaker), soccer-xg-fetcher (Understat), ML sidecar Python completo (soccer_moneyline/total/btts), HexaBoard wired. Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
+**Última actualización**: 2026-06-02 — **Sprint 12 (Tennis) completo en código** (rama `claude/tennis-sprint-12`): primer deporte individual (jugador A vs B → slots home/away; tours atp/wta reusan `league`); resolver de retiros/walkovers (void) como componente nuevo crítico; Oracle + shadow + UI (5º deporte activo) + ML sidecar pre-entrenable Sackmann. Specs: [tennis-architecture.md](tennis-architecture.md) + [tennis-roadmap.md](tennis-roadmap.md). **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true` en Railway): Sprint 11 completo al 100% (datos, Oracle, lifecycle, UI, shadow, board, live tracker, xG Understat, ML sidecar). Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
 
 ---
 
@@ -620,9 +620,11 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ---
 
-### ⏳ Sprint 12 — Tennis
+### 📋 Sprint 12 — Tennis
 
-**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 11; torneos Grand Slam como hito de validación.
+**Spec maestra**: [tennis-architecture.md](tennis-architecture.md) · **Roadmap por sub-sprints (12a–12e)**: [tennis-roadmap.md](tennis-roadmap.md). El resumen de abajo se conserva; el detalle vive en esos dos documentos.
+
+**Status**: 📋 planning (docs completas, sin código). Inicio recomendado: tras Sprint 11; torneos Grand Slam como hito de validación. `tennis` ya está en el registry como deporte conocido (`SPORT_META.tennis.active=false`). **Primer deporte individual**: jugador A vs B mapeado a slots home/away; tours `atp`/`wta` reusan la dimensión `league` de Soccer. El componente genuinamente nuevo es el **resolver de retiros/walkovers** (void + refund).
 
 **Por qué Tennis**: único deporte **año redondo** (Australian Open ene, Roland Garros may, Wimbledon jun, US Open ago + ATP/WTA tours continuos). Llena todos los huecos de calendario que los otros deportes no cubren.
 
@@ -773,7 +775,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 
 2026 Q3-4 Sprint 10    — NHL Hockey                        ████████████████████████ ✅ (backend + UI; ML sidecar diferido)
 2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████████████████████████ ✅ (completo + en prod; SOCCER_ANALYSIS_ENABLED=true; logos ESPN CDN)
-2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (año redondo, tras Sprint 11)
+2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ████████████████████████ ✅ (completo en código; rama claude/tennis-sprint-12; gated TENNIS_ANALYSIS_ENABLED)
 2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```
 

@@ -243,7 +243,7 @@ class HealthResponse(BaseModel):
 class RetrainRequest(BaseModel):
     market: str = Field(
         default="all",
-        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|nfl_moneyline|nfl_spread|nfl_total|soccer_moneyline|soccer_total|soccer_btts|all)$",
+        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|nfl_moneyline|nfl_spread|nfl_total|soccer_moneyline|soccer_total|soccer_btts|tennis_moneyline|tennis_set_handicap|tennis_total_games|all)$",
     )
     csv: str | None = None
     # Optional admin override — bypasses the per-market `min_train_size` floor.
@@ -420,6 +420,33 @@ def predict_soccer_btts(payload: FeaturePayload) -> PredictionOut:
 
 
 @app.post(
+    "/predict/tennis_moneyline",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_tennis_moneyline(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("tennis_moneyline", payload)
+
+
+@app.post(
+    "/predict/tennis_set_handicap",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_tennis_set_handicap(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("tennis_set_handicap", payload)
+
+
+@app.post(
+    "/predict/tennis_total_games",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_tennis_total_games(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("tennis_total_games", payload)
+
+
+@app.post(
     "/predict/prop/{prop_kind}",
     response_model=PredictionOut,
     dependencies=[Depends(require_internal_token)],
@@ -544,9 +571,9 @@ async def retrain(payload: RetrainRequest) -> RetrainResponse:
 
     Wrapped in a thread because XGBoost holds the GIL during fit().
     """
-    from .train import MARKETS, NFL_MARKETS, SOCCER_MARKETS, train_all
+    from .train import MARKETS, NFL_MARKETS, SOCCER_MARKETS, TENNIS_MARKETS, train_all
 
-    markets = (*MARKETS, *NFL_MARKETS, *SOCCER_MARKETS) if payload.market == "all" else (payload.market,)
+    markets = (*MARKETS, *NFL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS) if payload.market == "all" else (payload.market,)
 
     def _run() -> dict:
         return train_all(

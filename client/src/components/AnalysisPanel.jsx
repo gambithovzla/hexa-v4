@@ -1124,7 +1124,7 @@ export default function AnalysisPanel({
   }, [isAdmin, modelMode]);
 
   useEffect(() => {
-    if ((sport === 'nba' || sport === 'nfl' || sport === 'nhl' || sport === 'soccer') && modelMode === 'safe') {
+    if ((sport === 'nba' || sport === 'nfl' || sport === 'nhl' || sport === 'soccer' || sport === 'tennis') && modelMode === 'safe') {
       setModelMode('deep');
     }
   }, [sport, modelMode]);
@@ -1190,7 +1190,7 @@ export default function AnalysisPanel({
       let endpoint, body;
 
       if (modelMode === 'safe') {
-        if (sport === 'nba' || sport === 'nfl' || sport === 'nhl' || sport === 'soccer') {
+        if (sport === 'nba' || sport === 'nfl' || sport === 'nhl' || sport === 'soccer' || sport === 'tennis') {
           throw new Error(lang === 'es'
             ? 'SAFE PICK no está disponible para este deporte.'
             : 'SAFE PICK is not available for this sport.');
@@ -1251,6 +1251,17 @@ export default function AnalysisPanel({
         body = {
           gameId:      g.gamePk,
           leagueSlug:  g._leagueSlug ?? 'eng.1',
+          date:        selectedDate,
+          lang,
+          riskProfile: 'balanced',
+          engine:      modelMode === 'premium' ? 'premium' : 'deep',
+        };
+      } else if (mode === 'single' && sport === 'tennis') {
+        const g = selectedGames[0];
+        endpoint = `${API_URL}/api/tennis/analyze/match`;
+        body = {
+          matchId:     g.gamePk,
+          tour:        g._tour ?? 'atp',
           date:        selectedDate,
           lang,
           riskProfile: 'balanced',

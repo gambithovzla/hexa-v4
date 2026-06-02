@@ -40,11 +40,13 @@ MARKETS = (
 
 NFL_MARKETS    = ("nfl_moneyline", "nfl_spread", "nfl_total")
 SOCCER_MARKETS = ("soccer_moneyline", "soccer_total", "soccer_btts")
+TENNIS_MARKETS = ("tennis_moneyline", "tennis_set_handicap", "tennis_total_games")
 
 # Market → sport (for dataset loading)
 MARKET_SPORT = {
     **{m: "nfl"    for m in NFL_MARKETS},
     **{m: "soccer" for m in SOCCER_MARKETS},
+    **{m: "tennis" for m in TENNIS_MARKETS},
 }
 
 
@@ -174,10 +176,11 @@ def train_all(
     out_path = Path(out_dir or settings.artifacts_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # Separate markets by sport
+    # Separate markets by sport — each loads its own isolated dataset.
     nfl_markets    = [m for m in markets if m in NFL_MARKETS]
     soccer_markets = [m for m in markets if m in SOCCER_MARKETS]
-    std_markets    = [m for m in markets if m not in NFL_MARKETS and m not in SOCCER_MARKETS]
+    tennis_markets = [m for m in markets if m in TENNIS_MARKETS]
+    std_markets    = [m for m in markets if m not in NFL_MARKETS and m not in SOCCER_MARKETS and m not in TENNIS_MARKETS]
 
     # Load standard dataset once for all non-NFL/soccer markets
     df = None
@@ -207,6 +210,17 @@ def train_all(
         except Exception as exc:
             logger.warning("Soccer dataset load failed (%s) — skipping soccer markets", exc)
             soccer_markets = []
+
+    # Load Tennis dataset separately
+    tennis_df = None
+    if tennis_markets and not csv_path:
+        logger.info("Loading Tennis dataset…")
+        try:
+            tennis_df = load_dataset(sport="tennis")
+            logger.info("Tennis: Loaded %d rows; %d resolved", len(tennis_df), int(tennis_df["result"].notna().sum()))
+        except Exception as exc:
+            logger.warning("Tennis dataset load failed (%s) — skipping tennis markets", exc)
+            tennis_markets = []
 
     summary: dict[str, dict | None] = {}
 
@@ -249,6 +263,10 @@ def train_all(
         for market in soccer_markets:
             _train_market(soccer_df, market)
 
+    if tennis_df is not None:
+        for market in tennis_markets:
+            _train_market(tennis_df, market)
+
     manifest_path = out_path / "manifest.json"
     # Merge with any existing manifest so partial retrains (e.g. only
     # "overunder") don't wipe metrics for markets that weren't retrained
@@ -279,7 +297,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train H.E.X.A. ML models")
     parser.add_argument(
         "--market",
-        choices=[*MARKETS, *NFL_MARKETS, "all"],
+        choices=[*MARKETS, *NFL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS, "all"],
         default="all",
         help="Which market(s) to train",
     )
@@ -305,7 +323,7 @@ def main() -> None:
         level=args.log_level.upper(),
         format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
     )
-    markets = (*MARKETS, *NFL_MARKETS) if args.market == "all" else (args.market,)
+    markets = (*MARKETS, *NFL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS) if args.market == "all" else (args.market,)
     train_all(
         csv_path=args.csv,
         out_dir=args.out_dir,

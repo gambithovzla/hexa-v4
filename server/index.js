@@ -29,11 +29,13 @@ import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
 import nhlRouter from './routes/nhl.js';
 import soccerRouter from './routes/soccer.js';
+import tennisRouter from './routes/tennis.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
 import { resolveNhlPendingPicks } from './pick-resolver-nhl.js';
 import { resolveSoccerPendingPicks } from './pick-resolver-soccer.js';
+import { resolveTennisPendingPicks } from './pick-resolver-tennis.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
@@ -84,7 +86,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations, runTennisScaffoldingMigrations, runTennisDatasetMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -116,6 +118,11 @@ import {
   getSoccerTeams,
 } from './soccer-api.js';
 import { SOCCER_LEAGUE_SLUGS } from './soccer-league-map.js';
+import {
+  getTennisMatchesForDate,
+  getTennisRankings,
+} from './tennis-api.js';
+import { TENNIS_TOURS_LIST } from './tennis-tour-map.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -665,6 +672,7 @@ app.use('/api/nba',          nbaRouter);
 app.use('/api/nfl',          nflRouter);
 app.use('/api/nhl',          nhlRouter);
 app.use('/api/soccer',       soccerRouter);
+app.use('/api/tennis',       tennisRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -1183,6 +1191,45 @@ app.get('/api/soccer/standings', async (req, res) => {
     }
     const data = await getSoccerStandings(league);
     res.json({ success: true, league, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Tennis endpoints ──────────────────────────────────────────────────────────
+// GET /api/tennis/matches?tour=atp&date=YYYY-MM-DD
+app.get('/api/tennis/matches', async (req, res) => {
+  try {
+    const { tour, date } = req.query;
+    if (!tour || !TENNIS_TOURS_LIST.includes(tour)) {
+      return res.status(400).json({
+        success: false,
+        error: `tour required; supported: ${TENNIS_TOURS_LIST.join(', ')}`,
+      });
+    }
+    const dateStr = date || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ success: false, error: 'date must be YYYY-MM-DD' });
+    }
+    const matches = await getTennisMatchesForDate(tour, dateStr);
+    res.json({ success: true, tour, date: dateStr, count: matches.length, data: matches });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/tennis/rankings?tour=atp
+app.get('/api/tennis/rankings', async (req, res) => {
+  try {
+    const { tour } = req.query;
+    if (!tour || !TENNIS_TOURS_LIST.includes(tour)) {
+      return res.status(400).json({
+        success: false,
+        error: `tour required; supported: ${TENNIS_TOURS_LIST.join(', ')}`,
+      });
+    }
+    const data = await getTennisRankings(tour);
+    res.json({ success: true, tour, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -5035,6 +5082,8 @@ runMigrations()
   .then(() => runJobQueueMigrations())
   .then(() => runSoccerScaffoldingMigrations())
   .then(() => runSoccerDatasetMigrations())
+  .then(() => runTennisScaffoldingMigrations())
+  .then(() => runTennisDatasetMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -5129,6 +5178,15 @@ runMigrations()
           if (process.env.SOCCER_ANALYSIS_ENABLED === 'true') {
             resolveSoccerPendingPicks().catch(err => {
               console.error('[pick-resolver-soccer] Scheduled run failed:', err.message);
+            });
+          }
+
+          // Tennis is year-round; tournaments run across many timezones, so the
+          // same broad evening/overnight ET window covers most finals. Gated by
+          // its own flag; the resolver itself skips dates with no pending picks.
+          if (process.env.TENNIS_ANALYSIS_ENABLED === 'true') {
+            resolveTennisPendingPicks().catch(err => {
+              console.error('[pick-resolver-tennis] Scheduled run failed:', err.message);
             });
           }
         }

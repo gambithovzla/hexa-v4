@@ -1,5 +1,5 @@
 export const KNOWN_SPORTS = ['mlb', 'nba', 'nfl', 'soccer', 'nhl', 'tennis'];
-export const ACTIVE_SPORTS = ['mlb', 'nba'];
+export const ACTIVE_SPORTS = ['mlb', 'nba', 'nfl', 'nhl', 'tennis'];
 
 export function isKnownSport(value) {
   return KNOWN_SPORTS.includes(String(value ?? '').toLowerCase());

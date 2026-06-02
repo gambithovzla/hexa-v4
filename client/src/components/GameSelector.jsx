@@ -6,6 +6,7 @@ import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 import { getNflLogoUrl } from '../utils/nflLogoUrl';
 import { getNhlLogoUrl } from '../utils/nhlLogoUrl';
 import { getSoccerLogoUrl } from '../utils/soccerLogoUrl';
+import { getTennisLogoUrl } from '../utils/tennisLogoUrl';
 import { useHexaTheme } from '../themeProvider';
 import { formatGameTimeLima } from '../utils/dateKeys.js';
 import { useAuth } from '../store/authStore';
@@ -171,6 +172,8 @@ function TeamLogo({ teamId, abbr, logo, color, sport = 'mlb' }) {
     ? getNhlLogoUrl(teamId, abbr)
     : sport === 'soccer'
     ? (logo ?? getSoccerLogoUrl(teamId, abbr))
+    : sport === 'tennis'
+    ? getTennisLogoUrl(teamId)
     : teamId
       ? `https://www.mlb.com/team-logos/${teamId}.svg`
       : null;
@@ -261,7 +264,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
 
   const awayColor = MLB_COLORS[away] ?? '#666';
   const homeColor = MLB_COLORS[home] ?? '#666';
-  const sportKey  = game._sport === 'nba' ? 'nba' : game._sport === 'nfl' ? 'nfl' : game._sport === 'nhl' ? 'nhl' : game._sport === 'soccer' ? 'soccer' : 'mlb';
+  const sportKey  = game._sport === 'nba' ? 'nba' : game._sport === 'nfl' ? 'nfl' : game._sport === 'nhl' ? 'nhl' : game._sport === 'soccer' ? 'soccer' : game._sport === 'tennis' ? 'tennis' : 'mlb';
 
   const leftBorderColor = isSelected ? C.accent : status === 'live' ? C.amber : 'transparent';
 
@@ -446,7 +449,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
       </Box>
 
       {/* Pitchers — MLB only */}
-      {game._sport !== 'nba' && game._sport !== 'nfl' && game._sport !== 'nhl' && game._sport !== 'soccer' && (
+      {game._sport !== 'nba' && game._sport !== 'nfl' && game._sport !== 'nhl' && game._sport !== 'soccer' && game._sport !== 'tennis' && (
         <Box
           sx={{
             display: 'flex',
@@ -794,6 +797,56 @@ function normalizeSoccerGame(g, leagueSlug) {
   };
 }
 
+/**
+ * Converts a tennis match row from /api/tennis/matches into the MLB-compatible
+ * shape the card renders. Individual sport: player A → "away" (left) slot,
+ * player B → "home" (right) slot. Abbreviation shows the surname; name shows
+ * the full name; id carries the ESPN athlete id for the headshot.
+ */
+function normalizeTennisMatch(g, tour) {
+  let simplified = 'scheduled';
+  const s = String(g.status ?? '').toLowerCase();
+  if (s === 'final') simplified = 'final';
+  else if (s === 'live') simplified = 'live';
+
+  const aScore = g.players?.a?.setsWon ?? null;
+  const bScore = g.players?.b?.setsWon ?? null;
+
+  let displayTime = g.statusDetail ?? g.round ?? '';
+  if (simplified === 'scheduled' && g.matchDate) {
+    try {
+      displayTime = new Date(g.matchDate).toLocaleTimeString('es-PE', {
+        timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+    } catch { /* keep status text */ }
+  }
+
+  const surname = (name) => {
+    const parts = String(name ?? '').trim().split(/\s+/);
+    return parts.length ? parts[parts.length - 1] : (name ?? '');
+  };
+  const aName = g.players?.a?.name ?? 'Player A';
+  const bName = g.players?.b?.name ?? 'Player B';
+
+  return {
+    gamePk:   String(g.matchId ?? ''),
+    gameDate: g.matchDate ?? null,
+    _displayTime: displayTime,
+    _sport:   'tennis',
+    _tour:    tour,
+    _surface: g.surface ?? null,
+    _round:   g.round ?? null,
+    status:   { simplified },
+    teams: {
+      away: { abbreviation: surname(aName), name: aName, id: g.players?.a?.id ?? null },
+      home: { abbreviation: surname(bName), name: bName, id: g.players?.b?.id ?? null },
+    },
+    linescore: (aScore != null && bScore != null) ? {
+      teams: { away: { runs: aScore }, home: { runs: bScore } },
+    } : null,
+  };
+}
+
 export default function GameSelector({
   // New props
   mode = 'single',
@@ -813,6 +866,7 @@ export default function GameSelector({
   const { token } = useAuth();
 
   const [date, setDate]               = useState(todayStr);
+  const [tour, setTour]               = useState('atp'); // tennis only (atp|wta)
   const [games, setGames]             = useState([]);
   const [loading, setLoading]         = useState(false);
   const [fetchErr, setFetchErr]       = useState(null);
@@ -864,6 +918,8 @@ export default function GameSelector({
       ? `${API_URL}/api/nhl/games?date=${date}`
       : sport === 'soccer'
       ? `${API_URL}/api/soccer/games?league=${selectedLeague}&date=${date}`
+      : sport === 'tennis'
+      ? `${API_URL}/api/tennis/matches?tour=${tour}&date=${date}`
       : `${API_URL}/api/games?date=${date}`;
 
     fetch(url)
@@ -875,6 +931,7 @@ export default function GameSelector({
           : sport === 'nba' ? raw.map(normalizeNbaGame)
           : sport === 'nhl' ? raw.map(normalizeNhlGame)
           : sport === 'soccer' ? raw.map(g => normalizeSoccerGame(g, selectedLeague))
+          : sport === 'tennis' ? raw.map(g => normalizeTennisMatch(g, tour))
           : raw;
         setGames(list);
         // fullDay: auto-select only schedulable games on load
@@ -888,7 +945,7 @@ export default function GameSelector({
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [date, sport, selectedLeague]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [date, sport, tour, selectedLeague]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleSingleClick(game) {
@@ -1048,6 +1105,33 @@ export default function GameSelector({
               <option key={l.slug} value={l.slug}>{l.label}</option>
             ))}
           </select>
+        </Box>
+      )}
+
+      {/* ── Tennis tour selector (ATP / WTA) ── */}
+      {sport === 'tennis' && (
+        <Box sx={{ display: 'inline-flex', gap: '6px', mb: '14px' }}>
+          {['atp', 'wta'].map((tt) => {
+            const active = tour === tt;
+            return (
+              <Box
+                key={tt}
+                component="button"
+                onClick={() => setTour(tt)}
+                sx={{
+                  px: '14px', py: '5px',
+                  border: `1px solid ${active ? C.accent : C.border}`,
+                  background: active ? C.accent : 'transparent',
+                  color: active ? '#0a0d14' : C.ink2,
+                  fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700,
+                  letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
+                  borderRadius: '3px', transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                {tt.toUpperCase()}
+              </Box>
+            );
+          })}
         </Box>
       )}
 

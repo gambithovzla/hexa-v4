@@ -31,6 +31,8 @@ Monorepo: API Node/Express + Postgres · cliente React/Vite · sidecar Python Fa
 | [docs/roadmap.md](docs/roadmap.md) | Estado de sprints y backlog priorizado |
 | [docs/nfl-architecture.md](docs/nfl-architecture.md) | Spec técnica NFL — data sources, Oracle, ML sidecar, live mapping |
 | [docs/nfl-roadmap.md](docs/nfl-roadmap.md) | Roadmap Sprint 9 por sub-sprint (9a–9e completados) |
+| [docs/tennis-architecture.md](docs/tennis-architecture.md) | Spec técnica Tennis (Sprint 12) — deporte individual, ELO-surface, resolver de retiros |
+| [docs/tennis-roadmap.md](docs/tennis-roadmap.md) | Roadmap Sprint 12 por sub-sprint (12a–12e, 📋 planning) |
 | [docs/sport-registry.md](docs/sport-registry.md) | Sport shell, capability matrix y checklist para escalar a nuevos deportes |
 
 Para Claude Code (convenciones, frozen files, patrones): ver [CLAUDE.md](CLAUDE.md).  

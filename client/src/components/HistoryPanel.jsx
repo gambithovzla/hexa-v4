@@ -89,6 +89,17 @@ function MatchupWithLogos({ matchup, sport = 'mlb' }) {
   const away = parts[0].trim();
   const home = parts[1].trim();
 
+  // Tennis is individual — no team logos; render "Player A vs Player B" plainly.
+  if (sport === 'tennis') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        <span>{away}</span>
+        <span style={{ opacity: 0.4, fontSize: '0.7em' }}>vs</span>
+        <span>{home}</span>
+      </span>
+    );
+  }
+
   if (sport === 'nba' || sport === 'nfl' || sport === 'nhl') {
     const logoFor = sport === 'nfl' ? getNflLogoUrl : sport === 'nhl' ? getNhlLogoUrl : getNbaLogoUrl;
     const awaySrc = logoFor(null, away);

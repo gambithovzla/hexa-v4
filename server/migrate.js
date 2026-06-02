@@ -1551,3 +1551,117 @@ export async function runSoccerDatasetMigrations() {
     client.release();
   }
 }
+
+/**
+ * Sprint 12a — Tennis scaffolding.
+ *
+ * Tennis is the first individual sport. It reuses the `league` column Soccer
+ * added (here `league` holds the tour: 'atp' | 'wta') and the home/away slots
+ * of pick_features (player A → home slot, player B → away slot). This migration
+ * adds only the `tennis_matches` cache table; the `league` column already exists.
+ */
+export async function runTennisScaffoldingMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // `league` column on picks/pick_features already added by Soccer (11a);
+    // tennis reuses it for the tour. Re-assert idempotently in case tennis
+    // ships before soccer in some environment.
+    await client.query(`ALTER TABLE picks         ADD COLUMN IF NOT EXISTS league VARCHAR(32)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS league VARCHAR(32)`);
+
+    // ── tennis_matches cache (tour-aware, keyed by tour+match_id) ─────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tennis_matches (
+        id                BIGSERIAL    PRIMARY KEY,
+        match_id          VARCHAR(20)  NOT NULL,
+        tour              VARCHAR(8)   NOT NULL,
+        tournament_id     VARCHAR(20),
+        tournament_name   VARCHAR(160),
+        surface           VARCHAR(10),
+        round             VARCHAR(80),
+        round_depth       INTEGER,
+        best_of           INTEGER,
+        match_date        DATE,
+        player_a_id       VARCHAR(20),
+        player_b_id       VARCHAR(20),
+        player_a_name     VARCHAR(120),
+        player_b_name     VARCHAR(120),
+        status            VARCHAR(40),
+        status_name       VARCHAR(40),
+        score_json        JSONB,
+        winner            VARCHAR(8),
+        created_at        TIMESTAMPTZ  DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ  DEFAULT NOW(),
+        UNIQUE (match_id, tour)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tennis_matches_date_tour ON tennis_matches(match_date DESC, tour)`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] tennis-scaffolding ready (tennis_matches, league reused as tour)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] tennis-scaffolding migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Sprint 12a — Tennis dataset isolation.
+ *
+ * Adds tennis-specific feature columns to `pick_features`, reusing the home/away
+ * slots (player A → home, player B → away). Other sports keep NULL.
+ * Mirrors runSoccerDatasetMigrations.
+ */
+export async function runTennisDatasetMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // ── ELO (surface + overall) — null until Sackmann fetcher (12b) ───────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_elo_surface DECIMAL(7,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_elo_surface DECIMAL(7,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_elo_overall DECIMAL(7,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_elo_overall DECIMAL(7,2)`);
+
+    // ── rankings ──────────────────────────────────────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_rank INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_rank INTEGER`);
+
+    // ── head-to-head (total + by surface) ─────────────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS h2h_total_wins_home   INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS h2h_total_wins_away   INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS h2h_surface_wins_home INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS h2h_surface_wins_away INTEGER`);
+
+    // ── match context + fatigue ───────────────────────────────────────────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS surface VARCHAR(10)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS tournament_round INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS best_of INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_rest_days INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_rest_days INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_sets_played_tourney INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_sets_played_tourney INTEGER`);
+
+    // ── odds market (set handicap / total games — irregular coverage) ─────────
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS set_handicap_close DECIMAL(4,1)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS total_games_close  DECIMAL(4,1)`);
+
+    // ── pick orientation — needed to derive "player A won" from result for ML ──
+    // (tennis has no box-score columns; pick_side + result give the binary target)
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS pick_side VARCHAR(10)`);
+
+    await client.query('COMMIT');
+    console.log('[migrate] tennis-dataset ready (pick_features tennis columns)');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[migrate] tennis-dataset migration failed:', err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

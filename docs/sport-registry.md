@@ -81,3 +81,4 @@ Ejemplos actuales:
 - Módulos no soportados usan bloqueo consistente (`Coming Soon`).
 - MLB y NBA aislados en dataset/shadow/training default MLB-first.
 - **NFL** registrado como deporte conocido (`SPORT_META.nfl.active=false`), 📋 en planning. Spec en [nfl-architecture.md](nfl-architecture.md), roadmap en [nfl-roadmap.md](nfl-roadmap.md).
+- **Tennis** registrado como deporte conocido (`SPORT_META.tennis.active=false`), 📋 en planning (Sprint 12). Primer deporte **individual**: jugador A vs B mapeado a slots home/away; tours `atp`/`wta` reusan la dimensión `league`. Spec en [tennis-architecture.md](tennis-architecture.md), roadmap en [tennis-roadmap.md](tennis-roadmap.md).
