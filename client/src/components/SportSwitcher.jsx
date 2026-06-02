@@ -18,6 +18,7 @@ export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
       ? (s === 'nba' ? 'var(--brand-volt)'
         : s === 'nfl' ? 'var(--brand-field, #2e7d32)'
         : s === 'nhl' ? 'var(--brand-ice, #29b6f6)'
+        : s === 'tennis' ? 'var(--brand-clay, #d2691e)'
         : 'var(--brand-lava)')
       : C.cyan;
   const liveryText = (s) =>

@@ -2,7 +2,7 @@
 
 Plan de construcción del **sexto deporte** (Sprint 12) y el **primero individual**. Detalle técnico y de datos en [tennis-architecture.md](tennis-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md). Espeja la serie Soccer (Sprint 11) que a su vez espejó NFL/NBA, con las adaptaciones de "deporte individual" documentadas en la spec.
 
-**Estado**: 🔄 en build. **12a + 12b + 12c + 12.1 cerrados en código** (rama `claude/tennis-sprint-12`); 12d, 12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
+**Estado**: 🔄 en build. **12a + 12b + 12c + 12.1 + 12d cerrados en código** (rama `claude/tennis-sprint-12`); solo 12e (ML sidecar) pendiente. `tennis` **activo en UI** (`SPORT_META.tennis.active=true`, `ACTIVE_SPORTS` incluye `tennis`); el Oracle/resolver siguen gated por `TENNIS_ANALYSIS_ENABLED` (default `false`).
 
 ---
 
@@ -82,19 +82,20 @@ Espeja Soccer 11.1. **Cerrado en código (rama `claude/tennis-sprint-12`)**.
 - [x] Tests: `tennisShadowValidator.test.js` (7: ELO-surface/overall/rank fallback, cap 72, H2H shift, neutral floor). Fix de `toNumber(null)` (Number(null)===0) que activaba mal la rama elo_surface.
 - **Salida**: filas Tennis en `pick_features` + `shadow_model_runs` sin contaminar los otros deportes. 58 tests tennis verdes en total.
 
-### Sprint 12d — UI 📋
+### Sprint 12d — UI ✅ (cerrado en código)
 
-Espeja Soccer 11d.
+Espeja Soccer 11d. **Cerrado en código (rama `claude/tennis-sprint-12`)** — sin build en sandbox (sin node_modules de cliente); validación visual en deploy.
 
-- [ ] `client/src/config/sports.js` `tennis.active=true` + `ACTIVE_SPORTS` incluye `'tennis'`; `server/sports.js` igual.
-- [ ] `client/src/config/sportCapabilities.js` — gameAnalysis/oracleChat habilitados para Tennis; board/live/parlay "fase posterior".
-- [ ] `SportSwitcher` livery Tennis (6º botón, `clipFor()` ya adaptativo).
-- [ ] `GameSelector` — `normalizeTennisMatch`, dropdown tour ATP/WTA, jugador A vs B + superficie, foto/bandera en vez de logo de equipo.
-- [ ] `AnalysisPanel` — endpoint `/api/tennis/analyze/match`, SAFE bloqueado, controles MLB-only gateados.
-- [ ] `OracleChat` — games + `/api/tennis/analyze/chat` + selector de tour.
-- [ ] `client/src/utils/tennisLogoUrl.js` — foto del jugador / bandera por `athlete.id` ESPN.
-- [ ] `HistoryPanel` — matchup jugador A vs B (sin logos de equipo).
-- **Salida**: Tennis seleccionable en UI, análisis funcional end-to-end con tour ATP/WTA.
+- [x] `client/src/config/sports.js` `tennis.active=true` + `ACTIVE_SPORTS` incluye `'tennis'`; `server/sports.js` `ACTIVE_SPORTS` actualizado a `['mlb','nba','nfl','nhl','tennis']`.
+- [x] `client/src/config/sportCapabilities.js` — gameAnalysis + oracleChat habilitados (admin) y history habilitado para Tennis; board/standings/live/gameDetail/parlay*/batchScan → "fase posterior" con copy es/en.
+- [x] `SportSwitcher` livery Tennis (`--brand-clay, #d2691e`).
+- [x] `GameSelector` — `normalizeTennisMatch` (jugador A→slot away, B→home; apellido como abbr, nombre completo, athlete id para headshot), **selector de tour ATP/WTA**, fetch `/api/tennis/matches?tour=&date=`, oculta sección de pitchers, `TeamLogo` rama tennis (`getTennisLogoUrl`).
+- [x] `AnalysisPanel` — rama single `sport==='tennis'` → `/api/tennis/analyze/match` (`{matchId, tour}`); SAFE bloqueado (effect + guard); controles MLB-only ya gateados por `sport==='mlb'`.
+- [x] `OracleChat` — fetch tennis + map a shape de chat (players→away/home), endpoint `/api/tennis/analyze/chat` con `{matchId, tour}`, **selector de tour ATP/WTA**.
+- [x] `client/src/utils/tennisLogoUrl.js` — headshot ESPN por `athlete.id`.
+- [x] `HistoryPanel` — `MatchupWithLogos` rama tennis (jugador A vs B sin logos de equipo).
+- [x] `App.jsx` — tabs standings/live/board caen en `SportComingSoon` para tennis vía capabilities (sin fall-through a componentes MLB).
+- **Salida**: Tennis seleccionable en el switcher (5º deporte activo), análisis y chat funcionales end-to-end con tour ATP/WTA; tabs no soportadas muestran "fase posterior".
 
 ### Sprint 12e — ML sidecar 📋 (puede pre-entrenarse)
 

@@ -1,5 +1,5 @@
 export const ALL_SPORTS = ['mlb', 'nba', 'nfl', 'nhl', 'soccer', 'tennis'];
-export const ACTIVE_SPORTS = ['mlb', 'nba', 'nfl', 'nhl'];
+export const ACTIVE_SPORTS = ['mlb', 'nba', 'nfl', 'nhl', 'tennis'];
 
 export const SPORT_META = {
   mlb: { shortLabel: 'MLB', displayName: 'Baseball', active: true },
@@ -7,7 +7,7 @@ export const SPORT_META = {
   nfl: { shortLabel: 'NFL', displayName: 'Football', active: true },
   nhl: { shortLabel: 'NHL', displayName: 'Hockey', active: true },
   soccer: { shortLabel: 'SOCCER', displayName: 'Soccer', active: false },
-  tennis: { shortLabel: 'TENNIS', displayName: 'Tennis', active: false },
+  tennis: { shortLabel: 'TENNIS', displayName: 'Tennis', active: true },
 };
 
 export function isKnownSport(value) {

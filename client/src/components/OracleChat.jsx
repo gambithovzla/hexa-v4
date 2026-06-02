@@ -282,8 +282,10 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   const { C, isLeague } = useHexaTheme();
   const isNba = sport === 'nba';
   const isNhl = sport === 'nhl';
+  const isTennis = sport === 'tennis';
   // NBA and NHL share the date-based games shape and the per-sport chat route.
   const isDateSportNonMlb = isNba || isNhl;
+  const [tour, setTour] = useState('atp'); // tennis only (atp|wta)
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
   const [view, setView] = useState('chat'); // 'chat' | 'history'
@@ -316,12 +318,25 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
       ? `${API_URL}/api/nba/games?date=${date}`
       : isNhl
       ? `${API_URL}/api/nhl/games?date=${date}`
+      : isTennis
+      ? `${API_URL}/api/tennis/matches?tour=${tour}&date=${date}`
       : `${API_URL}/api/games?date=${date}`;
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
         let gameList = data.data || data.games || data || [];
-        if (isDateSportNonMlb && Array.isArray(gameList)) {
+        if (isTennis && Array.isArray(gameList)) {
+          gameList = gameList.map((g) => ({
+            gamePk: String(g.matchId),
+            game_id: g.matchId,
+            _tour: tour,
+            gameTime: g.statusDetail ?? g.round ?? g.status,
+            teams: {
+              away: { abbreviation: g.players?.a?.name, name: g.players?.a?.name },
+              home: { abbreviation: g.players?.b?.name, name: g.players?.b?.name },
+            },
+          }));
+        } else if (isDateSportNonMlb && Array.isArray(gameList)) {
           gameList = gameList.map((g) => ({
             gamePk: String(g.game_id),
             game_id: g.game_id,
@@ -335,7 +350,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         setGames(Array.isArray(gameList) ? gameList : []);
       })
       .catch(() => {});
-  }, [isNba, isNhl, isDateSportNonMlb]);
+  }, [isNba, isNhl, isTennis, tour, isDateSportNonMlb]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -406,12 +421,16 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         ? `${API_URL}/api/nba/analyze/chat`
         : isNhl
         ? `${API_URL}/api/nhl/analyze/chat`
+        : isTennis
+        ? `${API_URL}/api/tennis/analyze/chat`
         : `${API_URL}/api/analyze/chat`;
+      const matchId = selectedGame.gamePk || selectedGame.id || selectedGame.game_id;
       const res = await fetch(chatUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          gameId: selectedGame.gamePk || selectedGame.id || selectedGame.game_id,
+          gameId: matchId,
+          ...(isTennis ? { matchId, tour: selectedGame._tour ?? tour } : {}),
           question: q,
           conversationHistory: buildHistory(),
           lang,
@@ -629,6 +648,25 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
             }}>
               {lang === 'es' ? 'SELECCIONA UN PARTIDO' : 'SELECT A GAME'}
             </div>
+            {isTennis && (
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                {['atp', 'wta'].map(tt => (
+                  <button
+                    key={tt}
+                    onClick={() => { setTour(tt); setSelectedGame(null); }}
+                    style={{
+                      padding: '5px 14px', borderRadius: '3px', cursor: 'pointer',
+                      fontFamily: MONO, fontSize: '10px', fontWeight: 700, letterSpacing: '1px',
+                      background: tour === tt ? C.accent : 'transparent',
+                      color: tour === tt ? '#0a0d14' : C.textDim,
+                      border: `1px solid ${tour === tt ? C.accent : C.border}`,
+                    }}
+                  >
+                    {tt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {games.map((game, i) => (
                 <div key={i} onClick={() => setSelectedGame(game)} style={{
