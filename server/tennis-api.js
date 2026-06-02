@@ -235,9 +235,10 @@ export async function getTennisMatchesForDate(tour, dateStr) {
     // ESPN tennis scoreboard has three observed shapes:
     //   A) event IS the match → ev.competitors = [playerA, playerB]  (no competitions[])
     //   B) event IS a tournament → ev.competitions = [{competitors:[...]}]
-    //   C) Grand Slam / big tournament → ev.groupings = [{competitions:[{competitors:[...]}]}]
-    //      or ev.groupings = [{grouping:{competitions:[...]}}]
-    //      (confirmed for Roland Garros: topLevelKeys includes 'groupings', no competitions/competitors)
+    //   C) Grand Slam / big tournament → ev.groupings[N].{competitions,grouping.competitions}
+    //      Roland Garros confirmed: the event is a combined ATP+WTA tournament;
+    //      groupings contains Men's Singles, Women's Singles, Doubles, etc.
+    //      → filter by grouping name to only extract the requested tour's singles.
     const eventLevelCompetitors = ev?.competitors ?? [];
     if (eventLevelCompetitors.length === 2) {
       // Shape A: the event itself is the match.
@@ -248,14 +249,37 @@ export async function getTennisMatchesForDate(tour, dateStr) {
         extractMatch(comp?.competitors ?? [], comp, ev);
       }
     } else {
-      // Shape C: tournament with groupings (Roland Garros / Grand Slams).
-      // Matches live inside groupings[N].competitions or groupings[N].grouping.competitions.
-      for (const g of ev?.groupings ?? []) {
+      // Shape C: Grand Slam / combined tournament with groupings.
+      // Roland Garros groupings include Men's Singles, Women's Singles, Doubles, Mixed…
+      // Filter to the tour-appropriate singles grouping so ATP tab ≠ WTA matches.
+      const groupings = ev?.groupings ?? [];
+      if (matches.length === 0 && groupings.length > 0) {
+        // One-time log of grouping names to help diagnose filter correctness.
+        const names = groupings.map(g => g?.grouping?.name ?? g?.name ?? '').filter(Boolean);
+        if (names.length) console.log(`[tennis-api] Shape C groupings for ${ev?.name}: ${names.join(' | ')}`);
+      }
+      for (const g of groupings) {
+        const gName = String(g?.grouping?.name ?? g?.name ?? '').toLowerCase().trim();
+
+        // If we can identify the grouping type, keep only the matching singles.
+        if (gName) {
+          const isMensSingles    = /\bmen'?s singles\b/.test(gName) && !/women/.test(gName);
+          const isWomensSingles  = /\bwomen'?s singles\b/.test(gName);
+          const isSingles        = isMensSingles || isWomensSingles;
+          if (isSingles) {
+            if (tour === 'atp' && !isMensSingles)   continue;
+            if (tour === 'wta' && !isWomensSingles)  continue;
+          } else if (/doubles|mixed/i.test(gName)) {
+            continue; // skip doubles / mixed regardless of tour
+          }
+          // Unknown grouping names are included as fallback (nothing filtered out).
+        }
+
         const subComps =
-          Array.isArray(g?.competitions)         ? g.competitions :
-          Array.isArray(g?.grouping?.competitions) ? g.grouping.competitions :
-          Array.isArray(g?.events)               ? g.events :
-          Array.isArray(g?.grouping?.events)     ? g.grouping.events :
+          Array.isArray(g?.competitions)            ? g.competitions :
+          Array.isArray(g?.grouping?.competitions)  ? g.grouping.competitions :
+          Array.isArray(g?.events)                  ? g.events :
+          Array.isArray(g?.grouping?.events)        ? g.grouping.events :
           [];
         for (const comp of subComps) {
           extractMatch(comp?.competitors ?? [], comp, ev);
