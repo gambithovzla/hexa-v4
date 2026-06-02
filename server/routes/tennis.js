@@ -20,6 +20,7 @@ import { buildTennisMatchContext } from '../tennis-context-builder.js';
 import { analyzeTennisMatch, analyzeTennisChat } from '../services/oracleTennis.js';
 import { getTennisMatchOdds, matchTennisOddsToMatch, buildMarketOddsForMatch } from '../tennis-odds.js';
 import { validateTennisAnalysisOutput } from '../services/tennisOutputGuard.js';
+import { saveTennisPickFeatures, recordTennisShadowRun } from '../services/tennisShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
 import { upsertOracleSession } from './oracle-history.js';
 
@@ -205,6 +206,34 @@ router.post('/analyze/match', tennisEnabled, verifyToken, requireAdmin, async (r
       tour,
       marketOdds: resolvedOdds,
     });
+
+    // Fire-and-forget: persist Tennis pick_features + shadow_model_runs.
+    // Errors are swallowed inside the helpers; never break the response.
+    if (savedPick?.id) {
+      const gamePkInt = matchId ? parseInt(matchId, 10) : null;
+      saveTennisPickFeatures({
+        pickId:    savedPick.id,
+        gamePk:    gamePkInt,
+        gameDate,
+        tour,
+        context,
+        marketOdds: resolvedOdds,
+        pickText:  analysisData?.master_prediction?.pick ?? analysisData?.best_pick?.detail ?? null,
+        oracleConfidence: analysisData?.master_prediction?.oracle_confidence ?? null,
+        userEmail: req.user.email ?? null,
+      }).catch(err => console.warn(`[tennis-route] pick_features persist swallowed: ${err.message}`));
+
+      recordTennisShadowRun({
+        userId:    req.user.id,
+        userEmail: req.user.email ?? null,
+        pickId:    savedPick.id,
+        gamePk:    gamePkInt,
+        gameDate,
+        tour,
+        context,
+        analysisData,
+      }).catch(err => console.warn(`[tennis-route] shadow_model persist swallowed: ${err.message}`));
+    }
 
     console.log(`[tennis-route] pick saved id=${savedPick?.id} match=${matchId} tour=${tour} conf=${analysisData?.master_prediction?.oracle_confidence} quality=${guard.quality} odds=${oddsSource ?? 'none'} flags=${context.context_meta?.staleFlags?.length ?? 0}`);
 

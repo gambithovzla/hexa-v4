@@ -2,7 +2,7 @@
 
 Plan de construcción del **sexto deporte** (Sprint 12) y el **primero individual**. Detalle técnico y de datos en [tennis-architecture.md](tennis-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md). Espeja la serie Soccer (Sprint 11) que a su vez espejó NFL/NBA, con las adaptaciones de "deporte individual" documentadas en la spec.
 
-**Estado**: 🔄 en build. **12a + 12b + 12c cerrados en código** (rama `claude/tennis-sprint-12`); 12.1, 12d, 12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
+**Estado**: 🔄 en build. **12a + 12b + 12c + 12.1 cerrados en código** (rama `claude/tennis-sprint-12`); 12d, 12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
 
 ---
 
@@ -71,15 +71,16 @@ Espeja Soccer 11c **+ resolver propio**. **Cerrado en código (rama `claude/tenn
 - [x] Tests: `pick-resolver-tennis.test.js` (16 tests: match winner win/loss/ambiguo, set handicap -1.5 Bo3/Bo5 + +1.5, total over/under/push, **retiro→void, walkover→void**).
 - **Salida**: crear → resolver de un pick Tennis contra score final, **con void correcto en retiro/walkover**, aislado de jobs de otros deportes. 51 tests tennis verdes en total.
 
-### Sprint 12.1 — Dataset + shadow 📋
+### Sprint 12.1 — Dataset + shadow ✅ (cerrado en código)
 
-Espeja Soccer 11.1.
+Espeja Soccer 11.1. **Cerrado en código (rama `claude/tennis-sprint-12`)**.
 
-- [ ] `server/services/tennisShadowValidator.js` — P(win) desde ELO-surface diff (logística) ajustado por H2H + forma; de-vig odds h2h 2-vías; cap 50–72.
-- [ ] `server/services/tennisShadowPersistence.js` — `saveTennisPickFeatures` + `recordTennisShadowRun`, fire-and-forget, `sport='tennis'`, `league=tour`. Columnas tennis en `pick_features` pobladas (A→home, B→away).
-- [ ] Disparo fire-and-forget desde `routes/tennis.js`.
-- [ ] APIs admin dataset/shadow admiten `?sport=tennis`.
-- **Salida**: filas Tennis en `pick_features` + `shadow_model_runs` sin contaminar los otros deportes.
+- [x] `server/services/tennisShadowValidator.js` — P(A gana) desde **ELO-surface logístico** (`1/(1+10^((eloB−eloA)/400))`), con fallback a ELO overall → ranking → neutral; ajuste por H2H (superficie preferida, dampening por muestra) y forma reciente; cap 50–72, escalado por completeness. `calculateTennisShadowScore` → `{ score, predicted_winner: 'player_a'|'player_b', confidence, breakdown }`.
+- [x] `server/services/tennisShadowPersistence.js` — `saveTennisPickFeatures` + `recordTennisShadowRun`, fire-and-forget, `sport='tennis'`, `league=tour`. Columnas tennis en `pick_features` pobladas (A→home, B→away); `shadow_model_runs` con `pick_market_type` (moneyline/set_handicap/total_games), athlete ids en team_id (INTEGER), nombres truncados a 10 en abbr, `'player_a'`/`'player_b'` en predicted_winner (TEXT).
+- [x] Disparo fire-and-forget desde `routes/tennis.js` (tras persistir el pick).
+- [x] APIs admin dataset/shadow ya admiten `?sport=tennis` (usan `normalizeSportFilter` contra `KNOWN_SPORTS`, que ya incluye `'tennis'` — sin cambios).
+- [x] Tests: `tennisShadowValidator.test.js` (7: ELO-surface/overall/rank fallback, cap 72, H2H shift, neutral floor). Fix de `toNumber(null)` (Number(null)===0) que activaba mal la rama elo_surface.
+- **Salida**: filas Tennis en `pick_features` + `shadow_model_runs` sin contaminar los otros deportes. 58 tests tennis verdes en total.
 
 ### Sprint 12d — UI 📋
 
