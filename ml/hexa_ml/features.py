@@ -80,6 +80,37 @@ NFL_DERIVED_FEATURES = [
     "injury_diff",
 ]
 
+# ── Soccer features (Sprint 11 ML sidecar) ───────────────────────────────────
+
+SOCCER_BASE_NUMERIC = [
+    # Season goal stats
+    "home_goals_for",    "away_goals_for",
+    "home_goals_against", "away_goals_against",
+    "home_goal_diff",    "away_goal_diff",
+    "home_points",       "away_points",
+    # xG (null until Understat/FBref produces reliable per-game data)
+    "home_xg",  "away_xg",
+    "home_xga", "away_xga",
+    # Recent form
+    "home_last10_wins", "away_last10_wins",
+    # 3-way odds (dominant signal for soccer)
+    "odds_ml_home", "odds_ml_away", "draw_price",
+    "odds_ou_total", "btts_yes_price",
+    # Context quality
+    "context_completeness",
+    "oracle_confidence",
+]
+
+SOCCER_DERIVED_FEATURES = [
+    "goal_diff_delta",        # home_goal_diff - away_goal_diff
+    "points_delta",           # home_points - away_points
+    "xg_diff",                # home_xg - away_xg (NaN when xg unavailable)
+    "form_wins_diff",         # home_last10_wins - away_last10_wins
+    "implied_prob_home",      # de-vigged from 3-way market
+    "implied_prob_draw",
+    "implied_prob_away",
+]
+
 # ── Tennis features (individual sport — player A = "home" slot) ────────────────
 
 TENNIS_BASE_NUMERIC = [
@@ -189,6 +220,13 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def soccer_feature_columns(market: str) -> list[str]:
+    cols = list(SOCCER_BASE_NUMERIC) + list(SOCCER_DERIVED_FEATURES)
+    if market == "soccer_total":
+        cols.append("odds_ou_total")  # line already in base; keep for total model
+    return cols
+
+
 def feature_columns(market: str) -> list[str]:
     """Return the full ordered feature column list for a given market.
 
@@ -203,6 +241,9 @@ def feature_columns(market: str) -> list[str]:
         if market == "nfl_total":
             cols.append("total_close")
         return cols
+
+    if market.startswith("soccer_"):
+        return soccer_feature_columns(market)
 
     if market.startswith("tennis_"):
         cols = list(TENNIS_BASE_NUMERIC) + list(TENNIS_SURFACE_ONEHOT) + list(TENNIS_DERIVED_FEATURES)
@@ -246,6 +287,39 @@ def add_nfl_derived(df: pd.DataFrame) -> pd.DataFrame:
     for col in NFL_BOOL_FEATURES:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    return out
+
+
+def add_soccer_derived(df: pd.DataFrame) -> pd.DataFrame:
+    """Append soccer-specific computed features."""
+    out = df.copy()
+
+    h_gd = _col_or_nan(out, "home_goal_diff")
+    a_gd = _col_or_nan(out, "away_goal_diff")
+    out["goal_diff_delta"] = h_gd - a_gd
+
+    h_pts = _col_or_nan(out, "home_points")
+    a_pts = _col_or_nan(out, "away_points")
+    out["points_delta"] = h_pts - a_pts
+
+    h_xg = _col_or_nan(out, "home_xg")
+    a_xg = _col_or_nan(out, "away_xg")
+    out["xg_diff"] = h_xg - a_xg
+
+    h_fw = _col_or_nan(out, "home_last10_wins")
+    a_fw = _col_or_nan(out, "away_last10_wins")
+    out["form_wins_diff"] = h_fw - a_fw
+
+    # De-vig 3-way odds → implied probs
+    raw_h = _american_to_implied_prob(_col_or_nan(out, "odds_ml_home"))
+    raw_d = _american_to_implied_prob(_col_or_nan(out, "draw_price"))
+    raw_a = _american_to_implied_prob(_col_or_nan(out, "odds_ml_away"))
+    total = raw_h + raw_d + raw_a
+    total = total.replace(0, float("nan"))
+    out["implied_prob_home"] = raw_h / total
+    out["implied_prob_draw"] = raw_d / total
+    out["implied_prob_away"] = raw_a / total
 
     return out
 
@@ -297,6 +371,8 @@ def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
     """
     if market.startswith("nfl_"):
         enriched = add_nfl_derived(df)
+    elif market.startswith("soccer_"):
+        enriched = add_soccer_derived(df)
     elif market.startswith("tennis_"):
         enriched = add_tennis_derived(df)
     else:

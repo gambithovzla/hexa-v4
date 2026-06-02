@@ -5,6 +5,7 @@ import SportSwitcher from './SportSwitcher';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 import { getNflLogoUrl } from '../utils/nflLogoUrl';
 import { getNhlLogoUrl } from '../utils/nhlLogoUrl';
+import { getSoccerLogoUrl } from '../utils/soccerLogoUrl';
 import { getTennisLogoUrl } from '../utils/tennisLogoUrl';
 import { useHexaTheme } from '../themeProvider';
 import { formatGameTimeLima } from '../utils/dateKeys.js';
@@ -161,7 +162,7 @@ function isSelectable(game) {
 }
 
 // ── TeamLogo ──────────────────────────────────────────────────────────────────
-function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
+function TeamLogo({ teamId, abbr, logo, color, sport = 'mlb' }) {
   const [failed, setFailed] = useState(false);
   const src = sport === 'nba'
     ? getNbaLogoUrl(teamId, abbr)
@@ -169,6 +170,8 @@ function TeamLogo({ teamId, abbr, color, sport = 'mlb' }) {
     ? getNflLogoUrl(teamId, abbr)
     : sport === 'nhl'
     ? getNhlLogoUrl(teamId, abbr)
+    : sport === 'soccer'
+    ? (logo ?? getSoccerLogoUrl(teamId, abbr))
     : sport === 'tennis'
     ? getTennisLogoUrl(teamId)
     : teamId
@@ -244,10 +247,12 @@ function StatusBadge({ status, t }) {
 // ── GameCard ──────────────────────────────────────────────────────────────────
 function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, analyzed, t }) {
   const { C, isLeague } = useHexaTheme();
-  const away    = getAbbr(game.teams?.away);
-  const home    = getAbbr(game.teams?.home);
-  const awayId  = getTeamId(game.teams?.away);
-  const homeId  = getTeamId(game.teams?.home);
+  const away     = getAbbr(game.teams?.away);
+  const home     = getAbbr(game.teams?.home);
+  const awayId   = getTeamId(game.teams?.away);
+  const homeId   = getTeamId(game.teams?.home);
+  const awayLogo = game.teams?.away?.logo ?? null;
+  const homeLogo = game.teams?.home?.logo ?? null;
   const awayP   = getPitcher(game.teams?.away) ?? t.tbd;
   const homeP   = getPitcher(game.teams?.home) ?? t.tbd;
   const time    = getTime(game);
@@ -259,7 +264,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
 
   const awayColor = MLB_COLORS[away] ?? '#666';
   const homeColor = MLB_COLORS[home] ?? '#666';
-  const sportKey  = game._sport === 'nba' ? 'nba' : game._sport === 'nfl' ? 'nfl' : game._sport === 'nhl' ? 'nhl' : game._sport === 'tennis' ? 'tennis' : 'mlb';
+  const sportKey  = game._sport === 'nba' ? 'nba' : game._sport === 'nfl' ? 'nfl' : game._sport === 'nhl' ? 'nhl' : game._sport === 'soccer' ? 'soccer' : game._sport === 'tennis' ? 'tennis' : 'mlb';
 
   const leftBorderColor = isSelected ? C.accent : status === 'live' ? C.amber : 'transparent';
 
@@ -376,7 +381,7 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
       >
         {/* Away team */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <TeamLogo teamId={awayId} abbr={away} color={awayColor} sport={sportKey} />
+          <TeamLogo teamId={awayId} abbr={away} logo={awayLogo} color={awayColor} sport={sportKey} />
           <Typography
             sx={{
               fontFamily: MONO,
@@ -439,12 +444,12 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
           >
             {home}
           </Typography>
-          <TeamLogo teamId={homeId} abbr={home} color={homeColor} sport={sportKey} />
+          <TeamLogo teamId={homeId} abbr={home} logo={homeLogo} color={homeColor} sport={sportKey} />
         </Box>
       </Box>
 
       {/* Pitchers — MLB only */}
-      {game._sport !== 'nba' && game._sport !== 'nfl' && game._sport !== 'nhl' && game._sport !== 'tennis' && (
+      {game._sport !== 'nba' && game._sport !== 'nfl' && game._sport !== 'nhl' && game._sport !== 'soccer' && game._sport !== 'tennis' && (
         <Box
           sx={{
             display: 'flex',
@@ -737,6 +742,61 @@ function normalizeNhlGame(g) {
   };
 }
 
+const SOCCER_LEAGUES = [
+  { slug: 'eng.1', label: 'Premier League' },
+  { slug: 'esp.1', label: 'La Liga'        },
+  { slug: 'ita.1', label: 'Serie A'        },
+  { slug: 'ger.1', label: 'Bundesliga'     },
+  { slug: 'fra.1', label: 'Ligue 1'        },
+  { slug: 'usa.1', label: 'MLS'            },
+];
+
+function normalizeSoccerGame(g, leagueSlug) {
+  // soccer-api.js already returns g.status as 'scheduled'|'live'|'final'
+  const statusStr = g.status ?? '';
+  let simplified = 'scheduled';
+  if (/^final$/i.test(statusStr)) simplified = 'final';
+  else if (/^live$/i.test(statusStr)) simplified = 'live';
+
+  const homeScore = g.teams?.home?.score ?? null;
+  const awayScore = g.teams?.away?.score ?? null;
+
+  let displayTime = g.statusDetail ?? statusStr;
+  if (simplified === 'scheduled' && g.gameDate) {
+    try {
+      displayTime = new Date(g.gameDate).toLocaleTimeString('es-PE', {
+        timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+    } catch { /* keep status text */ }
+  }
+
+  return {
+    gamePk:       String(g.gameId ?? g.gamePk ?? ''),
+    gameDate:     g.gameDate ?? null,
+    _displayTime: displayTime,
+    _leagueSlug:  leagueSlug,
+    status:       { simplified },
+    teams: {
+      away: {
+        abbreviation: g.teams?.away?.abbreviation ?? 'AWAY',
+        name:         g.teams?.away?.name ?? g.teams?.away?.abbreviation ?? 'Away',
+        id:           g.teams?.away?.id ?? null,
+        logo:         g.teams?.away?.logo ?? null,
+      },
+      home: {
+        abbreviation: g.teams?.home?.abbreviation ?? 'HOME',
+        name:         g.teams?.home?.name ?? g.teams?.home?.abbreviation ?? 'Home',
+        id:           g.teams?.home?.id ?? null,
+        logo:         g.teams?.home?.logo ?? null,
+      },
+    },
+    linescore: (homeScore != null && awayScore != null) ? {
+      teams: { away: { runs: awayScore }, home: { runs: homeScore } },
+    } : null,
+    _sport: 'soccer',
+  };
+}
+
 /**
  * Converts a tennis match row from /api/tennis/matches into the MLB-compatible
  * shape the card renders. Individual sport: player A → "away" (left) slot,
@@ -811,6 +871,7 @@ export default function GameSelector({
   const [loading, setLoading]         = useState(false);
   const [fetchErr, setFetchErr]       = useState(null);
   const [analyzedPks, setAnalyzedPks] = useState(new Set());
+  const [selectedLeague, setSelectedLeague] = useState('eng.1');
 
   // single selection
   const [singleGame, setSingleGame] = useState(null);
@@ -855,6 +916,8 @@ export default function GameSelector({
       ? `${API_URL}/api/nba/games?date=${date}`
       : sport === 'nhl'
       ? `${API_URL}/api/nhl/games?date=${date}`
+      : sport === 'soccer'
+      ? `${API_URL}/api/soccer/games?league=${selectedLeague}&date=${date}`
       : sport === 'tennis'
       ? `${API_URL}/api/tennis/matches?tour=${tour}&date=${date}`
       : `${API_URL}/api/games?date=${date}`;
@@ -867,6 +930,7 @@ export default function GameSelector({
         const list = sport === 'nfl' ? raw.map(normalizeNflGame)
           : sport === 'nba' ? raw.map(normalizeNbaGame)
           : sport === 'nhl' ? raw.map(normalizeNhlGame)
+          : sport === 'soccer' ? raw.map(g => normalizeSoccerGame(g, selectedLeague))
           : sport === 'tennis' ? raw.map(g => normalizeTennisMatch(g, tour))
           : raw;
         setGames(list);
@@ -881,7 +945,7 @@ export default function GameSelector({
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [date, sport, tour]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [date, sport, tour, selectedLeague]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleSingleClick(game) {
@@ -1009,6 +1073,38 @@ export default function GameSelector({
       {onSportChange && mode === 'single' && (
         <Box sx={{ mb: '14px' }}>
           <SportSwitcher sport={sport} onChange={onSportChange} />
+        </Box>
+      )}
+
+      {/* ── Soccer league selector ── */}
+      {sport === 'soccer' && (
+        <Box sx={{ mb: '12px' }}>
+          <select
+            value={selectedLeague}
+            onChange={e => setSelectedLeague(e.target.value)}
+            style={{
+              width:             '100%',
+              background:        C.surfaceAlt,
+              border:            `1px solid ${C.border}`,
+              borderRadius:      '2px',
+              color:             C.textPrimary,
+              fontFamily:        MONO,
+              fontSize:          '0.72rem',
+              padding:           '6px 10px',
+              cursor:            'pointer',
+              outline:           'none',
+              colorScheme:       'dark',
+              appearance:        'none',
+              backgroundImage:   `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23666' d='M5 6L0 0h10z'/%3E%3C/svg%3E")`,
+              backgroundRepeat:  'no-repeat',
+              backgroundPosition:'right 10px center',
+              paddingRight:      '28px',
+            }}
+          >
+            {SOCCER_LEAGUES.map(l => (
+              <option key={l.slug} value={l.slug}>{l.label}</option>
+            ))}
+          </select>
         </Box>
       )}
 

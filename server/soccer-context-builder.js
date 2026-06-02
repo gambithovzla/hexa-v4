@@ -14,6 +14,7 @@
 import { getSoccerGamesForDate, getSoccerStandings, getSoccerTeams } from './soccer-api.js';
 import { getSoccerLeague, isSupportedLeague } from './soccer-league-map.js';
 import { findSoccerTeam } from './soccer-team-map.js';
+import { getSoccerGameXg } from './soccer-xg-fetcher.js';
 
 function recentFormSummary(games) {
   if (!games?.length) return null;
@@ -146,11 +147,12 @@ export async function buildSoccerGameContext({
   const startedAt = Date.now();
   const leagueMeta = getSoccerLeague(leagueSlug);
 
-  const [standingsPayload] = await Promise.all([
+  const [standingsPayload, xgData] = await Promise.all([
     getSoccerStandings(leagueSlug).catch(err => {
       console.warn(`[soccer-context] standings failed (${leagueSlug}): ${err.message}`);
       return null;
     }),
+    getSoccerGameXg(leagueSlug, homeTeamName, awayTeamName).catch(() => ({ home: null, away: null })),
   ]);
 
   const homeStats = extractTeamFromStandings(standingsPayload, homeTeamName, leagueSlug);
@@ -159,20 +161,30 @@ export async function buildSoccerGameContext({
   const home = buildTeamBlock(homeTeamName, homeTeamId, homeStats, leagueSlug);
   const away = buildTeamBlock(awayTeamName, awayTeamId, awayStats, leagueSlug);
 
+  // Enrich xG from Understat (null if league unsupported or fetch failed)
+  if (xgData?.home) {
+    home.xG  = xgData.home.xG  ?? null;
+    home.xGA = xgData.home.xGA ?? null;
+  }
+  if (xgData?.away) {
+    away.xG  = xgData.away.xG  ?? null;
+    away.xGA = xgData.away.xGA ?? null;
+  }
+
   const staleFlags = [];
   if (!homeStats) staleFlags.push('home_team_stats_missing');
   if (!awayStats) staleFlags.push('away_team_stats_missing');
   if (!home.recentForm) staleFlags.push('home_recent_form_missing');
   if (!away.recentForm) staleFlags.push('away_recent_form_missing');
   if (!marketOdds?.threeWay) staleFlags.push('three_way_odds_missing');
-  // xG always missing until Sprint 11 FBref integration:
-  staleFlags.push('xg_unavailable');
+  const xgAvailable = !!(xgData?.home?.xG || xgData?.away?.xG);
+  if (!xgAvailable) staleFlags.push('xg_unavailable');
 
   const completeness = {
     teamStats:  fractionPresent(homeStats, awayStats),
     recentForm: fractionPresent(home.recentForm, away.recentForm),
     marketOdds: marketOdds?.threeWay ? 1 : 0,
-    xG: 0,
+    xG: xgAvailable ? 1 : 0,
   };
   const overall = +(
     (completeness.teamStats  * 0.40 +
@@ -194,7 +206,7 @@ export async function buildSoccerGameContext({
         ok: !!(home.recentForm && away.recentForm),
         source: 'espn-standings-form',
       },
-      xG: { ok: false, source: 'unavailable — pending FBref/Understat' },
+      xG: { ok: xgAvailable, source: xgAvailable ? 'understat' : 'unavailable — MLS or fetch failed' },
       marketOdds: {
         ok: !!(marketOdds?.threeWay),
         source: marketOdds?.source ?? null,

@@ -49,6 +49,7 @@ import PostmortemDashboard    from './pages/PostmortemDashboard';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
 import NflLiveTracker      from './components/NflLiveTracker';
+import SoccerLiveTracker   from './components/SoccerLiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
 import HexaBoardLeague     from './components/HexaBoardLeague';
@@ -732,7 +733,9 @@ export default function App() {
                 ? <NflLiveTracker lang={lang} />
                 : sport === 'nba'
                   ? <NBALiveTracker lang={lang} />
-                  : <LiveTracker lang={lang} />}
+                  : sport === 'soccer'
+                    ? <SoccerLiveTracker lang={lang} />
+                    : <LiveTracker lang={lang} />}
             </Box>
           )}
 

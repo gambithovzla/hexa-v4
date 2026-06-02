@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-06-02 — **Sprint 12 (Tennis) planning**: specs maestras creadas — [tennis-architecture.md](tennis-architecture.md) + [tennis-roadmap.md](tennis-roadmap.md) (12a–12e). Primer deporte individual (jugador A vs B → slots home/away; tours atp/wta reusan `league`); resolver de retiros/walkovers (void + refund) como componente nuevo crítico. Rama `claude/tennis-sprint-12`. Sprint 11 Soccer completo + en prod. Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
+**Última actualización**: 2026-06-02 — **Sprint 12 (Tennis) completo en código** (rama `claude/tennis-sprint-12`): primer deporte individual (jugador A vs B → slots home/away; tours atp/wta reusan `league`); resolver de retiros/walkovers (void) como componente nuevo crítico; Oracle + shadow + UI (5º deporte activo) + ML sidecar pre-entrenable Sackmann. Specs: [tennis-architecture.md](tennis-architecture.md) + [tennis-roadmap.md](tennis-roadmap.md). **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true` en Railway): Sprint 11 completo al 100% (datos, Oracle, lifecycle, UI, shadow, board, live tracker, xG Understat, ML sidecar). Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
 
 ---
 
@@ -508,18 +508,61 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ---
 
-### 🔄 Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
+### ✅ Sprint 11 — Soccer (Fútbol) — Big 5 + MLS
 
-**Status**: 🔄 **en build** (2026-05-31). Sprint 11a (scaffolding de datos) en progreso en rama `claude/soccer-sprint-11`.
+**Status**: ✅ **completo + en prod** (2026-06-02). Rama `claude/soccer-sprint-11c`. `SOCCER_ANALYSIS_ENABLED=true` en Railway; selector Soccer activo en UI con logos ESPN CDN. Board + live tracker + xG + ML sidecar completos. Pendiente: ML training cuando haya ≥25 picks resueltos; xG MLS (Understat no cubre).
 
-**Progreso 11a — scaffolding de datos** (4 archivos creados, `node --check` OK):
+**Progreso completo — todos los sub-sprints cerrados**:
+
+**11a — scaffolding de datos** ✅
 - ✅ `server/soccer-league-map.js` — registro de las 6 ligas (`slug`, `oddsApiSlug`, `country`, `name`, `season`, `avgGoals`, `drawPct`, `style`). Helpers: `getSoccerLeague`, `isSupportedLeague`, `getSoccerLeagueByOddsSlug`, `SOCCER_LEAGUE_SLUGS`.
-- ✅ `server/soccer-team-map.js` — 88 clubes seed across las 6 ligas, keyed por nombre canónico + `short` + `aliases`. Sin ids ESPN numéricos (no confiables, patrón NHL). `findSoccerTeam(name, league)` con normalización (accent-strip + drop sufijos FC/CF/etc) y fallback graceful al nombre crudo para clubes no-seedeados. Validado: `Man United`, `Spurs`, `Atlético de Madrid`, `Bayern München`, `Gladbach`, `PSG`, `Wolves` resuelven.
+- ✅ `server/soccer-team-map.js` — 88 clubes seed across las 6 ligas, keyed por nombre canónico + `short` + `aliases`. Sin ids ESPN numéricos (patrón NHL). `findSoccerTeam(name, league)` con normalización (accent-strip + drop sufijos FC/CF/etc) y fallback graceful al nombre crudo.
 - ✅ `server/soccer-api.js` — wrapper ESPN league-aware (`getSoccerGamesForDate(league, date)`, `getSoccerStandings`, `getSoccerGameSummary`, `getSoccerTeams`). Cache 5min + stale fallback. Status `pre/in/post` → `scheduled/live/final`.
-- ✅ `server/soccer-odds.js` — The Odds API multi-liga, dual key. **Mercado 3-vías 1X2** (`threeWay: {home, draw, away}` — el Draw es outcome real, nunca push) + totals (MODA, no promedio) + **BTTS**. `getSoccerGameOdds({leagueSlug, date})`, `matchSoccerOddsToGame`, `buildMarketOddsForGame`.
-- ⏳ Pendiente 11a: `soccer-context-builder.js`, migraciones (`runSoccerScaffoldingMigrations` + columna `league VARCHAR(32)` en `picks`/`pick_features`), endpoints `GET /api/soccer/games|teams|standings`.
+- ✅ `server/soccer-odds.js` — The Odds API multi-liga, dual key. **Mercado 3-vías 1X2** (`threeWay: {home, draw, away}` — Draw es outcome real, nunca push) + totals (MODA) + **BTTS**. `getSoccerGameOdds`, `matchSoccerOddsToGame`, `buildMarketOddsForGame`.
+- ✅ `server/soccer-context-builder.js` — `buildSoccerGameContext`: form, goals for/against, goal diff, points, league profile (avgGoals, drawPct, style), market odds wiring, `context_meta` (completeness, sources, staleFlags).
+- ✅ Migraciones: `runSoccerScaffoldingMigrations()` + `runSoccerDatasetMigrations()` en `server/migrate.js`. Columna `league VARCHAR(32)` en `picks` y `pick_features`. Columnas soccer en `pick_features`: `home_goals_for`, `home_goals_against`, `home_goal_diff`, `home_points`, `home_xg` (null hasta FBref), `draw_price`, `btts_yes_price`.
+- ✅ Endpoints: `GET /api/soccer/games`, `GET /api/soccer/teams`, `GET /api/soccer/standings` en `server/index.js`.
 
-**Inicio recomendado siguientes fases**: 11b Oracle (prompts + `oracleSoccer.js` + `soccerOutputGuard.js`), 11c lifecycle (`routes/soccer.js` + `pick-resolver-soccer.js`), 11.1 shadow/dataset, 11d UI.
+**11b — Oracle Soccer** ✅
+- ✅ `server/prompts/oracle-soccer-prompts.js` — `SOCCER_SYSTEM_PROMPT` + `SOCCER_CHAT_PROMPT`. Cap 62%, mercado 3-vías explícito (Home/Draw/Away o PASS), prioridad form→goal diff→odds→perfil-liga, guardrail anti-hallucination.
+- ✅ `server/services/oracleSoccer.js` — `analyzeSoccerGame`, `analyzeSoccerChat`, `serializeSoccerContext`. Anthropic propio, sin Grok. **No toca oracle.js.**
+- ✅ `server/services/soccerOutputGuard.js` — valida `pick_side` exactamente `home|draw|away`, confianza 50–62, liga válida, rechaza props/ABSTAIN/parlay.
+
+**11c — Lifecycle** ✅
+- ✅ `server/routes/soccer.js` — `POST /api/soccer/analyze/game|chat` (admin-only, flag `SOCCER_ANALYSIS_ENABLED`). Valida `leagueSlug` contra `soccer-league-map.js`. Persiste `sport='soccer'`, `league=leagueSlug`. Resuelve odds server-side.
+- ✅ `server/pick-resolver-soccer.js` — resuelve `sport='soccer'` por score final: home_goals vs away_goals → 1X2 + over/under + BTTS. Sin push (90 min → siempre hay resultado). Job diario en `server/index.js`, ventana 19:00–05:59 ET, gated por `SOCCER_ANALYSIS_ENABLED`.
+
+**11d — UI** ✅
+- ✅ `client/src/utils/soccerLogoUrl.js` — `getSoccerLogoUrl(teamId, abbr, size)` desde ESPN CDN.
+- ✅ `client/src/config/sports.js` — `ACTIVE_SPORTS` incluye `'soccer'`; `SPORT_META.soccer = { shortLabel: 'SOC', displayName: 'Soccer', active: true }`.
+- ✅ `client/src/config/sportCapabilities.js` — soccer: gameAnalysis+requiresAdmin ✅, oracleChat+requiresAdmin ✅, todo lo demás disabled con mensajes "fase posterior".
+- ✅ `client/src/components/SportSwitcher.jsx` — livery soccer grass-green (`var(--brand-grass, #388e3c)`); `clipFor()` helper para 5-button adaptive layout.
+- ✅ `client/src/components/GameSelector.jsx` — `normalizeSoccerGame(g, leagueSlug)`; `selectedLeague` state; league dropdown (6 ligas); fetch `/api/soccer/games?league=&date=`; logos por `getSoccerLogoUrl`; pitchers ocultos.
+- ✅ `client/src/components/AnalysisPanel.jsx` — soccer endpoint `/api/soccer/analyze/game`; SAFE bloqueado; reset useEffect incluye soccer.
+- ✅ `client/src/components/HexaBoard.jsx` + `HexaBoardLeague.jsx` — usan `/api/soccer/board` cuando `sport='soccer'`; eliminado early-return placeholder.
+- ✅ `client/src/components/OracleChat.jsx` — `isSoccer`; `soccerLeague` state; fetch games + chat `/api/soccer/analyze/chat`; league dropdown en partido picker.
+
+**11.1 — Shadow/Dataset isolation** ✅
+- ✅ `server/services/soccerShadowValidator.js` — validador determinístico 3-vías. De-vig de odds 1X2 (home+draw+away normalizado). Pesos: `W_WITH_ODDS={strength:0.25, form:0.20, odds:0.55}`, `W_WITHOUT_ODDS={strength:0.50, form:0.50}`. Confianza capped 50–62%. `agree=null` para picks Draw.
+- ✅ `server/services/soccerShadowPersistence.js` — `saveSoccerPickFeatures` + `recordSoccerShadowRun`. Fire-and-forget. `sport='soccer'`, `league=leagueSlug`. `draw_price`, `btts_yes_price`, `home/away_goals_for/against/goal_diff/points`, `xg` desde Understat.
+- ✅ `server/routes/soccer.js` — wired en `/analyze/game`: extrae `gameMeta` del juego ESPN, llama ambas funciones con `.catch()` tras `persistSoccerPick`.
+
+**Post-11d — Board + Live Tracker + xG + ML sidecar** ✅
+- ✅ `server/services/hexaSoccerBoardService.js` — pizarra diaria soccer: itera las 6 ligas en paralelo; insights de juegos live+upcoming + top-2 standings por liga; cache hasta 04:00 ET.
+- ✅ `server/pick-tracker-soccer.js` — `buildSoccerPickLiveProgressEntry`: lookup league-aware (`leagueSlug:date`); `findSoccerGameForPick`; `formatSoccerDetails` (score + período).
+- ✅ `server/services/soccerMlClient.js` — circuit breaker propio (3f→open 2min); `buildSoccerFeaturePayload` (17 features); `predictSoccerMoneyline|Total|Btts`.
+- ✅ `server/soccer-xg-fetcher.js` — scraper Understat; regex extrae `teamsData` JSON del HTML; Big 5 leagues soportadas, MLS=null; cache 6h; `getSoccerTeamXg` + `getSoccerGameXg`.
+- ✅ `server/soccer-context-builder.js` — integra xG via Promise.all; enriquece `home.xG/xGA`, `away.xG/xGA`; actualiza `context_meta.completeness.xG` y `staleFlags`.
+- ✅ `ml/hexa_ml/models/soccer.py` — `SoccerMoneylineModel`, `SoccerTotalModel`, `SoccerBttsModel` (reg_lambda=3.0).
+- ✅ `ml/hexa_ml/features.py` — `SOCCER_BASE_NUMERIC` (17 cols) + `SOCCER_DERIVED_FEATURES` (7) + `add_soccer_derived()` con de-vig 3-way odds.
+- ✅ `ml/hexa_ml/data.py` — soccer columns en OPTIONAL_FEATURE_COLUMNS; `filter_for_market` para soccer markets; `make_target` soccer (btts/total/moneyline).
+- ✅ `ml/hexa_ml/train.py` — `SOCCER_MARKETS` + `load_dataset(sport="soccer")` isolado de MLB/NFL.
+- ✅ `ml/hexa_ml/serve.py` — FeaturePayload con 18 campos soccer; 3 predict routes; retrain incluye soccer markets.
+- ✅ `client/src/components/SoccerLiveTracker.jsx` — 6 ligas en paralelo (Promise.allSettled), 60s poll, grass-green livery, `SoccerPickProgressPanel`.
+- ✅ `client/src/config/sportCapabilities.js` — liveTracker + board habilitados para soccer.
+- ✅ `server/routes/soccer.js` — `GET /api/soccer/board` → `buildHexaSoccerBoard`.
+- ✅ `server/index.js` — import `buildSoccerPickLiveProgressEntry`; SQL filter `IN ('mlb','nba','nfl','soccer')`; rama soccer en live-progress loop.
+- ✅ `client/src/App.jsx` — `SoccerLiveTracker` importado y enrutado en Live tab.
 
 **Alcance**: las **6 ligas principales** desde el día 1. La arquitectura es league-aware desde la base — un solo `soccer-api.js` con `leagueSlug` como parámetro, no 6 wrappers separados.
 
@@ -560,19 +603,10 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 - **Understat** (scraping alternativo, solo Big 5) — xG por partido histórico, más fácil de parsear que FBref.
 - **API-Football** (freemium, 100 calls/día gratis) — alineaciones confirmadas ~60 min pre-kick para las 6 ligas.
 
-**Archivos a crear**:
-- `server/soccer-league-map.js` — registro de las 6 ligas: `{ slug, oddsApiSlug, country, name, avgGoals, drawPct, styleProfile }`. Un solo archivo, no 6 mapas.
-- `server/soccer-team-map.js` — todos los equipos de las 6 ligas: ESPN id↔abbr↔nombre↔liga + estadio + coords. ~120 equipos total.
-- `server/soccer-api.js` — wrapper ESPN soccer league-aware. `getSoccerGamesForDate(leagueSlug)`, `getSoccerTeamStats(teamId, leagueSlug)`, `getSoccerLineup(gameId)`, `getSoccerInjuries(teamId, leagueSlug)`. Único archivo para las 6 ligas.
-- `server/soccer-context-builder.js` — `buildSoccerGameContext(game, league)`: form, xG/xGA, PPDA, H2H, lineup status, perfil de liga, `context_meta`. El bloque de perfil de liga ajusta el tono del análisis (Bundesliga → sesgo Over; Serie A → sesgo Under/Draw).
-- `server/soccer-odds.js` — The Odds API multi-liga, dual key. `getSoccerGameOdds(leagueSlug)`, `matchSoccerOddsToGame`, `buildMarketOddsForGame`. **Tres mercados**: 1X2, over/under 2.5, BTTS.
-- `server/prompts/oracle-soccer-prompts.js` — `SOCCER_SYSTEM_PROMPT` + `SOCCER_CHAT_PROMPT`. Cap 62% global (con nota de que Bundesliga puede llegar a 65% en mercados Over/Under por mayor anotación), mercado 3-vías explícito, prioridad xG→form→H2H→perfil-liga, guardrail. Oracle **debe** elegir Home/Draw/Away o PASS — nunca "equipo local favorito" sin pick explícito.
-- `server/services/oracleSoccer.js` — `analyzeSoccerGame`, `analyzeSoccerChat`. No toca `oracle.js`. Recibe `league` en el payload.
-- `server/services/soccerOutputGuard.js` — valida `pick_side` exactamente `home|draw|away`, confianza 50–62, liga válida.
-- `server/routes/soccer.js` — `POST /api/soccer/analyze/game|chat` (admin-only, flag `SOCCER_ANALYSIS_ENABLED`). `league` en body/query — valida contra `soccer-league-map.js`. `GET /api/soccer/games?league=eng.1&date=` para el GameSelector.
-- `server/pick-resolver-soccer.js` — resuelve `sport='soccer'` por score final: home_goals vs away_goals → 1X2 + over/under + BTTS. Sin push (en 90 min hay resultado siempre). Filtra por `league` para jobs multi-liga.
-- `server/services/soccerShadowValidator.js` + `soccerShadowPersistence.js` — dataset/shadow con `league` como campo.
-- Migraciones: `runSoccerScaffoldingMigrations()`. Columna `league VARCHAR(32)` en `picks` y `pick_features` (compartida con Tennis y Horse Racing también).
+**Pendiente operacional** (no código — solo datos):
+- Entrenamiento ML: soccer_moneyline/total/btts entrenan automáticamente vía `/retrain` cuando haya picks resueltos en prod. Usar `/admin/ml-control` cuando haya ≥25 picks resueltos por mercado.
+- xG MLS: Understat no cubre la MLS — `getSoccerGameXg` devuelve null para `usa.1`. Considerar API-Football como fuente alternativa en una fase posterior.
+- Pick Imperdible Soccer — diferido; requiere `auto_resolvable` check + resolver integrado.
 
 **Feature flag**: `SOCCER_ANALYSIS_ENABLED` global. Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` — lista las ligas activas (default todas).
 
@@ -740,8 +774,8 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 ```
 
 2026 Q3-4 Sprint 10    — NHL Hockey                        ████████████████████████ ✅ (backend + UI; ML sidecar diferido)
-2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████░░░░░░░░░░░░░░░░░░░░ 🔄 (11a scaffolding datos en build; mercado 3-vías)
-2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ████░░░░░░░░░░░░░░░░░░░░ 📋 (planning: docs completas — tennis-architecture.md + tennis-roadmap.md)
+2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████████████████████████ ✅ (completo + en prod; SOCCER_ANALYSIS_ENABLED=true; logos ESPN CDN)
+2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ████████████████████████ ✅ (completo en código; rama claude/tennis-sprint-12; gated TENNIS_ANALYSIS_ENABLED)
 2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```
 

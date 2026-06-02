@@ -280,11 +280,14 @@ function getEasternDateString(value = new Date()) {
 
 export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   const { C, isLeague } = useHexaTheme();
-  const isNba = sport === 'nba';
-  const isNhl = sport === 'nhl';
+  const isNba    = sport === 'nba';
+  const isNhl    = sport === 'nhl';
+  const isSoccer = sport === 'soccer';
   const isTennis = sport === 'tennis';
-  // NBA and NHL share the date-based games shape and the per-sport chat route.
-  const isDateSportNonMlb = isNba || isNhl;
+  // NBA, NHL and Soccer share the date-based games shape and per-sport chat route.
+  // Tennis has its own mapping (players → teams) handled by the isTennis branch.
+  const isDateSportNonMlb = isNba || isNhl || isSoccer;
+  const [soccerLeague, setSoccerLeague] = useState('eng.1');
   const [tour, setTour] = useState('atp'); // tennis only (atp|wta)
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
@@ -318,6 +321,8 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
       ? `${API_URL}/api/nba/games?date=${date}`
       : isNhl
       ? `${API_URL}/api/nhl/games?date=${date}`
+      : isSoccer
+      ? `${API_URL}/api/soccer/games?league=${soccerLeague}&date=${date}`
       : isTennis
       ? `${API_URL}/api/tennis/matches?tour=${tour}&date=${date}`
       : `${API_URL}/api/games?date=${date}`;
@@ -338,9 +343,10 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
           }));
         } else if (isDateSportNonMlb && Array.isArray(gameList)) {
           gameList = gameList.map((g) => ({
-            gamePk: String(g.game_id),
-            game_id: g.game_id,
-            gameTime: g.status,
+            gamePk:      String(g.game_id),
+            game_id:     g.game_id,
+            gameTime:    g.status,
+            _leagueSlug: isSoccer ? soccerLeague : undefined,
             teams: {
               away: { abbreviation: g.away_team_abbr, name: g.away_team_name },
               home: { abbreviation: g.home_team_abbr, name: g.home_team_name },
@@ -350,7 +356,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         setGames(Array.isArray(gameList) ? gameList : []);
       })
       .catch(() => {});
-  }, [isNba, isNhl, isTennis, tour, isDateSportNonMlb]);
+  }, [isNba, isNhl, isSoccer, soccerLeague, isTennis, tour, isDateSportNonMlb]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -421,6 +427,8 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         ? `${API_URL}/api/nba/analyze/chat`
         : isNhl
         ? `${API_URL}/api/nhl/analyze/chat`
+        : isSoccer
+        ? `${API_URL}/api/soccer/analyze/chat`
         : isTennis
         ? `${API_URL}/api/tennis/analyze/chat`
         : `${API_URL}/api/analyze/chat`;
@@ -430,6 +438,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         headers,
         body: JSON.stringify({
           gameId: matchId,
+          ...(isSoccer ? { leagueSlug: selectedGame._leagueSlug ?? soccerLeague } : {}),
           ...(isTennis ? { matchId, tour: selectedGame._tour ?? tour } : {}),
           question: q,
           conversationHistory: buildHistory(),
@@ -452,6 +461,13 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
           text: lang === 'es'
             ? 'Oracle Chat NBA requiere NBA_ANALYSIS_ENABLED=true en el servidor.'
             : 'NBA Oracle Chat requires NBA_ANALYSIS_ENABLED=true on the server.',
+        }]);
+      } else if (res.status === 503 && isSoccer) {
+        setConversation(prev => [...prev, {
+          role: 'assistant',
+          text: lang === 'es'
+            ? 'Oracle Chat Soccer requiere SOCCER_ANALYSIS_ENABLED=true en el servidor.'
+            : 'Soccer Oracle Chat requires SOCCER_ANALYSIS_ENABLED=true on the server.',
         }]);
       } else {
         setConversation(prev => [...prev, { role: 'assistant', text: data.error || 'Error getting response.' }]);
@@ -648,6 +664,30 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
             }}>
               {lang === 'es' ? 'SELECCIONA UN PARTIDO' : 'SELECT A GAME'}
             </div>
+            {isSoccer && (
+              <select
+                value={soccerLeague}
+                onChange={e => setSoccerLeague(e.target.value)}
+                style={{
+                  width: '100%', marginBottom: '10px',
+                  background: C.surface, border: `1px solid ${C.border}`,
+                  color: C.textPrimary, fontFamily: MONO, fontSize: '11px',
+                  padding: '7px 10px', cursor: 'pointer', outline: 'none',
+                  colorScheme: 'dark', appearance: 'none',
+                }}
+              >
+                {[
+                  { slug: 'eng.1', label: 'Premier League' },
+                  { slug: 'esp.1', label: 'La Liga'        },
+                  { slug: 'ita.1', label: 'Serie A'        },
+                  { slug: 'ger.1', label: 'Bundesliga'     },
+                  { slug: 'fra.1', label: 'Ligue 1'        },
+                  { slug: 'usa.1', label: 'MLS'            },
+                ].map(l => (
+                  <option key={l.slug} value={l.slug}>{l.label}</option>
+                ))}
+              </select>
+            )}
             {isTennis && (
               <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
                 {['atp', 'wta'].map(tt => (

@@ -18,11 +18,22 @@ export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
       ? (s === 'nba' ? 'var(--brand-volt)'
         : s === 'nfl' ? 'var(--brand-field, #2e7d32)'
         : s === 'nhl' ? 'var(--brand-ice, #29b6f6)'
+        : s === 'soccer' ? 'var(--brand-grass, #388e3c)'
         : s === 'tennis' ? 'var(--brand-clay, #d2691e)'
         : 'var(--brand-lava)')
       : C.cyan;
   const liveryText = (s) =>
     isLeague ? (s === 'nba' ? 'var(--brand-ink)' : '#fff') : '#0a0d14';
+  // Soccer has 5 buttons — narrow the clip so they all fit
+  const clipFor = (idx, total) => {
+    if (!isLeague) return 'none';
+    if (total <= 4) return idx === 0
+      ? 'polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%)'
+      : 'polygon(10px 0, 100% 0, 100% 100%, 0 100%)';
+    return idx === 0
+      ? 'polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%)'
+      : 'polygon(7px 0, 100% 0, 100% 100%, 0 100%)';
+  };
 
   return (
     <Box
@@ -44,23 +55,19 @@ export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
             component="button"
             onClick={() => onChange?.(s)}
             sx={{
-              px:            isLeague ? '18px' : '16px',
+              px:            isLeague ? (renderedOptions.length > 4 ? '12px' : '18px') : '16px',
               py:            isLeague ? '6px'  : '5px',
               bgcolor:       active ? accent : 'transparent',
               color:         active ? liveryText(s) : C.ink2,
               border:        'none',
               fontFamily:    isLeague ? "'Oswald', sans-serif" : MONO,
-              fontSize:      isLeague ? '0.78rem' : '0.65rem',
+              fontSize:      isLeague ? (renderedOptions.length > 4 ? '0.68rem' : '0.78rem') : '0.65rem',
               fontWeight:    700,
-              letterSpacing: isLeague ? '0.12em' : '0.14em',
+              letterSpacing: isLeague ? '0.10em' : '0.14em',
               cursor:        'pointer',
               textTransform: 'uppercase',
               transition:    'background 0.15s, color 0.15s',
-              clipPath:      isLeague
-                ? (idx === 0
-                    ? 'polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%)'
-                    : 'polygon(10px 0, 100% 0, 100% 100%, 0 100%)')
-                : 'none',
+              clipPath:      clipFor(idx, renderedOptions.length),
               '&:hover': active ? {} : { color: accent },
             }}
           >
