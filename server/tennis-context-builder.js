@@ -16,6 +16,7 @@
 
 import { getTennisRankings } from './tennis-api.js';
 import { getTennisTour, isSupportedTour } from './tennis-tour-map.js';
+import { getSurfaceElo, getH2H, getRecentForm } from './tennis-elo-fetcher.js';
 
 function fractionPresent(...vals) {
   const present = vals.filter(v => v != null).length;
@@ -67,21 +68,20 @@ function extractRank(rankingsPayload, playerName) {
 }
 
 /**
- * Build a per-player block. ELO/H2H/form are null until the 12b Sackmann
- * fetcher; everything that can be derived from the match + rankings is filled.
+ * Build a per-player block. ELO/form come from the Sackmann fetcher (12b) when
+ * available; they degrade to null (rankings-only) when GitHub is unreachable.
  */
-function buildPlayerBlock(player, rank, surface) {
+function buildPlayerBlock(player, rank, surface, elo, form) {
   return {
     playerId: player?.id ?? null,
     playerName: player?.name ?? null,
     country: player?.country ?? null,
     seed: player?.seed ?? null,
     rank: rank ?? null,
-    // surface-specific signals — populated in Sprint 12b
-    eloOverall: null,
-    eloSurface: null,
+    eloOverall: elo?.overall ?? null,
+    eloSurface: elo?.surface ?? null,
     surface: surface ?? null,
-    recentForm: null,    // { record, recent } from Sackmann
+    recentForm: form ?? null,    // { record, recent, surfaceRecord } from Sackmann
     // fatigue — derived from draw progress when available
     restDays: null,
     setsPlayedTourney: null,
@@ -126,34 +126,41 @@ export async function buildTennisMatchContext({
   const tourMeta = getTennisTour(tour);
   const effectiveBestOf = bestOf ?? (tour === 'atp' ? null : 3); // ATP varies (5 in Slams)
 
-  const [rankingsPayload] = await Promise.all([
+  const [rankingsPayload, eloA, eloB, formA, formB, h2h] = await Promise.all([
     getTennisRankings(tour).catch(err => {
       console.warn(`[tennis-context] rankings failed (${tour}): ${err.message}`);
       return null;
     }),
+    getSurfaceElo(tour, playerAName, surface).catch(() => null),
+    getSurfaceElo(tour, playerBName, surface).catch(() => null),
+    getRecentForm(tour, playerAName, surface).catch(() => null),
+    getRecentForm(tour, playerBName, surface).catch(() => null),
+    getH2H(tour, playerAName, playerBName, surface).catch(() => null),
   ]);
 
   const rankA = extractRank(rankingsPayload, playerAName);
   const rankB = extractRank(rankingsPayload, playerBName);
 
-  const playerA = buildPlayerBlock({ id: playerAId, name: playerAName }, rankA, surface);
-  const playerB = buildPlayerBlock({ id: playerBId, name: playerBName }, rankB, surface);
+  const playerA = buildPlayerBlock({ id: playerAId, name: playerAName }, rankA, surface, eloA, formA);
+  const playerB = buildPlayerBlock({ id: playerBId, name: playerBName }, rankB, surface, eloB, formB);
+
+  const eloSurfacePresent = eloA?.surface != null && eloB?.surface != null;
+  const h2hPresent = h2h != null && (h2h.aWins + h2h.bWins) > 0;
 
   const staleFlags = [];
   if (rankA == null) staleFlags.push('player_a_rank_missing');
   if (rankB == null) staleFlags.push('player_b_rank_missing');
   if (!surface) staleFlags.push('surface_unknown');
   if (!marketOdds?.moneyline || marketOdds.moneyline.a == null) staleFlags.push('moneyline_odds_missing');
-  // ELO-surface always missing until Sprint 12b Sackmann integration:
-  staleFlags.push('elo_surface_unavailable');
-  staleFlags.push('h2h_unavailable');
+  if (!eloSurfacePresent) staleFlags.push('elo_surface_unavailable');
+  if (!h2hPresent) staleFlags.push('h2h_unavailable');
 
   const completeness = {
     rankings:  fractionPresent(rankA, rankB),
     surface:   surface ? 1 : 0,
     marketOdds: marketOdds?.moneyline?.a != null ? 1 : 0,
-    eloSurface: 0,
-    h2h: 0,
+    eloSurface: eloSurfacePresent ? 1 : 0,
+    h2h: h2hPresent ? 1 : 0,
   };
   const overall = +(
     (completeness.rankings   * 0.20 +
@@ -172,8 +179,14 @@ export async function buildTennisMatchContext({
         ok: !!(rankA != null && rankB != null),
         source: rankingsPayload ? 'espn-rankings' : 'unavailable',
       },
-      eloSurface: { ok: false, source: 'unavailable — pending Tennis Abstract/Sackmann (12b)' },
-      h2h: { ok: false, source: 'unavailable — pending Tennis Abstract/Sackmann (12b)' },
+      eloSurface: {
+        ok: eloSurfacePresent,
+        source: eloSurfacePresent ? 'sackmann-elo' : 'unavailable — Sackmann fetch failed or player not found',
+      },
+      h2h: {
+        ok: h2hPresent,
+        source: h2hPresent ? 'sackmann-matches' : 'unavailable — no matchup history found',
+      },
       marketOdds: {
         ok: !!(marketOdds?.moneyline?.a != null),
         source: marketOdds?.source ?? null,
@@ -195,6 +208,7 @@ export async function buildTennisMatchContext({
     bestOf: effectiveBestOf,
     playerA,
     playerB,
+    h2h: h2h ?? null,
     context_meta,
   };
 }

@@ -2,7 +2,7 @@
 
 Plan de construcción del **sexto deporte** (Sprint 12) y el **primero individual**. Detalle técnico y de datos en [tennis-architecture.md](tennis-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md). Espeja la serie Soccer (Sprint 11) que a su vez espejó NFL/NBA, con las adaptaciones de "deporte individual" documentadas en la spec.
 
-**Estado**: 🔄 en build. **12a cerrado en código** (rama `claude/tennis-sprint-12`); 12b–12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
+**Estado**: 🔄 en build. **12a + 12b cerrados en código** (rama `claude/tennis-sprint-12`); 12c–12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
 
 ---
 
@@ -47,16 +47,18 @@ Espeja Soccer 11a. Objetivo: leer Tennis de extremo a extremo sin análisis toda
 - [x] Tests: `server/__tests__/tennis-tour-map.test.js` (19 tests, lógica pura) + `tennis-odds.test.js` (11 tests: matching straight/flipped, build, void status).
 - **Salida**: `GET /api/tennis/matches?tour=atp&date=` devuelve partidos normalizados; el context builder degrada con `staleFlags` honestos cuando una fuente falla. 30 tests verdes.
 
-### Sprint 12b — Oracle Tennis 📋
+### Sprint 12b — Oracle Tennis ✅ (cerrado en código)
 
-Espeja Soccer 11b.
+Espeja Soccer 11b. **Cerrado en código (rama `claude/tennis-sprint-12`)** — la llamada LLM real se valida cuando 12c exponga el endpoint (requiere `ANTHROPIC_API_KEY` + red).
 
-- [ ] `server/tennis-elo-fetcher.js` — baja datasets Sackmann (ELO-surface, H2H, forma), cache 24h. `getSurfaceElo`, `getH2H`, `getRecentForm`. (Puede empezar en 12b y refinarse; el Oracle cae a ranking si ELO falta.)
-- [ ] `server/prompts/oracle-tennis-prompts.js` — `TENNIS_SYSTEM_PROMPT` + `TENNIS_CHAT_PROMPT` + `TENNIS_OUTPUT_SCHEMA_VERSION`. Cap 72%, prioridad ELO-surface→H2H→forma→fatiga→ranking, guardrail anti-retiro + anti-hallucination + anti-bias.
-- [ ] `server/services/oracleTennis.js` — `analyzeTennisMatch`, `analyzeTennisChat`, `serializeTennisContext` (Anthropic propio, sin Grok; no toca oracle.js).
-- [ ] `server/services/tennisOutputGuard.js` — `pick_side` exactamente `player_a|player_b` (sin empate), confianza 50–72, bet_type válido, rechaza props/ABSTAIN/parlay/parse fallido.
-- [ ] Tests: `tennisOutputGuard.test.js` + serializer end-to-end con contexto mock.
-- **Salida**: motor end-to-end listo; la llamada LLM real se valida cuando 12c exponga el endpoint.
+- [x] `server/tennis-elo-fetcher.js` — baja los CSV de partidos de Jeff Sackmann (GitHub, temporada actual + previa), corre un **único pase cronológico de ELO** (overall + por superficie, K=32) y construye índices H2H + forma reciente. Cache 24h, stale fallback, **nunca throwea** (cae a null → el Oracle usa ranking). `getSurfaceElo`, `getH2H`, `getRecentForm`, `getTennisEloStatus`.
+- [x] Context builder cableado al fetcher: `buildTennisMatchContext` ahora puebla ELO-surface/overall, forma y un bloque `h2h` vía `Promise.all`; `staleFlags` y `completeness` reflejan presencia real de ELO/H2H.
+- [x] `server/prompts/oracle-tennis-prompts.js` — `TENNIS_SYSTEM_PROMPT` + `TENNIS_CHAT_PROMPT` + `TENNIS_OUTPUT_SCHEMA_VERSION`. Cap **72%**, mercado 2-vías (sin empate), prioridad surface-ELO→H2H→forma→fatiga→ranking, **guardrail anti-retiro** + anti-hallucination + anti-bias. Output JSON con `pick_side` y `probability_model` de 2 claves (sin draw).
+- [x] `server/services/oracleTennis.js` — `analyzeTennisMatch`, `analyzeTennisChat` (Anthropic propio, sin Grok; **no toca oracle.js**). Modelos: sonnet deep / opus-4-8 premium / haiku chat.
+- [x] `server/services/tennisContextSerializer.js` — serializador puro extraído (testeable sin el SDK); re-exportado desde `oracleTennis.js`.
+- [x] `server/services/tennisOutputGuard.js` — `pick_side` exactamente `player_a|player_b` (sin empate, fatal si falta/ inválido), confianza 50–72, bet_type ∈ Match Winner/Set Handicap/Total Games, `probability_model` de 2 claves (flag si trae draw), rechaza props/ABSTAIN/parlay/parse fallido.
+- [x] Tests: `tennisOutputGuard.test.js` (16 tests: guard + serializer end-to-end con contexto mock, incl. degradación sin ELO/H2H/odds).
+- **Salida**: motor end-to-end listo; 35 tests tennis verdes. La llamada LLM real se valida cuando 12c exponga el endpoint.
 
 ### Sprint 12c — Pick lifecycle Tennis 📋 (el sprint crítico)
 
