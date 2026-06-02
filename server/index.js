@@ -123,6 +123,7 @@ import {
   getTennisRankings,
 } from './tennis-api.js';
 import { TENNIS_TOURS_LIST } from './tennis-tour-map.js';
+import { getTennisMatchOdds } from './tennis-odds.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -1211,7 +1212,45 @@ app.get('/api/tennis/matches', async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return res.status(400).json({ success: false, error: 'date must be YYYY-MM-DD' });
     }
-    const matches = await getTennisMatchesForDate(tour, dateStr);
+    let matches = await getTennisMatchesForDate(tour, dateStr);
+
+    // Fallback: if ESPN returned nothing, use The Odds API match list.
+    // The Odds API has player names + commence times for upcoming matches.
+    if (matches.length === 0) {
+      console.log(`[tennis-matches] ESPN returned 0 for ${tour} ${dateStr} — trying Odds API fallback`);
+      try {
+        const oddsEvents = await getTennisMatchOdds({ tour, date: dateStr });
+        matches = oddsEvents.map(ev => {
+          const compDate = ev.commenceTime ?? null;
+          // Only include events on the requested date.
+          if (compDate && !String(compDate).startsWith(dateStr)) return null;
+          return {
+            matchId:        ev.eventId ?? null,
+            tour,
+            tournamentId:   null,
+            tournamentName: null,
+            matchDate:      compDate,
+            surface:        null,
+            round:          null,
+            roundDepth:     null,
+            status:         'scheduled',
+            statusName:     null,
+            statusDetail:   null,
+            isVoidStatus:   false,
+            players: {
+              a: { id: null, name: ev.playerA, country: null, flag: null, setsWon: null, gamesPerSet: [], winner: false, seed: null },
+              b: { id: null, name: ev.playerB, country: null, flag: null, setsWon: null, gamesPerSet: [], winner: false, seed: null },
+            },
+            winner:    null,
+            _source:   'oddsapi',
+          };
+        }).filter(Boolean);
+        console.log(`[tennis-matches] Odds API fallback: ${matches.length} matches for ${tour} ${dateStr}`);
+      } catch (oddsErr) {
+        console.warn(`[tennis-matches] Odds API fallback failed: ${oddsErr.message}`);
+      }
+    }
+
     res.json({ success: true, tour, date: dateStr, count: matches.length, data: matches });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
