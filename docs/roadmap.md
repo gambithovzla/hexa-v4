@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-05-31 — **Sprint 11a (Soccer scaffolding de datos) en build**: `soccer-league-map.js` (6 ligas: EPL, La Liga, Serie A, Bundesliga, Ligue 1, MLS), `soccer-team-map.js` (88 clubes seed + aliases + accent-strip), `soccer-api.js` (wrapper ESPN league-aware), `soccer-odds.js` (The Odds API multi-liga, mercado 3-vías 1X2 + totals + BTTS). Rama `claude/soccer-sprint-11`. Fixes UX 2026-05-31 mergeados (badge analizado, prop ML, imperdible gate). Sprint 9 NFL cerrado (PRs #373–#378). B2+B10 frontend cerrados.
+**Última actualización**: 2026-06-02 — **Sprint 12 (Tennis) planning**: specs maestras creadas — [tennis-architecture.md](tennis-architecture.md) + [tennis-roadmap.md](tennis-roadmap.md) (12a–12e). Primer deporte individual (jugador A vs B → slots home/away; tours atp/wta reusan `league`); resolver de retiros/walkovers (void + refund) como componente nuevo crítico. Rama `claude/tennis-sprint-12`. Sprint 11 Soccer completo + en prod. Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
 
 ---
 
@@ -586,9 +586,11 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 ---
 
-### ⏳ Sprint 12 — Tennis
+### 📋 Sprint 12 — Tennis
 
-**Status**: ⏳ planificado. Inicio recomendado: tras Sprint 11; torneos Grand Slam como hito de validación.
+**Spec maestra**: [tennis-architecture.md](tennis-architecture.md) · **Roadmap por sub-sprints (12a–12e)**: [tennis-roadmap.md](tennis-roadmap.md). El resumen de abajo se conserva; el detalle vive en esos dos documentos.
+
+**Status**: 📋 planning (docs completas, sin código). Inicio recomendado: tras Sprint 11; torneos Grand Slam como hito de validación. `tennis` ya está en el registry como deporte conocido (`SPORT_META.tennis.active=false`). **Primer deporte individual**: jugador A vs B mapeado a slots home/away; tours `atp`/`wta` reusan la dimensión `league` de Soccer. El componente genuinamente nuevo es el **resolver de retiros/walkovers** (void + refund).
 
 **Por qué Tennis**: único deporte **año redondo** (Australian Open ene, Roland Garros may, Wimbledon jun, US Open ago + ATP/WTA tours continuos). Llena todos los huecos de calendario que los otros deportes no cubren.
 
@@ -739,7 +741,7 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 
 2026 Q3-4 Sprint 10    — NHL Hockey                        ████████████████████████ ✅ (backend + UI; ML sidecar diferido)
 2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████░░░░░░░░░░░░░░░░░░░░ 🔄 (11a scaffolding datos en build; mercado 3-vías)
-2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (año redondo, tras Sprint 11)
+2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ████░░░░░░░░░░░░░░░░░░░░ 📋 (planning: docs completas — tennis-architecture.md + tennis-roadmap.md)
 2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```
 
