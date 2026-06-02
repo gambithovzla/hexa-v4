@@ -232,36 +232,55 @@ export async function getTennisMatchesForDate(tour, dateStr) {
   };
 
   for (const ev of events) {
-    // ESPN tennis scoreboard can return events in two shapes:
-    //   A) event IS the match → ev.competitors = [playerA, playerB]  (no nested competitions)
-    //   B) event IS the tournament → ev.competitions = [{competitors:[...]}]
-    // Detected by presence of ev.competitors with 2 entries.
+    // ESPN tennis scoreboard has three observed shapes:
+    //   A) event IS the match → ev.competitors = [playerA, playerB]  (no competitions[])
+    //   B) event IS a tournament → ev.competitions = [{competitors:[...]}]
+    //   C) Grand Slam / big tournament → ev.groupings = [{competitions:[{competitors:[...]}]}]
+    //      or ev.groupings = [{grouping:{competitions:[...]}}]
+    //      (confirmed for Roland Garros: topLevelKeys includes 'groupings', no competitions/competitors)
     const eventLevelCompetitors = ev?.competitors ?? [];
     if (eventLevelCompetitors.length === 2) {
       // Shape A: the event itself is the match.
       extractMatch(eventLevelCompetitors, null, ev);
-    } else {
-      // Shape B: tournament containing individual match competitions.
-      for (const comp of ev?.competitions ?? []) {
+    } else if ((ev?.competitions ?? []).length > 0) {
+      // Shape B: tournament with top-level competitions.
+      for (const comp of ev.competitions) {
         extractMatch(comp?.competitors ?? [], comp, ev);
+      }
+    } else {
+      // Shape C: tournament with groupings (Roland Garros / Grand Slams).
+      // Matches live inside groupings[N].competitions or groupings[N].grouping.competitions.
+      for (const g of ev?.groupings ?? []) {
+        const subComps =
+          Array.isArray(g?.competitions)         ? g.competitions :
+          Array.isArray(g?.grouping?.competitions) ? g.grouping.competitions :
+          Array.isArray(g?.events)               ? g.events :
+          Array.isArray(g?.grouping?.events)     ? g.grouping.events :
+          [];
+        for (const comp of subComps) {
+          extractMatch(comp?.competitors ?? [], comp, ev);
+        }
       }
     }
   }
 
   console.log(`[tennis-api] ${tour} ${dateStr}: ${matches.length} singles matches from ${events.length} events`);
 
-  // Diagnostic: when 0 matches extracted, log raw ESPN event structure to aid debugging.
+  // Diagnostic: when 0 matches extracted, log groupings structure to aid debugging.
   if (matches.length === 0 && events.length > 0) {
     const ev0 = events[0];
-    console.warn(`[tennis-api] 0 matches extracted — first event diagnostic:`, JSON.stringify({
+    const g0 = (ev0?.groupings ?? [])[0];
+    console.warn(`[tennis-api] 0 matches extracted — event diagnostic:`, JSON.stringify({
       id:               ev0?.id,
       name:             ev0?.name,
-      shortName:        ev0?.shortName,
+      statusState:      ev0?.status?.type?.state,
       competitorsLen:   (ev0?.competitors ?? []).length,
       competitionsLen:  (ev0?.competitions ?? []).length,
-      comp0competitors: (ev0?.competitions?.[0]?.competitors ?? []).length,
-      statusState:      ev0?.status?.type?.state,
-      topLevelKeys:     Object.keys(ev0 ?? {}),
+      groupingsLen:     (ev0?.groupings ?? []).length,
+      g0keys:           g0 ? Object.keys(g0) : null,
+      g0compsLen:       (g0?.competitions ?? []).length,
+      g0groupingComps:  (g0?.grouping?.competitions ?? []).length,
+      g0eventsLen:      (g0?.events ?? []).length,
     }));
   }
 
