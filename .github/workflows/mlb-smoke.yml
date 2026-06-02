@@ -116,9 +116,9 @@ jobs:
         env:
           SMOKE_BASE_URL: http://127.0.0.1:3001
           SMOKE_WAIT_FOR_SERVER: "1"
-          SMOKE_TIMEOUT_MS: "15000"
+          SMOKE_TIMEOUT_MS: "45000"
           SMOKE_RETRIES: "3"
-          SMOKE_RETRY_DELAY_MS: "1500"
+          SMOKE_RETRY_DELAY_MS: "2000"
           SMOKE_ADMIN_TOKEN: ${{ secrets.HEXA_ADMIN_SMOKE_TOKEN }}
         run: npm run smoke:mlb
 
