@@ -249,6 +249,22 @@ export async function getTennisMatchesForDate(tour, dateStr) {
   }
 
   console.log(`[tennis-api] ${tour} ${dateStr}: ${matches.length} singles matches from ${events.length} events`);
+
+  // Diagnostic: when 0 matches extracted, log raw ESPN event structure to aid debugging.
+  if (matches.length === 0 && events.length > 0) {
+    const ev0 = events[0];
+    console.warn(`[tennis-api] 0 matches extracted — first event diagnostic:`, JSON.stringify({
+      id:               ev0?.id,
+      name:             ev0?.name,
+      shortName:        ev0?.shortName,
+      competitorsLen:   (ev0?.competitors ?? []).length,
+      competitionsLen:  (ev0?.competitions ?? []).length,
+      comp0competitors: (ev0?.competitions?.[0]?.competitors ?? []).length,
+      statusState:      ev0?.status?.type?.state,
+      topLevelKeys:     Object.keys(ev0 ?? {}),
+    }));
+  }
+
   return matches;
 }
 
