@@ -147,33 +147,45 @@ export async function getTennisMatchesForDate(tour, dateStr) {
   const datePart = toEspnDate(dateStr);
   const cacheKey = `tennis:matches:${tour}:${dateStr}`;
 
-  // Try with dates first, then bare URL as fallback.
-  let json = null;
-  for (const url of [
+  // ESPN tennis may or may not use /atp/ or /wta/ as a sub-path. Try all known
+  // patterns in order of specificity; stop on the first one that returns events.
+  const candidates = [
     `${ESPN_BASE}/${tour}/scoreboard?dates=${datePart}`,
     `${ESPN_BASE}/${tour}/scoreboard`,
-  ]) {
+    `${ESPN_BASE}/scoreboard?dates=${datePart}`,
+    `${ESPN_BASE}/scoreboard`,
+  ];
+
+  let json = null;
+  let usedTourPath = false;
+  for (const url of candidates) {
     try {
       const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (hexa-tennis)' } });
       if (!res.ok) {
         console.warn(`[tennis-api] ${url} → HTTP ${res.status}`);
         continue;
       }
-      json = await res.json();
-      const evCount = (json?.events ?? []).length;
+      const data = await res.json();
+      const evCount = (data?.events ?? []).length;
       console.log(`[tennis-api] ${url} → events=${evCount}`);
-      if (evCount > 0) { cacheSet(cacheKey, json); break; }
+      if (evCount > 0) {
+        json = data;
+        usedTourPath = url.includes(`/${tour}/`);
+        cacheSet(cacheKey, json);
+        break;
+      }
     } catch (err) {
       console.warn(`[tennis-api] fetch failed (${url}): ${err.message}`);
     }
   }
 
-  // Fall back to stale cache if both attempts failed or returned nothing.
+  // Fall back to stale cache if all attempts returned nothing.
   if (!json || (json?.events ?? []).length === 0) {
     const cached = cache.get(cacheKey);
     if (cached) {
       console.warn(`[tennis-api] serving stale cache for ${tour}:${dateStr}`);
       json = cached.data;
+      usedTourPath = true; // cached data was already tour-filtered when stored
     }
   }
 
@@ -188,10 +200,23 @@ export async function getTennisMatchesForDate(tour, dateStr) {
       // Tennis singles = 2 competitors. Skip doubles (4) and malformed rows.
       if (competitors.length !== 2) continue;
 
-      // Secondary date filter: ESPN sometimes returns all tournament competitions
-      // regardless of the queried date. Keep only matches on the target date.
-      const compDate = comp?.date ?? ev?.date ?? null;
+      // Secondary date filter: ESPN may return all rounds of an active tournament;
+      // keep only matches whose date matches the requested day.
+      // comp.date is ISO 8601, e.g. "2026-06-02T13:00Z" — compare prefix only.
+      const compDate = comp?.date ?? null;
       if (compDate && !String(compDate).startsWith(dateStr)) continue;
+
+      // Tour filter when the bare /scoreboard URL was used (returns ATP+WTA together).
+      // Match tournament name keywords ("ATP"/"WTA"/gender). When unrecognizable,
+      // include — better to show an extra match than to miss one.
+      if (!usedTourPath) {
+        const nameUpper = String(tournamentName ?? '').toUpperCase();
+        const wantAtp = tour === 'atp';
+        const hasWta = nameUpper.includes('WTA') || nameUpper.includes('WOMEN');
+        const hasAtp = nameUpper.includes('ATP') || nameUpper.includes('MEN');
+        if (wantAtp && hasWta && !hasAtp) continue;
+        if (!wantAtp && hasAtp && !hasWta) continue;
+      }
 
       const ordered = [...competitors].sort(
         (a, b) => (a?.order ?? 0) - (b?.order ?? 0),
@@ -206,7 +231,7 @@ export async function getTennisMatchesForDate(tour, dateStr) {
         tour,
         tournamentId,
         tournamentName,
-        matchDate: compDate,
+        matchDate: compDate ?? ev?.date ?? null,
         surface: sr.surface,
         round: sr.round,
         roundDepth: sr.roundDepth,
