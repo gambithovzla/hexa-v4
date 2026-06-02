@@ -28,10 +28,12 @@ import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
 import nhlRouter from './routes/nhl.js';
+import tennisRouter from './routes/tennis.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
 import { resolveNhlPendingPicks } from './pick-resolver-nhl.js';
+import { resolveTennisPendingPicks } from './pick-resolver-tennis.js';
 import { resolveParlayRunById, resolvePendingParlays } from './services/parlayResolver.js';
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
@@ -666,6 +668,7 @@ app.use('/api/insights',     insightsRouter);
 app.use('/api/nba',          nbaRouter);
 app.use('/api/nfl',          nflRouter);
 app.use('/api/nhl',          nhlRouter);
+app.use('/api/tennis',       tennisRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -5155,6 +5158,15 @@ runMigrations()
           if (process.env.NHL_ANALYSIS_ENABLED === 'true') {
             resolveNhlPendingPicks().catch(err => {
               console.error('[pick-resolver-nhl] Scheduled run failed:', err.message);
+            });
+          }
+
+          // Tennis is year-round; tournaments run across many timezones, so the
+          // same broad evening/overnight ET window covers most finals. Gated by
+          // its own flag; the resolver itself skips dates with no pending picks.
+          if (process.env.TENNIS_ANALYSIS_ENABLED === 'true') {
+            resolveTennisPendingPicks().catch(err => {
+              console.error('[pick-resolver-tennis] Scheduled run failed:', err.message);
             });
           }
         }

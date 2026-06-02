@@ -2,7 +2,7 @@
 
 Plan de construcción del **sexto deporte** (Sprint 12) y el **primero individual**. Detalle técnico y de datos en [tennis-architecture.md](tennis-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md). Espeja la serie Soccer (Sprint 11) que a su vez espejó NFL/NBA, con las adaptaciones de "deporte individual" documentadas en la spec.
 
-**Estado**: 🔄 en build. **12a + 12b cerrados en código** (rama `claude/tennis-sprint-12`); 12c–12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
+**Estado**: 🔄 en build. **12a + 12b + 12c cerrados en código** (rama `claude/tennis-sprint-12`); 12.1, 12d, 12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
 
 ---
 
@@ -60,16 +60,16 @@ Espeja Soccer 11b. **Cerrado en código (rama `claude/tennis-sprint-12`)** — l
 - [x] Tests: `tennisOutputGuard.test.js` (16 tests: guard + serializer end-to-end con contexto mock, incl. degradación sin ELO/H2H/odds).
 - **Salida**: motor end-to-end listo; 35 tests tennis verdes. La llamada LLM real se valida cuando 12c exponga el endpoint.
 
-### Sprint 12c — Pick lifecycle Tennis 📋 (el sprint crítico)
+### Sprint 12c — Pick lifecycle Tennis ✅ (cerrado en código — el sprint crítico)
 
-Espeja Soccer 11c **+ resolver propio**.
+Espeja Soccer 11c **+ resolver propio**. **Cerrado en código (rama `claude/tennis-sprint-12`)** — la llamada LLM/Odds real se valida en prod (keys + red).
 
-- [ ] `server/routes/tennis.js` — `POST /api/tennis/analyze/match` + `/chat` (admin-only, flag `TENNIS_ANALYSIS_ENABLED` → 503). Valida `tour`. Persiste `sport='tennis'`, `league=tour`. Resuelve odds server-side.
-- [ ] `server/pick-resolver-tennis.js` — **lógica propia, NO reusa `resolvePickFromFinalState`**. Match winner / set handicap / total games por score de sets. **`STATUS_RETIRED`/`STATUS_WALKOVER`/`STATUS_ABANDONED` → `result='void'` + refund de crédito.** Job diario gated por flag, pollea solo si hay partidos `in`.
-- [ ] Path de refund en void verificado/reusado (mismo que otros voids). Documentar `result='void'` tennis en `docs/data-schema.md`.
-- [ ] `chatPickExtractor.js` extendido a `'tennis'` (sport normaliza; market hint moneyline/set_handicap/total; persiste `sport='tennis'` sin contaminar otros).
-- [ ] Tests: resolver con casos final / retiro / walkover / set-handicap / total-games (lógica pura, sin red).
-- **Salida**: crear → resolver de un pick Tennis contra score final, **con void correcto en retiro**, aislado de jobs de otros deportes.
+- [x] `server/routes/tennis.js` — `POST /api/tennis/analyze/match` + `/chat` (admin-only, flag `TENNIS_ANALYSIS_ENABLED` → 503). Valida `tour`. Persiste `sport='tennis'`, `league=tour`, `game_pk=parseInt(matchId)`. Resuelve odds server-side. Montado en `index.js` (`app.use('/api/tennis')`). (pick_features/shadow → 12.1.)
+- [x] `server/pick-resolver-tennis.js` + `server/tennis-resolution.js` — **lógica propia, NO reusa `resolvePickFromFinalState`**. Match winner / set handicap (±1.5, half-point, sin push) / total games por score de sets. **`STATUS_RETIRED`/`STATUS_WALKOVER`/`STATUS_ABANDONED`/`STATUS_CANCELED` → `result='void'`.** Lógica pura extraída a `tennis-resolution.js` (testeable sin `pg`). Job diario en `index.js` gated por `TENNIS_ANALYSIS_ENABLED` (ventana 19:00–05:59 ET; el resolver salta fechas sin pendientes).
+- [x] **Política de void = no acción**: `result='void'` queda fuera de `IN ('won','lost','push','win','loss')`, así que se **excluye automáticamente** de todo ROI/equity/win-rate. Tennis es admin-only sin descuento de créditos en esta fase, por lo que no hay refund explícito que invocar.
+- [x] `chatPickExtractor.js` extendido a `'tennis'` (sport normaliza a `'tennis'` en `saveExtractedChatPick` — sin contaminar otros; market hint match winner/set handicap/total games en `augmentChatQuestion`).
+- [x] Tests: `pick-resolver-tennis.test.js` (16 tests: match winner win/loss/ambiguo, set handicap -1.5 Bo3/Bo5 + +1.5, total over/under/push, **retiro→void, walkover→void**).
+- **Salida**: crear → resolver de un pick Tennis contra score final, **con void correcto en retiro/walkover**, aislado de jobs de otros deportes. 51 tests tennis verdes en total.
 
 ### Sprint 12.1 — Dataset + shadow 📋
 
