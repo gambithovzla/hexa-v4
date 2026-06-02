@@ -133,14 +133,12 @@ function extractSurfaceRound(competition, parentEvent) {
 
 /**
  * Matches for a tour on a date. `dateStr` is YYYY-MM-DD.
- * Flattens the nested tournament→competition shape into a flat match list.
  *
- * ESPN tennis scoreboard returns *tournaments* as top-level events; individual
- * matches live in event.competitions[]. The `dates` param returns whatever
- * active tournaments ESPN considers "for" that date — some days ESPN ignores
- * the filter and returns all active tournament competitions regardless of match
- * date. We therefore filter by comp.date as a secondary pass and also try a
- * bare call without dates when the first returns 0 events.
+ * ESPN tennis scoreboard has two observed shapes:
+ *   A) event IS the match: ev.competitors=[playerA, playerB] (no competitions[])
+ *   B) event IS a tournament: ev.competitions=[{competitors:[...]}]
+ * We detect by ev.competitors.length === 2 and handle both. No secondary date
+ * filter — ESPN already filters by ?dates=YYYYMMDD; over-filtering caused 0 results.
  */
 export async function getTennisMatchesForDate(tour, dateStr) {
   assertTour(tour);
@@ -191,60 +189,66 @@ export async function getTennisMatchesForDate(tour, dateStr) {
 
   const events = json?.events ?? [];
   const matches = [];
+
+  // Helper: extract a single match from a competitors array + context objects.
+  // comp = the nested competition (null when event IS the match).
+  // parentEv = the top-level event (used for name/id/surface/round fallbacks).
+  const extractMatch = (competitors, comp, parentEv) => {
+    if (competitors.length !== 2) return; // skip doubles/malformed
+
+    // Tour filter when bare /scoreboard returns ATP+WTA together.
+    if (!usedTourPath) {
+      const nameUpper = String(parentEv?.name ?? '').toUpperCase();
+      const wantAtp = tour === 'atp';
+      const hasWta = nameUpper.includes('WTA') || nameUpper.includes('WOMEN');
+      const hasAtp = nameUpper.includes('ATP') || nameUpper.includes('MEN');
+      if (wantAtp && hasWta && !hasAtp) return;
+      if (!wantAtp && hasAtp && !hasWta) return;
+    }
+
+    const ordered = [...competitors].sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0));
+    const playerA = mapCompetitor(ordered[0]);
+    const playerB = mapCompetitor(ordered[1]);
+    const sr = extractSurfaceRound(comp ?? parentEv, parentEv);
+    const ref = comp ?? parentEv; // prefer comp-level fields, fall back to event
+    const statusName = ref?.status?.type?.name ?? null;
+
+    matches.push({
+      matchId:        ref?.id ?? null,
+      tour,
+      tournamentId:   parentEv?.id ?? null,
+      tournamentName: parentEv?.name ?? parentEv?.shortName ?? null,
+      matchDate:      ref?.date ?? parentEv?.date ?? null,
+      surface:        sr.surface,
+      round:          sr.round,
+      roundDepth:     sr.roundDepth,
+      status:         normalizeStatus(ref?.status?.type?.state),
+      statusName,
+      statusDetail:   ref?.status?.type?.detail ?? null,
+      isVoidStatus:   isVoidStatusName(statusName),
+      players:        { a: playerA, b: playerB },
+      winner:         playerA.winner ? 'a' : playerB.winner ? 'b' : null,
+    });
+  };
+
   for (const ev of events) {
-    const tournamentName = ev?.name ?? ev?.shortName ?? null;
-    const tournamentId = ev?.id ?? null;
-    const competitions = ev?.competitions ?? [];
-    for (const comp of competitions) {
-      const competitors = comp?.competitors ?? [];
-      // Tennis singles = 2 competitors. Skip doubles (4) and malformed rows.
-      if (competitors.length !== 2) continue;
-
-      // Secondary date filter: ESPN may return all rounds of an active tournament;
-      // keep only matches whose date matches the requested day.
-      // comp.date is ISO 8601, e.g. "2026-06-02T13:00Z" — compare prefix only.
-      const compDate = comp?.date ?? null;
-      if (compDate && !String(compDate).startsWith(dateStr)) continue;
-
-      // Tour filter when the bare /scoreboard URL was used (returns ATP+WTA together).
-      // Match tournament name keywords ("ATP"/"WTA"/gender). When unrecognizable,
-      // include — better to show an extra match than to miss one.
-      if (!usedTourPath) {
-        const nameUpper = String(tournamentName ?? '').toUpperCase();
-        const wantAtp = tour === 'atp';
-        const hasWta = nameUpper.includes('WTA') || nameUpper.includes('WOMEN');
-        const hasAtp = nameUpper.includes('ATP') || nameUpper.includes('MEN');
-        if (wantAtp && hasWta && !hasAtp) continue;
-        if (!wantAtp && hasAtp && !hasWta) continue;
+    // ESPN tennis scoreboard can return events in two shapes:
+    //   A) event IS the match → ev.competitors = [playerA, playerB]  (no nested competitions)
+    //   B) event IS the tournament → ev.competitions = [{competitors:[...]}]
+    // Detected by presence of ev.competitors with 2 entries.
+    const eventLevelCompetitors = ev?.competitors ?? [];
+    if (eventLevelCompetitors.length === 2) {
+      // Shape A: the event itself is the match.
+      extractMatch(eventLevelCompetitors, null, ev);
+    } else {
+      // Shape B: tournament containing individual match competitions.
+      for (const comp of ev?.competitions ?? []) {
+        extractMatch(comp?.competitors ?? [], comp, ev);
       }
-
-      const ordered = [...competitors].sort(
-        (a, b) => (a?.order ?? 0) - (b?.order ?? 0),
-      );
-      const playerA = mapCompetitor(ordered[0]);
-      const playerB = mapCompetitor(ordered[1]);
-      const sr = extractSurfaceRound(comp, ev);
-      const statusName = comp?.status?.type?.name ?? null;
-
-      matches.push({
-        matchId: comp?.id ?? null,
-        tour,
-        tournamentId,
-        tournamentName,
-        matchDate: compDate ?? ev?.date ?? null,
-        surface: sr.surface,
-        round: sr.round,
-        roundDepth: sr.roundDepth,
-        status: normalizeStatus(comp?.status?.type?.state),
-        statusName,
-        statusDetail: comp?.status?.type?.detail ?? null,
-        isVoidStatus: isVoidStatusName(statusName),
-        players: { a: playerA, b: playerB },
-        winner: playerA.winner ? 'a' : playerB.winner ? 'b' : null,
-      });
     }
   }
-  console.log(`[tennis-api] ${tour} ${dateStr}: ${matches.length} singles matches from ${events.length} tournaments`);
+
+  console.log(`[tennis-api] ${tour} ${dateStr}: ${matches.length} singles matches from ${events.length} events`);
   return matches;
 }
 
