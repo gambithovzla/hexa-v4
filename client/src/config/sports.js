@@ -7,7 +7,7 @@ export const SPORT_META = {
   nfl: { shortLabel: 'NFL', displayName: 'Football', active: true },
   nhl: { shortLabel: 'NHL', displayName: 'Hockey', active: true },
   soccer: { shortLabel: 'SOC', displayName: 'Soccer', active: true },
-  tennis: { shortLabel: 'TENNIS', displayName: 'Tennis', active: true },
+  tennis: { shortLabel: 'TEN', displayName: 'Tennis', active: true },
 };
 
 export function isKnownSport(value) {

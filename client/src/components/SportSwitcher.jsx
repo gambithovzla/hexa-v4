@@ -24,15 +24,15 @@ export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
       : C.cyan;
   const liveryText = (s) =>
     isLeague ? (s === 'nba' ? 'var(--brand-ink)' : '#fff') : '#0a0d14';
-  // Soccer has 5 buttons — narrow the clip so they all fit
+  // Clip polygon shifts for League brand diagonal cuts; tighter at 5+ buttons
   const clipFor = (idx, total) => {
     if (!isLeague) return 'none';
     if (total <= 4) return idx === 0
       ? 'polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%)'
       : 'polygon(10px 0, 100% 0, 100% 100%, 0 100%)';
     return idx === 0
-      ? 'polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%)'
-      : 'polygon(7px 0, 100% 0, 100% 100%, 0 100%)';
+      ? 'polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%)'
+      : 'polygon(6px 0, 100% 0, 100% 100%, 0 100%)';
   };
 
   return (
@@ -55,13 +55,13 @@ export default function SportSwitcher({ sport = 'mlb', onChange, options }) {
             component="button"
             onClick={() => onChange?.(s)}
             sx={{
-              px:            isLeague ? (renderedOptions.length > 4 ? '12px' : '18px') : '16px',
+              px:            isLeague ? (renderedOptions.length > 5 ? '9px' : renderedOptions.length > 4 ? '12px' : '18px') : (renderedOptions.length > 5 ? '12px' : '16px'),
               py:            isLeague ? '6px'  : '5px',
               bgcolor:       active ? accent : 'transparent',
               color:         active ? liveryText(s) : C.ink2,
               border:        'none',
               fontFamily:    isLeague ? "'Oswald', sans-serif" : MONO,
-              fontSize:      isLeague ? (renderedOptions.length > 4 ? '0.68rem' : '0.78rem') : '0.65rem',
+              fontSize:      isLeague ? (renderedOptions.length > 5 ? '0.62rem' : renderedOptions.length > 4 ? '0.68rem' : '0.78rem') : (renderedOptions.length > 5 ? '0.60rem' : '0.65rem'),
               fontWeight:    700,
               letterSpacing: isLeague ? '0.10em' : '0.14em',
               cursor:        'pointer',

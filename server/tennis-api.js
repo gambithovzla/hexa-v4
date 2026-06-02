@@ -134,14 +134,50 @@ function extractSurfaceRound(competition, parentEvent) {
 /**
  * Matches for a tour on a date. `dateStr` is YYYY-MM-DD.
  * Flattens the nested tournament→competition shape into a flat match list.
+ *
+ * ESPN tennis scoreboard returns *tournaments* as top-level events; individual
+ * matches live in event.competitions[]. The `dates` param returns whatever
+ * active tournaments ESPN considers "for" that date — some days ESPN ignores
+ * the filter and returns all active tournament competitions regardless of match
+ * date. We therefore filter by comp.date as a secondary pass and also try a
+ * bare call without dates when the first returns 0 events.
  */
 export async function getTennisMatchesForDate(tour, dateStr) {
   assertTour(tour);
-  const url = `${ESPN_BASE}/${tour}/scoreboard?dates=${toEspnDate(dateStr)}`;
+  const datePart = toEspnDate(dateStr);
   const cacheKey = `tennis:matches:${tour}:${dateStr}`;
-  const json = await fetchEspn(url, cacheKey);
-  const events = json?.events ?? [];
 
+  // Try with dates first, then bare URL as fallback.
+  let json = null;
+  for (const url of [
+    `${ESPN_BASE}/${tour}/scoreboard?dates=${datePart}`,
+    `${ESPN_BASE}/${tour}/scoreboard`,
+  ]) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (hexa-tennis)' } });
+      if (!res.ok) {
+        console.warn(`[tennis-api] ${url} → HTTP ${res.status}`);
+        continue;
+      }
+      json = await res.json();
+      const evCount = (json?.events ?? []).length;
+      console.log(`[tennis-api] ${url} → events=${evCount}`);
+      if (evCount > 0) { cacheSet(cacheKey, json); break; }
+    } catch (err) {
+      console.warn(`[tennis-api] fetch failed (${url}): ${err.message}`);
+    }
+  }
+
+  // Fall back to stale cache if both attempts failed or returned nothing.
+  if (!json || (json?.events ?? []).length === 0) {
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      console.warn(`[tennis-api] serving stale cache for ${tour}:${dateStr}`);
+      json = cached.data;
+    }
+  }
+
+  const events = json?.events ?? [];
   const matches = [];
   for (const ev of events) {
     const tournamentName = ev?.name ?? ev?.shortName ?? null;
@@ -151,6 +187,12 @@ export async function getTennisMatchesForDate(tour, dateStr) {
       const competitors = comp?.competitors ?? [];
       // Tennis singles = 2 competitors. Skip doubles (4) and malformed rows.
       if (competitors.length !== 2) continue;
+
+      // Secondary date filter: ESPN sometimes returns all tournament competitions
+      // regardless of the queried date. Keep only matches on the target date.
+      const compDate = comp?.date ?? ev?.date ?? null;
+      if (compDate && !String(compDate).startsWith(dateStr)) continue;
+
       const ordered = [...competitors].sort(
         (a, b) => (a?.order ?? 0) - (b?.order ?? 0),
       );
@@ -164,7 +206,7 @@ export async function getTennisMatchesForDate(tour, dateStr) {
         tour,
         tournamentId,
         tournamentName,
-        matchDate: comp?.date ?? ev?.date ?? null,
+        matchDate: compDate,
         surface: sr.surface,
         round: sr.round,
         roundDepth: sr.roundDepth,
@@ -177,6 +219,7 @@ export async function getTennisMatchesForDate(tour, dateStr) {
       });
     }
   }
+  console.log(`[tennis-api] ${tour} ${dateStr}: ${matches.length} singles matches from ${events.length} tournaments`);
   return matches;
 }
 
