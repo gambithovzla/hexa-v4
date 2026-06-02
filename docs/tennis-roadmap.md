@@ -2,7 +2,7 @@
 
 Plan de construcción del **sexto deporte** (Sprint 12) y el **primero individual**. Detalle técnico y de datos en [tennis-architecture.md](tennis-architecture.md). Checklist multi-deporte en [sport-registry.md](sport-registry.md). Espeja la serie Soccer (Sprint 11) que a su vez espejó NFL/NBA, con las adaptaciones de "deporte individual" documentadas en la spec.
 
-**Estado**: 📋 planning. Ningún sub-sprint en código todavía. `tennis` ya está en el registry como deporte conocido (`SPORT_META.tennis.active=false`).
+**Estado**: 🔄 en build. **12a cerrado en código** (rama `claude/tennis-sprint-12`); 12b–12e pendientes. `tennis` sigue inactivo en el registry (`SPORT_META.tennis.active=false`) hasta el go-public gate.
 
 ---
 
@@ -34,18 +34,18 @@ Plan de construcción del **sexto deporte** (Sprint 12) y el **primero individua
 
 ## Sprints
 
-### Sprint 12a — Scaffolding de datos 📋
+### Sprint 12a — Scaffolding de datos ✅ (cerrado en código)
 
-Espeja Soccer 11a. Objetivo: leer Tennis de extremo a extremo sin análisis todavía.
+Espeja Soccer 11a. Objetivo: leer Tennis de extremo a extremo sin análisis todavía. **Cerrado en código (rama `claude/tennis-sprint-12`)** — pendiente smoke con tráfico real en prod (ESPN/Odds API bloqueados desde el sandbox de dev, igual que NBA/NFL/NHL/Soccer en su momento).
 
-- [ ] `server/tennis-tour-map.js` — registro de tours atp/wta (label, oddsApiSlug, género) + constantes de superficies (hard/clay/grass/carpet) y rounds (R128…final). Helpers `getTennisTour`, `isSupportedTour`.
-- [ ] `server/tennis-api.js` — wrapper ESPN tour-aware. `getTennisMatchesForDate(tour, date)` que **aplana** `events[].competitions[]` → lista de partidos con superficie/round heredados; `getTennisTournamentDraw`, `getTennisMatchSummary`, `getTennisRankings`. Cache + fallback stale; nunca throwea.
-- [ ] `server/tennis-odds.js` — The Odds API `tennis_atp`/`tennis_wta`, dual key. h2h primario; set handicap/total cuando existan. `matchTennisOddsToMatch` por nombre normalizado.
-- [ ] `server/tennis-context-builder.js` — `buildTennisMatchContext` con ranking, ELO-surface, H2H, forma, round/fatiga, superficie, best-of, odds, `context_meta`. ELO/H2H presentes pero null hasta el fetcher Sackmann (12b+).
-- [ ] Migración `runTennisScaffoldingMigrations()` (tabla `tennis_matches`) + `runTennisDatasetMigrations()` (columnas tennis en `pick_features`, reusando slots home/away). Cableadas tras las de Soccer en `index.js`.
-- [ ] Endpoints públicos `GET /api/tennis/matches?tour=&date=`, `/api/tennis/rankings?tour=`.
-- [ ] Tests: `server/__tests__/tennis-tour-map.test.js` (lógica pura) + aplanado del scoreboard.
-- **Salida**: `GET /api/tennis/matches?tour=atp&date=` devuelve partidos normalizados; el context builder degrada con `staleFlags` honestos cuando una fuente falla.
+- [x] `server/tennis-tour-map.js` — registro de tours atp/wta (label, oddsApiSlug, género, bestOfMax) + vocabulario de superficies (`normalizeSurface`) y rounds (`roundDepth` 1..7). Helpers `getTennisTour`, `isSupportedTour`, `getTennisTourByOddsSlug`.
+- [x] `server/tennis-api.js` — wrapper ESPN tour-aware. `getTennisMatchesForDate(tour, date)` **aplana** `events[].competitions[]` → lista de partidos con superficie/round heredados (salta dobles/malformados); `getTennisTournamentDraw`, `getTennisMatchSummary` (TTL corto para live), `getTennisRankings`. Cache + fallback stale; nunca throwea. Exporta `isVoidStatusName` (retiro/walkover/abandonado) para el resolver de 12c.
+- [x] `server/tennis-odds.js` — The Odds API `tennis_atp`/`tennis_wta`, dual key. h2h 2-vías primario; set handicap/total cuando existan. `matchTennisOddsToMatch` por nombre normalizado **con detección de orientación A/B flip**; `buildMarketOddsForMatch` respeta el flip.
+- [x] `server/tennis-context-builder.js` — `buildTennisMatchContext` con ranking (ESPN), superficie, round/best-of, market odds, `context_meta` con `staleFlags` honestos. ELO-surface/H2H/forma presentes pero null hasta el fetcher Sackmann (12b).
+- [x] Migración `runTennisScaffoldingMigrations()` (tabla `tennis_matches`, reusa `league` como tour) + `runTennisDatasetMigrations()` (columnas tennis en `pick_features`, reusando slots home/away). Cableadas tras las de Soccer en `index.js`.
+- [x] Endpoints públicos `GET /api/tennis/matches?tour=&date=`, `/api/tennis/rankings?tour=`.
+- [x] Tests: `server/__tests__/tennis-tour-map.test.js` (19 tests, lógica pura) + `tennis-odds.test.js` (11 tests: matching straight/flipped, build, void status).
+- **Salida**: `GET /api/tennis/matches?tour=atp&date=` devuelve partidos normalizados; el context builder degrada con `staleFlags` honestos cuando una fuente falla. 30 tests verdes.
 
 ### Sprint 12b — Oracle Tennis 📋
 

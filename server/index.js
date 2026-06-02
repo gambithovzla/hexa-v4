@@ -81,7 +81,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations, runTennisScaffoldingMigrations, runTennisDatasetMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -113,6 +113,11 @@ import {
   getSoccerTeams,
 } from './soccer-api.js';
 import { SOCCER_LEAGUE_SLUGS } from './soccer-league-map.js';
+import {
+  getTennisMatchesForDate,
+  getTennisRankings,
+} from './tennis-api.js';
+import { TENNIS_TOURS_LIST } from './tennis-tour-map.js';
 import {
   getCalibration as getMlCalibration,
   getCircuitState as getMlCircuitState,
@@ -1179,6 +1184,45 @@ app.get('/api/soccer/standings', async (req, res) => {
     }
     const data = await getSoccerStandings(league);
     res.json({ success: true, league, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// ── Tennis endpoints ──────────────────────────────────────────────────────────
+// GET /api/tennis/matches?tour=atp&date=YYYY-MM-DD
+app.get('/api/tennis/matches', async (req, res) => {
+  try {
+    const { tour, date } = req.query;
+    if (!tour || !TENNIS_TOURS_LIST.includes(tour)) {
+      return res.status(400).json({
+        success: false,
+        error: `tour required; supported: ${TENNIS_TOURS_LIST.join(', ')}`,
+      });
+    }
+    const dateStr = date || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ success: false, error: 'date must be YYYY-MM-DD' });
+    }
+    const matches = await getTennisMatchesForDate(tour, dateStr);
+    res.json({ success: true, tour, date: dateStr, count: matches.length, data: matches });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/tennis/rankings?tour=atp
+app.get('/api/tennis/rankings', async (req, res) => {
+  try {
+    const { tour } = req.query;
+    if (!tour || !TENNIS_TOURS_LIST.includes(tour)) {
+      return res.status(400).json({
+        success: false,
+        error: `tour required; supported: ${TENNIS_TOURS_LIST.join(', ')}`,
+      });
+    }
+    const data = await getTennisRankings(tour);
+    res.json({ success: true, tour, data });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
@@ -5022,6 +5066,8 @@ runMigrations()
   .then(() => runJobQueueMigrations())
   .then(() => runSoccerScaffoldingMigrations())
   .then(() => runSoccerDatasetMigrations())
+  .then(() => runTennisScaffoldingMigrations())
+  .then(() => runTennisDatasetMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
