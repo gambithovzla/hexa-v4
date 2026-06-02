@@ -1212,6 +1212,7 @@ app.get('/api/tennis/matches', async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return res.status(400).json({ success: false, error: 'date must be YYYY-MM-DD' });
     }
+    console.log(`[tennis-matches] GET tour=${tour} date=${dateStr}`);
     let matches = await getTennisMatchesForDate(tour, dateStr);
 
     // Fallback: if ESPN returned nothing, use The Odds API match list.
