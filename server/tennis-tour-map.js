@@ -53,6 +53,60 @@ export function normalizeSurface(raw) {
 }
 
 /**
+ * Surface keyed off the tournament name. ESPN's tennis scoreboard frequently
+ * omits the surface field on Grand Slam / combined-tournament payloads — which is
+ * why a Roland Garros match arrived at the Oracle as "surface unknown" even
+ * though clay is obvious from the name. This is the fallback the API wrapper
+ * applies when no explicit surface field is present.
+ *
+ * High-confidence only: the four Slams plus the well-known clay (Apr–Jun) and
+ * grass (Jun–Jul) swing events. Anything we can't place with confidence returns
+ * null (stays "unknown") rather than guessing — a wrong surface label is worse
+ * than an honest absence. Stuttgart is intentionally omitted (ATP grass in June,
+ * WTA clay in April — ambiguous by name alone).
+ */
+const CLAY_TOURNAMENT_KEYWORDS = [
+  'roland garros', 'french open', 'madrid', 'rome', 'italian open', 'internazionali',
+  'monte carlo', 'monte-carlo', 'barcelona', 'hamburg', 'estoril', 'munich', 'bmw open',
+  'geneva', 'lyon', 'bucharest', 'gstaad', 'kitzbuhel', 'kitzbühel', 'umag', 'bastad',
+  'båstad', 'cordoba', 'córdoba', 'buenos aires', 'rio open', 'santiago', 'marrakech',
+  'strasbourg', 'rabat', 'palermo', 'parma', 'charleston', 'houston', 'iasi',
+];
+const GRASS_TOURNAMENT_KEYWORDS = [
+  'wimbledon', 'halle', "queen's", 'queens club', 'cinch', 'eastbourne', 'mallorca',
+  'hertogenbosch', 'libema', 'libéma', 'newport', 'nottingham', 'birmingham', 'berlin',
+  'bad homburg',
+];
+const HARD_TOURNAMENT_KEYWORDS = [
+  'us open', 'australian open', 'indian wells', 'miami open', 'cincinnati', 'canadian open',
+  'national bank', 'shanghai', 'paris masters', 'rolex paris', 'atp finals', 'wta finals',
+  'dubai', 'doha', 'qatar', 'acapulco', 'beijing', 'china open', 'tokyo', 'washington',
+  'winston-salem', 'metz', 'vienna', 'basel', 'antwerp', 'stockholm', 'auckland', 'adelaide',
+  'brisbane', 'united cup', 'hong kong', 'montpellier', 'rotterdam', 'marseille', 'delray beach',
+  'dallas', 'los cabos', 'almaty', 'astana', 'chengdu', 'hangzhou', 'zhuhai', 'guadalajara',
+  'monterrey', 'san diego', 'seoul', 'ningbo', 'jeddah', 'cleveland', 'cancun',
+];
+
+// Word-boundary match so "halle" doesn't fire on "cHALLEnger", "rome" on
+// "Velodrome", etc. Keywords may contain spaces/hyphens/apostrophes — all
+// non-word chars are escaped and the \b anchors sit on the alnum edges.
+function hasKeyword(haystack, keywords) {
+  return keywords.some((k) => {
+    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escaped}\\b`).test(haystack);
+  });
+}
+
+export function inferSurfaceFromTournament(tournamentName) {
+  if (!tournamentName) return null;
+  const n = String(tournamentName).toLowerCase();
+  if (hasKeyword(n, GRASS_TOURNAMENT_KEYWORDS)) return 'grass';
+  if (hasKeyword(n, CLAY_TOURNAMENT_KEYWORDS)) return 'clay';
+  if (hasKeyword(n, HARD_TOURNAMENT_KEYWORDS)) return 'hard';
+  return null;
+}
+
+/**
  * Tournament rounds mapped to a numeric depth (1 = earliest, 7 = final).
  * Used for fatigue features and Oracle context (later rounds = fresher draw,
  * tougher opponents). The string keys cover ESPN's common round labels.
