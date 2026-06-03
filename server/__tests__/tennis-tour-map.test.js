@@ -5,6 +5,7 @@ import {
   isSupportedTour,
   getTennisTourByOddsSlug,
   normalizeSurface,
+  inferSurfaceFromTournament,
   roundDepth,
   TENNIS_SURFACES,
   TENNIS_TOURS_LIST,
@@ -51,6 +52,29 @@ test('normalizeSurface maps common ESPN labels', () => {
   assert.equal(normalizeSurface('Carpet'), 'carpet');
   assert.equal(normalizeSurface('unknown'), null);
   assert.equal(normalizeSurface(null), null);
+});
+
+test('inferSurfaceFromTournament places the Grand Slams', () => {
+  assert.equal(inferSurfaceFromTournament('Roland Garros'), 'clay');
+  assert.equal(inferSurfaceFromTournament('French Open'), 'clay');
+  assert.equal(inferSurfaceFromTournament('Wimbledon'), 'grass');
+  assert.equal(inferSurfaceFromTournament('US Open'), 'hard');
+  assert.equal(inferSurfaceFromTournament('Australian Open'), 'hard');
+});
+
+test('inferSurfaceFromTournament places clay/grass swing events', () => {
+  assert.equal(inferSurfaceFromTournament('Mutua Madrid Open'), 'clay');
+  assert.equal(inferSurfaceFromTournament('Internazionali BNL d\'Italia'), 'clay');
+  assert.equal(inferSurfaceFromTournament('Monte-Carlo Masters'), 'clay');
+  assert.equal(inferSurfaceFromTournament('Halle Open'), 'grass');
+  assert.equal(inferSurfaceFromTournament("Queen's Club"), 'grass');
+});
+
+test('inferSurfaceFromTournament returns null for unknown / ambiguous', () => {
+  assert.equal(inferSurfaceFromTournament('Some Challenger 125'), null);
+  assert.equal(inferSurfaceFromTournament('Stuttgart Open'), null); // ATP grass / WTA clay — ambiguous
+  assert.equal(inferSurfaceFromTournament(''), null);
+  assert.equal(inferSurfaceFromTournament(null), null);
 });
 
 test('TENNIS_SURFACES is the canonical vocabulary', () => {

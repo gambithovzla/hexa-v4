@@ -20,7 +20,7 @@
  * No team map: players are keyed by normalized displayName + ESPN athlete.id.
  */
 
-import { isSupportedTour, normalizeSurface, roundDepth } from './tennis-tour-map.js';
+import { isSupportedTour, normalizeSurface, roundDepth, inferSurfaceFromTournament } from './tennis-tour-map.js';
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/tennis';
 
@@ -57,6 +57,34 @@ function assertTour(tour) {
 
 function toEspnDate(dateStr) {
   return String(dateStr).replace(/-/g, '');
+}
+
+/**
+ * True when an ISO match datetime falls on the requested calendar date in ANY of
+ * the relevant zones (UTC / US-Eastern / Lima). The multi-zone tolerance absorbs
+ * the UTC-rollover that made a naive same-string filter drop valid late-night
+ * matches (the reason the original code shipped with NO date filter at all) —
+ * while still rejecting matches that are days off. ESPN returns the whole active
+ * tournament (every round across every day) for a single ?dates= query on Grand
+ * Slams, and its dateless scoreboard fallback returns an arbitrary default
+ * tournament; without this guard a finished April match leaks into a June slate.
+ * Null / unparseable dates pass through — we can't prove they're off-date.
+ */
+export function matchOnRequestedDate(matchDateIso, dateStr) {
+  if (!matchDateIso || !dateStr) return true;
+  const d = new Date(matchDateIso);
+  if (Number.isNaN(d.getTime())) return true;
+  for (const tz of ['UTC', 'America/New_York', 'America/Lima']) {
+    try {
+      const ymd = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(d);
+      if (ymd === dateStr) return true;
+    } catch {
+      // unsupported tz — skip
+    }
+  }
+  return false;
 }
 
 function normalizeStatus(state) {
@@ -124,8 +152,16 @@ function extractSurfaceRound(competition, parentEvent) {
     parentEvent?.groupings?.[0]?.grouping?.displayName ??
     null;
 
+  // ESPN omits the surface field on most Grand Slam / combined-tournament
+  // payloads. Fall back to inferring it from the tournament name (Roland Garros
+  // → clay, Wimbledon → grass, …) so the Oracle never sees "surface unknown" for
+  // an event whose surface is common knowledge.
+  const surface =
+    normalizeSurface(surfaceRaw) ??
+    inferSurfaceFromTournament(parentEvent?.name ?? parentEvent?.shortName ?? competition?.name);
+
   return {
-    surface: normalizeSurface(surfaceRaw),
+    surface,
     round: roundRaw ?? null,
     roundDepth: roundDepth(roundRaw),
   };
@@ -288,7 +324,18 @@ export async function getTennisMatchesForDate(tour, dateStr) {
     }
   }
 
-  console.log(`[tennis-api] ${tour} ${dateStr}: ${matches.length} singles matches from ${events.length} events`);
+  // Date-scope the slate to the requested calendar date. ESPN returns the whole
+  // active tournament (all rounds, all days) for a single ?dates= query, and the
+  // dateless scoreboard fallbacks above can return an arbitrary default
+  // tournament — both leak matches from other days (finished finals, or a
+  // months-old event shown as "scheduled"). Filtering on each match's own date
+  // (multi-zone tolerant) is what keeps the slate honest.
+  const dateScoped = matches.filter((m) => matchOnRequestedDate(m.matchDate, dateStr));
+  if (dateScoped.length !== matches.length) {
+    console.log(`[tennis-api] ${tour} ${dateStr}: date filter dropped ${matches.length - dateScoped.length} off-date matches`);
+  }
+
+  console.log(`[tennis-api] ${tour} ${dateStr}: ${dateScoped.length} singles matches from ${events.length} events`);
 
   // Diagnostic: when 0 matches extracted, log groupings structure to aid debugging.
   if (matches.length === 0 && events.length > 0) {
@@ -308,7 +355,7 @@ export async function getTennisMatchesForDate(tour, dateStr) {
     }));
   }
 
-  return matches;
+  return dateScoped;
 }
 
 export async function getTennisTournamentDraw(tour, tournamentId) {
