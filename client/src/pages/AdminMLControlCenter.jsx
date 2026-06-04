@@ -87,7 +87,7 @@ const STRINGS = {
     brierScores:      'BRIER SCORES (lower is better)',
     learnedWeights:   'LEARNED WEIGHTS (logit-space coefficients)',
     ensembleDisabled: 'Ensemble disabled. Set ENSEMBLE_ENABLED=true on the server to enable.',
-    ensembleNotTrained:'Ensemble enabled but not yet trained — click RETRAIN ENSEMBLE once ≥50 resolved picks have all 3 sources.',
+    ensembleNotTrained:'Ensemble enabled but not yet trained — click RETRAIN ENSEMBLE once ≥50 resolved picks have oracle + python (moneyline also needs legacy).',
     chatTitle:        'Chat-sourced Picks',
     chatLoading:      'Loading chat-sourced picks…',
     noRetrains:       'No retrains logged yet. Click RETRAIN above to fire the first one.',
@@ -108,9 +108,9 @@ const STRINGS = {
     ensembleSkippedMsg: (have, need, byMarket) => {
       if (byMarket && Object.keys(byMarket).length > 0) {
         const parts = Object.entries(byMarket).map(([m, n]) => `${m}: ${n}/${need}`).join(' · ');
-        return `Eligible rows per market: ${parts}. Each market needs ≥${need} resolved picks with all 3 sources.`;
+        return `Eligible rows per market: ${parts}. Each market needs ≥${need} picks with oracle + python (moneyline also requires legacy).`;
       }
-      return `Only ${have ?? '?'} total eligible rows across all markets (need ≥${need} per market). Waiting for more resolved picks with all 3 sources.`;
+      return `Only ${have ?? '?'} total eligible rows across all markets (need ≥${need} per market). Waiting for more resolved picks with oracle + python (moneyline also requires legacy).`;
     },
     ensembleFail:     'ENSEMBLE RETRAIN FAILED',
     allOk:            'RETRAIN ALL OK',
@@ -193,7 +193,7 @@ const STRINGS = {
     brierScores:      'PUNTAJES BRIER (menor es mejor)',
     learnedWeights:   'PESOS APRENDIDOS (coeficientes logit)',
     ensembleDisabled: 'Ensemble desactivado. Configura ENSEMBLE_ENABLED=true en el servidor.',
-    ensembleNotTrained:'Ensemble activo pero sin entrenar — presiona REENTRENAR ENSEMBLE cuando haya ≥50 picks resueltos con las 3 fuentes.',
+    ensembleNotTrained:'Ensemble activo pero sin entrenar — presiona REENTRENAR ENSEMBLE cuando haya ≥50 picks resueltos con oracle + python (moneyline también necesita legacy).',
     chatTitle:        'Picks del Chat Oracle',
     chatLoading:      'Cargando picks del chat…',
     noRetrains:       'Sin reentrenamientos registrados. Haz clic en REENTRENAR arriba para disparar el primero.',
@@ -216,7 +216,7 @@ const STRINGS = {
         const parts = Object.entries(byMarket).map(([m, n]) => `${m}: ${n}/${need}`).join(' · ');
         return `Filas elegibles por mercado: ${parts}. Se necesitan ≥${need} por mercado para entrenar el ensemble.`;
       }
-      return `Solo ${have ?? '?'} filas en total entre todos los mercados (se necesitan ≥${need} por mercado). Faltan picks resueltos con las 3 fuentes.`;
+      return `Solo ${have ?? '?'} filas en total entre todos los mercados (se necesitan ≥${need} por mercado). Faltan picks resueltos con oracle + python (moneyline también necesita legacy).`;
     },
     ensembleFail:     'FALLO ENSEMBLE',
     allOk:            'REENTRENADO TODO OK',
