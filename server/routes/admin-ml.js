@@ -353,10 +353,10 @@ router.post('/ml/retrain/ensemble', async (req, res) => {
                   COUNT(*)::INT AS eligible
              FROM shadow_model_runs
             WHERE oracle_pick_prob IS NOT NULL
-              AND legacy_pick_prob IS NOT NULL
               AND python_pick_prob IS NOT NULL
               AND actual_status    = 'resolved'
               AND pick_market_type IN ('moneyline','overunder','runline','prop')
+              AND (pick_market_type <> 'moneyline' OR legacy_pick_prob IS NOT NULL)
             GROUP BY pick_market_type`
         );
         const byMarket = Object.fromEntries(mktRows.map((r) => [r.market, r.eligible]));
