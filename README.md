@@ -182,7 +182,7 @@ Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑
 ### Pipeline ML propio (XGBoost + ensemble)
 Sidecar Python en `ml/` — desplegado en Railway como servicio independiente.
 - **Mercados MLB activos**: moneyline (Brier 0.205, ROI +18.3%), overunder (Brier 0.138, ROI +8.5%), runline, prop.
-- **Mercados NFL scaffoldeados**: `nfl_moneyline`, `nfl_spread`, `nfl_total` — modelos listos para entrenar cuando haya picks resueltos (temporada sept 2026).
+- **Mercados NFL activos**: `nfl_moneyline` (Brier ~0.234), `nfl_spread` (~0.25), `nfl_total` (~0.25) — pre-entrenados con 8 temporadas nflverse (2,622 filas) vía `pyarrow`; se refinan con picks reales en temporada.
 - **Ensemble**: meta-learner LogReg (Oracle + Legacy + Python) en logit space.
 - **Admin ML Control Center** (`/admin/ml-control`): HUD live (circuit breaker, latencia, modelos cargados), retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, retrain audit log.
 
@@ -214,7 +214,7 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 
 ---
 
-## Estado del proyecto (2026-05-30)
+## Estado del proyecto (2026-06-06)
 
 ### Pipeline ML y sprints completados
 
@@ -235,36 +235,44 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
   - **9.2**: `pick-tracker-nfl.js` + `NflLiveTracker.jsx` — SSE per-game, drives + plays + win probability.
   - **9d**: `GameSelector` + `AnalysisPanel` + `HexaBoard` extendidos a NFL; `nflLogoUrl.js`; `sports.js` con `ACTIVE_SPORTS=['mlb','nba','nfl']`.
   - **9e**: `nflMlClient.js` (circuit breaker propio) + modelos `nfl_moneyline`/`nfl_spread`/`nfl_total` en sidecar Python.
+- ✅ **Sprint 9.3 — nflverse pre-training** (2026-06-06): cierra la brecha #1 de calidad NFL (EPA = el Statcast del fútbol americano).
+  - `ml/hexa_ml/nflverse_loader.py` (NEW): descarga parquet pbp de nflverse via `pyarrow` (NO `nfl_data_py`), computa EPA off/def, success rate, PROE por equipo; dataset histórico sin leakage (as-of-week); 8 temporadas, 2,622 filas.
+  - `ml/hexa_ml/serve.py`: `GET /nfl/team-stats?season=` + `POST /nfl/refresh`.
+  - `ml/hexa_ml/train.py`: concatena picks live + historia nflverse por mercado; `NFL_PRETRAIN_ENABLED`/`NFL_PRETRAIN_SEASONS`.
+  - `server/nfl-advanced-fetcher.js` (NEW): análogo NFL de `savant-fetcher.js` — EPA/PROE desde el sidecar, re-keyed a abbr ESPN (WAS→WSH, LA→LAR), cache 6h, stale fallback.
+  - `server/nfl-context-builder.js`: EPA/success/PROE ya NO son null; `context_meta.sources.advancedStats` expone freshness.
+  - **Resultado**: 3 modelos NFL vivos en producción (nfl_moneyline Brier ~0.234, nfl_spread ~0.25, nfl_total ~0.25). Dep nueva: `pyarrow==18.1.0`.
 
 ### Estado en producción
 
 - Sidecar ML: `https://hexa-ml-production.up.railway.app`
-- Modelos activos MLB: **moneyline** (Brier 0.205) · **overunder** (Brier 0.138) · **runline** (early model) · **prop** (gateado)
-- Modelos NFL: scaffolded — entrenan con temporada real sept 2026
-- Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC)
+- Modelos activos **MLB**: **moneyline** (Brier 0.205) · **overunder** (Brier 0.138) · **runline** (early model) · **prop** (gateado)
+- Modelos activos **NFL** (nflverse pre-training, 2,622 filas): **nfl_moneyline** (Brier ~0.234) · **nfl_spread** (~0.25) · **nfl_total** (~0.25) — vivos desde 2026-06-06
+- Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC; requiere secrets `HEXA_ML_API_URL` + `HEXA_ML_INTERNAL_TOKEN`)
 - Variables Railway hexa-v4: `NIXPACKS_NODE_VERSION=20` · `ML_SIDECAR_ENABLED=true` · `NFL_ANALYSIS_ENABLED=true`
+- Variables Railway Hexa ML: `NFL_PRETRAIN_ENABLED=true` · `NFL_PRETRAIN_SEASONS=` (default últimas 8)
 
 ### Pendiente operacional (no requiere sprint de código)
 
 - Props ML gate: ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
 - NBA validación E2E en prod con tráfico real.
 - Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
-- NFL sept 2026: `hexaNflBoardService`, picks reales → entrenar modelos NFL.
+- NFL sept 2026: `hexaNflBoardService` (pizarra del día), picks reales de la temporada → refinar modelos NFL (ya pre-entrenados con nflverse).
 
 ### Matriz de calidad por deporte
 
 | Criterio | MLB | NBA | NFL | Gate |
 |---|---:|---:|---:|---:|
-| Data depth pregame | 9.5 | 6.5 | 6.0 | 8.0 |
+| Data depth pregame | 9.5 | 6.5 | 7.5 | 8.0 |
 | Data quality live | 8.5 | 7.0 | 6.5 | 8.0 |
 | Lineup/Injury verification | 9.0 | 7.0 | 7.0 | 8.0 |
 | Market coverage | 9.0 | 6.0 | 7.0 | 8.0 |
 | Guardrails LLM | 8.5 | 7.5 | 8.0 | 8.0 |
 | Pick lifecycle | 9.0 | 7.5 | 7.0 | 8.0 |
-| Calibration/ROI observables | 8.5 | 6.0 | n/a | 8.0 |
+| Calibration/ROI observables | 8.5 | 6.0 | 6.5 | 8.0 |
 | Isolation por deporte | 8.5 | 8.0 | 8.0 | 8.5 |
 
-NFL: código completo, datos y calibración pendientes de temporada real.
+NFL: código completo + EPA/PROE real (nflverse); modelos pre-entrenados. Calibración mejorará con picks reales en temporada (sept 2026).
 
 ---
 
