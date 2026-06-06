@@ -24,6 +24,7 @@ import pool from './db.js';
 import { getNflGamesForDate } from './nfl-api.js';
 import { resolvePickFromFinalState, tokenMatchesTeam } from './pick-resolver.js';
 import { updateShadowModelRunsForGame } from './shadow-model.js';
+import { parseNflProp, getNflGameBoxscore, resolveNflPlayerProp } from './nfl-props-resolver.js';
 
 function nflGameToResolverGame(game) {
   return {
@@ -124,6 +125,35 @@ export async function resolveNflPendingPicks() {
         }
         if (!isGameFinal(nflGame)) {
           console.log(`[pick-resolver-nfl] Pick #${pick.id} "${pick.matchup}": game not final (status: ${nflGame.status})`);
+          continue;
+        }
+
+        // Player props resolve against the ESPN boxscore, not the final score.
+        if (parseNflProp(pick.pick)) {
+          let players;
+          try {
+            players = await getNflGameBoxscore(parseInt(String(nflGame.game_id), 10));
+          } catch (err) {
+            summary.errors.push(`Pick #${pick.id}: boxscore fetch failed — ${err.message}`);
+            continue;
+          }
+          const propRes = resolveNflPlayerProp(pick.pick, players);
+          if (!propRes?.result) {
+            console.log(
+              `[pick-resolver-nfl] Pick #${pick.id} "${pick.pick}" — prop unresolved ` +
+              `(${propRes?.error ?? 'no match'})`
+            );
+            continue;
+          }
+          await writePickResult(pick.id, propRes.result);
+          summary.resolved++;
+          if (propRes.result === 'win')  summary.wins++;
+          if (propRes.result === 'loss') summary.losses++;
+          if (propRes.result === 'push') summary.pushes++;
+          console.log(
+            `[pick-resolver-nfl] Pick #${pick.id} prop "${pick.pick}" → ${propRes.result.toUpperCase()} ` +
+            `(${propRes.playerName} ${propRes.propType}=${propRes.actual} vs ${propRes.line})`
+          );
           continue;
         }
 
