@@ -126,11 +126,18 @@ def train_one_market(
 
     if market.startswith("prop_"):
         odds_col = "prop_odds_american"
-    elif market in {"moneyline", "runline"}:
+    elif market in {"moneyline", "runline", "nfl_moneyline"}:
         odds_col = "odds_ml_home"
     else:
         odds_col = "odds_ou_total"
-    odds_test = pd.to_numeric(test_df.get(odds_col), errors="coerce").fillna(-110).to_numpy()
+    # The column may be absent entirely (e.g. nflverse historical frames carry
+    # closing points, not American prices) — fall back to the -110 vig default
+    # so the diagnostic ROI metric still computes instead of crashing on a scalar.
+    odds_series = test_df.get(odds_col)
+    if odds_series is None:
+        odds_test = pd.Series([-110.0] * len(test_df)).to_numpy()
+    else:
+        odds_test = pd.to_numeric(odds_series, errors="coerce").fillna(-110).to_numpy()
     roi = kelly_roi(y_test, p_test, odds_test, kelly_fraction=0.25)
 
     metrics = TrainMetrics(
@@ -189,16 +196,30 @@ def train_all(
         df = load_dataset(csv_path=csv_path)
         logger.info("Loaded %d rows; %d resolved", len(df), int(df["result"].notna().sum()))
 
-    # Load NFL dataset separately if any NFL market requested
+    # Load NFL dataset separately if any NFL market requested. Live picks come
+    # from pick_features (empty in the offseason); nflverse historical EPA is
+    # concatenated per-market so models can train before any live pick resolves.
     nfl_df = None
+    nfl_pretrain_years: list[int] | None = None
     if nfl_markets and not csv_path:
-        logger.info("Loading NFL dataset…")
+        logger.info("Loading NFL live dataset…")
         try:
             nfl_df = load_dataset(sport="nfl")
-            logger.info("NFL: Loaded %d rows; %d resolved", len(nfl_df), int(nfl_df["result"].notna().sum()))
+            logger.info("NFL: Loaded %d live rows; %d resolved", len(nfl_df), int(nfl_df["result"].notna().sum()))
         except Exception as exc:
-            logger.warning("NFL dataset load failed (%s) — skipping NFL markets", exc)
-            nfl_markets = []
+            logger.warning("NFL live dataset load failed (%s) — relying on nflverse history", exc)
+            nfl_df = None
+        if settings.nfl_pretrain_enabled:
+            try:
+                from . import nflverse_loader
+                if nflverse_loader.is_available():
+                    nfl_pretrain_years = nflverse_loader.parse_seasons(settings.nfl_pretrain_seasons)
+                    logger.info("NFL pre-training enabled — seasons %s", nfl_pretrain_years)
+                else:
+                    logger.warning("pyarrow unavailable — NFL pre-training skipped")
+            except Exception as exc:
+                logger.warning("NFL pre-training setup failed (%s)", exc)
+                nfl_pretrain_years = None
 
     # Load Soccer dataset separately
     soccer_df = None
@@ -255,9 +276,25 @@ def train_all(
         for market in std_markets:
             _train_market(df, market)
 
-    if nfl_df is not None:
+    if nfl_markets:
+        from . import nflverse_loader
         for market in nfl_markets:
-            _train_market(nfl_df, market)
+            parts = []
+            if nfl_df is not None and not nfl_df.empty:
+                parts.append(nfl_df)
+            if nfl_pretrain_years:
+                try:
+                    hist = nflverse_loader.build_nfl_training_frame(market, nfl_pretrain_years)
+                    logger.info("NFL %s: +%d historical rows", market, len(hist))
+                    parts.append(hist)
+                except Exception as exc:
+                    logger.warning("NFL historical frame for %s failed (%s)", market, exc)
+            if not parts:
+                logger.warning("NFL %s: no data (no live picks, no history) — skipping", market)
+                summary[market] = {"skipped": True, "reason": "no_data"}
+                continue
+            combined = parts[0] if len(parts) == 1 else pd.concat(parts, ignore_index=True)
+            _train_market(combined, market)
 
     if soccer_df is not None:
         for market in soccer_markets:

@@ -53,6 +53,18 @@ class Settings(BaseSettings):
     # Acceptance threshold (Brier score) — moneyline floor for production
     moneyline_brier_ceiling: float = Field(default=0.24)
 
+    # ── NFL pre-training (nflverse history) ───────────────────────────────
+    # When enabled, NFL market models train on leakage-free historical EPA from
+    # nflverse instead of waiting for ~60 resolved live picks. Live picks (once
+    # they exist) are concatenated on top automatically.
+    nfl_pretrain_enabled: bool = Field(
+        default=True, validation_alias="NFL_PRETRAIN_ENABLED"
+    )
+    # Empty → last 8 completed seasons. Accepts "2016-2023" or "2018,2019,2020".
+    nfl_pretrain_seasons: str = Field(
+        default="", validation_alias="NFL_PRETRAIN_SEASONS"
+    )
+
     # ── Server ────────────────────────────────────────────────────────────
     port: int = Field(default=8000, validation_alias="PORT")
     log_level: str = Field(default="info", validation_alias="LOG_LEVEL")

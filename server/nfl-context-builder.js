@@ -19,7 +19,17 @@ import {
   getNflLeagueInjuries,
   findTeamInjuries,
 } from './nfl-api.js';
+import { getNflAdvancedTeamStats, findAdvancedStats } from './nfl-advanced-fetcher.js';
 import { resolveNflTeamId, getNflTeam, getNflStadium } from './nfl-team-map.js';
+
+/** NFL season year for a calendar date (Sep–Feb belongs to the Sep year). */
+function seasonFromDate(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  return m >= 8 ? y : y - 1;
+}
 
 function diffDays(fromDateStr, toDateStr) {
   if (!fromDateStr || !toDateStr) return null;
@@ -144,10 +154,15 @@ function lookupTeamStats(teamStats, teamId, teamAbbr) {
   return null;
 }
 
-function buildTeamBlock(stats, recentGames, injuries, teamId, teamAbbr, gameDate) {
+function buildTeamBlock(stats, recentGames, injuries, teamId, teamAbbr, gameDate, advanced = null) {
   const meta = getNflTeam({ teamId, teamAbbr }) ?? {};
   const lastGame = recentGames[0] ?? null;
   const rest = diffDays(lastGame?.game_date, gameDate);
+  const epaOff = advanced?.epa_off ?? stats?.epa_off ?? null;
+  const epaDef = advanced?.epa_def ?? stats?.epa_def ?? null;
+  const successRateOff = advanced?.success_rate_off ?? stats?.success_rate_off ?? null;
+  const successRateDef = advanced?.success_rate_def ?? stats?.success_rate_def ?? null;
+  const proe = advanced?.proe ?? stats?.proe ?? null;
   return {
     teamId: teamId ?? null,
     teamAbbr: stats?.team_abbr ?? teamAbbr ?? meta.abbr ?? null,
@@ -158,12 +173,14 @@ function buildTeamBlock(stats, recentGames, injuries, teamId, teamAbbr, gameDate
     pointsForPerGame: stats?.ppg_for ?? null,
     pointsAgainstPerGame: stats?.ppg_against ?? null,
     pointDiff: stats?.point_diff ?? null,
-    // nflverse-sourced (null until advanced fetcher):
-    epaOff: stats?.epa_off ?? null,
-    epaDef: stats?.epa_def ?? null,
-    successRateOff: stats?.success_rate_off ?? null,
-    successRateDef: stats?.success_rate_def ?? null,
-    proe: stats?.proe ?? null,
+    // nflverse-sourced advanced metrics (overlaid from the ML sidecar):
+    epaOff,
+    epaDef,
+    successRateOff,
+    successRateDef,
+    successRate: successRateOff,  // alias the ML feature payload reads (home.successRate)
+    proe,
+    playsPerGame: advanced?.plays_per_game ?? null,
     pace: stats?.pace_sec_play ?? null,
     restDays: rest,
     isShortWeek: rest != null ? rest <= 5 : null,
@@ -196,7 +213,9 @@ export async function buildNflGameContext({
   const stadium = getNflStadium({ teamId: homeId, teamAbbr: homeTeamAbbr });
   const isDome = stadium?.dome === true;
 
-  const [teamStats, homeGames, awayGames, injuriesPayload, weather] = await Promise.all([
+  const advSeason = season ?? seasonFromDate(gameDate);
+
+  const [teamStats, homeGames, awayGames, injuriesPayload, weather, advancedStats] = await Promise.all([
     getNflTeamStats(season).catch(err => {
       console.warn(`[nfl-context] team stats failed: ${err.message}`);
       return [];
@@ -216,16 +235,23 @@ export async function buildNflGameContext({
     isDome
       ? Promise.resolve(null)
       : fetchNflWeather({ lat: stadium?.lat, lon: stadium?.lon, gameTime }),
+    getNflAdvancedTeamStats(advSeason).catch(err => {
+      console.warn(`[nfl-context] advanced stats failed: ${err.message}`);
+      return null;
+    }),
   ]);
 
   const homeStats = lookupTeamStats(teamStats, homeId, homeTeamAbbr);
   const awayStats = lookupTeamStats(teamStats, awayId, awayTeamAbbr);
 
+  const homeAdvanced = findAdvancedStats(advancedStats, homeStats?.team_abbr ?? homeTeamAbbr);
+  const awayAdvanced = findAdvancedStats(advancedStats, awayStats?.team_abbr ?? awayTeamAbbr);
+
   const homeInjuries = summariseInjuries(findTeamInjuries(injuriesPayload, { teamId: homeId, teamAbbr: homeTeamAbbr }));
   const awayInjuries = summariseInjuries(findTeamInjuries(injuriesPayload, { teamId: awayId, teamAbbr: awayTeamAbbr }));
 
-  const home = buildTeamBlock(homeStats, homeGames, homeInjuries, homeId, homeTeamAbbr, gameDate);
-  const away = buildTeamBlock(awayStats, awayGames, awayInjuries, awayId, awayTeamAbbr, gameDate);
+  const home = buildTeamBlock(homeStats, homeGames, homeInjuries, homeId, homeTeamAbbr, gameDate, homeAdvanced);
+  const away = buildTeamBlock(awayStats, awayGames, awayInjuries, awayId, awayTeamAbbr, gameDate, awayAdvanced);
 
   const weatherBlock = isDome
     ? { dome: true, stadium: stadium?.stadium ?? null, neutral: true, analysis: [] }
@@ -243,18 +269,22 @@ export async function buildNflGameContext({
   if (!homeInjuries.qbStatus && !awayInjuries.qbStatus) { /* no QB flags = healthy starters assumed */ }
   if (!isDome && (!weather)) staleFlags.push('weather_unavailable');
   if (!marketOdds) staleFlags.push('market_odds_missing');
+  const advancedOk = !!(home.epaOff != null && away.epaOff != null);
+  if (!advancedOk) staleFlags.push('advanced_stats_unavailable');
 
   const completeness = {
     teamStats: fractionPresent(homeStats, awayStats),
+    advancedStats: fractionPresent(home.epaOff, away.epaOff),
     recentForm: fractionPresent(homeGames.length ? 1 : null, awayGames.length ? 1 : null),
     injuries: injuriesPayload.source === 'espn' ? 1 : 0,
     weather: isDome ? 1 : (weather ? 1 : 0),
     marketOdds: marketOdds ? 1 : 0,
   };
   const overall = +(
-    (completeness.teamStats * 0.35 +
-     completeness.recentForm * 0.25 +
-     completeness.injuries * 0.20 +
+    (completeness.teamStats * 0.25 +
+     completeness.advancedStats * 0.20 +
+     completeness.recentForm * 0.20 +
+     completeness.injuries * 0.15 +
      completeness.weather * 0.10 +
      completeness.marketOdds * 0.10).toFixed(2)
   );
@@ -268,6 +298,12 @@ export async function buildNflGameContext({
     },
     sources: {
       teamStats: { ok: !!(homeStats && awayStats), source: 'espn-standings', n: teamStats.length },
+      advancedStats: {
+        ok: advancedOk,
+        source: advancedStats ? 'nflverse-sidecar' : 'unavailable',
+        season: advancedStats?.season ?? advSeason ?? null,
+        fetchedAt: advancedStats?.fetchedAt ?? null,
+      },
       recentForm: { ok: !!(homeGames.length && awayGames.length), source: 'espn', n: { home: homeGames.length, away: awayGames.length } },
       injuries: {
         ok: injuriesPayload.source === 'espn',

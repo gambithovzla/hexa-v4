@@ -60,6 +60,25 @@ def _require_fangraphs() -> None:
             detail="FanGraphs scraper unavailable (missing httpx/beautifulsoup4)",
         )
 
+
+# nflverse advanced stats (EPA/success/PROE) are an optional add-on (needs
+# nfl_data_py). Same defensive pattern as FanGraphs — a missing dep or an
+# unreachable nflverse only degrades the /nfl/* endpoints.
+try:
+    from . import nflverse_loader
+    _NFLVERSE_AVAILABLE = nflverse_loader.is_available()
+except ImportError as _nv_err:  # pragma: no cover - depends on optional deps
+    logger.warning("nflverse loader unavailable — /nfl/* disabled (%s)", _nv_err)
+    _NFLVERSE_AVAILABLE = False
+
+
+def _require_nflverse() -> None:
+    if not _NFLVERSE_AVAILABLE:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="nflverse stats unavailable (missing nfl_data_py)",
+        )
+
 SUPPORTED_MARKETS = tuple(MARKET_MODELS.keys())
 SUPPORTED_PROP_ENDPOINTS = {
     "hits": "prop_hits",
@@ -585,6 +604,46 @@ async def retrain(payload: RetrainRequest) -> RetrainResponse:
     summary = await asyncio.to_thread(_run)
     get_registry().reload()
     return RetrainResponse(status="ok", summary=summary)
+
+
+# ── nflverse advanced stats (EPA / success / PROE) ───────────────────────────
+
+class NflTeamStatsResponse(BaseModel):
+    season: int
+    fetched_at: str | None = None
+    teams: dict[str, dict]
+
+
+@app.get(
+    "/nfl/team-stats",
+    response_model=NflTeamStatsResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def nfl_team_stats(season: int) -> NflTeamStatsResponse:
+    """Per-team season-to-date EPA/success/PROE keyed by nflverse team abbr.
+
+    The Node context builder overlays these onto the ESPN-derived team block so
+    the Oracle prompt and the NFL ML payload get real advanced metrics.
+    """
+    _require_nflverse()
+    try:
+        payload = await asyncio.to_thread(nflverse_loader.build_team_stats, season)
+    except Exception as exc:  # nflverse fetch can fail at runtime
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"nflverse team-stats failed: {exc}",
+        ) from exc
+    return NflTeamStatsResponse(**payload)
+
+
+@app.post(
+    "/nfl/refresh",
+    dependencies=[Depends(require_internal_token)],
+)
+async def nfl_refresh(season: int | None = None) -> dict:
+    """Drop cached nflverse data so the next /nfl/team-stats re-fetches."""
+    _require_nflverse()
+    return nflverse_loader.refresh_team_stats(season)
 
 
 # ── FanGraphs ZiPS projections (A2) ──────────────────────────────────────────
