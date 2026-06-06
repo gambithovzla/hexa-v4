@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-06-02 — **Sprint 12 (Tennis) completo en código** (rama `claude/tennis-sprint-12`): primer deporte individual (jugador A vs B → slots home/away; tours atp/wta reusan `league`); resolver de retiros/walkovers (void) como componente nuevo crítico; Oracle + shadow + UI (5º deporte activo) + ML sidecar pre-entrenable Sackmann. Specs: [tennis-architecture.md](tennis-architecture.md) + [tennis-roadmap.md](tennis-roadmap.md). **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true` en Railway): Sprint 11 completo al 100% (datos, Oracle, lifecycle, UI, shadow, board, live tracker, xG Understat, ML sidecar). Sprint 9 NFL cerrado (PRs #373–#378). Sprint 10 NHL completo.
+**Última actualización**: 2026-06-06 — **Sprint 9.3 (NFL nflverse pre-training) completo**: EPA/success/PROE ya son datos reales en el contexto NFL — el sidecar Python descarga parquet pbp de nflverse vía `pyarrow`, genera dataset histórico sin leakage (as-of-week, 2,622 filas, 8 temporadas) y entrena `nfl_moneyline`/`nfl_spread`/`nfl_total`. Los 3 modelos NFL están vivos en producción. Ver detalles abajo en la sección Sprint 9.3. **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true`): Sprint 11 completo. Sprint 12 Tennis completo en código. Sprint 10 NHL completo. Sprint 9 NFL cerrado con todos los sub-sprints incluyendo 9.3.
 
 ---
 
@@ -775,23 +775,34 @@ Items que el análisis externo sugirió o que aparecieron en discusiones, y por 
 
 2026 Q3-4 Sprint 10    — NHL Hockey                        ████████████████████████ ✅ (backend + UI; ML sidecar diferido)
 2026 Q4-1 Sprint 11    — Soccer (Big 5 + MLS)              ████████████████████████ ✅ (completo + en prod; SOCCER_ANALYSIS_ENABLED=true; logos ESPN CDN)
+2026 Q4   Sprint 9.3   — NFL nflverse pre-training         ████████████████████████ ✅ (EPA/PROE real; 3 modelos NFL en prod; pyarrow; 2026-06-06)
 2027 Q1-2 Sprint 12    — Tennis (ATP/WTA)                  ████████████████████████ ✅ (completo en código; rama claude/tennis-sprint-12; gated TENNIS_ANALYSIS_ENABLED)
 2027 Q2-3 Sprint 13    — Carreras de Caballos              ░░░░░░░░░░░░░░░░░░░░░░░░ ⏳ (US+UK/IRE, tras Sprint 12)
 ```
 
-**Estado al cierre de Sprint 9 (2026-05-30)**:
+**Estado al cierre de Sprint 9 + 9.3 (2026-06-06)**:
 - ✅ Sprint 8f Railway hardening — tres servicios Online, Node 20 activo, emails operativos.
 - ✅ A1–A9, B2–B11 completados. Todos los Tier A y Tier B cerrados en código y en frontend.
 - ✅ B2 Hexa Live UI — `LiveTracker` SSE per-game (2026-05-29). Lag real ~1-2s vs 30s antes.
 - ✅ B10 Alt lines UI — `AltLinesModal` + botón en `PlayerPropsPage` cerrado.
 - ✅ **NFL Sprint 9 completo** (PRs #373–#378, 2026-05-30): Oracle + lifecycle + shadow/dataset + live tracker + UI (selector activo, pizarra placeholder) + ML scaffolding. Tres deportes operativos: MLB, NBA, NFL.
 - ✅ **Hotfix ensemble skip UX (2026-05-30)**: `POST /retrain/ensemble` en `admin-ml.js` — la query de filas elegibles ahora usa `GROUP BY pick_market_type` con `actual_status='resolved'`; devuelve `eligible_by_market`. Toast "ENSEMBLE OMITIDO" muestra desglose por mercado (`moneyline: N/50 · overunder: N/50 · …`) en vez del total global engañoso.
+- ✅ **Sprint 9.3 — nflverse pre-training (2026-06-06)**: cierra la brecha #1 de calidad NFL (EPA = el Statcast del fútbol americano), sin depender de `nfl_data_py` (que clava `pandas<2.0`). Dep nueva: `pyarrow==18.1.0`.
+  - `ml/hexa_ml/nflverse_loader.py` (NEW): descarga parquet pbp de nflverse desde GitHub release assets; `build_team_stats(season)` (EPA off/def, success rate, PROE por equipo, cache 6h); `build_nfl_training_frame(market, years)` (dataset sin leakage as-of-week, `spread_close = -spread_line` para igualar `nfl-odds.js`). 2,622 filas de historia, 8 temporadas.
+  - `ml/hexa_ml/serve.py`: `GET /nfl/team-stats?season=` + `POST /nfl/refresh` (503 defensivo si falta pyarrow).
+  - `ml/hexa_ml/train.py`: concatena picks live (vacíos en offseason) + historia nflverse; `NFL_PRETRAIN_ENABLED` (default `true`) + `NFL_PRETRAIN_SEASONS`; fix latente: `train_one_market` tolera columna de odds ausente.
+  - `ml/hexa_ml/config.py`: `nfl_pretrain_enabled` + `nfl_pretrain_seasons`.
+  - `server/nfl-advanced-fetcher.js` (NEW): análogo NFL de `savant-fetcher.js`; EPA/PROE desde sidecar, re-keyed a abbr ESPN canónico (WAS→WSH, LA→LAR), cache 6h, stale fallback, no-op si sidecar off.
+  - `server/nfl-context-builder.js`: EPA/success/PROE ya NO son null; `successRate` aliasado para payload ML; `context_meta.sources.advancedStats` + `completeness.advancedStats` (peso 20%).
+  - Tests: `ml/tests/test_nflverse_loader.py` (6 unit tests sin red) + `server/__tests__/nfl-advanced-fetcher.test.js` (4 Node tests).
+  - GitHub Actions: secrets `HEXA_ML_API_URL` + `HEXA_ML_INTERNAL_TOKEN` configurados en el repo; retrain semanal (`retrain-weekly.yml`) incluye los 3 modelos NFL.
+  - **Modelos NFL en producción**: nfl_moneyline (Brier ~0.234), nfl_spread (~0.25), nfl_total (~0.25). Retrain run #5 exitoso el 2026-06-06.
 
 **Pendiente operacional (no requiere nuevo sprint de código)**:
 - Props ML gate: acumular ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
 - NBA validación E2E en prod con tráfico real.
 - Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
-- NFL sept 2026: activar `hexaNflBoardService`, acumular picks resueltos → entrenar `nfl_moneyline`/`nfl_spread`/`nfl_total`.
+- NFL sept 2026: activar `hexaNflBoardService` (pizarra del día), picks reales de temporada → refinar modelos NFL (ya pre-entrenados con nflverse).
 - `OPENAI_EMBED_API_KEY` → activa RAG (pgvector embeddings de oracle_report en contexto).
 
 Para detalle ejecutable de cada sprint, ver [docs/ml-pipeline.md sección 10](ml-pipeline.md#10-plan-modelo-python-entrenado-propio).

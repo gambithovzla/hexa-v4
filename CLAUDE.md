@@ -428,6 +428,8 @@ npm run preview      # preview del build
 - `X_AUTO_PUBLISH_INTERVAL_MINUTES` — intervalo (default `5`)
 - `NBA_ANALYSIS_ENABLED` — habilita Oracle NBA y resolver NBA (default `false`; `true` en local y en Railway cuando se lance el MVP)
 - `NFL_ANALYSIS_ENABLED` — habilita endpoints Oracle NFL + resolver NFL (default `false`; activo en Railway con `=true`). Opcionales planificados: `NFL_LIVE_TRACKER_ENABLED`, `NFL_PROPS_ENABLED`, `IMPERDIBLE_NFL_ENABLED`. Ver [docs/nfl-roadmap.md](docs/nfl-roadmap.md).
+- `NFL_PRETRAIN_ENABLED` — (sidecar Python) entrena nfl_moneyline/spread/total con histórico nflverse en vez de esperar picks resueltos (default `true`).
+- `NFL_PRETRAIN_SEASONS` — ventana de temporadas nflverse para pre-training, ej. `"2016-2023"` o `"2018,2019"` (default: últimas 8 temporadas).
 - `SOCCER_ANALYSIS_ENABLED` — habilita Oracle Soccer + resolver Soccer (`true` en Railway prod). Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` (default todas).
 - `ML_ADMIN_TIMEOUT_MS` — timeout sidecar en analyze admin para pick-aligned (default `2500`)
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
@@ -451,7 +453,7 @@ Lista completa en [.env.example](.env.example).
 
 El pipeline de ML propio está **completo y en producción**. Los modelos XGBoost están entrenados y sirviendo predicciones en tiempo real. Backlog en [docs/roadmap.md](docs/roadmap.md).
 
-**NFL — ✅ Sprint 9 completo (2026-05-30, PRs #373–#378)**: tercer deporte operativo. Spec en [docs/nfl-architecture.md](docs/nfl-architecture.md), roadmap en [docs/nfl-roadmap.md](docs/nfl-roadmap.md). Todo el código está mergeado: Oracle, lifecycle, shadow/dataset, live tracker, UI (selector + AnalysisPanel + GameSelector), ML scaffolding. Pendiente operacional: temporada NFL arranca sept 2026 → `hexaNflBoardService`, picks reales → entrenar modelos.
+**NFL — ✅ Sprint 9 + 9.3 completos (2026-06-06)**: tercer deporte operativo. Spec en [docs/nfl-architecture.md](docs/nfl-architecture.md), roadmap en [docs/nfl-roadmap.md](docs/nfl-roadmap.md). Todo el código está mergeado: Oracle, lifecycle, shadow/dataset, live tracker, UI, ML scaffolding + nflverse pre-training. **Sprint 9.3 cierra la brecha #1 de calidad**: EPA/success/PROE ya NO son null — el sidecar Python descarga parquet pbp de nflverse vía `pyarrow` y entrena `nfl_moneyline`/`nfl_spread`/`nfl_total` con 8 temporadas de historia (2,622 filas). Los 3 modelos NFL están vivos en producción. Pendiente operacional: `hexaNflBoardService` (sept 2026), picks reales para refinar los modelos en temporada.
 
 Estado del pipeline ML:
 - ✅ Sprint 0 — documentación viva (este archivo + `/docs/`).
@@ -513,13 +515,15 @@ Estado del pipeline ML:
   - **9d UI**: `GameSelector` + `AnalysisPanel` extendidos a NFL; `nflLogoUrl.js`; `HexaBoard` placeholder NFL; `sports.js` `ACTIVE_SPORTS` incluye `'nfl'`.
   - **9e ML scaffolding**: `nflMlClient.js` (circuit breaker propio); modelos `nfl_moneyline`/`nfl_spread`/`nfl_total` en Python; endpoints `/predict/nfl_*` en sidecar.
   - **post-9 fix**: `HexaBoard` early-return NFL (PR #378, 2026-05-30) — evita que pizarra muestre datos MLB cuando `sport='nfl'`.
+  - **9.3 nflverse pre-training** (2026-06-06): `ml/hexa_ml/nflverse_loader.py` (descarga parquet pbp de nflverse vía `pyarrow`, computa EPA/success/PROE, dataset sin leakage as-of-week); `serve.py` añade `GET /nfl/team-stats?season=` + `POST /nfl/refresh`; `train.py` concatena picks live + historia nflverse; `config.py` añade `NFL_PRETRAIN_ENABLED`/`NFL_PRETRAIN_SEASONS`; `requirements.txt` añade `pyarrow==18.1.0`. Los 3 modelos NFL están **vivos en producción** (entrenados con 2,622 filas, 8 temporadas). Node: `nfl-advanced-fetcher.js` (análogo NFL de `savant-fetcher.js`) + `nfl-context-builder.js` sobrepone EPA/PROE reales.
 
-**Estado en producción (2026-05-30, post-Sprint 9)**:
+**Estado en producción (2026-06-06, post-Sprint 9.3)**:
 - Hexa ML corriendo en: `https://hexa-ml-production.up.railway.app`
-- Modelos entrenados: **moneyline** (Brier 0.205, ROI +18.3%) y **overunder** (Brier 0.138, ROI +8.5%)
-- Runline: floor bajado a 25 (de 100). Modelo se entrena con regularización L2 fuerte; n_train se muestra en el dashboard como flag "EARLY MODEL".
+- Modelos entrenados **MLB**: **moneyline** (Brier 0.205, ROI +18.3%), **overunder** (Brier 0.138, ROI +8.5%), **runline** (early model, floor 25), **prop** (gateado, acumula picks)
+- Modelos entrenados **NFL** (nflverse pre-training, 2,622 filas históricas, 8 temporadas): **nfl_moneyline** (Brier ~0.234), **nfl_spread** (Brier ~0.25), **nfl_total** (Brier ~0.25) — en producción desde 2026-06-06
+- Dep nueva sidecar: `pyarrow==18.1.0` (lee parquet pbp nflverse directo de GitHub release assets; NO usa `nfl_data_py` que clava `pandas<2.0`)
 - Backfill ejecutado: 583/635 filas de `pick_features` tienen `market_type` parseado
-- Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC)
+- Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC) — requiere secrets `HEXA_ML_API_URL` + `HEXA_ML_INTERNAL_TOKEN` en GitHub
 
 **Variables en Railway Hexa ML**: `DATABASE_URL` (public URL), `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `MIN_TRAIN_SIZE=60`, `RUNLINE_MIN_TRAIN_SIZE=25` (override), `TEST_DAYS=7`
 
