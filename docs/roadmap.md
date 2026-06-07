@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-06-06 — **Sprint 9.3 (NFL nflverse pre-training) completo**: EPA/success/PROE ya son datos reales en el contexto NFL — el sidecar Python descarga parquet pbp de nflverse vía `pyarrow`, genera dataset histórico sin leakage (as-of-week, 2,622 filas, 8 temporadas) y entrena `nfl_moneyline`/`nfl_spread`/`nfl_total`. Los 3 modelos NFL están vivos en producción. Ver detalles abajo en la sección Sprint 9.3. **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true`): Sprint 11 completo. Sprint 12 Tennis completo en código. Sprint 10 NHL completo. Sprint 9 NFL cerrado con todos los sub-sprints incluyendo 9.3.
+**Última actualización**: 2026-06-07 — **NFL Player Props + Board + Parlay (Sprint 9f–9j) completos**: player props NFL punta a punta — fundación + board (`/api/nfl/props/board`), modelo `nfl_prop` pooled (pick-aligned), enriquecimiento player-level nflverse (`/nfl/player-stats`) + persistencia `source='live'`; pizarra diaria `hexaNflBoardService` (`/api/nfl/board`); `PlayerPropsPage` parametrizada por sport (switcher MLB/NFL, columna Fair % de-vig); y **Parlay Synergy NFL MVP** (`POST /api/nfl/parlay`, flag `PARLAY_SYNERGY_NFL_ENABLED`) que alimenta el motor frozen sport-agnóstico. Cero ediciones a frozen. **Imperdible NFL diferido** (el más acoplado a MLB). **Sprint 9.3** dejó EPA/success/PROE reales y los 3 modelos de juego NFL vivos en producción. **Soccer en producción** (`SOCCER_ANALYSIS_ENABLED=true`): Sprint 11 completo. Sprint 12 Tennis completo en código. Sprint 10 NHL completo. Sprint 9 NFL cerrado con todos los sub-sprints (9a–9j + 9.3).
 
 ---
 
@@ -48,7 +48,7 @@ Lo MLB-específico vive en 4 archivos: [server/mlb-api.js](../server/mlb-api.js)
 
 **Explícitamente fuera de esta fase**: Sprint 7e NBA ML sidecar (waiting for ~500 NBA picks resolved); Sprint 7a basketball-reference scraper + tablas dedicadas NBA.
 
-**Siguiente deporte — NFL (🔄 en build, serie Sprint 9)**: tercer deporte, espejo del patrón NBA. Datos ESPN + The Odds API + nflverse. Spec maestra en [nfl-architecture.md](nfl-architecture.md) y roadmap por sprints en [nfl-roadmap.md](nfl-roadmap.md). **9a (scaffolding de datos) mergeado (PR #373); 9b (Oracle NFL + prompts) en build.** Arranque: verano 2026 (off-season NFL) → MVP admin-only en kickoff de septiembre.
+**NFL (✅ Sprint 9 completo — serie 9a–9j + 9.3)**: tercer deporte activo, espejo del patrón NBA. Datos ESPN + The Odds API + nflverse. Spec maestra en [nfl-architecture.md](nfl-architecture.md) y roadmap por sprints en [nfl-roadmap.md](nfl-roadmap.md). **Todo mergeado**: 9a–9e (scaffolding → Oracle → lifecycle → dataset/shadow → live tracker → UI → ML scaffolding), 9.3 (pre-training nflverse, 3 modelos de juego vivos), 9f–9h (player props: fundación+board → modelo `nfl_prop` pooled → enriquecimiento player-level + persistencia live), 9i (pizarra `hexaNflBoardService` + UI props parametrizada por sport), 9j (Parlay Synergy NFL MVP vía motor frozen). **Imperdible NFL diferido** (el más acoplado a MLB; necesita gate QB + data de temporada). Validación E2E + entrenamiento real requieren temporada (kickoff sept 2026).
 
 ### El trade-off explícito
 

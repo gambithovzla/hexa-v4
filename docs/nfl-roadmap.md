@@ -118,6 +118,28 @@ Espeja NBA 7e pero **adelantado** gracias a la arquitectura XGBoost. **Cerrado e
 - **Dataset inicial**: 0 picks NFL resueltos en prod (temporada comienza sept). Los modelos estarán listos para entrenarse automáticamente cuando `shadow_model_runs` acumule ≥60 filas NFL con result. Desde `/admin/ml-control` → RETRAIN (nfl_moneyline|nfl_spread|nfl_total) en sept 2026.
 - **Nota nflverse**: pre-entrenamiento con histórico nflverse (`nfl_data_py`) queda como mejora post-temporada; requiere integrar el loader CSV → `data.py load_from_csv`. El scaffolding de modelos ya está.
 
+### Sprint 9.3 — nflverse pre-training ✅
+
+EPA/success/PROE dejan de ser null. El sidecar Python descarga el parquet pbp de nflverse vía `pyarrow` (no `nfl_data_py`), genera un dataset histórico sin leakage (as-of-week, 2,622 filas, 8 temporadas) y entrena los 3 modelos de juego. `nfl_moneyline`/`nfl_spread`/`nfl_total` **vivos en producción**. Flags `NFL_PRETRAIN_ENABLED`/`NFL_PRETRAIN_SEASONS`. Detalle en CLAUDE.md (Sprint 9.3).
+
+### Sprint 9f–9h — Player Props NFL ✅
+
+Espeja el patrón MLB props (board ML + chat extraction). **Cero ediciones a frozen.**
+- **9f fundación + board**: `nfl-props-resolver.js` (parser bilingüe + boxscore ESPN + resolver), `nfl-props-odds.js` (endpoint event-específico de The Odds API), `nflPropFeatureEnricher.js` (de-vig over/under → Fair %), `GET /api/nfl/props/board` (admin, flag `NFL_PROPS_ENABLED`), rama de props en `pick-resolver-nfl.js`. 10 kinds (pass/rush/reception yds, TDs, completions, receptions, anytime TD).
+- **9g modelo `nfl_prop`**: pooled across kinds, pick-aligned (`P(la pata gana)`); `features.py`/`data.py`/`train.py`/`serve.py` + `nflMlClient.js` `buildNflPropFeaturePayload`/`predictNflProp`. Sin pretrain (no hay líneas históricas de props) → entrena con picks live.
+- **9h enriquecimiento player-level**: `nflverse_loader.build_player_stats` + `GET /nfl/player-stats`; `nfl-player-fetcher.js` + `nflPropFeaturePersistence.js` (promueve el feature row a `source='live'` con Fair % + season/recent avg). El board adjunta features de jugador al payload del modelo.
+
+### Sprint 9i — Pizarra NFL + UI de props ✅
+
+- `hexaNflBoardService.js` (`buildHexaNflBoard`) — pizarra diaria: slate + líderes de división + point-diff, fallback off-season. `GET /api/nfl/board` (público, cache 04:00 ET). `HexaBoard`/`HexaBoardLeague` fetchean el endpoint real (placeholder "sept 2026" eliminado).
+- `PlayerPropsPage.jsx` parametrizada por `sport` con switcher MLB/NFL: NFL usa `/api/nfl/props/board`, columna **Fair %** (de-vig) en vez de Savant, sin alt-lines. `/props?sport=nfl` en `App.jsx`.
+
+### Sprint 9j — Parlay Synergy NFL (MVP) ✅
+
+- `parlayEngine/nflParlayCandidates.js` — builder puro (spread/total/moneyline → forma del motor). **Cero ediciones a frozen.**
+- `POST /api/nfl/parlay` (admin, flag `PARLAY_SYNERGY_NFL_ENABLED`) alimenta el motor **frozen sport-agnóstico** (`buildCorrelationMatrix` → `composeParlays` → `computeHitDistribution`). Model probs caen al de-vig del mercado hasta el enriquecimiento in-season → `mode=safe` es el útil ahora.
+- **Imperdible NFL diferido**: el más acoplado a MLB (`MARKET_VARIANCE`/thresholds + gate "lineup confirmado" asumen béisbol); necesita gate "QB confirmado" + key numbers + 4-6 semanas de data de parlay para calibrar convicción.
+
 ---
 
 ## Producto: Parlay + Imperdible NFL
@@ -135,8 +157,9 @@ Reusan el motor existente con reglas NFL (detalle en [nfl-architecture.md](nfl-a
 |---|---|---|
 | `NFL_ANALYSIS_ENABLED` | `false` | Habilita endpoints Oracle NFL + resolver. `true` en local / Railway al lanzar MVP. |
 | `NFL_LIVE_TRACKER_ENABLED` | `false` | Activa polling live game-time-aware (Sprint 9.2). |
-| `NFL_PROPS_ENABLED` | `false` | Player props NFL (fase posterior, requiere resolver dedicado). |
-| `IMPERDIBLE_NFL_ENABLED` | `false` | Lock of the week NFL. |
+| `NFL_PROPS_ENABLED` | `false` | ✅ Player props NFL (9f–9h): board `/api/nfl/props/board`, modelo `nfl_prop`, chat extractor. Resolver de props corre siempre, sin gate. |
+| `PARLAY_SYNERGY_NFL_ENABLED` | `false` | ✅ Parlay Synergy NFL MVP (9j): `POST /api/nfl/parlay` vía el motor frozen. |
+| `IMPERDIBLE_NFL_ENABLED` | `false` | Lock of the week NFL — **diferido** (el más acoplado a MLB; necesita gate QB + data de temporada). |
 
 ---
 
