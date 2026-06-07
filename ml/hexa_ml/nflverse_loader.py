@@ -235,10 +235,173 @@ def refresh_team_stats(season: int | None = None) -> dict:
         if season is None:
             _team_stats_cache.clear()
             _pbp_cache.clear()
+            _player_stats_cache.clear()
+            _player_weeks_cache.clear()
         else:
             _team_stats_cache.pop(int(season), None)
             _pbp_cache.pop(int(season), None)
+            _player_stats_cache.pop(int(season), None)
+            _player_weeks_cache.pop(int(season), None)
     return {"cleared": "all" if season is None else int(season)}
+
+
+# ── Player-level weekly stats (NFL props — Fase 2.1) ───────────────────────────
+
+# nflverse renamed the weekly-player release a couple of times; try each known
+# asset URL in order and use the first that resolves.
+_PLAYER_WEEK_URLS = (
+    "https://github.com/nflverse/nflverse-data/releases/download/player_stats/"
+    "player_stats_{year}.parquet",
+    "https://github.com/nflverse/nflverse-data/releases/download/stats_player/"
+    "stats_player_week_{year}.parquet",
+)
+
+# Columns we read from the weekly file (intersected with what's actually present).
+_PLAYER_WEEK_COLUMNS = [
+    "player_id", "player_display_name", "player_name", "position",
+    "recent_team", "season", "week", "season_type",
+    "passing_yards", "passing_tds", "completions", "attempts", "interceptions",
+    "rushing_yards", "carries", "rushing_tds",
+    "receiving_yards", "receptions", "targets", "receiving_tds",
+]
+
+# Canonical prop kind → nflverse weekly stat column. anytime_td is derived
+# (rushing_tds + receiving_tds) and handled separately.
+_PROP_STAT_COLUMN = {
+    "pass_yds": "passing_yards",
+    "pass_tds": "passing_tds",
+    "pass_completions": "completions",
+    "pass_attempts": "attempts",
+    "pass_interceptions": "interceptions",
+    "rush_yds": "rushing_yards",
+    "rush_attempts": "carries",
+    "reception_yds": "receiving_yards",
+    "receptions": "receptions",
+}
+_PROP_KINDS = (*_PROP_STAT_COLUMN.keys(), "anytime_td")
+_RECENT_WINDOW = 4  # last N games for the "recent form" average
+
+_PLAYER_STATS_TTL_S = 6 * 60 * 60
+_player_stats_cache: dict[int, dict] = {}
+_player_weeks_cache: dict[int, pd.DataFrame] = {}
+
+
+def _normalize_player_name(name: str) -> str:
+    """Lower, strip accents + punctuation, collapse spaces — mirrors the Node side."""
+    import unicodedata
+
+    s = unicodedata.normalize("NFD", str(name or ""))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    s = s.lower()
+    for ch in ".,'-":
+        s = s.replace(ch, "")
+    return " ".join(s.split())
+
+
+def _fetch_player_weeks(year: int) -> pd.DataFrame:
+    last_err: Exception | None = None
+    for tmpl in _PLAYER_WEEK_URLS:
+        url = tmpl.format(year=year)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "hexa-ml/nflverse"})
+            t0 = time.time()
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                raw = resp.read()
+            df = pd.read_parquet(io.BytesIO(raw))
+            keep = [c for c in _PLAYER_WEEK_COLUMNS if c in df.columns]
+            df = df[keep]
+            logger.info("nflverse player-weeks %d → %d rows (%.1fMB) in %.1fs",
+                        year, len(df), len(raw) / 1e6, time.time() - t0)
+            return df
+        except Exception as exc:  # try the next asset URL
+            last_err = exc
+            logger.warning("nflverse player-weeks %d via %s failed (%s)", year, url, exc)
+    raise RuntimeError(f"no nflverse player-weeks asset for {year}: {last_err}")
+
+
+def _load_player_weeks(season: int) -> pd.DataFrame:
+    if not _NFLVERSE_AVAILABLE:
+        raise RuntimeError("pyarrow is not installed")
+    with _lock:
+        cached = _player_weeks_cache.get(season)
+    if cached is None:
+        cached = _fetch_player_weeks(season)
+        with _lock:
+            _player_weeks_cache[season] = cached
+    return cached
+
+
+def build_player_stats(season: int) -> dict:
+    """Per-player season-to-date + recent prop averages for a season.
+
+    Returns { season, fetched_at, players: { norm_name: {
+        name, player_id, position, games,
+        season_avg: { pass_yds: .., ... , anytime_td: .. },
+        recent_avg: { ... last-4-game means ... },
+    } } }. Cached 6h. Raises RuntimeError if nflverse is unavailable (→ 503).
+    """
+    season = int(season)
+    now = time.time()
+    with _lock:
+        cached = _player_stats_cache.get(season)
+    if cached and (now - cached["_ts"]) < _PLAYER_STATS_TTL_S:
+        return cached["payload"]
+
+    weeks = _load_player_weeks(season)
+    if "season_type" in weeks.columns:
+        weeks = weeks[weeks["season_type"].astype(str).str.upper() == "REG"].copy()
+    else:
+        weeks = weeks.copy()
+
+    name_col = "player_display_name" if "player_display_name" in weeks.columns else "player_name"
+    weeks["anytime_td"] = (
+        pd.to_numeric(weeks.get("rushing_tds"), errors="coerce").fillna(0)
+        + pd.to_numeric(weeks.get("receiving_tds"), errors="coerce").fillna(0)
+    )
+    if "week" in weeks.columns:
+        weeks = weeks.sort_values("week")
+
+    players: dict[str, dict] = {}
+    for raw_name, grp in weeks.groupby(name_col):
+        if not raw_name or str(raw_name) in ("", "nan"):
+            continue
+        norm = _normalize_player_name(raw_name)
+        if not norm:
+            continue
+        tail = grp.tail(_RECENT_WINDOW)
+
+        season_avg: dict[str, float | None] = {}
+        recent_avg: dict[str, float | None] = {}
+        for kind in _PROP_KINDS:
+            col = _PROP_STAT_COLUMN.get(kind, kind)  # anytime_td maps to itself
+            if col not in grp.columns:
+                season_avg[kind] = None
+                recent_avg[kind] = None
+                continue
+            s_full = pd.to_numeric(grp[col], errors="coerce")
+            s_tail = pd.to_numeric(tail[col], errors="coerce")
+            season_avg[kind] = None if s_full.dropna().empty else round(float(s_full.mean()), 3)
+            recent_avg[kind] = None if s_tail.dropna().empty else round(float(s_tail.mean()), 3)
+
+        pid = grp["player_id"].iloc[0] if "player_id" in grp.columns else None
+        pos = grp["position"].iloc[0] if "position" in grp.columns else None
+        players[norm] = {
+            "name": str(raw_name),
+            "player_id": None if pd.isna(pid) else str(pid),
+            "position": None if pos is None or pd.isna(pos) else str(pos),
+            "games": int(grp.shape[0]),
+            "season_avg": season_avg,
+            "recent_avg": recent_avg,
+        }
+
+    payload = {
+        "season": season,
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "players": players,
+    }
+    with _lock:
+        _player_stats_cache[season] = {"_ts": now, "payload": payload}
+    return payload
 
 
 # ── As-of-week aggregates for leakage-free training ────────────────────────────

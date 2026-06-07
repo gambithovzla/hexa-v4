@@ -11,6 +11,7 @@ import {
 import { normalizeNflPropEvent } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { buildNflPropFeaturePayload } from '../services/nflMlClient.js';
+import { findNflPlayerPropStat } from '../nfl-player-fetcher.js';
 
 // ── parseNflProp ──────────────────────────────────────────────────────────────
 
@@ -204,6 +205,42 @@ test('enrichNflPropOffers: unpaired offer has null fairProb', () => {
 });
 
 // ── ML feature payload (Fase 2) ───────────────────────────────────────────────
+
+// ── player-level enrichment (Fase 2.1) ────────────────────────────────────────
+
+const PLAYER_STATS_FIXTURE = {
+  season: 2024,
+  players: {
+    'patrick mahomes': {
+      name: 'Patrick Mahomes', games: 16,
+      season_avg: { pass_yds: 271.4, pass_tds: 2.1, anytime_td: 0.2 },
+      recent_avg: { pass_yds: 255.0, pass_tds: 1.8, anytime_td: 0.0 },
+    },
+    'christian mccaffrey': {
+      name: 'Christian McCaffrey', games: 14,
+      season_avg: { rush_yds: 88.5, receptions: 4.2, anytime_td: 1.1 },
+      recent_avg: { rush_yds: 95.0, receptions: 5.0, anytime_td: 1.0 },
+    },
+  },
+};
+
+test('findNflPlayerPropStat: exact name + kind lookup', () => {
+  const r = findNflPlayerPropStat(PLAYER_STATS_FIXTURE, 'Patrick Mahomes', 'pass_yds');
+  assert.equal(r.seasonAvg, 271.4);
+  assert.equal(r.recentAvg, 255.0);
+  assert.equal(r.games, 16);
+});
+
+test('findNflPlayerPropStat: accent/last-name fallback + anytime_td', () => {
+  const r = findNflPlayerPropStat(PLAYER_STATS_FIXTURE, 'McCaffrey', 'anytime_td');
+  assert.equal(r.seasonAvg, 1.1);
+  assert.equal(r.recentAvg, 1.0);
+});
+
+test('findNflPlayerPropStat: unknown player or kind → null', () => {
+  assert.equal(findNflPlayerPropStat(PLAYER_STATS_FIXTURE, 'Joe Burrow', 'pass_yds'), null);
+  assert.equal(findNflPlayerPropStat(PLAYER_STATS_FIXTURE, 'Patrick Mahomes', 'rush_yds'), null);
+});
 
 test('buildNflPropFeaturePayload: maps offer to pick-aligned sidecar payload', () => {
   const payload = buildNflPropFeaturePayload({
