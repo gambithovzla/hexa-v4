@@ -80,7 +80,7 @@ const CAPABILITY_MAP = {
     // ENABLED; set VITE_NFL_LIVE_TRACKER_ENABLED=false to hide the tab (e.g. to
     // suppress game-time polling during a deploy or a quiet stretch).
     nfl: {
-      enabled: import.meta.env.VITE_NFL_LIVE_TRACKER_ENABLED !== 'false',
+      enabled: import.meta.env?.VITE_NFL_LIVE_TRACKER_ENABLED !== 'false',
       message: { es: 'Live tracker NFL deshabilitado temporalmente.', en: 'NFL live tracker is temporarily disabled.' },
     },
     nhl: { enabled: false, message: { es: 'Live tracker NHL llega en una fase posterior.', en: 'NHL live tracker ships in a later phase.' } },
