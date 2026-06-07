@@ -177,7 +177,7 @@ Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑
 ### Oracle multi-motor (MLB/NBA/NFL)
 - **MLB**: [oracle.js](server/oracle.js) — dual Claude + Grok, contexto rico con Statcast/Savant (rolling wOBA, CSW%, bat speed, umpire, bullpen ERA/WHIP individual, schedule fatigue). FROZEN.
 - **NBA**: [services/oracleNba.js](server/services/oracleNba.js) — Anthropic-only, net/off/def rating, pace, TS%, rest, injuries ESPN. Cap 68%.
-- **NFL**: [services/oracleNfl.js](server/services/oracleNfl.js) — Anthropic-only, EPA, success rate, PROE, QB status, rest/short-week/off-bye, weather (no-dome), spread primario con key numbers 3/7. Cap 72%.
+- **NFL**: [services/oracleNfl.js](server/services/oracleNfl.js) — Anthropic-only, EPA, success rate, PROE, **red zone TD%**, **3rd-down conv%**, **sack rate off/def**, QB status + backup QB, rest/short-week/off-bye + fatiga acumulativa, surface (turf/grass) + altitude (Denver 5,280ft), weather (no-dome), spread primario con key numbers 3/7, **8-signal coherence voting**. Cap 72%.
 
 ### Pipeline ML propio (XGBoost + ensemble)
 Sidecar Python en `ml/` — desplegado en Railway como servicio independiente.
@@ -214,7 +214,7 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 
 ---
 
-## Estado del proyecto (2026-06-06)
+## Estado del proyecto (2026-06-07)
 
 ### Pipeline ML y sprints completados
 
@@ -242,6 +242,13 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
   - `server/nfl-advanced-fetcher.js` (NEW): análogo NFL de `savant-fetcher.js` — EPA/PROE desde el sidecar, re-keyed a abbr ESPN (WAS→WSH, LA→LAR), cache 6h, stale fallback.
   - `server/nfl-context-builder.js`: EPA/success/PROE ya NO son null; `context_meta.sources.advancedStats` expone freshness.
   - **Resultado**: 3 modelos NFL vivos en producción (nfl_moneyline Brier ~0.234, nfl_spread ~0.25, nfl_total ~0.25). Dep nueva: `pyarrow==18.1.0`.
+- ✅ **Sprint 9.4 — NFL precision parity** (2026-06-07): cierra las brechas de situacional, trenches, superficie/altitud y coherencia de señales.
+  - `ml/hexa_ml/nflverse_loader.py`: 6 nuevos campos desde play-by-play — `red_zone_td_pct_off/def` (% jugadas RZ → TD), `third_down_conv_off/def` (tasa conversión 3er down), `sack_rate_off/def` (sacks por dropback). Helpers `_red_zone_stats`, `_third_down_stats`, `_trench_stats`.
+  - `server/nfl-team-map.js`: todos los 32 estadios con `surface` (turf/grass) y `altitude` (ft ASL). `getNflStadium` expone ambos. Denver 5,280ft marcado.
+  - `server/nfl-context-builder.js`: `buildTeamBlock` incluye los 6 nuevos campos nflverse; `buildFatigueBlock` (fatiga acumulativa — games/14d, road games, días consecutivos, espejo MLB `buildScheduleFatigueBlock`); `detectBackupQb` (detecta QB de respaldo cuando el titular está en duda); weather block lleva surface + altitude; completeness reformulado con `situationalStats` (12%) + `trenchStats` (10%).
+  - `server/services/nflShadowValidator.js`: `situationalAdvantage` (RZ TD% + 3rd-down) al 14%; `trenchesAdvantage` (sack rate diff) al 10%. Pesos rebalanceados. Breakdown expone `sitAdv` + `trAdv`.
+  - `server/services/oracleNfl.js`: `describeEfficiencyDeltas` — bloque comparativo con dirección HOME/AWAY; `describeBackupQb`; venue block incluye surface + altitude.
+  - `server/prompts/oracle-nfl-prompts.js`: umbrales calibrados RZ/3rd-down/sack rate; **Signal Coherence** (8 señales votando, modifica confianza ±1→+6%); 5 nuevos alert flags (altitud, trench mismatch, RZ gap, baja coherencia, fatiga); oracle_report requiere "N/8 signals aligned" en EDGE MATH.
 
 ### Estado en producción
 
@@ -263,16 +270,16 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 
 | Criterio | MLB | NBA | NFL | Gate |
 |---|---:|---:|---:|---:|
-| Data depth pregame | 9.5 | 6.5 | 7.5 | 8.0 |
+| Data depth pregame | 9.5 | 6.5 | 8.5 | 8.0 |
 | Data quality live | 8.5 | 7.0 | 6.5 | 8.0 |
-| Lineup/Injury verification | 9.0 | 7.0 | 7.0 | 8.0 |
-| Market coverage | 9.0 | 6.0 | 7.0 | 8.0 |
-| Guardrails LLM | 8.5 | 7.5 | 8.0 | 8.0 |
+| Lineup/Injury verification | 9.0 | 7.0 | 7.5 | 8.0 |
+| Market coverage | 9.0 | 6.0 | 7.5 | 8.0 |
+| Guardrails LLM | 8.5 | 7.5 | 8.5 | 8.0 |
 | Pick lifecycle | 9.0 | 7.5 | 7.0 | 8.0 |
 | Calibration/ROI observables | 8.5 | 6.0 | 6.5 | 8.0 |
 | Isolation por deporte | 8.5 | 8.0 | 8.0 | 8.5 |
 
-NFL: código completo + EPA/PROE real (nflverse); modelos pre-entrenados. Calibración mejorará con picks reales en temporada (sept 2026).
+NFL post-9.4: EPA/PROE + red zone + 3rd-down + trenches + surface/altitude + signal coherence. Data depth alcanza paridad MLB (8.5). Calibración y lifecycle mejorarán con picks reales en temporada (sept 2026).
 
 ---
 
