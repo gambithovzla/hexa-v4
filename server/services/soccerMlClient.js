@@ -118,7 +118,7 @@ export function buildSoccerFeaturePayload(context = {}, gameMeta = {}, marketOdd
     home_points:       home.points      ?? null,
     away_points:       away.points      ?? null,
 
-    // xG (null until FBref integration)
+    // xG from Understat (Big 5 leagues; null for MLS / fetch failure)
     home_xg:  home.xG  ?? null,
     away_xg:  away.xG  ?? null,
     home_xga: home.xGA ?? null,

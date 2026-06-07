@@ -22,8 +22,13 @@
 
 // Weights applied when 3-way market odds are available vs. absent.
 // Soccer is the most efficient market — when the book speaks, trust it heavily.
-const W_WITH_ODDS    = { strength: 0.25, form: 0.20, odds: 0.55 };
-const W_WITHOUT_ODDS = { strength: 0.50, form: 0.50, odds: 0.00 };
+// xG (Understat) is the underlying-performance signal — present for the Big 5
+// leagues, absent for MLS. Absent signals are dropped and their weight is
+// redistributed proportionally across the present ones (Sprint 11.4 — mirrors
+// the NFL 9.6 re-weighting), so an MLS pick with no xG isn't flattened by a
+// neutral 0.5 filler.
+const W_WITH_ODDS    = { strength: 0.20, form: 0.15, xg: 0.10, odds: 0.55 };
+const W_WITHOUT_ODDS = { strength: 0.35, form: 0.30, xg: 0.35, odds: 0.00 };
 
 // Home field in soccer is real (~0.03–0.05 raw prob swing) but already priced in
 // by the market, so only apply when we're NOT using odds as the primary signal.
@@ -57,7 +62,44 @@ function strengthAdvantage(home, away) {
   if (hp != null && ap != null) {
     return deltaToAdvantage(hp - ap, 15);
   }
-  return 0.5;
+  return null;  // no strength data → drop the signal (re-weighting handles it)
+}
+
+/**
+ * Net xG (xG − xGA) gap from Understat season totals. Both teams sit at roughly
+ * the same matchday, so the season-cumulative differential is a fair underlying-
+ * strength signal (a ~12 net-xG gap is dominant). Returns null when either
+ * team's xG is missing (MLS / fetch failure) so the signal is dropped.
+ */
+function xgAdvantage(home, away) {
+  const hx = toNumber(home.xG);
+  const ax = toNumber(away.xG);
+  if (hx == null || ax == null) return null;
+  const hNet = hx - (toNumber(home.xGA) ?? 0);
+  const aNet = ax - (toNumber(away.xGA) ?? 0);
+  return deltaToAdvantage(hNet - aNet, 12);
+}
+
+/**
+ * Blend per-signal home-win advantages by their weights, dropping signals with
+ * no data and renormalizing over the present ones. Returns the blended [0,1]
+ * advantage plus `coverage` — the fraction of nominal model weight that had data
+ * (1.0 = every signal present; lower = some dropped).
+ */
+function blendSignals(signals, weights) {
+  let acc = 0;
+  let presentW = 0;
+  let nominalW = 0;
+  for (const key of Object.keys(weights)) {
+    const w = weights[key];
+    nominalW += w;
+    const v = signals[key];
+    if (v == null || !Number.isFinite(v)) continue;
+    acc += w * v;
+    presentW += w;
+  }
+  const coverage = nominalW > 0 ? presentW / nominalW : 0;
+  return { value: presentW > 0 ? acc / presentW : 0.5, coverage };
 }
 
 /**
@@ -89,7 +131,7 @@ function parseFormRecord(recentForm) {
 function formAdvantage(home, away) {
   const hf = parseFormRecord(home.recentForm);
   const af = parseFormRecord(away.recentForm);
-  if (!hf && !af) return 0.5;
+  if (!hf && !af) return null;  // no form data → drop the signal
   const hRate = hf ? hf.wins / hf.total : 0.4;
   const aRate = af ? af.wins / af.total : 0.4;
   return deltaToAdvantage(hRate - aRate, 0.3);
@@ -136,12 +178,13 @@ export function calculateSoccerShadowScore(context, gameMeta = {}, marketOdds = 
 
   const strAdv  = strengthAdvantage(home, away);
   const formAdv = formAdvantage(home, away);
-  const oAdv    = oddsPresent ? oddsAdv : 0.5;
+  const xgAdv   = xgAdvantage(home, away);
+  const oAdv    = oddsPresent ? oddsAdv : null;
 
-  const rawHomeAdvantage =
-    W.strength * strAdv  +
-    W.form     * formAdv +
-    W.odds     * oAdv;
+  const { value: rawHomeAdvantage, coverage: signalCoverage } = blendSignals(
+    { strength: strAdv, form: formAdv, xg: xgAdv, odds: oAdv },
+    W,
+  );
 
   const homeAdvantage = Math.max(0, Math.min(1, rawHomeAdvantage + homeBoost));
   const homeScoreNorm = homeAdvantage * 100;
@@ -166,7 +209,8 @@ export function calculateSoccerShadowScore(context, gameMeta = {}, marketOdds = 
   console.log(
     `[soccerShadowValidator] ${homeAbbr} vs ${awayAbbr} → ` +
     `homeScore=${homeScoreNorm.toFixed(1)} winner=${predictedWinnerAbbr} ` +
-    `conf=${confidence} oddsPresent=${oddsPresent} completeness=${completeness}`
+    `conf=${confidence} oddsPresent=${oddsPresent} xgPresent=${xgAdv != null} ` +
+    `coverage=${signalCoverage.toFixed(2)} completeness=${completeness}`
   );
 
   return {
@@ -175,8 +219,9 @@ export function calculateSoccerShadowScore(context, gameMeta = {}, marketOdds = 
     predicted_winner_abbr: predictedWinnerAbbr,
     confidence,
     breakdown: {
-      strAdv, formAdv, oddsAdv,
+      strAdv, formAdv, xgAdv, oddsAdv,
       oddsPresent,
+      signalCoverage,
       homeAdvantage,
       rawConfidence: Math.round(rawConf),
       completeness,

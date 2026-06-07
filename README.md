@@ -187,7 +187,7 @@ Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑
 Soccer pasó el MVP (Oracle 3-vías, lifecycle, UI 5-deportes, board, live tracker, xG, sidecar scaffolded) pero le faltan los pilares de profundidad de MLB. Plan para cerrar la brecha (ver [docs/roadmap.md](docs/roadmap.md) y [CLAUDE.md](CLAUDE.md)):
 - **11.2** ✅ ML pre-training histórico ([soccer_history_loader.py](ml/hexa_ml/soccer_history_loader.py)): football-data.co.uk (resultados + closing odds 1X2, 5 ligas europeas) → modelos `soccer_*` entrenables sin esperar temporada, análogo nflverse. Flags `SOCCER_PRETRAIN_*`.
 - **11.3** profundidad de contexto pregame: **lineups/injuries/suspensiones** (API-Football), árbitro, congestión de calendario, weather, FBref (PPDA/pases progresivos), xG rolling, motivación.
-- **11.4** xG cableado a `pick_features` + shadow validator.
+- **11.4** ✅ xG cableado: `soccerShadowPersistence` persiste xG/xGA reales de Understat (era null) → dataset con xG; `soccerShadowValidator` suma señal `xgAdvantage` con re-weighting sobre señales presentes.
 - **11.5** player props (tiros/goles/asistencias/tarjetas). **11.6** parlay (motor frozen, correlación Over+BTTS). **11.7** Imperdible Soccer. **11.8** CLV + postmortem + ensemble. **11.9** smart signals + ascensos/descensos.
 
 ### Pipeline ML propio (XGBoost + ensemble)
