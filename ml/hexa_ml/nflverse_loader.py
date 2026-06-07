@@ -159,8 +159,10 @@ def _red_zone_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     Red zone = yardline_100 <= 20 on pass/run plays. TD% = TDs / red-zone plays.
     """
     if "yardline_100" not in pbp.columns or "touchdown" not in pbp.columns:
-        empty = pd.Series(dtype=float, name="rz_td_pct")
-        return empty, empty
+        # Distinct names so the downstream off/def join doesn't see overlapping
+        # columns when these are empty (synthetic frames lacking yardline_100).
+        return (pd.Series(dtype=float, name="rz_td_pct_off"),
+                pd.Series(dtype=float, name="rz_td_pct_def"))
     rz = pbp[
         (pbp["play_type"].isin(_RELEVANT_PLAY_TYPES)) &
         (pd.to_numeric(pbp["yardline_100"], errors="coerce") <= 20) &
@@ -177,8 +179,8 @@ def _red_zone_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
 def _third_down_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     """3rd-down conversion rate per team — offense and defense."""
     if "down" not in pbp.columns or "first_down" not in pbp.columns:
-        empty = pd.Series(dtype=float, name="third_down_conv")
-        return empty, empty
+        return (pd.Series(dtype=float, name="third_down_conv_off"),
+                pd.Series(dtype=float, name="third_down_conv_def"))
     td3 = pbp[
         (pbp["play_type"].isin(_RELEVANT_PLAY_TYPES)) &
         (pd.to_numeric(pbp["down"], errors="coerce") == 3)
@@ -198,8 +200,8 @@ def _trench_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     A lower sack_rate_off = better O-line; a higher sack_rate_def = better pass rush.
     """
     if "pass_attempt" not in pbp.columns or "sack" not in pbp.columns:
-        empty = pd.Series(dtype=float, name="sack_rate")
-        return empty, empty
+        return (pd.Series(dtype=float, name="sack_rate_off"),
+                pd.Series(dtype=float, name="sack_rate_def"))
     passes = pbp[
         (pbp["play_type"].isin(_RELEVANT_PLAY_TYPES)) &
         (pd.to_numeric(pbp["pass_attempt"], errors="coerce") == 1)

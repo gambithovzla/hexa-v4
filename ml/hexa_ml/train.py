@@ -231,16 +231,28 @@ def train_all(
                 logger.warning("NFL pre-training setup failed (%s)", exc)
                 nfl_pretrain_years = None
 
-    # Load Soccer dataset separately
+    # Load Soccer dataset separately. Live picks come from pick_features (often
+    # empty out of season); football-data.co.uk historical results + closing
+    # odds are concatenated per-market so models can train before any live pick
+    # resolves — the soccer analog of the nflverse pre-training above.
     soccer_df = None
+    soccer_pretrain_years: list[int] | None = None
     if soccer_markets and not csv_path:
-        logger.info("Loading Soccer dataset…")
+        logger.info("Loading Soccer live dataset…")
         try:
             soccer_df = load_dataset(sport="soccer")
-            logger.info("Soccer: Loaded %d rows; %d resolved", len(soccer_df), int(soccer_df["result"].notna().sum()))
+            logger.info("Soccer: Loaded %d live rows; %d resolved", len(soccer_df), int(soccer_df["result"].notna().sum()))
         except Exception as exc:
-            logger.warning("Soccer dataset load failed (%s) — skipping soccer markets", exc)
-            soccer_markets = []
+            logger.warning("Soccer live dataset load failed (%s) — relying on football-data history", exc)
+            soccer_df = None
+        if settings.soccer_pretrain_enabled:
+            try:
+                from . import soccer_history_loader
+                soccer_pretrain_years = soccer_history_loader.parse_seasons(settings.soccer_pretrain_seasons)
+                logger.info("Soccer pre-training enabled — seasons %s", soccer_pretrain_years)
+            except Exception as exc:
+                logger.warning("Soccer pre-training setup failed (%s)", exc)
+                soccer_pretrain_years = None
 
     # Load Tennis dataset separately
     tennis_df = None
@@ -315,9 +327,26 @@ def train_all(
                 continue
             _train_market(nfl_df, market)
 
-    if soccer_df is not None:
+    if soccer_markets:
+        from . import soccer_history_loader
         for market in soccer_markets:
-            _train_market(soccer_df, market)
+            parts = []
+            if soccer_df is not None and not soccer_df.empty:
+                parts.append(soccer_df)
+            if soccer_pretrain_years:
+                try:
+                    hist = soccer_history_loader.build_soccer_training_frame(market, soccer_pretrain_years)
+                    if not hist.empty:
+                        logger.info("Soccer %s: +%d historical rows", market, len(hist))
+                        parts.append(hist)
+                except Exception as exc:
+                    logger.warning("Soccer historical frame for %s failed (%s)", market, exc)
+            if not parts:
+                logger.warning("Soccer %s: no data (no live picks, no history) — skipping", market)
+                summary[market] = {"skipped": True, "reason": "no_data"}
+                continue
+            combined = parts[0] if len(parts) == 1 else pd.concat(parts, ignore_index=True)
+            _train_market(combined, market)
 
     if tennis_df is not None:
         for market in tennis_markets:

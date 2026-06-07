@@ -637,14 +637,14 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 
 **Orden de ataque** (11.2 + 11.3 + 11.4 mueven la aguja y son off-season-friendly):
 
-#### Sprint 11.2 — ML pre-training histórico (el "nflverse del fútbol")
-Mayor lift de robustez, sin esperar temporada. Hoy soccer tiene **0 modelos vivos** (espera ≥25 picks resueltos). NFL resolvió esto exacto leyendo nflverse.
-- **football-data.co.uk** — 25+ años de resultados + **closing odds** (1X2/OU/BTTS) de las 6 ligas, CSV gratis sin key. Análogo directo a nflverse.
-- **Understat histórico** — xG por partido Big 5 (ya existe el scraper, falta modo histórico).
-- Espejo de `nflverse_loader.py`: `build_soccer_training_frame(league, market, years)` sin leakage (features as-of-matchday, labels desde score + closing odds).
-- Flags `SOCCER_PRETRAIN_ENABLED` (default true) + `SOCCER_PRETRAIN_SEASONS`.
-- **Resultado**: `soccer_moneyline/total/btts` vivos en producción ya, refinándose con picks reales en temporada.
-- **Criterio de éxito**: Brier honesto desde el día 1; los 3 modelos cargados en `/health` del sidecar sin esperar picks.
+#### Sprint 11.2 — ML pre-training histórico (el "nflverse del fútbol") — ✅ implementado en código (2026-06-07)
+Mayor lift de robustez, sin esperar temporada. Soccer tenía **0 modelos vivos** (esperaba ≥25 picks resueltos). NFL resolvió esto exacto leyendo nflverse; ahora soccer hace lo mismo con football-data.co.uk.
+- ✅ [ml/hexa_ml/soccer_history_loader.py](../ml/hexa_ml/soccer_history_loader.py) — análogo de `nflverse_loader.py`. **football-data.co.uk** (CSVs gratis sin key, 20+ años de resultados + closing odds 1X2). `build_soccer_training_frame(market, years)` itera las 5 ligas europeas (E0/SP1/I1/D1/F1; MLS no está en la fuente), computa features **as-of cada partido** (acumulados temporada-a-fecha *antes* del kick-off — misma semántica que el standings ESPN en vivo, cero leakage), convierte odds decimal→American para alinear con `soccer-odds.js`. xG queda NaN (football-data no lo trae; Understat histórico = follow-up). Sin deps nuevas (CSV vía pandas+urllib).
+- ✅ Flags `SOCCER_PRETRAIN_ENABLED` (default true) + `SOCCER_PRETRAIN_SEASONS` en [config.py](../ml/hexa_ml/config.py) + `.env.example`.
+- ✅ [train.py](../ml/hexa_ml/train.py) — `train_all` concatena picks live (vacíos en off-season) con la historia football-data por mercado → los 3 modelos soccer **se entrenan ya**. Reusa `filter_for_market`/`make_target`/`build_X` sin cambios.
+- ✅ **Drive-by fixes**: (1) `build_X` ahora dedupe columnas (bug latente: `soccer_total` re-listaba `odds_ou_total`, que rompía la coerción numérica — nunca se había disparado porque soccer_total jamás se entrenó); (2) `nflverse_loader.py` nombres distintos off/def en las Series vacías de RZ/3rd-down/sack (bug pre-existente que rompía un test con frames sintéticos).
+- ✅ Tests: [test_soccer_history_loader.py](../ml/tests/test_soccer_history_loader.py) (9: parse_seasons, season_code, decimal→American, leakage-free primera jornada, acumulados as-of, market_type, unsupported, empty-when-no-CSV). Validado E2E: los 3 mercados entrenan+predicen sobre frame sintético. Suite ML completa verde (72).
+- **Pendiente operacional**: deploy del sidecar + `POST /retrain {"market":"all"}` → verificar `soccer_*` cargados en `/health`. **Understat histórico** (xG por partido Big 5) como follow-up para enriquecer el frame.
 
 #### Sprint 11.3 — Profundidad de contexto pregame (el "Statcast del fútbol")
 La brecha #1. El context-builder hoy solo deriva de standings + form-string `WDLWW`. Enriquecer al nivel del Sprint 8d MLB:
