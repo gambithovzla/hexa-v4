@@ -666,6 +666,33 @@ async def nfl_refresh(season: int | None = None) -> dict:
     return nflverse_loader.refresh_team_stats(season)
 
 
+class NflPlayerStatsResponse(BaseModel):
+    season: int
+    fetched_at: str | None = None
+    players: dict[str, dict]
+
+
+@app.get(
+    "/nfl/player-stats",
+    response_model=NflPlayerStatsResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def nfl_player_stats(season: int) -> NflPlayerStatsResponse:
+    """Per-player season-to-date + recent (last-4) prop averages keyed by
+    normalized player name. Consumed by the Node nfl-player-fetcher to enrich
+    NFL prop pick_features (nfl_prop_player_season_avg / recent_avg / games).
+    """
+    _require_nflverse()
+    try:
+        payload = await asyncio.to_thread(nflverse_loader.build_player_stats, season)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"nflverse player-stats failed: {exc}",
+        ) from exc
+    return NflPlayerStatsResponse(**payload)
+
+
 # ── FanGraphs ZiPS projections (A2) ──────────────────────────────────────────
 
 class FangraphsRefreshResponse(BaseModel):

@@ -24,6 +24,8 @@ import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp } from '../services/nflMlClient.js';
+import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
+import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
 import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
@@ -400,6 +402,16 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireAdmin, async (req, 
         });
         cleanAnswer = processed.answer;
         picked = processed.picked;
+        // NFL prop pick → promote its feature row to a trainable source='live'
+        // snapshot enriched with market + player signal (fire-and-forget).
+        if (picked?.pick_id && picked.market_type === 'prop') {
+          enrichAndPersistNflPropPick({
+            pickId: picked.pick_id,
+            rawPickText: picked.raw_pick_text,
+            eventId: resolvedOdds?.eventId ?? null,
+            season: game.season ?? null,
+          }).catch(() => {});
+        }
       } catch (err) {
         console.warn(`[nfl-route] chat pick extraction failed: ${err.message}`);
       }
@@ -538,12 +550,18 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
 
         // Admin board: attach the pooled nfl_prop model probability when the
         // sidecar is up and the model is trained. predictNflProp returns null
-        // (circuit open / disabled / no artifact) → modelProb stays null.
+        // (circuit open / disabled / no artifact) → modelProb stays null. Player
+        // averages mirror the training features so board preds are consistent.
         const top = props.slice(0, MAX_MODEL_PREDICTIONS);
+        const playerStats = await getNflPlayerStats(game.season);
         await Promise.all(top.map(async (p) => {
+          const ps = findNflPlayerPropStat(playerStats, p.playerName, p.propKind);
           const payload = buildNflPropFeaturePayload({
             propKind: p.propKind, side: p.side, line: p.line,
             oddsAmerican: p.oddsAmerican, impliedProb: p.impliedProb, fairProb: p.fairProb,
+            playerSeasonAvg: ps?.seasonAvg ?? null,
+            playerRecentAvg: ps?.recentAvg ?? null,
+            playerGames: ps?.games ?? null,
           });
           const pred = await predictNflProp(payload);
           if (pred && typeof pred.probability === 'number') {

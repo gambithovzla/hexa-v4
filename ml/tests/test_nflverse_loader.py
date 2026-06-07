@@ -101,3 +101,48 @@ def test_training_frame_market_type_mapping():
 def test_unsupported_market_raises():
     with pytest.raises(ValueError):
         nv.build_nfl_training_frame("nfl_props", [2023])
+
+
+def _synthetic_player_weeks() -> pd.DataFrame:
+    """Two players, REG weeks 1-3, easy-to-reason averages."""
+    return pd.DataFrame({
+        "player_display_name": ["Patrick Mahomes"] * 3 + ["Christian McCaffrey"] * 3,
+        "player_id": ["1"] * 3 + ["2"] * 3,
+        "position": ["QB"] * 3 + ["RB"] * 3,
+        "season": [2024] * 6,
+        "week": [1, 2, 3, 1, 2, 3],
+        "season_type": ["REG"] * 6,
+        "passing_yards": [300, 280, 260, 0, 0, 0],
+        "passing_tds": [3, 2, 1, 0, 0, 0],
+        "completions": [25, 22, 20, 0, 0, 0],
+        "attempts": [35, 33, 30, 0, 0, 0],
+        "interceptions": [1, 0, 1, 0, 0, 0],
+        "rushing_yards": [10, 5, 8, 95, 110, 80],
+        "carries": [2, 1, 2, 20, 22, 18],
+        "rushing_tds": [0, 0, 1, 1, 2, 0],
+        "receiving_yards": [0, 0, 0, 40, 30, 55],
+        "receptions": [0, 0, 0, 5, 4, 6],
+        "targets": [0, 0, 0, 6, 5, 7],
+        "receiving_tds": [0, 0, 0, 0, 1, 1],
+    })
+
+
+def test_build_player_stats_season_recent_and_anytime_td(monkeypatch):
+    monkeypatch.setattr(nv, "_NFLVERSE_AVAILABLE", True)
+    monkeypatch.setattr(nv, "_load_player_weeks", lambda season: _synthetic_player_weeks())
+    nv.refresh_team_stats()  # clear caches
+
+    payload = nv.build_player_stats(2024)
+    players = payload["players"]
+
+    mahomes = players["patrick mahomes"]
+    assert mahomes["games"] == 3
+    assert mahomes["season_avg"]["pass_yds"] == 280.0
+    assert mahomes["season_avg"]["pass_tds"] == 2.0
+
+    cmc = players["christian mccaffrey"]
+    assert cmc["season_avg"]["rush_yds"] == round((95 + 110 + 80) / 3, 3)
+    # anytime_td = rushing_tds + receiving_tds, averaged over games
+    assert cmc["season_avg"]["anytime_td"] == round((1 + 3 + 1) / 3, 3)
+    # recent_avg over the last <=4 games equals season here (3 games)
+    assert cmc["recent_avg"]["receptions"] == round((5 + 4 + 6) / 3, 3)
