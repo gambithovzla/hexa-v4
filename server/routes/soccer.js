@@ -35,6 +35,7 @@ import { composeParlays } from '../services/parlayEngine/composer.js';
 import { buildCorrelationMatrix } from '../services/parlayEngine/correl.js';
 import { computeHitDistribution } from '../services/parlayEngine/hitMath.js';
 import { predictSoccerGameModel } from '../services/soccerMlClient.js';
+import { buildSoccerGameSignals } from '../services/hexaSoccerSignalsService.js';
 
 const router = Router();
 
@@ -317,6 +318,7 @@ router.post('/analyze/game', soccerEnabled, verifyToken, requireAdmin, async (re
         pickId:       savedPick?.id ?? null,
         oddsSource,
         context_meta: context.context_meta ?? null,
+        signals:      buildSoccerGameSignals(context, resolvedOdds),
       },
     });
   } catch (err) {
