@@ -48,7 +48,11 @@ function deltaToAdvantage(delta, scale) {
   return Math.max(0, Math.min(1, y));
 }
 
-/** Team strength: prefer EPA matchup diff; fall back to season point differential. */
+/**
+ * Team strength: prefer EPA matchup diff; fall back to season point differential.
+ * Returns null (signal absent → re-weighted out) when neither EPA nor point
+ * differential is available for either team.
+ */
 function strengthAdvantage(home, away) {
   const hOff = toNumber(home.epaOff), hDef = toNumber(home.epaDef);
   const aOff = toNumber(away.epaOff), aDef = toNumber(away.epaDef);
@@ -59,7 +63,7 @@ function strengthAdvantage(home, away) {
   }
   const hPd = toNumber(home.pointDiff);
   const aPd = toNumber(away.pointDiff);
-  if (hPd == null && aPd == null) return 0.5;
+  if (hPd == null && aPd == null) return null;
   return deltaToAdvantage((hPd ?? 0) - (aPd ?? 0), 60); // 60-pt season diff gap ~ 0.75
 }
 
@@ -83,7 +87,7 @@ function restAdvantage(home, away) {
   const aUnits = (away.isOffBye ? 1 : 0) + (away.isShortWeek ? -1 : 0);
   if (hUnits === 0 && aUnits === 0) {
     const hr = toNumber(home.restDays), ar = toNumber(away.restDays);
-    if (hr == null || ar == null) return 0.5;
+    if (hr == null || ar == null) return null; // absent → re-weighted out
     return deltaToAdvantage(hr - ar, 4);
   }
   return deltaToAdvantage(hUnits - aUnits, 1.2);
@@ -100,7 +104,7 @@ function parseRecordWins(recentForm) {
 function formAdvantage(home, away) {
   const hw = parseRecordWins(home.recentForm);
   const aw = parseRecordWins(away.recentForm);
-  if (hw == null && aw == null) return 0.5;
+  if (hw == null && aw == null) return null; // absent → re-weighted out
   return deltaToAdvantage((hw ?? 3) - (aw ?? 3), 2.5);
 }
 
@@ -122,7 +126,7 @@ function situationalAdvantage(home, away) {
   // Net score contributions: (home off advantage − away def resistance) for each team.
   const rzBothPresent = hRzOff != null && aRzOff != null && hRzDef != null && aRzDef != null;
   const tdBothPresent = h3dOff != null && a3dOff != null && h3dDef != null && a3dDef != null;
-  if (!rzBothPresent && !tdBothPresent) return 0.5;
+  if (!rzBothPresent && !tdBothPresent) return null; // absent → re-weighted out
 
   let scores = [];
   if (rzBothPresent) {
@@ -149,7 +153,7 @@ function trenchesAdvantage(home, away) {
   const aSackDef = toNumber(away.sackRateDef);
   const hSackOff = toNumber(home.sackRateOff);
   const aSackOff = toNumber(away.sackRateOff);
-  if (hSackDef == null && aSackDef == null) return 0.5;
+  if (hSackDef == null && aSackDef == null && hSackOff == null && aSackOff == null) return null; // absent → re-weighted out
 
   // Pass-rush advantage: how often home defense sacks vs away defense sacks.
   const rushAdv = (hSackDef != null && aSackDef != null)
@@ -179,14 +183,26 @@ export function calculateNflShadowScore(context, gameMeta = {}) {
   const formAdv = formAdvantage(home, away);
   const restAdv = restAdvantage(home, away);
 
-  const rawHomeAdvantage =
-    FEATURE_WEIGHTS.strength    * strAdv  +
-    FEATURE_WEIGHTS.qb          * qbAdv   +
-    FEATURE_WEIGHTS.situational * sitAdv  +
-    FEATURE_WEIGHTS.trenches    * trAdv   +
-    FEATURE_WEIGHTS.injuries    * injAdv  +
-    FEATURE_WEIGHTS.form        * formAdv +
-    FEATURE_WEIGHTS.rest        * restAdv;
+  // Re-normalize weights over the signals that actually have data. An absent
+  // signal (null) gets its weight redistributed proportionally to the present
+  // ones instead of silently injecting a neutral 0.5 that dilutes discrimination
+  // — this matters off-season when situational/trenches stats are unavailable
+  // (24% of the weight collapsing to neutral would flatten every pick to ~0.5).
+  const signals = [
+    { w: FEATURE_WEIGHTS.strength,    adv: strAdv },
+    { w: FEATURE_WEIGHTS.qb,          adv: qbAdv },
+    { w: FEATURE_WEIGHTS.situational, adv: sitAdv },
+    { w: FEATURE_WEIGHTS.trenches,    adv: trAdv },
+    { w: FEATURE_WEIGHTS.injuries,    adv: injAdv },
+    { w: FEATURE_WEIGHTS.form,        adv: formAdv },
+    { w: FEATURE_WEIGHTS.rest,        adv: restAdv },
+  ];
+  const present = signals.filter(s => s.adv != null);
+  const totalWeight = present.reduce((s, x) => s + x.w, 0) || 1;
+  const rawHomeAdvantage = present.length
+    ? present.reduce((s, x) => s + (x.w / totalWeight) * x.adv, 0)
+    : 0.5;
+  const signalCoverage = +(totalWeight.toFixed(2)); // share of the model with data
 
   const homeAdvantage = Math.max(0, Math.min(1, rawHomeAdvantage + HOME_FIELD_BOOST));
   const homeScoreNorm = homeAdvantage * 100;
@@ -222,6 +238,7 @@ export function calculateNflShadowScore(context, gameMeta = {}) {
     breakdown: {
       strAdv, qbAdv, sitAdv, trAdv, injAdv, formAdv, restAdv,
       homeAdvantage,
+      signalCoverage,
       rawConfidence: confidence,
       completeness,
     },
