@@ -2,7 +2,7 @@
 
 Documento vivo. Se actualiza al cierre de cada sprint y cuando entran/salen items del backlog.
 
-**Última actualización**: 2026-06-07 — **Sprint 9.6 NFL off-season precision fixes**: (1) `nfl-advanced-fetcher.js` season fallback — cuando la temporada pedida no tiene PBP nflverse (off-season / pre-Week 2), camina un año atrás a la última temporada completa en vez de dejar EPA/success/PROE en null (`isFallback`/`requestedSeason` en `context_meta` + stale flag `advanced_stats_prior_season`); (2) fix del bug de fatiga en `buildFatigueBlock` (`consecutiveDaysPlayed` marcaba todo partido como fatiga; reemplazado por `shortRestGames` ≤6d en ventana 14d); (3) `nflShadowValidator.js` re-ponderación sobre señales presentes (las ausentes retornan null y redistribuyen su peso en vez de inyectar 0.5 neutro que aplanaba off-season a coin-flip; nuevo `breakdown.signalCoverage`). +7 tests. **Sprint 9.5 NFL ops gaps**: parlay model enrichment (conecta los 3 modelos pre-entrenados al `POST /api/nfl/parlay` vía `predictNflGameModel`, fin del `model:null`; fix `qbStatus.statusKey`), toggle `VITE_NFL_LIVE_TRACKER_ENABLED`, y **Imperdible NFL** (lock-of-the-slate NFL: gate QB confirmado, convicción modelo+mercado+shadow validator, arbiter Opus, flag `IMPERDIBLE_NFL_ENABLED`; `nflImperdible{Selector,Engine,Arbiter}.js` + `routes/nfl-imperdible.js`). +15 tests. Calibración fina de thresholds requiere temporada. **Sprint 9.4** cerró las brechas situacional + trenches + superficie/altitud + coherencia de señales. `nflverse_loader.py` añade `red_zone_td_pct_off/def`, `third_down_conv_off/def`, `sack_rate_off/def` desde play-by-play. `nfl-team-map.js` añade `surface`/`altitude` a los 32 estadios. `nfl-context-builder.js` añade `buildFatigueBlock` (fatiga acumulativa, espejo MLB) + `detectBackupQb`. `nflShadowValidator.js` suma `situationalAdvantage` (14%) + `trenchesAdvantage` (10%). `oracleNfl.js` serializa `EFFICIENCY DELTAS` + backup QB + VENUE block. `oracle-nfl-prompts.js` añade umbrales calibrados para RZ/3rd-down/sack-rate + **Signal Coherence** (8-signal voting, confianza ±1→+6%) + 5 nuevos alert flags. NFL data depth alcanza paridad con MLB (8.5/10 en pregame). **Sprint 9.3** EPA/PROE reales + 3 modelos de juego vivos. Sprints 9a–9j + 9.3 completos. Soccer Sprint 11 completo en prod. Sprint 10 NHL completo.
+**Última actualización**: 2026-06-07 — **Soccer parity roadmap (Sprint 11.2–11.9 planificado)**: plan para llevar Soccer de funcionalmente completo a robusto como MLB. Brechas rojas vs release-gate: data depth pregame (4.5), lineups/injuries/suspensiones (2.0), market coverage/props (5.5), calibración ML (3.0). Sub-sprints: **11.2** ML pre-training histórico (football-data.co.uk + Understat, análogo nflverse → modelos vivos sin esperar temporada); **11.3** profundidad de contexto pregame (lineups/injuries/suspensiones vía API-Football, árbitro, congestión de calendario, weather, FBref, xG rolling, motivación); **11.4** xG cableado a features + shadow validator; **11.5** player props (tiros/goles/tarjetas, espeja NFL 9f–9i); **11.6** parlay (motor frozen, correlación Over+BTTS); **11.7** Imperdible Soccer (gate lineup confirmado); **11.8** lifecycle (CLV + postmortem + ensemble); **11.9** smart signals + ascensos/descensos. Ver bloque completo en sección 2. — **Sprint 9.6 NFL off-season precision fixes**: (1) `nfl-advanced-fetcher.js` season fallback — cuando la temporada pedida no tiene PBP nflverse (off-season / pre-Week 2), camina un año atrás a la última temporada completa en vez de dejar EPA/success/PROE en null (`isFallback`/`requestedSeason` en `context_meta` + stale flag `advanced_stats_prior_season`); (2) fix del bug de fatiga en `buildFatigueBlock` (`consecutiveDaysPlayed` marcaba todo partido como fatiga; reemplazado por `shortRestGames` ≤6d en ventana 14d); (3) `nflShadowValidator.js` re-ponderación sobre señales presentes (las ausentes retornan null y redistribuyen su peso en vez de inyectar 0.5 neutro que aplanaba off-season a coin-flip; nuevo `breakdown.signalCoverage`). +7 tests. **Sprint 9.5 NFL ops gaps**: parlay model enrichment (conecta los 3 modelos pre-entrenados al `POST /api/nfl/parlay` vía `predictNflGameModel`, fin del `model:null`; fix `qbStatus.statusKey`), toggle `VITE_NFL_LIVE_TRACKER_ENABLED`, y **Imperdible NFL** (lock-of-the-slate NFL: gate QB confirmado, convicción modelo+mercado+shadow validator, arbiter Opus, flag `IMPERDIBLE_NFL_ENABLED`; `nflImperdible{Selector,Engine,Arbiter}.js` + `routes/nfl-imperdible.js`). +15 tests. Calibración fina de thresholds requiere temporada. **Sprint 9.4** cerró las brechas situacional + trenches + superficie/altitud + coherencia de señales. `nflverse_loader.py` añade `red_zone_td_pct_off/def`, `third_down_conv_off/def`, `sack_rate_off/def` desde play-by-play. `nfl-team-map.js` añade `surface`/`altitude` a los 32 estadios. `nfl-context-builder.js` añade `buildFatigueBlock` (fatiga acumulativa, espejo MLB) + `detectBackupQb`. `nflShadowValidator.js` suma `situationalAdvantage` (14%) + `trenchesAdvantage` (10%). `oracleNfl.js` serializa `EFFICIENCY DELTAS` + backup QB + VENUE block. `oracle-nfl-prompts.js` añade umbrales calibrados para RZ/3rd-down/sack-rate + **Signal Coherence** (8-signal voting, confianza ±1→+6%) + 5 nuevos alert flags. NFL data depth alcanza paridad con MLB (8.5/10 en pregame). **Sprint 9.3** EPA/PROE reales + 3 modelos de juego vivos. Sprints 9a–9j + 9.3 completos. Soccer Sprint 11 completo en prod. Sprint 10 NHL completo.
 
 ---
 
@@ -604,9 +604,11 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 - **API-Football** (freemium, 100 calls/día gratis) — alineaciones confirmadas ~60 min pre-kick para las 6 ligas.
 
 **Pendiente operacional** (no código — solo datos):
-- Entrenamiento ML: soccer_moneyline/total/btts entrenan automáticamente vía `/retrain` cuando haya picks resueltos en prod. Usar `/admin/ml-control` cuando haya ≥25 picks resueltos por mercado.
-- xG MLS: Understat no cubre la MLS — `getSoccerGameXg` devuelve null para `usa.1`. Considerar API-Football como fuente alternativa en una fase posterior.
-- Pick Imperdible Soccer — diferido; requiere `auto_resolvable` check + resolver integrado.
+- Entrenamiento ML: soccer_moneyline/total/btts entrenan automáticamente vía `/retrain` cuando haya picks resueltos en prod. Usar `/admin/ml-control` cuando haya ≥25 picks resueltos por mercado. **Mejor**: ver Sprint 11.2 (pre-training histórico football-data.co.uk) para tener modelos vivos sin esperar la temporada.
+- xG MLS: Understat no cubre la MLS — `getSoccerGameXg` devuelve null para `usa.1`. Considerar API-Football como fuente alternativa en una fase posterior (Sprint 11.9).
+- Pick Imperdible Soccer — diferido; requiere `auto_resolvable` check + resolver integrado (Sprint 11.7).
+
+**Parity con MLB (planificado, Sprint 11.2–11.9)**: Soccer pasó el MVP pero le faltan los pilares de profundidad de MLB (context enrichment 8d, props, ensemble, pretraining). Ver bloque **🔵 Sprint 11.2–11.9** más abajo — brechas rojas: data depth pregame, lineups/injuries/suspensiones, player props, calibración ML.
 
 **Feature flag**: `SOCCER_ANALYSIS_ENABLED` global. Opcional: `SOCCER_LEAGUES_ENABLED=epl,laliga,seriea,bundesliga,ligue1,mls` — lista las ligas activas (default todas).
 
@@ -617,6 +619,66 @@ Cada tier ordenado por ROI / esfuerzo dentro del tier. Detalle del por qué de l
 - El contexto para un partido del Bundesliga menciona explícitamente el perfil de alta anotación; para Serie A, el perfil defensivo.
 - Resolver maneja 1X2 + BTTS + over/under para las 6 ligas desde score final ESPN.
 - `sport='soccer'`, `league='eng.1'` (etc.) aislados en historial, dataset y shadow sin contaminar otros deportes.
+
+---
+
+### 🔵 Sprint 11.2–11.9 — Soccer parity con MLB (planificado)
+
+**Objetivo**: llevar Soccer de **funcionalmente completo** a **robusto como MLB**. Soccer pasó el MVP (Oracle 3-vías, lifecycle, UI, board, live tracker, xG, sidecar scaffolded) pero le faltan los pilares de profundidad que hicieron robusto a MLB (Sprint 8d context enrichment + props + ensemble + pretraining). Cero ediciones a frozen; mismo patrón espejo de NFL 9.x.
+
+**Scorecard vs release-gate** (brechas rojas que estos sub-sprints cierran):
+
+| Criterio | MLB | Soccer hoy | Gate | Sub-sprint |
+|---|---:|---:|---:|---|
+| Data depth pregame | 9.5 | 4.5 🔴 | 8.0 | 11.3 |
+| Lineup/Injury/Suspensión | 9.0 | 2.0 🔴 | 8.0 | 11.3 |
+| Market coverage real | 9.0 | 5.5 🔴 | 8.0 | 11.4 + 11.5 |
+| Calibration/ROI | 8.5 | 3.0 🔴 | 8.0 | 11.2 |
+
+**Orden de ataque** (11.2 + 11.3 + 11.4 mueven la aguja y son off-season-friendly):
+
+#### Sprint 11.2 — ML pre-training histórico (el "nflverse del fútbol")
+Mayor lift de robustez, sin esperar temporada. Hoy soccer tiene **0 modelos vivos** (espera ≥25 picks resueltos). NFL resolvió esto exacto leyendo nflverse.
+- **football-data.co.uk** — 25+ años de resultados + **closing odds** (1X2/OU/BTTS) de las 6 ligas, CSV gratis sin key. Análogo directo a nflverse.
+- **Understat histórico** — xG por partido Big 5 (ya existe el scraper, falta modo histórico).
+- Espejo de `nflverse_loader.py`: `build_soccer_training_frame(league, market, years)` sin leakage (features as-of-matchday, labels desde score + closing odds).
+- Flags `SOCCER_PRETRAIN_ENABLED` (default true) + `SOCCER_PRETRAIN_SEASONS`.
+- **Resultado**: `soccer_moneyline/total/btts` vivos en producción ya, refinándose con picks reales en temporada.
+- **Criterio de éxito**: Brier honesto desde el día 1; los 3 modelos cargados en `/health` del sidecar sin esperar picks.
+
+#### Sprint 11.3 — Profundidad de contexto pregame (el "Statcast del fútbol")
+La brecha #1. El context-builder hoy solo deriva de standings + form-string `WDLWW`. Enriquecer al nivel del Sprint 8d MLB:
+- **Lineups + injuries + suspensiones** vía **API-Football** (freemium, 100 calls/día). `lineupStatus:'unknown'` → confirmado ~1h pre-kick. **Suspensiones por acumulación de amarillas/roja son únicas del fútbol y hoy invisibles.** Gate análogo a "lineup confirmado" MLB.
+- **Árbitro** — tendencia de tarjetas/penaltis por réferi. Análogo a `getUmpireForGame`/`getUmpireStats`.
+- **Congestión de calendario / rotación** — UCL/UEL + copa entre semana. Análogo a `buildScheduleFatigueBlock`.
+- **Weather** — el fútbol es outdoor; el builder hoy dice explícitamente "NO weather block". Open-Meteo (ya integrado en MLB).
+- **Splits local/visitante**, **H2H**, **métricas FBref** (PPDA, pases progresivos, xG de balón parado, calidad de tiro).
+- **xG rolling + splits** (ventanas 7d/14d + local/visitante, como rolling wOBA MLB).
+- **Motivación/stakes** — descenso, título, plazas europeas, dead rubber, prioridad de copa.
+- **Criterio de éxito**: contexto soccer con bloques LINEUP/INJURIES, REFEREE, FIXTURE CONGESTION y WEATHER; `context_meta.completeness` rebalanceada; data depth ≥8.0.
+
+#### Sprint 11.4 — xG cableado a features + shadow validator
+Hoy xG **solo se muestra en el contexto** — `home_xg` es null en `pick_features` y `soccerShadowValidator` no lo usa. xG es el predictor #1 del fútbol y no entra al modelo. Cablearlo a `pick_features` + darle peso en el validator determinístico.
+
+#### Sprint 11.5 — Player Props Soccer (espeja NFL 9f–9i)
+Cero props hoy. Mercados: tiros a puerta, goles de jugador, asistencias, **tarjetas**, pases, entradas, faltas.
+- `soccer-props-resolver.js` (boxscore ESPN `/summary` o API-Football), `soccer-props-odds.js` (endpoint event-específico Odds API), `soccerPropFeatureEnricher.js` (de-vig), `GET /api/soccer/props/board`, modelo `soccer_prop` pooled pick-aligned, UI parametrizada (patrón `PlayerPropsPage`). Flag `SOCCER_PROPS_ENABLED`.
+
+#### Sprint 11.6 — Parlay Synergy Soccer (espeja NFL 9j)
+`soccerParlayCandidates.js` alimentando el motor **frozen** sport-agnóstico. Ideal para correlación same-game (Over 2.5 + BTTS correlacionados — el motor ya tiene `buildCorrelationMatrix`). Flag `PARLAY_SYNERGY_SOCCER_ENABLED`.
+
+#### Sprint 11.7 — Pick Imperdible Soccer (espeja NFL 9.5)
+Lock-of-the-slate. Gate = lineup confirmado (API-Football, requiere 11.3). Convicción = modelo (11.2) + mercado de-vig + shadow validator; árbitro Opus con disqualifiers de fútbol (rotación, lineup no confirmado, baja convicción 3-vías). Flag `IMPERDIBLE_SOCCER_ENABLED`.
+
+#### Sprint 11.8 — Lifecycle completeness
+- **CLV / closing line capture** soccer (MLB tiene `closing-line-capture.js`; soccer no).
+- **Postmortem sport-aware** — verificar/extender `pick-postmortem.js` a soccer.
+- **Ensemble** — sumar mercados soccer al meta-learner cuando haya datos.
+
+#### Sprint 11.9 — Pizarra smart signals + mantenimiento
+- **Señales rule-based** análogas a `hexaSmartSignalsService` (value de mercado, divergencia xG vs resultado, racha).
+- **Ascensos/descensos** — `soccer-team-map.js` (88 clubes seed) se desactualiza cada temporada (3 suben/bajan por liga); mecanismo de refresh.
+- **xG MLS** — Understat no cubre MLS; evaluar API-Football/FBref como fuente alternativa.
 
 ---
 
