@@ -154,6 +154,40 @@ function lookupTeamStats(teamStats, teamId, teamAbbr) {
   return null;
 }
 
+/** Cumulative schedule fatigue from last N games: road games + consecutive day streaks. */
+function buildFatigueBlock(recentGames, gameDate) {
+  if (!recentGames?.length) return { gamesLast14d: 0, roadGamesLast14d: 0, consecutiveDaysPlayed: 0 };
+  const cutoff = gameDate ? new Date(new Date(gameDate).getTime() - 14 * 24 * 60 * 60 * 1000) : null;
+  const recent = cutoff
+    ? recentGames.filter(g => g.game_date && new Date(g.game_date) >= cutoff)
+    : recentGames.slice(0, 4);
+  const roadGames = recent.filter(g => g.home_away === 'away').length;
+  let streak = 0;
+  let prev = null;
+  for (const g of recent) {
+    if (!g.game_date) continue;
+    const curr = new Date(g.game_date);
+    if (prev == null || Math.abs(diffDays(g.game_date, prev)) <= 4) streak++;
+    else break;
+    prev = g.game_date;
+  }
+  return {
+    gamesLast14d: recent.length,
+    roadGamesLast14d: roadGames,
+    consecutiveDaysPlayed: streak,
+  };
+}
+
+/** Detect a backup QB in the injury list (the non-starter QB, if starter is out). */
+function detectBackupQb(injuries) {
+  if (!injuries?.items) return null;
+  const qbs = injuries.items.filter(i => String(i.position).toUpperCase() === 'QB');
+  if (qbs.length < 2) return null;
+  // starter is the most severe; second QB by severity = backup
+  const backup = qbs[1];
+  return backup ? { playerName: backup.playerName, status: backup.status } : null;
+}
+
 function buildTeamBlock(stats, recentGames, injuries, teamId, teamAbbr, gameDate, advanced = null) {
   const meta = getNflTeam({ teamId, teamAbbr }) ?? {};
   const lastGame = recentGames[0] ?? null;
@@ -178,16 +212,25 @@ function buildTeamBlock(stats, recentGames, injuries, teamId, teamAbbr, gameDate
     epaDef,
     successRateOff,
     successRateDef,
-    successRate: successRateOff,  // alias the ML feature payload reads (home.successRate)
+    successRate: successRateOff,
     proe,
     playsPerGame: advanced?.plays_per_game ?? null,
     pace: stats?.pace_sec_play ?? null,
+    // Situational/efficiency metrics from nflverse (new — Sprint 9.4):
+    redZoneTdPctOff: advanced?.red_zone_td_pct_off ?? null,
+    redZoneTdPctDef: advanced?.red_zone_td_pct_def ?? null,
+    thirdDownConvOff: advanced?.third_down_conv_off ?? null,
+    thirdDownConvDef: advanced?.third_down_conv_def ?? null,
+    sackRateOff: advanced?.sack_rate_off ?? null,   // sacks allowed per dropback
+    sackRateDef: advanced?.sack_rate_def ?? null,   // sacks forced per dropback
     restDays: rest,
     isShortWeek: rest != null ? rest <= 5 : null,
     isOffBye: rest != null ? rest >= 13 : null,
+    scheduleFatigue: buildFatigueBlock(recentGames, gameDate),
     recentForm: recentFormSummary(recentGames),
     injuries,
     qbStatus: injuries.qbStatus,
+    backupQb: detectBackupQb(injuries),
   };
 }
 
@@ -254,10 +297,10 @@ export async function buildNflGameContext({
   const away = buildTeamBlock(awayStats, awayGames, awayInjuries, awayId, awayTeamAbbr, gameDate, awayAdvanced);
 
   const weatherBlock = isDome
-    ? { dome: true, stadium: stadium?.stadium ?? null, neutral: true, analysis: [] }
+    ? { dome: true, stadium: stadium?.stadium ?? null, surface: stadium?.surface ?? null, altitude: stadium?.altitude ?? null, neutral: true, analysis: [] }
     : weather
-      ? { dome: false, stadium: stadium?.stadium ?? null, ...weather }
-      : { dome: false, stadium: stadium?.stadium ?? null, neutral: false, unavailable: true, analysis: [] };
+      ? { dome: false, stadium: stadium?.stadium ?? null, surface: stadium?.surface ?? null, altitude: stadium?.altitude ?? null, ...weather }
+      : { dome: false, stadium: stadium?.stadium ?? null, surface: stadium?.surface ?? null, altitude: stadium?.altitude ?? null, neutral: false, unavailable: true, analysis: [] };
 
   const staleFlags = [];
   if (!homeStats) staleFlags.push('home_team_stats_missing');
@@ -270,23 +313,30 @@ export async function buildNflGameContext({
   if (!isDome && (!weather)) staleFlags.push('weather_unavailable');
   if (!marketOdds) staleFlags.push('market_odds_missing');
   const advancedOk = !!(home.epaOff != null && away.epaOff != null);
+  const situationalOk = !!(home.redZoneTdPctOff != null && away.redZoneTdPctOff != null);
+  const trenchesOk = !!(home.sackRateDef != null && away.sackRateDef != null);
   if (!advancedOk) staleFlags.push('advanced_stats_unavailable');
+  if (!situationalOk) staleFlags.push('situational_stats_unavailable');
 
   const completeness = {
     teamStats: fractionPresent(homeStats, awayStats),
     advancedStats: fractionPresent(home.epaOff, away.epaOff),
+    situationalStats: fractionPresent(home.redZoneTdPctOff, away.redZoneTdPctOff, home.thirdDownConvOff, away.thirdDownConvOff),
+    trenchStats: fractionPresent(home.sackRateDef, away.sackRateDef),
     recentForm: fractionPresent(homeGames.length ? 1 : null, awayGames.length ? 1 : null),
     injuries: injuriesPayload.source === 'espn' ? 1 : 0,
     weather: isDome ? 1 : (weather ? 1 : 0),
     marketOdds: marketOdds ? 1 : 0,
   };
   const overall = +(
-    (completeness.teamStats * 0.25 +
-     completeness.advancedStats * 0.20 +
-     completeness.recentForm * 0.20 +
-     completeness.injuries * 0.15 +
-     completeness.weather * 0.10 +
-     completeness.marketOdds * 0.10).toFixed(2)
+    (completeness.teamStats * 0.20 +
+     completeness.advancedStats * 0.18 +
+     completeness.situationalStats * 0.12 +
+     completeness.trenchStats * 0.10 +
+     completeness.recentForm * 0.18 +
+     completeness.injuries * 0.12 +
+     completeness.weather * 0.05 +
+     completeness.marketOdds * 0.05).toFixed(2)
   );
 
   const context_meta = {

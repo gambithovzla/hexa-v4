@@ -77,13 +77,32 @@ function describeTeamStrengthLine(side) {
   return `  Team strength (proxy — EPA unavailable): PF/g ${fmt(side?.pointsForPerGame)} | PA/g ${fmt(side?.pointsAgainstPerGame)} | point diff ${side?.pointDiff ?? 'n/a'}`;
 }
 
+function describeEfficiencyLine(side) {
+  const parts = [];
+  if (side?.redZoneTdPctOff != null)  parts.push(`RZ TD% off ${fmt(side.redZoneTdPctOff * 100)}%`);
+  if (side?.redZoneTdPctDef != null)  parts.push(`def ${fmt(side.redZoneTdPctDef * 100)}%`);
+  if (side?.thirdDownConvOff != null) parts.push(`3rd-dn off ${fmt(side.thirdDownConvOff * 100)}%`);
+  if (side?.thirdDownConvDef != null) parts.push(`def ${fmt(side.thirdDownConvDef * 100)}%`);
+  if (side?.sackRateOff != null)      parts.push(`sack-allowed ${fmt(side.sackRateOff * 100)}%`);
+  if (side?.sackRateDef != null)      parts.push(`sack-forced ${fmt(side.sackRateDef * 100)}%`);
+  return parts.length ? `  Efficiency: ${parts.join(' | ')}` : null;
+}
+
 function describeScheduleLine(side) {
   const rest = side?.restDays;
   const tags = [];
   if (side?.isOffBye) tags.push('OFF BYE (+prep edge)');
   if (side?.isShortWeek) tags.push('SHORT WEEK (-fatigue/prep)');
+  const fat = side?.scheduleFatigue;
+  if (fat?.gamesLast14d >= 3 && fat?.roadGamesLast14d >= 2) tags.push(`FATIGUE (${fat.gamesLast14d}g/14d, ${fat.roadGamesLast14d} road)`);
   const restStr = rest != null ? `${rest} days rest` : 'rest n/a';
   return `  Schedule: ${restStr}${tags.length ? ` — ${tags.join(', ')}` : ''}`;
+}
+
+function describeBackupQb(side) {
+  if (!side?.backupQb) return null;
+  const bq = side.backupQb;
+  return `  Backup QB on roster: ${bq.playerName ?? 'unknown'} (${bq.status ?? 'status unknown'})`;
 }
 
 function describeTeamBlock(label, side) {
@@ -93,13 +112,17 @@ function describeTeamBlock(label, side) {
     ? `last ${recent.games?.length ?? 0}: ${recent.record}, avg ${fmt(recent.avgPointsFor)} pts for` +
       (recent.avgPointsAgainst != null ? ` / ${fmt(recent.avgPointsAgainst)} pts allowed` : '')
     : 'recent form: data unavailable';
+  const effLine = describeEfficiencyLine(side);
+  const backupLine = describeBackupQb(side);
   return [
     `${label} — ${teamLabel(side)} (${side.conference ?? '?'} ${side.division ?? ''})`.trim(),
     `  Record: ${side.record ?? 'n/a'}`,
     describeTeamStrengthLine(side),
+    ...(effLine ? [effLine] : []),
     describeScheduleLine(side),
     `  ${recentLine}`,
     `  ${describeQbStatus(side)}`,
+    ...(backupLine ? [backupLine] : []),
     describeInjuriesBlock(side),
   ].join('\n');
 }
@@ -130,12 +153,41 @@ function describeRestDelta(home, away) {
   return `Rest delta: ${adv} has ${Math.abs(diff)} day(s) more rest (home ${hr} vs away ${ar}).`;
 }
 
+function describeEfficiencyDeltas(home, away) {
+  const parts = [];
+  const rzH = home?.redZoneTdPctOff, rzA = away?.redZoneTdPctOff;
+  const rzHD = home?.redZoneTdPctDef, rzAD = away?.redZoneTdPctDef;
+  if (rzH != null && rzA != null) {
+    const gap = rzH - rzA;
+    const fav = Math.abs(gap) >= 0.05 ? ` [${teamLabel(gap > 0 ? home : away)} edge ${fmt(Math.abs(gap) * 100)}%]` : '';
+    parts.push(`RZ TD%: home ${fmt(rzH * 100)}% off / ${fmt(rzHD * 100)}% def | away ${fmt(rzA * 100)}% off / ${fmt(rzAD * 100)}% def${fav}`);
+  }
+  const td3H = home?.thirdDownConvOff, td3A = away?.thirdDownConvOff;
+  const td3HD = home?.thirdDownConvDef, td3AD = away?.thirdDownConvDef;
+  if (td3H != null && td3A != null) {
+    const gap = td3H - td3A;
+    const fav = Math.abs(gap) >= 0.04 ? ` [${teamLabel(gap > 0 ? home : away)} edge ${fmt(Math.abs(gap) * 100)}%]` : '';
+    parts.push(`3rd-down: home ${fmt(td3H * 100)}% off / ${fmt(td3HD * 100)}% def | away ${fmt(td3A * 100)}% off / ${fmt(td3AD * 100)}% def${fav}`);
+  }
+  const skH = home?.sackRateDef, skA = away?.sackRateDef;
+  const skHO = home?.sackRateOff, skAO = away?.sackRateOff;
+  if (skH != null && skA != null) {
+    const gap = skH - skA;
+    const fav = Math.abs(gap) >= 0.02 ? ` [${teamLabel(gap > 0 ? home : away)} pass-rush edge]` : '';
+    parts.push(`Sack rate: home forced ${fmt(skH * 100)}% / allowed ${fmt(skHO * 100)}% | away forced ${fmt(skA * 100)}% / allowed ${fmt(skAO * 100)}%${fav}`);
+  }
+  if (!parts.length) return null;
+  return `EFFICIENCY DELTAS:\n${parts.map(p => `  ${p}`).join('\n')}`;
+}
+
 function describeWeather(weather) {
   if (!weather) return 'WEATHER: not provided.';
-  if (weather.dome) return `WEATHER: dome (${weather.stadium ?? 'indoor'}) — weather-neutral.`;
-  if (weather.unavailable) return `WEATHER: outdoor (${weather.stadium ?? 'n/a'}) — forecast unavailable.`;
+  const surfaceLine = weather.surface ? ` Surface: ${weather.surface}.` : '';
+  const altLine = weather.altitude != null && weather.altitude > 2000 ? ` Altitude: ${weather.altitude}ft (elevation bonus applies).` : '';
+  if (weather.dome) return `VENUE: dome (${weather.stadium ?? 'indoor'}) — weather-neutral.${surfaceLine}${altLine}`;
+  if (weather.unavailable) return `VENUE: outdoor (${weather.stadium ?? 'n/a'}) — forecast unavailable.${surfaceLine}${altLine}`;
   const flags = Array.isArray(weather.analysis) && weather.analysis.length ? ` Flags: ${weather.analysis.join('; ')}.` : '';
-  return `WEATHER (outdoor, ${weather.stadium ?? 'n/a'}): ${fmt(weather.temperature, 0)}°F, wind ${fmt(weather.windSpeed, 0)}mph, precip ${fmt(weather.precipitationProbability, 0)}%.${flags}`;
+  return `VENUE/WEATHER (outdoor, ${weather.stadium ?? 'n/a'}): ${fmt(weather.temperature, 0)}°F, wind ${fmt(weather.windSpeed, 0)}mph, precip ${fmt(weather.precipitationProbability, 0)}%.${surfaceLine}${altLine}${flags}`;
 }
 
 function describeMarketOdds(marketOdds) {
@@ -175,11 +227,13 @@ export function serializeNflContext({ context, marketOdds }) {
   if (!context) return 'No NFL context provided.';
   const { season, gameDate, home, away, weather, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
+  const effDeltas = describeEfficiencyDeltas(home, away);
   return [
     `H.E.X.A. NFL CONTEXT — ${gameDate} (Season ${season ?? 'n/a'})`,
     '',
     describeStrengthDelta(home, away),
     describeRestDelta(home, away),
+    ...(effDeltas ? ['', effDeltas] : []),
     '',
     describeTeamBlock('HOME', home),
     '',

@@ -19,11 +19,13 @@
  */
 
 const FEATURE_WEIGHTS = {
-  strength:   0.45,  // EPA diff or season point-differential — dominant
-  qb:         0.20,  // QB availability is the NFL swing factor
-  injuries:   0.13,  // severe injuries beyond QB
-  form:       0.12,  // recent results
-  rest:       0.10,  // off bye (+) / short week (−)
+  strength:    0.38,  // EPA diff or season point-differential — dominant
+  qb:          0.18,  // QB availability is the NFL swing factor
+  situational: 0.14,  // red zone TD% + 3rd-down conv% differential
+  trenches:    0.10,  // sack rate differential (pass rush vs O-line)
+  injuries:    0.10,  // severe injuries beyond QB
+  form:        0.06,  // recent results
+  rest:        0.04,  // off bye (+) / short week (−)
 };
 
 // NFL home field ≈ 2-2.5 pts — smaller than NBA's ~3.5, so a smaller boost.
@@ -103,6 +105,65 @@ function formAdvantage(home, away) {
 }
 
 /**
+ * Situational efficiency: red zone TD% and 3rd-down conversion rate.
+ * Both are scoring efficiency metrics; higher = better offense / better defense
+ * (interpreted by perspective: off vs def columns).
+ */
+function situationalAdvantage(home, away) {
+  const hRzOff = toNumber(home.redZoneTdPctOff);
+  const aRzOff = toNumber(away.redZoneTdPctOff);
+  const hRzDef = toNumber(home.redZoneTdPctDef);
+  const aRzDef = toNumber(away.redZoneTdPctDef);
+  const h3dOff = toNumber(home.thirdDownConvOff);
+  const a3dOff = toNumber(away.thirdDownConvOff);
+  const h3dDef = toNumber(home.thirdDownConvDef);
+  const a3dDef = toNumber(away.thirdDownConvDef);
+
+  // Net score contributions: (home off advantage − away def resistance) for each team.
+  const rzBothPresent = hRzOff != null && aRzOff != null && hRzDef != null && aRzDef != null;
+  const tdBothPresent = h3dOff != null && a3dOff != null && h3dDef != null && a3dDef != null;
+  if (!rzBothPresent && !tdBothPresent) return 0.5;
+
+  let scores = [];
+  if (rzBothPresent) {
+    const homeRzNet = hRzOff - aRzDef;  // home offense vs away defense in RZ
+    const awayRzNet = aRzOff - hRzDef;
+    scores.push(deltaToAdvantage(homeRzNet - awayRzNet, 0.15));
+  }
+  if (tdBothPresent) {
+    const home3dNet = h3dOff - a3dDef;
+    const away3dNet = a3dOff - h3dDef;
+    scores.push(deltaToAdvantage(home3dNet - away3dNet, 0.12));
+  }
+  return scores.reduce((s, v) => s + v, 0) / scores.length;
+}
+
+/**
+ * Trenches: sack rate differential.
+ * sack_rate_def = sacks forced / dropbacks (higher = better pass rush).
+ * sack_rate_off = sacks allowed / dropbacks (lower = better O-line).
+ * Net = (home pass-rush edge) vs (away pass-rush edge).
+ */
+function trenchesAdvantage(home, away) {
+  const hSackDef = toNumber(home.sackRateDef);
+  const aSackDef = toNumber(away.sackRateDef);
+  const hSackOff = toNumber(home.sackRateOff);
+  const aSackOff = toNumber(away.sackRateOff);
+  if (hSackDef == null && aSackDef == null) return 0.5;
+
+  // Pass-rush advantage: how often home defense sacks vs away defense sacks.
+  const rushAdv = (hSackDef != null && aSackDef != null)
+    ? deltaToAdvantage(hSackDef - aSackDef, 0.03)
+    : 0.5;
+  // O-line advantage: how well home O-line protects vs away O-line.
+  const olineAdv = (hSackOff != null && aSackOff != null)
+    ? deltaToAdvantage(aSackOff - hSackOff, 0.03)  // lower sack rate allowed = better
+    : 0.5;
+
+  return (rushAdv + olineAdv) / 2;
+}
+
+/**
  * @param {object} context   — from buildNflGameContext()
  * @param {object} gameMeta  — { homeTeamId, awayTeamId, homeAbbr, awayAbbr }
  */
@@ -112,16 +173,20 @@ export function calculateNflShadowScore(context, gameMeta = {}) {
 
   const strAdv  = strengthAdvantage(home, away);
   const qbAdv   = qbAdvantage(home, away);
+  const sitAdv  = situationalAdvantage(home, away);
+  const trAdv   = trenchesAdvantage(home, away);
   const injAdv  = injuryAdvantage(home.injuries?.severeCount, away.injuries?.severeCount);
   const formAdv = formAdvantage(home, away);
   const restAdv = restAdvantage(home, away);
 
   const rawHomeAdvantage =
-    FEATURE_WEIGHTS.strength * strAdv  +
-    FEATURE_WEIGHTS.qb       * qbAdv   +
-    FEATURE_WEIGHTS.injuries * injAdv  +
-    FEATURE_WEIGHTS.form     * formAdv +
-    FEATURE_WEIGHTS.rest     * restAdv;
+    FEATURE_WEIGHTS.strength    * strAdv  +
+    FEATURE_WEIGHTS.qb          * qbAdv   +
+    FEATURE_WEIGHTS.situational * sitAdv  +
+    FEATURE_WEIGHTS.trenches    * trAdv   +
+    FEATURE_WEIGHTS.injuries    * injAdv  +
+    FEATURE_WEIGHTS.form        * formAdv +
+    FEATURE_WEIGHTS.rest        * restAdv;
 
   const homeAdvantage = Math.max(0, Math.min(1, rawHomeAdvantage + HOME_FIELD_BOOST));
   const homeScoreNorm = homeAdvantage * 100;
@@ -155,7 +220,7 @@ export function calculateNflShadowScore(context, gameMeta = {}) {
     predicted_winner_abbr: predictedWinnerAbbr,
     confidence: adjConfidence,
     breakdown: {
-      strAdv, qbAdv, injAdv, formAdv, restAdv,
+      strAdv, qbAdv, sitAdv, trAdv, injAdv, formAdv, restAdv,
       homeAdvantage,
       rawConfidence: confidence,
       completeness,
