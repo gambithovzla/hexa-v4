@@ -38,6 +38,7 @@ const STRINGS = {
     odds: 'Odds',
     model: 'Model %',
     implied: 'Implied %',
+    fair: 'Fair %',
     edge: 'Edge',
     game: 'Game',
     altLines: 'Alt lines',
@@ -58,6 +59,7 @@ const STRINGS = {
       lineCol: 'Book line (e.g. 5.5 strikeouts).',
       oddsCol: 'American odds for that side at snapshot time.',
       implied: 'Implied win probability from the posted odds (no vig removed).',
+      fair: 'No-vig fair probability — de-vigged from the over/under pair (NFL board).',
       model: 'Python XGBoost probability for that side (prop_* model). Empty if ML public gate is off.',
       edge: 'Model % minus implied %. Positive = model likes the bet more than the market price.',
     },
@@ -82,6 +84,7 @@ const STRINGS = {
     odds: 'Odds',
     model: 'Modelo %',
     implied: 'Implícita %',
+    fair: 'Justa %',
     edge: 'Edge',
     game: 'Partido',
     altLines: 'Líneas alt.',
@@ -102,6 +105,7 @@ const STRINGS = {
       lineCol: 'Línea de la casa (ej. 5.5 ponches).',
       oddsCol: 'Odds americanas de ese lado al momento del snapshot.',
       implied: 'Probabilidad implícita desde la cuota publicada (sin quitar vig).',
+      fair: 'Probabilidad justa sin vig — de-vig del par over/under (tablero NFL).',
       model: 'Probabilidad del XGBoost Python para ese lado (modelo prop_*). Vacío si el gate público ML está apagado.',
       edge: 'Modelo % menos implícita %. Positivo = el modelo valora más la apuesta que el precio del mercado.',
     },
@@ -138,13 +142,23 @@ function ThLabel({ label, help }) {
 }
 
 const KIND_LABELS = {
-  en: {
-    hits: 'Hits', total_bases: 'Total Bases', strikeouts: 'Strikeouts',
-    home_runs: 'HR', rbis: 'RBI',
+  mlb: {
+    en: { hits: 'Hits', total_bases: 'Total Bases', strikeouts: 'Strikeouts', home_runs: 'HR', rbis: 'RBI' },
+    es: { hits: 'Hits', total_bases: 'Bases Totales', strikeouts: 'Ponches', home_runs: 'HR', rbis: 'RBI' },
   },
-  es: {
-    hits: 'Hits', total_bases: 'Bases Totales', strikeouts: 'Ponches',
-    home_runs: 'HR', rbis: 'RBI',
+  nfl: {
+    en: {
+      pass_yds: 'Pass Yds', pass_tds: 'Pass TD', pass_completions: 'Completions',
+      pass_attempts: 'Pass Att', pass_interceptions: 'INT',
+      rush_yds: 'Rush Yds', rush_attempts: 'Carries',
+      reception_yds: 'Rec Yds', receptions: 'Receptions', anytime_td: 'Anytime TD',
+    },
+    es: {
+      pass_yds: 'Yds Pase', pass_tds: 'TD Pase', pass_completions: 'Completos',
+      pass_attempts: 'Int. Pase', pass_interceptions: 'INT',
+      rush_yds: 'Yds Tierra', rush_attempts: 'Acarreos',
+      reception_yds: 'Yds Recep', receptions: 'Recepciones', anytime_td: 'TD Anytime',
+    },
   },
 };
 
@@ -159,10 +173,13 @@ function fmtEdge(v) {
   return v > 0 ? `+${pct}%` : `${pct}%`;
 }
 
-export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
+export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: initialSport = 'mlb' }) {
   const T = { ...(STRINGS[lang] ?? STRINGS.es), lang };
   const H = T.help ?? {};
-  const KL = KIND_LABELS[lang] ?? KIND_LABELS.es;
+
+  const [sport, setSport] = useState(initialSport === 'nfl' ? 'nfl' : 'mlb');
+  const isNfl = sport === 'nfl';
+  const KL = (KIND_LABELS[sport] ?? KIND_LABELS.mlb)[lang] ?? (KIND_LABELS[sport] ?? KIND_LABELS.mlb).es;
 
   const [date, setDate] = useState(() =>
     new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
@@ -184,7 +201,8 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
       const params = new URLSearchParams({ date });
       if (propKind) params.set('propKind', propKind);
       if (minEdge) params.set('minEdge', minEdge);
-      const res = await fetch(`${API_URL}/api/mlb/props/board?${params}`, {
+      const boardPath = isNfl ? '/api/nfl/props/board' : '/api/mlb/props/board';
+      const res = await fetch(`${API_URL}${boardPath}?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -195,7 +213,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
     } finally {
       setLoading(false);
     }
-  }, [token, date, propKind, minEdge]);
+  }, [token, date, propKind, minEdge, isNfl]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -222,6 +240,24 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
             {T.title}
           </Typography>
           <HelpTip title={H.page} />
+        </Box>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {['mlb', 'nfl'].map((s) => (
+            <Button
+              key={s}
+              onClick={() => { setSport(s); setPropKind(''); }}
+              size="small"
+              sx={{
+                color: sport === s ? '#000' : MUTED,
+                background: sport === s ? (s === 'nfl' ? 'var(--brand-field, #2e7d32)' : CYAN) : 'transparent',
+                fontFamily: MONO, fontSize: '10px', fontWeight: 700,
+                border: `1px solid ${sport === s ? (s === 'nfl' ? 'var(--brand-field, #2e7d32)' : CYAN) : BORDER}`,
+                minWidth: 44,
+              }}
+            >
+              {s.toUpperCase()}
+            </Button>
+          ))}
         </Box>
       </Box>
 
@@ -274,13 +310,15 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
             style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', width: 160, fontFamily: MONO, fontSize: '11px' }}
           />
         </Box>
-        <Button
-          onClick={() => setShowSavant((v) => !v)}
-          size="small"
-          sx={{ color: showSavant ? CYAN : MUTED, fontFamily: MONO, fontSize: '10px', border: `1px solid ${showSavant ? CYAN : BORDER}` }}
-        >
-          {showSavant ? T.hideSavant : T.showSavant}
-        </Button>
+        {!isNfl && (
+          <Button
+            onClick={() => setShowSavant((v) => !v)}
+            size="small"
+            sx={{ color: showSavant ? CYAN : MUTED, fontFamily: MONO, fontSize: '10px', border: `1px solid ${showSavant ? CYAN : BORDER}` }}
+          >
+            {showSavant ? T.hideSavant : T.showSavant}
+          </Button>
+        )}
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Button onClick={load} sx={{ color: CYAN, fontFamily: MONO, border: `1px solid ${CYAN}` }}>
             ↻
@@ -353,7 +391,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
       )}
 
       {!loading && filteredGames.map((g) => (
-        <Box key={g.gamePk} sx={{ mb: 3, background: SURF, border: `1px solid ${BORDER}`, p: 2 }}>
+        <Box key={g.gamePk ?? g.gameId} sx={{ mb: 3, background: SURF, border: `1px solid ${BORDER}`, p: 2 }}>
           <SectionHeading
             title={`${T.game}: ${g.awayTeam} @ ${g.homeTeam}${g.startTime ? ` · ${g.startTime}` : ''}`}
             help={H.gameBlock}
@@ -367,11 +405,12 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
                   <ThLabel label={T.line} help={H.lineCol} />
                   <ThLabel label={T.odds} help={H.oddsCol} />
                   <ThLabel label={T.implied} help={H.implied} />
+                  {isNfl && <ThLabel label={T.fair} help={H.fair} />}
                   <ThLabel label={T.model} help={H.model} />
                   <ThLabel label={T.edge} help={H.edge} />
-                  {showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>xBA / xSLG</th>}
-                  {showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>wOBA 7d</th>}
-                  {g.eventId && <th style={{ padding: '6px 8px', color: MUTED }}></th>}
+                  {!isNfl && showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>xBA / xSLG</th>}
+                  {!isNfl && showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>wOBA 7d</th>}
+                  {!isNfl && g.eventId && <th style={{ padding: '6px 8px', color: MUTED }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -393,21 +432,22 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es' }) {
                       <td>{p.line}</td>
                       <td>{p.oddsAmerican > 0 ? `+${p.oddsAmerican}` : p.oddsAmerican}</td>
                       <td>{fmtPct(p.impliedProb)}</td>
+                      {isNfl && <td style={{ color: p.fairProb != null ? GREEN : MUTED }}>{fmtPct(p.fairProb)}</td>}
                       <td style={{ color: p.modelProb != null ? CYAN : MUTED }}>{fmtPct(p.modelProb)}</td>
                       <td style={{ color: edgeColor, fontWeight: 700 }}>{fmtEdge(p.edge)}</td>
-                      {showSavant && (
+                      {!isNfl && showSavant && (
                         <td style={{ color: MUTED }}>
                           {p.savant?.xba != null ? p.savant.xba.toFixed(3) : '—'}
                           {' / '}
                           {p.savant?.xslg != null ? p.savant.xslg.toFixed(3) : '—'}
                         </td>
                       )}
-                      {showSavant && (
+                      {!isNfl && showSavant && (
                         <td style={{ color: MUTED }}>
                           {p.savant?.rolling7d != null ? p.savant.rolling7d.toFixed(3) : '—'}
                         </td>
                       )}
-                      {g.eventId && (
+                      {!isNfl && g.eventId && (
                         <td style={{ padding: '4px 8px' }}>
                           <button
                             onClick={() => setAltLines({ eventId: g.eventId, playerName: p.playerName, propKind: p.propKind })}
