@@ -92,6 +92,8 @@ cd ml && pip install -e ".[dev]" && uvicorn hexa_ml.serve:app --port 8000
 | `NBA_ANALYSIS_ENABLED` | No | Oracle NBA + resolver (default `false`) |
 | `NFL_ANALYSIS_ENABLED` | No | Oracle NFL + resolver (default `false`; activo en Railway con `=true`) |
 | `IMPERDIBLE_ENABLED` | No | Pick Imperdible admin-only MLB (default `false`) |
+| `IMPERDIBLE_NFL_ENABLED` | No | NFL Pick Imperdible admin-only (default `false`; gate QB confirmado) |
+| `VITE_NFL_LIVE_TRACKER_ENABLED` | No | (cliente) toggle del tab Live NFL (default ENABLED) |
 | `ML_SIDECAR_ENABLED` | No | Llamadas al sidecar Python XGBoost |
 | `HEXA_ML_API_URL` | Con sidecar | URL base del sidecar Railway |
 | `HEXA_ML_INTERNAL_TOKEN` | Con sidecar | Token auth Node→Python |
@@ -249,6 +251,10 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
   - `server/services/nflShadowValidator.js`: `situationalAdvantage` (RZ TD% + 3rd-down) al 14%; `trenchesAdvantage` (sack rate diff) al 10%. Pesos rebalanceados. Breakdown expone `sitAdv` + `trAdv`.
   - `server/services/oracleNfl.js`: `describeEfficiencyDeltas` — bloque comparativo con dirección HOME/AWAY; `describeBackupQb`; venue block incluye surface + altitude.
   - `server/prompts/oracle-nfl-prompts.js`: umbrales calibrados RZ/3rd-down/sack rate; **Signal Coherence** (8 señales votando, modifica confianza ±1→+6%); 5 nuevos alert flags (altitud, trench mismatch, RZ gap, baja coherencia, fatiga); oracle_report requiere "N/8 signals aligned" en EDGE MATH.
+- ✅ **Sprint 9.5 — NFL ops gaps off-season** (2026-06-07): cierra las brechas operacionales NFL que no requerían temporada. Cero ediciones a frozen.
+  - **Parlay model enrichment**: `POST /api/nfl/parlay` conecta los 3 modelos pre-entrenados nflverse vía el nuevo `predictNflGameModel(context, gameMeta, marketOdds)` (`server/services/nflMlClient.js`) — fin del `model:null`; per-leg cae al de-vig cuando el sidecar está caído. Respuesta expone `modelEnriched`. Fix: `buildNflFeaturePayload` lee `qbStatus.statusKey` (antes `String(obj)` marcaba todo QB lesionado como activo).
+  - **Live tracker flag**: `VITE_NFL_LIVE_TRACKER_ENABLED` (default ENABLED) controla el tab Live NFL en `sportCapabilities.js`.
+  - **Imperdible NFL** (`IMPERDIBLE_NFL_ENABLED`, admin-only): lock-of-the-slate NFL. Gate **QB confirmado** (no lineup); convicción = modelo sidecar (0.45) + mercado de-vig (0.30) + shadow validator independiente (0.25, moneyline). `requireModelCertified` (sin modelo sidecar → no hay lock). Arbiter Opus con prompt NFL. Archivos `nflImperdible{Selector,Engine,Arbiter}.js` + `nfl-imperdible-prompts.js` + `routes/nfl-imperdible.js`. Persiste `picks` (`sport='nfl'`) + `imperdible_runs` (`sport='nfl'`). +15 tests. Thresholds necesitan calibración in-season.
 
 ### Estado en producción
 
@@ -273,13 +279,13 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 | Data depth pregame | 9.5 | 6.5 | 8.5 | 8.0 |
 | Data quality live | 8.5 | 7.0 | 6.5 | 8.0 |
 | Lineup/Injury verification | 9.0 | 7.0 | 7.5 | 8.0 |
-| Market coverage | 9.0 | 6.0 | 7.5 | 8.0 |
+| Market coverage | 9.0 | 6.0 | 8.0 | 8.0 |
 | Guardrails LLM | 8.5 | 7.5 | 8.5 | 8.0 |
 | Pick lifecycle | 9.0 | 7.5 | 7.0 | 8.0 |
 | Calibration/ROI observables | 8.5 | 6.0 | 6.5 | 8.0 |
 | Isolation por deporte | 8.5 | 8.0 | 8.0 | 8.5 |
 
-NFL post-9.4: EPA/PROE + red zone + 3rd-down + trenches + surface/altitude + signal coherence. Data depth alcanza paridad MLB (8.5). Calibración y lifecycle mejorarán con picks reales en temporada (sept 2026).
+NFL post-9.5: EPA/PROE + red zone + 3rd-down + trenches + surface/altitude + signal coherence (9.4); parlay model-driven (3 modelos pre-entrenados), Imperdible NFL (lock-of-the-slate, gate QB) y toggle live tracker (9.5). Data depth alcanza paridad MLB (8.5); market coverage sube a 8.0 (parlay con modelos reales). Calibración del Imperdible y lifecycle mejorarán con picks reales en temporada (sept 2026).
 
 ---
 
