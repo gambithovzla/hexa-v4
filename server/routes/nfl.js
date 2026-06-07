@@ -20,6 +20,10 @@ import { getNflGamesForWeek, getNflGamesForDate } from '../nfl-api.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { analyzeNflGame, analyzeNflChat } from '../services/oracleNfl.js';
 import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
+import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
+import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
+import { parseNflProp } from '../nfl-props-resolver.js';
+import { buildNflPropFeaturePayload, predictNflProp } from '../services/nflMlClient.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
 import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
@@ -30,6 +34,13 @@ const router = Router();
 function nflEnabled(req, res, next) {
   if (process.env.NFL_ANALYSIS_ENABLED !== 'true') {
     return res.status(503).json({ success: false, error: 'NFL analysis is not yet enabled on this instance.' });
+  }
+  return next();
+}
+
+function nflPropsEnabled(req, res, next) {
+  if (process.env.NFL_PROPS_ENABLED !== 'true') {
+    return res.status(503).json({ success: false, error: 'NFL player props are not yet enabled on this instance.' });
   }
   return next();
 }
@@ -439,6 +450,132 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireAdmin, async (req, 
     });
   } catch (err) {
     console.error(`[nfl-route] analyze/chat error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// ── GET /api/nfl/props/board ───────────────────────────────────────────────────
+//
+// Admin-only player-props board: market odds (event endpoint) + no-vig fair
+// probability, plus the user's Oracle-Chat-sourced NFL prop picks for the date.
+// ML model probability is intentionally null until the dedicated NFL-prop model
+// ships (mirrors MLB props gating). Flag: NFL_PROPS_ENABLED.
+
+const MAX_MODEL_PREDICTIONS = 40; // cap sidecar calls per game on the admin board
+
+function todayEt() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+async function fetchOraclePropPicks(userId, date) {
+  const { rows } = await pool.query(
+    `SELECT id, pick, matchup, game_pk, game_date::text AS game_date,
+            oracle_confidence, result, created_at
+     FROM picks
+     WHERE user_id = $1 AND sport = 'nfl' AND deleted_at IS NULL AND pick IS NOT NULL
+       AND (game_date::date = $2 OR created_at::date = $2)
+     ORDER BY created_at DESC
+     LIMIT 60`,
+    [userId, date]
+  );
+  const out = [];
+  for (const r of rows) {
+    const parsed = parseNflProp(r.pick);
+    if (!parsed) continue;
+    out.push({
+      pickId: r.id,
+      pick: r.pick,
+      matchup: r.matchup,
+      gamePk: r.game_pk,
+      propKind: parsed.propKind,
+      side: parsed.side,
+      line: parsed.line,
+      playerName: parsed.playerName,
+      confidence: r.oracle_confidence,
+      result: r.result,
+      createdAt: r.created_at,
+      source: 'oracle_chat',
+    });
+  }
+  return out;
+}
+
+router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? req.query.date : todayEt();
+  const propKindFilter = req.query.propKind ? String(req.query.propKind) : null;
+
+  try {
+    const [games, oddsEvents] = await Promise.all([
+      getNflGamesForDate(date),
+      getNflGameOdds({ date }),
+    ]);
+
+    const boardGames = [];
+    let oddsAvailable = false;
+
+    for (const game of games) {
+      const event = matchNflOddsToGame(oddsEvents, game.home_team_name, game.away_team_name);
+      let props = [];
+      if (event?.eventId) {
+        const offers = await getNflPlayerPropOdds({ eventId: event.eventId });
+        if (offers.length) oddsAvailable = true;
+        props = enrichNflPropOffers(offers)
+          .filter(o => !propKindFilter || o.propKind === propKindFilter)
+          .map(o => ({
+            propKind: o.propKind,
+            playerName: o.playerName,
+            side: o.side,
+            line: o.line,
+            oddsAmerican: o.oddsAmerican,
+            impliedProb: o.impliedProb,
+            fairProb: o.fairProb,
+            vig: o.vig,
+            modelProb: null, // filled below when the nfl_prop model is live
+            edge: null,
+          }))
+          .sort((a, b) =>
+            a.propKind.localeCompare(b.propKind) || String(a.playerName).localeCompare(String(b.playerName)));
+
+        // Admin board: attach the pooled nfl_prop model probability when the
+        // sidecar is up and the model is trained. predictNflProp returns null
+        // (circuit open / disabled / no artifact) → modelProb stays null.
+        const top = props.slice(0, MAX_MODEL_PREDICTIONS);
+        await Promise.all(top.map(async (p) => {
+          const payload = buildNflPropFeaturePayload({
+            propKind: p.propKind, side: p.side, line: p.line,
+            oddsAmerican: p.oddsAmerican, impliedProb: p.impliedProb, fairProb: p.fairProb,
+          });
+          const pred = await predictNflProp(payload);
+          if (pred && typeof pred.probability === 'number') {
+            p.modelProb = Math.round(pred.probability * 1e4) / 1e4;
+            if (p.impliedProb != null) p.edge = Math.round((p.modelProb - p.impliedProb) * 1e4) / 1e4;
+          }
+        }));
+      }
+      boardGames.push({
+        gameId: game.game_id,
+        eventId: event?.eventId ?? null,
+        awayTeam: game.away_team_abbr,
+        homeTeam: game.home_team_abbr,
+        startTime: game.game_datetime ?? null,
+        props,
+      });
+    }
+
+    const oraclePropPicks = await fetchOraclePropPicks(req.user.id, date);
+
+    return res.json({
+      success: true,
+      date,
+      sport: 'nfl',
+      mlPublic: false,
+      mlEnabled: boardGames.some(g => g.props.some(p => p.modelProb != null)),
+      games: boardGames,
+      oraclePropPicks,
+      oddsAvailable,
+    });
+  } catch (err) {
+    console.error(`[nfl-route] props/board error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });
   }
 });

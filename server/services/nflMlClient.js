@@ -141,6 +141,40 @@ export function buildNflFeaturePayload(context = {}, gameMeta = {}, marketOdds =
   };
 }
 
+/**
+ * Build the NFL player-prop feature payload (pooled nfl_prop market). Pick-aligned:
+ * the model predicts P(the bet side wins), so `side` is a feature. Player season/
+ * recent averages are optional (null until the nflverse player fetcher lands).
+ */
+export function buildNflPropFeaturePayload({
+  propKind,
+  side,
+  line,
+  oddsAmerican = null,
+  impliedProb = null,
+  fairProb = null,
+  playerSeasonAvg = null,
+  playerRecentAvg = null,
+  playerGames = null,
+} = {}) {
+  return {
+    prop_kind:                  propKind ?? null,
+    side:                       side ?? null,
+    line:                       line ?? null,
+    prop_odds_american:         oddsAmerican,
+    prop_implied_prob:          impliedProb,
+    nfl_prop_fair_prob:         fairProb,
+    nfl_prop_player_season_avg: playerSeasonAvg,
+    nfl_prop_player_recent_avg: playerRecentAvg,
+    nfl_prop_player_games:      playerGames,
+  };
+}
+
+export async function predictNflProp(features) {
+  if (!_guard()) return null;
+  return _post('/predict/nfl_prop', features ?? {});
+}
+
 export async function predictNflMoneyline(features) {
   if (!_guard()) return null;
   return _post('/predict/nfl_moneyline', features ?? {});

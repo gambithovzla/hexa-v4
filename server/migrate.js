@@ -960,6 +960,14 @@ export async function runNflDatasetMigrations() {
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS injuries_home_severe INTEGER`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS injuries_away_severe INTEGER`);
 
+    // ── pick_features: NFL player props (Fase 2 — pooled nfl_prop model) ─────
+    // prop_kind / side / line / prop_odds_american / prop_implied_prob already
+    // exist (MLB props). These add the NFL-specific player + market signals.
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS nfl_prop_fair_prob DECIMAL(7,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS nfl_prop_player_season_avg DECIMAL(8,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS nfl_prop_player_recent_avg DECIMAL(8,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS nfl_prop_player_games INTEGER`);
+
     await client.query('COMMIT');
     console.log('[migrate] nfl-dataset ready (pick_features NFL columns)');
   } catch (err) {

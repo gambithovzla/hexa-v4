@@ -83,17 +83,24 @@ export function augmentChatQuestion(question, lang = 'en', sport = 'mlb', option
   // NHL's puck line is a fixed ±1.5 spread, so it parses through the spread path.
   const sportLc = String(sport ?? 'mlb').toLowerCase();
   const isSpreadSport = ['nba', 'nfl', 'nhl'].includes(sportLc);
+  // NFL player props (Fase 2) open up the prop market for NFL chat when the flag
+  // is on — additive, gated, never affects NBA/NHL.
+  const nflPropsOn = sportLc === 'nfl' && process.env.NFL_PROPS_ENABLED === 'true';
   // Tennis is an individual 2-way sport: match winner + total games (no draw,
   // no run line, no props in phase 1). Set handicap maps to the spread path.
   const isTennis = sportLc === 'tennis';
   const isMulti = Boolean(options?.multi || options?.mode === 'jornada');
   const marketHint = isTennis
     ? 'moneyline|overunder|spread'
+    : nflPropsOn
+    ? 'moneyline|overunder|spread|prop'
     : isSpreadSport
     ? 'moneyline|overunder|spread'
     : 'moneyline|overunder|runline|prop';
   const marketDesc = isTennis
     ? 'a match winner, set handicap, or total games over/under'
+    : nflPropsOn
+    ? 'a team moneyline, point spread, total over/under, or a player prop (e.g. "Patrick Mahomes Over 274.5 Passing Yards")'
     : isSpreadSport
     ? 'a team moneyline, point spread, or total over/under'
     : 'a team moneyline, run line, over/under total, or prop';
