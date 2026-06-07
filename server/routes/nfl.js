@@ -23,7 +23,7 @@ import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../n
 import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { parseNflProp } from '../nfl-props-resolver.js';
-import { buildNflPropFeaturePayload, predictNflProp } from '../services/nflMlClient.js';
+import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
 import { buildHexaNflBoard } from '../services/hexaNflBoardService.js';
@@ -614,8 +614,9 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
 // NFL Parlay Synergy (admin-only, flag PARLAY_SYNERGY_NFL_ENABLED). Builds NFL
 // candidates (spread/total/moneyline) and feeds them to the FROZEN, sport-agnostic
 // engine (correlation matrix → composer → hit distribution). Model probabilities
-// fall back to de-vigged market until in-season model enrichment lands, so the
-// `safe` mode (seeds by probability, ignores edge) is the meaningful one now.
+// come from the pre-trained nfl_moneyline/spread/total sidecar models (live since
+// Sprint 9.3); when the sidecar is down per-leg probs fall back to de-vigged
+// market so the parlay still composes.
 router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, res) => {
   const {
     season = null, seasonType = null, week = null, date = null,
@@ -638,26 +639,59 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
     }
 
     const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date });
-    const entries = [];
-    for (const g of games) {
+    const entries = (await Promise.all(games.map(async (g) => {
       const ev = matchNflOddsToGame(oddsEvents, g.home_team_name, g.away_team_name);
       const odds = ev ? buildMarketOddsForGame(ev) : null;
-      if (!odds) continue;
-      entries.push({
+      if (!odds) return null;
+
+      // Enrich each game's leg probabilities with the pre-trained sidecar models.
+      // Heavy (context build + 3 predicts per game) but admin-only / low-frequency;
+      // the underlying fetchers cache and the circuit breaker shorts out if down.
+      let context = null;
+      let model = null;
+      try {
+        context = await buildNflGameContext({
+          homeTeamId: g.home_team_id,
+          awayTeamId: g.away_team_id,
+          homeTeamAbbr: g.home_team_abbr,
+          awayTeamAbbr: g.away_team_abbr,
+          gameDate: g.game_date,
+          gameTime: g.game_time ?? null,
+          season: g.season ?? null,
+          marketOdds: odds,
+        });
+        const gameMeta = {
+          homeTeamId: g.home_team_id, awayTeamId: g.away_team_id,
+          homeAbbr: g.home_team_abbr, awayAbbr: g.away_team_abbr,
+          homeRestDays: context.home?.restDays ?? null,
+          awayRestDays: context.away?.restDays ?? null,
+          homeIsShortWeek: context.home?.isShortWeek ?? null,
+          awayIsShortWeek: context.away?.isShortWeek ?? null,
+          homeIsOffBye: context.home?.isOffBye ?? null,
+          awayIsOffBye: context.away?.isOffBye ?? null,
+          isDome: context.weather?.dome ?? null,
+        };
+        model = await predictNflGameModel(context, gameMeta, odds);
+      } catch (err) {
+        console.warn(`[nfl-route] parlay model enrich failed for ${g.game_id}: ${err.message}`);
+      }
+
+      return {
         gameId: String(g.game_id),
         matchup: `${g.away_team_abbr ?? 'AWAY'} @ ${g.home_team_abbr ?? 'HOME'}`,
         gameDate: g.game_date,
         homeAbbr: g.home_team_abbr,
         awayAbbr: g.away_team_abbr,
         odds,
-        model: null, // in-season: enrich via nfl_moneyline/spread/total sidecar
-        dataQuality: 70,
-      });
-    }
+        model, // { moneyline, spread, total } in [0,1], or null → de-vig fallback
+        dataQuality: Math.round((context?.context_meta?.overallCompleteness ?? 0.7) * 100),
+      };
+    }))).filter(Boolean);
 
+    const modelEnriched = entries.some(e => e.model != null);
     const candidates = buildNflParlayCandidates(entries);
     if (candidates.length < 2) {
-      return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: candidates.length, note: 'not enough priced NFL candidates' });
+      return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: candidates.length, modelEnriched, note: 'not enough priced NFL candidates' });
     }
 
     const correlationMatrix = buildCorrelationMatrix(candidates);
@@ -667,7 +701,7 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
       hit_distribution: computeHitDistribution(p.legs.map(l => l.modelProbability / 100)),
     }));
 
-    return res.json({ success: true, sport: 'nfl', mode, lang, candidateCount: candidates.length, parlays: enriched, meta });
+    return res.json({ success: true, sport: 'nfl', mode, lang, candidateCount: candidates.length, modelEnriched, parlays: enriched, meta });
   } catch (err) {
     console.error(`[nfl-route] parlay error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });

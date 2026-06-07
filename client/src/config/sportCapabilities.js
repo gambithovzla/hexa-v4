@@ -76,7 +76,13 @@ const CAPABILITY_MAP = {
   liveTracker: {
     mlb: { enabled: true },
     nba: { enabled: true },
-    nfl: { enabled: true },
+    // Operational toggle: NFL live tracker is fully built (Sprint 9.2). Defaults
+    // ENABLED; set VITE_NFL_LIVE_TRACKER_ENABLED=false to hide the tab (e.g. to
+    // suppress game-time polling during a deploy or a quiet stretch).
+    nfl: {
+      enabled: import.meta.env?.VITE_NFL_LIVE_TRACKER_ENABLED !== 'false',
+      message: { es: 'Live tracker NFL deshabilitado temporalmente.', en: 'NFL live tracker is temporarily disabled.' },
+    },
     nhl: { enabled: false, message: { es: 'Live tracker NHL llega en una fase posterior.', en: 'NHL live tracker ships in a later phase.' } },
     soccer: { enabled: true },
     tennis: { enabled: false, message: { es: 'Live tracker de Tenis llega en una fase posterior.', en: 'Tennis live tracker ships in a later phase.' } },

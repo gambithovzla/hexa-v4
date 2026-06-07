@@ -105,11 +105,17 @@ async function _post(path, body, attempt = 0) {
 export function buildNflFeaturePayload(context = {}, gameMeta = {}, marketOdds = {}) {
   const { home = {}, away = {}, weather = {}, injuries = {} } = context;
 
-  const qbHomeActive = home.qbStatus
-    ? !['out', 'out_for_season', 'doubtful'].includes(String(home.qbStatus).toLowerCase())
+  // context.home.qbStatus is an object { playerName, status, statusKey } or null —
+  // read statusKey, never String(obj) which yields "[object Object]" and silently
+  // marked every injured QB as active (QB is the dominant NFL variable).
+  const qbKey = s => (s && typeof s === 'object' ? s.statusKey : s);
+  const qbHomeRaw = qbKey(home.qbStatus);
+  const qbAwayRaw = qbKey(away.qbStatus);
+  const qbHomeActive = qbHomeRaw
+    ? !['out', 'out_for_season', 'doubtful'].includes(String(qbHomeRaw).toLowerCase())
     : null;
-  const qbAwayActive = away.qbStatus
-    ? !['out', 'out_for_season', 'doubtful'].includes(String(away.qbStatus).toLowerCase())
+  const qbAwayActive = qbAwayRaw
+    ? !['out', 'out_for_season', 'doubtful'].includes(String(qbAwayRaw).toLowerCase())
     : null;
 
   return {
@@ -188,4 +194,28 @@ export async function predictNflSpread(features) {
 export async function predictNflTotal(features) {
   if (!_guard()) return null;
   return _post('/predict/nfl_total', features ?? {});
+}
+
+/**
+ * Predict all three NFL game markets in parallel and return the model-probability
+ * triplet the parlay candidate builder consumes:
+ *   { moneyline: P(home wins), spread: P(home covers), total: P(over) }  (each [0,1])
+ * Any market whose prediction is unavailable (circuit open / disabled / no
+ * artifact) is left null so buildNflGameCandidates falls back to de-vigged
+ * market odds for that leg. Returns null if the whole triplet is unavailable.
+ */
+export async function predictNflGameModel(context = {}, gameMeta = {}, marketOdds = {}) {
+  if (!_guard()) return null;
+  const features = buildNflFeaturePayload(context, gameMeta, marketOdds);
+  const [ml, sp, tot] = await Promise.all([
+    predictNflMoneyline(features),
+    predictNflSpread(features),
+    predictNflTotal(features),
+  ]);
+  const prob = r => (r && typeof r.probability === 'number' ? r.probability : null);
+  const moneyline = prob(ml);
+  const spread = prob(sp);
+  const total = prob(tot);
+  if (moneyline == null && spread == null && total == null) return null;
+  return { moneyline, spread, total };
 }
