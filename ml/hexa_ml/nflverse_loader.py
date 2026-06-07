@@ -58,6 +58,9 @@ _PBP_COLUMNS = [
     "home_team", "away_team", "home_score", "away_score",
     "spread_line", "total_line",
     "posteam", "defteam", "play_type", "epa", "success", "pass_oe",
+    # Additional columns for red zone, 3rd-down, and trench metrics:
+    "yardline_100", "down", "first_down", "touchdown", "sack", "qb_hit",
+    "pass_attempt",
 ]
 
 
@@ -150,11 +153,71 @@ def _relevant_plays(pbp: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _red_zone_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Red zone TD% per team — offense (posteam) and defense (defteam).
+
+    Red zone = yardline_100 <= 20 on pass/run plays. TD% = TDs / red-zone plays.
+    """
+    if "yardline_100" not in pbp.columns or "touchdown" not in pbp.columns:
+        empty = pd.Series(dtype=float, name="rz_td_pct")
+        return empty, empty
+    rz = pbp[
+        (pbp["play_type"].isin(_RELEVANT_PLAY_TYPES)) &
+        (pd.to_numeric(pbp["yardline_100"], errors="coerce") <= 20) &
+        pbp["yardline_100"].notna()
+    ].copy()
+    rz["td"] = pd.to_numeric(rz["touchdown"], errors="coerce").fillna(0)
+    off_rz = rz.groupby("posteam").agg(rz_plays=("td", "count"), rz_tds=("td", "sum"))
+    def_rz = rz.groupby("defteam").agg(rz_plays=("td", "count"), rz_tds=("td", "sum"))
+    off_pct = (off_rz["rz_tds"] / off_rz["rz_plays"].replace(0, np.nan)).rename("rz_td_pct_off")
+    def_pct = (def_rz["rz_tds"] / def_rz["rz_plays"].replace(0, np.nan)).rename("rz_td_pct_def")
+    return off_pct, def_pct
+
+
+def _third_down_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """3rd-down conversion rate per team — offense and defense."""
+    if "down" not in pbp.columns or "first_down" not in pbp.columns:
+        empty = pd.Series(dtype=float, name="third_down_conv")
+        return empty, empty
+    td3 = pbp[
+        (pbp["play_type"].isin(_RELEVANT_PLAY_TYPES)) &
+        (pd.to_numeric(pbp["down"], errors="coerce") == 3)
+    ].copy()
+    td3["converted"] = (
+        pd.to_numeric(td3.get("first_down"), errors="coerce").fillna(0) +
+        pd.to_numeric(td3.get("touchdown"), errors="coerce").fillna(0)
+    ).clip(upper=1)
+    off_conv = td3.groupby("posteam")["converted"].mean().rename("third_down_conv_off")
+    def_conv = td3.groupby("defteam")["converted"].mean().rename("third_down_conv_def")
+    return off_conv, def_conv
+
+
+def _trench_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Sack rate per team — offense (sacks allowed per dropback) and defense (sacks forced).
+
+    A lower sack_rate_off = better O-line; a higher sack_rate_def = better pass rush.
+    """
+    if "pass_attempt" not in pbp.columns or "sack" not in pbp.columns:
+        empty = pd.Series(dtype=float, name="sack_rate")
+        return empty, empty
+    passes = pbp[
+        (pbp["play_type"].isin(_RELEVANT_PLAY_TYPES)) &
+        (pd.to_numeric(pbp["pass_attempt"], errors="coerce") == 1)
+    ].copy()
+    passes["is_sack"] = pd.to_numeric(passes["sack"], errors="coerce").fillna(0)
+    dropbacks_off = passes.groupby("posteam")["is_sack"].agg(["count", "sum"])
+    dropbacks_def = passes.groupby("defteam")["is_sack"].agg(["count", "sum"])
+    sack_rate_off = (dropbacks_off["sum"] / dropbacks_off["count"].replace(0, np.nan)).rename("sack_rate_off")
+    sack_rate_def = (dropbacks_def["sum"] / dropbacks_def["count"].replace(0, np.nan)).rename("sack_rate_def")
+    return sack_rate_off, sack_rate_def
+
+
 def _season_team_stats(pbp: pd.DataFrame) -> pd.DataFrame:
     """Season-to-date per-team aggregates (one row per team).
 
     epa_def/success_def are computed from plays where the team is on defense
     (lower epa_def = better defense). proe is offense-only.
+    Adds: red_zone_td_pct_off/def, third_down_conv_off/def, sack_rate_off/def.
     """
     plays = _relevant_plays(pbp)
 
@@ -176,7 +239,20 @@ def _season_team_stats(pbp: pd.DataFrame) -> pd.DataFrame:
         .rename("games_played")
     )
 
-    stats = off.join(deff, how="outer").join(games, how="outer")
+    rz_off, rz_def = _red_zone_stats(pbp)
+    td3_off, td3_def = _third_down_stats(pbp)
+    sack_off, sack_def = _trench_stats(pbp)
+
+    stats = (
+        off.join(deff, how="outer")
+           .join(games, how="outer")
+           .join(rz_off, how="left")
+           .join(rz_def, how="left")
+           .join(td3_off, how="left")
+           .join(td3_def, how="left")
+           .join(sack_off, how="left")
+           .join(sack_def, how="left")
+    )
     stats = stats.reset_index(names="team")
     games_safe = stats["games_played"].replace(0, np.nan)
     stats["plays_per_game"] = stats["off_plays"] / games_safe
@@ -217,6 +293,12 @@ def build_team_stats(season: int) -> dict:
             "proe": _num(row.get("proe")),
             "plays_per_game": _num(row.get("plays_per_game")),
             "games_played": None if pd.isna(row.get("games_played")) else int(row["games_played"]),
+            "red_zone_td_pct_off": _num(row.get("rz_td_pct_off")),
+            "red_zone_td_pct_def": _num(row.get("rz_td_pct_def")),
+            "third_down_conv_off": _num(row.get("third_down_conv_off")),
+            "third_down_conv_def": _num(row.get("third_down_conv_def")),
+            "sack_rate_off": _num(row.get("sack_rate_off")),
+            "sack_rate_def": _num(row.get("sack_rate_def")),
         }
 
     payload = {
