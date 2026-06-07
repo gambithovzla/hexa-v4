@@ -27,6 +27,10 @@ import { buildNflPropFeaturePayload, predictNflProp } from '../services/nflMlCli
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
 import { buildHexaNflBoard } from '../services/hexaNflBoardService.js';
+import { buildNflParlayCandidates } from '../services/parlayEngine/nflParlayCandidates.js';
+import { composeParlays } from '../services/parlayEngine/composer.js';
+import { buildCorrelationMatrix } from '../services/parlayEngine/correl.js';
+import { computeHitDistribution } from '../services/parlayEngine/hitMath.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
 import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
@@ -44,6 +48,13 @@ function nflEnabled(req, res, next) {
 function nflPropsEnabled(req, res, next) {
   if (process.env.NFL_PROPS_ENABLED !== 'true') {
     return res.status(503).json({ success: false, error: 'NFL player props are not yet enabled on this instance.' });
+  }
+  return next();
+}
+
+function nflParlayEnabled(req, res, next) {
+  if (process.env.PARLAY_SYNERGY_NFL_ENABLED !== 'true') {
+    return res.status(503).json({ success: false, error: 'NFL parlay synergy is not yet enabled on this instance.' });
   }
   return next();
 }
@@ -595,6 +606,70 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
     });
   } catch (err) {
     console.error(`[nfl-route] props/board error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// ── POST /api/nfl/parlay ───────────────────────────────────────────────────────
+// NFL Parlay Synergy (admin-only, flag PARLAY_SYNERGY_NFL_ENABLED). Builds NFL
+// candidates (spread/total/moneyline) and feeds them to the FROZEN, sport-agnostic
+// engine (correlation matrix → composer → hit distribution). Model probabilities
+// fall back to de-vigged market until in-season model enrichment lands, so the
+// `safe` mode (seeds by probability, ignores edge) is the meaningful one now.
+router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, res) => {
+  const {
+    season = null, seasonType = null, week = null, date = null,
+    requestedLegs = 3, mode = 'safe', lang = 'en',
+  } = req.body ?? {};
+
+  try {
+    let games;
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      games = await getNflGamesForDate(date);
+    } else {
+      games = await getNflGamesForWeek({
+        season: season != null ? Number(season) : null,
+        seasonType: seasonType != null ? Number(seasonType) : null,
+        week: week != null ? Number(week) : null,
+      });
+    }
+    if (!games?.length) {
+      return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: 0, note: 'no NFL games for the requested window' });
+    }
+
+    const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date });
+    const entries = [];
+    for (const g of games) {
+      const ev = matchNflOddsToGame(oddsEvents, g.home_team_name, g.away_team_name);
+      const odds = ev ? buildMarketOddsForGame(ev) : null;
+      if (!odds) continue;
+      entries.push({
+        gameId: String(g.game_id),
+        matchup: `${g.away_team_abbr ?? 'AWAY'} @ ${g.home_team_abbr ?? 'HOME'}`,
+        gameDate: g.game_date,
+        homeAbbr: g.home_team_abbr,
+        awayAbbr: g.away_team_abbr,
+        odds,
+        model: null, // in-season: enrich via nfl_moneyline/spread/total sidecar
+        dataQuality: 70,
+      });
+    }
+
+    const candidates = buildNflParlayCandidates(entries);
+    if (candidates.length < 2) {
+      return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: candidates.length, note: 'not enough priced NFL candidates' });
+    }
+
+    const correlationMatrix = buildCorrelationMatrix(candidates);
+    const { parlays, meta } = composeParlays({ candidates, correlationMatrix, N: Number(requestedLegs) || 3, mode });
+    const enriched = parlays.map(p => ({
+      ...p,
+      hit_distribution: computeHitDistribution(p.legs.map(l => l.modelProbability / 100)),
+    }));
+
+    return res.json({ success: true, sport: 'nfl', mode, lang, candidateCount: candidates.length, parlays: enriched, meta });
+  } catch (err) {
+    console.error(`[nfl-route] parlay error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });
   }
 });
