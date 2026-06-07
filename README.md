@@ -30,7 +30,7 @@ Monorepo: API Node/Express + Postgres · cliente React/Vite · sidecar Python Fa
 | [docs/data-schema.md](docs/data-schema.md) | Tablas Postgres — columnas, índices, FKs, estado para training |
 | [docs/roadmap.md](docs/roadmap.md) | Estado de sprints y backlog priorizado |
 | [docs/nfl-architecture.md](docs/nfl-architecture.md) | Spec técnica NFL — data sources, Oracle, ML sidecar, live mapping |
-| [docs/nfl-roadmap.md](docs/nfl-roadmap.md) | Roadmap Sprint 9 por sub-sprint (9a–9e completados) |
+| [docs/nfl-roadmap.md](docs/nfl-roadmap.md) | Roadmap Sprint 9 por sub-sprint (9a–9j + 9.3 completos: Oracle, lifecycle, ML, props, board, parlay) |
 | [docs/tennis-architecture.md](docs/tennis-architecture.md) | Spec técnica Tennis (Sprint 12) — deporte individual, ELO-surface, resolver de retiros |
 | [docs/tennis-roadmap.md](docs/tennis-roadmap.md) | Roadmap Sprint 12 por sub-sprint (12a–12e, 📋 planning) |
 | [docs/sport-registry.md](docs/sport-registry.md) | Sport shell, capability matrix y checklist para escalar a nuevos deportes |
@@ -159,13 +159,13 @@ hexa-v4/
 
 Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑`).
 
-- **Públicos**: `/games`, `/teams`, `/odds/today`, `/hexa/board`, `/nba/games`, `/nba/teams`, `/nfl/games`, `/nfl/teams`, `/nfl/standings`.
+- **Públicos**: `/games`, `/teams`, `/odds/today`, `/hexa/board`, `/nba/games`, `/nba/teams`, `/nba/board`, `/nfl/games`, `/nfl/teams`, `/nfl/standings`, `/nfl/board`, `/soccer/board`.
 - **Auth** (`/auth/*`): register, login, me, verify-email, forgot-password.
 - **Análisis MLB** (`/analyze/*`) 🔒: game, parlay, safe, parlay-synergy (👑 beta).
 - **Análisis NBA** (`/nba/analyze/*`) 👑 (feature-flagged): game, chat.
-- **Análisis NFL** (`/nfl/analyze/*`) 👑 (feature-flagged `NFL_ANALYSIS_ENABLED`): game, chat.
+- **Análisis NFL** (`/nfl/analyze/*`) 👑 (feature-flagged `NFL_ANALYSIS_ENABLED`): game, chat. Parlay NFL: `/nfl/parlay` 👑 (`PARLAY_SYNERGY_NFL_ENABLED`).
 - **Picks** (`/picks/*`) 🔒: CRUD, postmortem, live-progress, clv-stats.
-- **MLB Player Props** (`/mlb/props/board`) 🔒: Odds API + Savant + ML scores admin.
+- **Player Props** — MLB (`/mlb/props/board`) 🔒: Odds API + Savant + ML scores admin. NFL (`/nfl/props/board`) 👑 (`NFL_PROPS_ENABLED`): Odds API event endpoint + Fair % de-vig + modelo `nfl_prop`.
 - **Admin** (`/admin/*`) 👑: shadow-model (`?sport=mlb|nba|nfl`), feature-store, ml/status, ml/retrain, ml/ensemble, db/tables, content/queue, imperdible.
 - **Pagos** (`/nowpayments/*`): checkout + IPN HMAC-SHA512.
 - **Content API** (API key pública): `/content/v1/games`, `/board`, `/picks`, `/performance`.
@@ -182,7 +182,7 @@ Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑
 ### Pipeline ML propio (XGBoost + ensemble)
 Sidecar Python en `ml/` — desplegado en Railway como servicio independiente.
 - **Mercados MLB activos**: moneyline (Brier 0.205, ROI +18.3%), overunder (Brier 0.138, ROI +8.5%), runline, prop.
-- **Mercados NFL activos**: `nfl_moneyline` (Brier ~0.234), `nfl_spread` (~0.25), `nfl_total` (~0.25) — pre-entrenados con 8 temporadas nflverse (2,622 filas) vía `pyarrow`; se refinan con picks reales en temporada.
+- **Mercados NFL activos**: `nfl_moneyline` (Brier ~0.234), `nfl_spread` (~0.25), `nfl_total` (~0.25) — pre-entrenados con 8 temporadas nflverse (2,622 filas) vía `pyarrow`; se refinan con picks reales en temporada. `nfl_prop` (pooled, pick-aligned) con features player-level nflverse — entrena con picks live resueltos en temporada.
 - **Ensemble**: meta-learner LogReg (Oracle + Legacy + Python) en logit space.
 - **Admin ML Control Center** (`/admin/ml-control`): HUD live (circuit breaker, latencia, modelos cargados), retrain on-demand por mercado/ensemble/all, per-pick ensemble breakdown badge, retrain audit log.
 
