@@ -29,6 +29,7 @@
 import pool from './db.js';
 import { getSoccerGamesForDate } from './soccer-api.js';
 import { tokenMatchesTeam } from './pick-resolver.js';
+import { parseSoccerProp, getSoccerGameBoxscore, resolveSoccerPlayerProp } from './soccer-props-resolver.js';
 
 function isGameFinal(game) {
   return game.status === 'final';
@@ -213,6 +214,35 @@ export async function resolveSoccerPendingPicks() {
         }
         if (!isGameFinal(soccerGame)) {
           console.log(`[pick-resolver-soccer] Pick #${pick.id} "${pick.matchup}": game not final (status: ${soccerGame.status})`);
+          continue;
+        }
+
+        // Player props resolve against the ESPN boxscore, not the final score.
+        if (parseSoccerProp(pick.pick)) {
+          let players;
+          try {
+            players = await getSoccerGameBoxscore(league, soccerGame.gameId ?? soccerGame.gamePk);
+          } catch (err) {
+            summary.errors.push(`Pick #${pick.id}: boxscore fetch failed — ${err.message}`);
+            continue;
+          }
+          const propRes = resolveSoccerPlayerProp(pick.pick, players);
+          if (!propRes?.result) {
+            console.log(
+              `[pick-resolver-soccer] Pick #${pick.id} "${pick.pick}" — prop unresolved ` +
+              `(${propRes?.error ?? 'no match'})`
+            );
+            continue;
+          }
+          await writePickResult(pick.id, propRes.result);
+          summary.resolved++;
+          if (propRes.result === 'win')  summary.wins++;
+          if (propRes.result === 'loss') summary.losses++;
+          if (propRes.result === 'push') summary.pushes++;
+          console.log(
+            `[pick-resolver-soccer] Pick #${pick.id} prop "${pick.pick}" → ${propRes.result.toUpperCase()} ` +
+            `(${propRes.playerName} ${propRes.propType}=${propRes.actual} vs ${propRes.line})`
+          );
           continue;
         }
 

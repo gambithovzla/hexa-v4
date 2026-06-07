@@ -176,10 +176,19 @@ Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑
 
 ## Features destacadas
 
-### Oracle multi-motor (MLB/NBA/NFL)
+### Oracle multi-motor (MLB/NBA/NFL/NHL/Soccer)
 - **MLB**: [oracle.js](server/oracle.js) — dual Claude + Grok, contexto rico con Statcast/Savant (rolling wOBA, CSW%, bat speed, umpire, bullpen ERA/WHIP individual, schedule fatigue). FROZEN.
 - **NBA**: [services/oracleNba.js](server/services/oracleNba.js) — Anthropic-only, net/off/def rating, pace, TS%, rest, injuries ESPN. Cap 68%.
 - **NFL**: [services/oracleNfl.js](server/services/oracleNfl.js) — Anthropic-only, EPA, success rate, PROE, **red zone TD%**, **3rd-down conv%**, **sack rate off/def**, QB status + backup QB, rest/short-week/off-bye + fatiga acumulativa, surface (turf/grass) + altitude (Denver 5,280ft), weather (no-dome), spread primario con key numbers 3/7, **8-signal coherence voting**. Cap 72%.
+- **NHL**: [services/oracleNhl.js](server/services/oracleNhl.js) — Anthropic-only, moneyline primario + puck line ±1.5, goal diff, special teams (PP%/PK%), goalie confirmado, rest/B2B. Cap 70%.
+- **Soccer**: [services/oracleSoccer.js](server/services/oracleSoccer.js) — Anthropic-only, mercado **3-vías** (1X2 + OU 2.5 + BTTS), form, goal diff, perfil de liga (avgGoals/drawPct/style), xG Understat (Big 5). Cap 62% (el más bajo — mercado más eficiente). 6 ligas (EPL, La Liga, Serie A, Bundesliga, Ligue 1, MLS).
+
+### Soccer — parity roadmap (Sprint 11.2–11.9, planificado)
+Soccer pasó el MVP (Oracle 3-vías, lifecycle, UI 5-deportes, board, live tracker, xG, sidecar scaffolded) pero le faltan los pilares de profundidad de MLB. Plan para cerrar la brecha (ver [docs/roadmap.md](docs/roadmap.md) y [CLAUDE.md](CLAUDE.md)):
+- **11.2** ✅ ML pre-training histórico ([soccer_history_loader.py](ml/hexa_ml/soccer_history_loader.py)): football-data.co.uk (resultados + closing odds 1X2, 5 ligas europeas) → modelos `soccer_*` entrenables sin esperar temporada, análogo nflverse. Flags `SOCCER_PRETRAIN_*`.
+- **11.3** profundidad de contexto pregame: **lineups/injuries/suspensiones** (API-Football), árbitro, congestión de calendario, weather, FBref (PPDA/pases progresivos), xG rolling, motivación.
+- **11.4** ✅ xG cableado: `soccerShadowPersistence` persiste xG/xGA reales de Understat (era null) → dataset con xG; `soccerShadowValidator` suma señal `xgAdvantage` con re-weighting sobre señales presentes.
+- **11.5** 🟡 player props — fundación (parser + resolver de boxscore ESPN) en [soccer-props-resolver.js](server/soccer-props-resolver.js); pendiente in-season: odds/board/modelo/UI. **11.6** ✅ parlay (`soccerParlayCandidates.js` → motor frozen; `POST /api/soccer/parlay`, flag `PARLAY_SYNERGY_SOCCER_ENABLED`). **11.7** Imperdible Soccer (pendiente — requiere 11.3 + modelo). **11.8** 🟡 CLV ([closing-line-capture-soccer.js](server/closing-line-capture-soccer.js)) + postmortem sport-aware; ensemble pendiente. **11.9** 🟡 smart signals ([hexaSoccerSignalsService.js](server/services/hexaSoccerSignalsService.js), en `meta.signals` de analyze) + ascensos/descensos pendientes.
 
 ### Pipeline ML propio (XGBoost + ensemble)
 Sidecar Python en `ml/` — desplegado en Railway como servicio independiente.

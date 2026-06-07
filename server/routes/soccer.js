@@ -30,12 +30,25 @@ import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtr
 import { upsertOracleSession } from './oracle-history.js';
 import { saveSoccerPickFeatures, recordSoccerShadowRun } from '../services/soccerShadowPersistence.js';
 import { buildHexaSoccerBoard } from '../services/hexaSoccerBoardService.js';
+import { buildSoccerParlayCandidates } from '../services/parlayEngine/soccerParlayCandidates.js';
+import { composeParlays } from '../services/parlayEngine/composer.js';
+import { buildCorrelationMatrix } from '../services/parlayEngine/correl.js';
+import { computeHitDistribution } from '../services/parlayEngine/hitMath.js';
+import { predictSoccerGameModel } from '../services/soccerMlClient.js';
+import { buildSoccerGameSignals } from '../services/hexaSoccerSignalsService.js';
 
 const router = Router();
 
 function soccerEnabled(req, res, next) {
   if (process.env.SOCCER_ANALYSIS_ENABLED !== 'true') {
     return res.status(503).json({ success: false, error: 'Soccer analysis is not yet enabled on this instance.' });
+  }
+  return next();
+}
+
+function soccerParlayEnabled(req, res, next) {
+  if (process.env.PARLAY_SYNERGY_SOCCER_ENABLED !== 'true') {
+    return res.status(503).json({ success: false, error: 'Soccer parlay synergy is not yet enabled on this instance.' });
   }
   return next();
 }
@@ -305,6 +318,7 @@ router.post('/analyze/game', soccerEnabled, verifyToken, requireAdmin, async (re
         pickId:       savedPick?.id ?? null,
         oddsSource,
         context_meta: context.context_meta ?? null,
+        signals:      buildSoccerGameSignals(context, resolvedOdds),
       },
     });
   } catch (err) {
@@ -470,6 +484,93 @@ router.get('/board', async (req, res) => {
     return res.json({ success: true, data });
   } catch (err) {
     console.error(`[soccer-route] board error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// ── POST /api/soccer/parlay ─────────────────────────────────────────────────────
+// Soccer Parlay Synergy (admin-only, flag PARLAY_SYNERGY_SOCCER_ENABLED). Builds
+// 1X2 / total / BTTS candidates for the slate and feeds them to the frozen,
+// sport-agnostic engine. Model probs come from the pre-trained soccer sidecar
+// (Sprint 11.2); each market falls back to the de-vigged market when a model
+// isn't trained or the sidecar is down — so the parlay still composes.
+router.post('/parlay', soccerParlayEnabled, verifyToken, requireAdmin, async (req, res) => {
+  const leagueSlug = validateLeague(req, res);
+  if (!leagueSlug) return;
+
+  const {
+    date = null, requestedLegs = 3, mode = 'safe', lang = 'en',
+  } = req.body ?? {};
+
+  try {
+    const lookupDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? date
+      : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const games = await getSoccerGamesForDate(leagueSlug, lookupDate);
+    if (!games?.length) {
+      return res.json({ success: true, sport: 'soccer', league: leagueSlug, mode, parlays: [], candidateCount: 0, note: 'no soccer games for the requested window' });
+    }
+
+    let oddsEvents = [];
+    try {
+      oddsEvents = await getSoccerGameOdds({ leagueSlug, date: lookupDate });
+    } catch (err) {
+      console.warn(`[soccer-route] parlay odds fetch failed (${leagueSlug}): ${err.message}`);
+    }
+
+    const entries = (await Promise.all(games.map(async (g) => {
+      const homeName = g.teams?.home?.name;
+      const awayName = g.teams?.away?.name;
+      const match = matchSoccerOddsToGame(oddsEvents, homeName, awayName);
+      const odds = match ? buildMarketOddsForGame(match) : null;
+      if (!odds) return null;
+
+      // Enrich leg probabilities with the pre-trained sidecar (admin-only / low
+      // frequency). Heavy (context build + 3 predicts); the fetchers cache and the
+      // circuit breaker shorts out if the sidecar is down → de-vig fallback.
+      let context = null;
+      let model = null;
+      try {
+        context = await buildSoccerGameContext({
+          leagueSlug,
+          homeTeamName: homeName,
+          awayTeamName: awayName,
+          gameDate: lookupDate,
+          marketOdds: odds,
+        });
+        model = await predictSoccerGameModel(context, {}, odds);
+      } catch (err) {
+        console.warn(`[soccer-route] parlay model enrich failed for ${g.gameId}: ${err.message}`);
+      }
+
+      return {
+        gameId: String(g.gameId ?? g.gamePk),
+        matchup: `${g.teams?.away?.abbreviation ?? 'AWAY'} @ ${g.teams?.home?.abbreviation ?? 'HOME'}`,
+        gameDate: lookupDate,
+        homeAbbr: g.teams?.home?.abbreviation,
+        awayAbbr: g.teams?.away?.abbreviation,
+        odds,
+        model, // { moneyline, total, btts } in [0,1], or null → de-vig fallback
+        dataQuality: Math.round((context?.context_meta?.overallCompleteness ?? 0.6) * 100),
+      };
+    }))).filter(Boolean);
+
+    const modelEnriched = entries.some(e => e.model != null);
+    const candidates = buildSoccerParlayCandidates(entries);
+    if (candidates.length < 2) {
+      return res.json({ success: true, sport: 'soccer', league: leagueSlug, mode, parlays: [], candidateCount: candidates.length, modelEnriched, note: 'not enough priced soccer candidates' });
+    }
+
+    const correlationMatrix = buildCorrelationMatrix(candidates);
+    const { parlays, meta } = composeParlays({ candidates, correlationMatrix, N: Number(requestedLegs) || 3, mode });
+    const enriched = parlays.map(p => ({
+      ...p,
+      hit_distribution: computeHitDistribution(p.legs.map(l => l.modelProbability / 100)),
+    }));
+
+    return res.json({ success: true, sport: 'soccer', league: leagueSlug, mode, lang, candidateCount: candidates.length, modelEnriched, parlays: enriched, meta });
+  } catch (err) {
+    console.error(`[soccer-route] parlay error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });
   }
 });

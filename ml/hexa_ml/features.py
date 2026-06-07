@@ -428,7 +428,11 @@ def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
         enriched = add_tennis_derived(df)
     else:
         enriched = add_derived(df)
-    cols = feature_columns(market)
+    # Dedupe while preserving order — some market column lists intentionally
+    # repeat a base column (e.g. soccer_total re-lists odds_ou_total). A
+    # duplicate name makes enriched[cols] select a 2-col frame, which breaks the
+    # per-column pd.to_numeric coercion below.
+    cols = list(dict.fromkeys(feature_columns(market)))
 
     for c in cols:
         if c not in enriched.columns:

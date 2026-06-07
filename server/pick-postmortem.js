@@ -76,13 +76,46 @@ Rules:
 - Keep every string single-line and plain text.
 - When lang=es, all values must be in Spanish. Keys stay in English.`;
 
+const SOCCER_SYSTEM_PROMPT = `You are H.E.X.A. Postmortem, a soccer (football) betting review engine.
+
+Your job is to explain why a pick won or lost after the match ended, and to extract adjustment signals that can help future model tuning.
+
+Respond ONLY with valid JSON. No markdown. No backticks. No preamble.
+
+Required JSON shape:
+{
+  "summary": "single paragraph under 320 chars",
+  "key_factors": ["1-4 short bullets as plain strings"],
+  "what_hexa_got_right": ["0-3 short strings"],
+  "what_hexa_missed": ["0-3 short strings"],
+  "adjustment_signals": ["1-4 concrete model tuning signals"],
+  "training_takeaway": "single sentence under 220 chars"
+}
+
+Rules:
+- Base everything on the provided pick, stored reasoning, final score, and soccer feature snapshot (goals for/against, goal diff, points, xG/xGA, de-vigged 3-way prices).
+- Markets are THREE-way (1X2: home win / draw / away win), plus over/under goals and BTTS (both teams to score). A Draw is a real outcome — NEVER a push. There are no pushes in 1X2.
+- When relevant, reference xG vs actual goals divergence (finishing variance), league scoring profile, recent form, and home advantage.
+- If the pick WON, explain why the logic held. If it LOST, what invalidated the thesis (e.g. an against-the-run-of-play goal, a red card, xG underperformance).
+- "adjustment_signals" must be useful for future system learning, not user advice.
+- Keep every string single-line and plain text.
+- When lang=es, all values must be in Spanish. Keys stay in English.`;
+
 function resolvePostmortemSport(sport) {
-  return String(sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+  const s = String(sport ?? 'mlb').toLowerCase();
+  if (s === 'nba') return 'nba';
+  if (s === 'soccer') return 'soccer';
+  return 'mlb';
 }
 
 function getSystemPrompt(sport) {
-  return resolvePostmortemSport(sport) === 'nba' ? NBA_SYSTEM_PROMPT : MLB_SYSTEM_PROMPT;
+  const s = resolvePostmortemSport(sport);
+  if (s === 'nba') return NBA_SYSTEM_PROMPT;
+  if (s === 'soccer') return SOCCER_SYSTEM_PROMPT;
+  return MLB_SYSTEM_PROMPT;
 }
+
+export { resolvePostmortemSport, getSystemPrompt };
 
 function normalizeLanguage(lang) {
   return String(lang ?? '').toLowerCase().startsWith('es') ? 'es' : 'en';

@@ -9,8 +9,8 @@
  * Mirrors nhlShadowPersistence.js. No Python ML client (soccer ML sidecar is a
  * later phase, like NBA 7e / NHL 10e). Uses the soccer-specific pick_features
  * columns added in runSoccerDatasetMigrations() (goals for/against, goal diff,
- * points, xG/xGA null, draw_price, btts_yes_price) plus the generic columns
- * common to all sports.
+ * points, xG/xGA from Understat, draw_price, btts_yes_price) plus the generic
+ * columns common to all sports.
  */
 
 import pool from '../db.js';
@@ -118,8 +118,11 @@ export async function saveSoccerPickFeatures({
         toNumber(home.goalsAgainst), toNumber(away.goalsAgainst),
         toNumber(home.goalDiff),    toNumber(away.goalDiff),
         toNumber(home.points),      toNumber(away.points),
-        null, null,   // home_xg, away_xg — always null until FBref
-        null, null,   // home_xga, away_xga
+        // xG/xGA from Understat (Big 5 leagues; null for MLS / fetch failure).
+        // The context builder enriches home.xG/xGA — persisting them (not null)
+        // is what feeds real xG into the training dataset (Sprint 11.4).
+        toNumber(home.xG),  toNumber(away.xG),
+        toNumber(home.xGA), toNumber(away.xGA),
         parseWinsFromForm(home.recentForm),
         parseWinsFromForm(away.recentForm),
         overallCompleteness,

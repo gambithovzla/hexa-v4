@@ -65,6 +65,20 @@ class Settings(BaseSettings):
         default="", validation_alias="NFL_PRETRAIN_SEASONS"
     )
 
+    # ── Soccer pre-training (football-data.co.uk history) ─────────────────
+    # When enabled, soccer market models train on leakage-free historical
+    # results + closing odds from football-data.co.uk (5 big European leagues)
+    # instead of waiting for ~25 resolved live picks. Live picks (once they
+    # exist) are concatenated on top automatically.
+    soccer_pretrain_enabled: bool = Field(
+        default=True, validation_alias="SOCCER_PRETRAIN_ENABLED"
+    )
+    # Empty → last 8 completed seasons. Accepts "2016-2023" or "2018,2019,2020"
+    # (season start years: 2023 = the 2023-24 campaign).
+    soccer_pretrain_seasons: str = Field(
+        default="", validation_alias="SOCCER_PRETRAIN_SEASONS"
+    )
+
     # ── Server ────────────────────────────────────────────────────────────
     port: int = Field(default=8000, validation_alias="PORT")
     log_level: str = Field(default="info", validation_alias="LOG_LEVEL")
