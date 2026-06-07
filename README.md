@@ -255,6 +255,10 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
   - **Parlay model enrichment**: `POST /api/nfl/parlay` conecta los 3 modelos pre-entrenados nflverse vía el nuevo `predictNflGameModel(context, gameMeta, marketOdds)` (`server/services/nflMlClient.js`) — fin del `model:null`; per-leg cae al de-vig cuando el sidecar está caído. Respuesta expone `modelEnriched`. Fix: `buildNflFeaturePayload` lee `qbStatus.statusKey` (antes `String(obj)` marcaba todo QB lesionado como activo).
   - **Live tracker flag**: `VITE_NFL_LIVE_TRACKER_ENABLED` (default ENABLED) controla el tab Live NFL en `sportCapabilities.js`.
   - **Imperdible NFL** (`IMPERDIBLE_NFL_ENABLED`, admin-only): lock-of-the-slate NFL. Gate **QB confirmado** (no lineup); convicción = modelo sidecar (0.45) + mercado de-vig (0.30) + shadow validator independiente (0.25, moneyline). `requireModelCertified` (sin modelo sidecar → no hay lock). Arbiter Opus con prompt NFL. Archivos `nflImperdible{Selector,Engine,Arbiter}.js` + `nfl-imperdible-prompts.js` + `routes/nfl-imperdible.js`. Persiste `picks` (`sport='nfl'`) + `imperdible_runs` (`sport='nfl'`). +15 tests. Thresholds necesitan calibración in-season.
+- ✅ **Sprint 9.6 — NFL off-season precision fixes** (2026-06-07): tres mejoras de calidad que no requieren temporada. Cero ediciones a frozen.
+  - **Advanced-stats season fallback** (`nfl-advanced-fetcher.js`): `getNflAdvancedTeamStats(season, { maxLookback })` camina un año atrás cuando la temporada pedida no tiene PBP nflverse aún (off-season / pre-Week 2) — usa los agregados de la última temporada completa en vez de dejar EPA/success/PROE en null. `isFallback`/`requestedSeason` en `context_meta.sources.advancedStats` + stale flag `advanced_stats_prior_season`.
+  - **Fix bug de fatiga** (`nfl-context-builder.js`): `consecutiveDaysPlayed` marcaba todo partido como fatiga (contaba gaps Thu/Sun/Mon ≤4d como racha; la NFL nunca juega días consecutivos). Reemplazado por `shortRestGames` (≤6 días de descanso en ventana 14d); `oracleNfl.js` muestra tag `SHORT REST`.
+  - **Shadow validator re-weighting** (`nflShadowValidator.js`): señales ausentes retornan null y su peso se redistribuye sobre las presentes en vez de inyectar un 0.5 neutro que aplanaba off-season a coin-flip (situational+trenches = 24% colapsaban). Nuevo `breakdown.signalCoverage`. +7 tests.
 
 ### Estado en producción
 
@@ -285,7 +289,7 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 | Calibration/ROI observables | 8.5 | 6.0 | 6.5 | 8.0 |
 | Isolation por deporte | 8.5 | 8.0 | 8.0 | 8.5 |
 
-NFL post-9.5: EPA/PROE + red zone + 3rd-down + trenches + surface/altitude + signal coherence (9.4); parlay model-driven (3 modelos pre-entrenados), Imperdible NFL (lock-of-the-slate, gate QB) y toggle live tracker (9.5). Data depth alcanza paridad MLB (8.5); market coverage sube a 8.0 (parlay con modelos reales). Calibración del Imperdible y lifecycle mejorarán con picks reales en temporada (sept 2026).
+NFL post-9.6: EPA/PROE + red zone + 3rd-down + trenches + surface/altitude + signal coherence (9.4); parlay model-driven (3 modelos pre-entrenados), Imperdible NFL (lock-of-the-slate, gate QB) y toggle live tracker (9.5); advanced-stats season fallback + fix bug de fatiga + shadow validator re-ponderado sobre señales presentes (9.6 — el contexto NFL ya es robusto en off-season, no degrada a coin-flip). Data depth alcanza paridad MLB (8.5); market coverage sube a 8.0 (parlay con modelos reales). Calibración del Imperdible y lifecycle mejorarán con picks reales en temporada (sept 2026).
 
 ---
 
