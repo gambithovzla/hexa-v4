@@ -50,6 +50,21 @@ export async function buildPostmortemGameSummary(pickRow, sport = 'mlb') {
     };
   }
 
+  // Soccer: no live play-by-play feed (and 1X2 has no push). The final result
+  // lives on the pick itself; the feature snapshot carries the rest. Minimal,
+  // network-free summary — mirrors the NBA "no GUMBO" shape.
+  if (sport === 'soccer') {
+    return {
+      gamePk,
+      gameDate,
+      sport: 'soccer',
+      league: pickRow.league ?? null,
+      pickProgress: null,
+      pickOutcomeContext: null,
+      recentPlays: [],
+    };
+  }
+
   let liveData = null;
   let playByPlay = null;
   if (gamePk) {
@@ -127,6 +142,33 @@ export function buildPostmortemFeatureSnapshot(pickRow, sport = 'mlb') {
       odds_ml_home: pickRow.odds_ml_home,
       odds_ml_away: pickRow.odds_ml_away,
       odds_ou_total: pickRow.odds_ou_total,
+    };
+  }
+
+  if (sport === 'soccer') {
+    return {
+      sport: 'soccer',
+      gamePk,
+      gameDate,
+      league: pickRow.league ?? null,
+      home_goals_for: pickRow.home_goals_for,
+      away_goals_for: pickRow.away_goals_for,
+      home_goals_against: pickRow.home_goals_against,
+      away_goals_against: pickRow.away_goals_against,
+      home_goal_diff: pickRow.home_goal_diff,
+      away_goal_diff: pickRow.away_goal_diff,
+      home_points: pickRow.home_points,
+      away_points: pickRow.away_points,
+      home_xg: pickRow.home_xg,
+      away_xg: pickRow.away_xg,
+      home_xga: pickRow.home_xga,
+      away_xga: pickRow.away_xga,
+      draw_price: pickRow.draw_price,
+      btts_yes_price: pickRow.btts_yes_price,
+      odds_ml_home: pickRow.odds_ml_home,
+      odds_ml_away: pickRow.odds_ml_away,
+      odds_ou_total: pickRow.odds_ou_total,
+      context_completeness: pickRow.context_completeness,
     };
   }
 

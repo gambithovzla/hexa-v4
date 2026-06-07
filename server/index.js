@@ -3681,7 +3681,8 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
       });
     }
 
-    const pickSport = String(pickRow.sport ?? 'mlb').toLowerCase() === 'nba' ? 'nba' : 'mlb';
+    const rawPickSport = String(pickRow.sport ?? 'mlb').toLowerCase();
+    const pickSport = ['nba', 'soccer'].includes(rawPickSport) ? rawPickSport : 'mlb';
     const gameSummary = await buildPostmortemGameSummary(pickRow, pickSport);
     const featureSnapshot = buildPostmortemFeatureSnapshot(pickRow, pickSport);
 
