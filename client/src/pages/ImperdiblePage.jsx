@@ -304,11 +304,11 @@ function REASON_TEXT(reason, lang) {
   return map[reason] || reason;
 }
 
-function Metric({ label, value, big, small }) {
+function Metric({ label, value, big, small, color }) {
   return (
     <Box>
       <Typography sx={{ fontFamily: MONO, fontSize: 10, color: MUTED, letterSpacing: 1 }}>{label}</Typography>
-      <Typography sx={{ fontWeight: 800, fontSize: big ? 28 : small ? 13 : 18, color: big ? GREEN : 'var(--ink-0)' }}>{value}</Typography>
+      <Typography sx={{ fontWeight: 800, fontSize: big ? 28 : small ? 13 : 18, color: color ?? (big ? GREEN : 'var(--ink-0)') }}>{value}</Typography>
     </Box>
   );
 }
@@ -322,11 +322,16 @@ function HistoryView({ history, lang }) {
         {T(lang, 'HISTORIAL & EQUITY', 'HISTORY & EQUITY')}
       </Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(5,1fr)' }, gap: 2, mb: 2 }}>
-        <Metric label="W-L-P" value={`${eq.wins ?? 0}-${eq.losses ?? 0}-${eq.pushes ?? 0}`} />
-        <Metric label={T(lang, 'Aciertos', 'Hit rate')} value={fmtPct(eq.winRate)} />
-        <Metric label="ROI" value={fmtPct(eq.roi)} />
-        <Metric label={T(lang, 'Unidades', 'Units')} value={eq.unitProfit != null ? `${eq.unitProfit >= 0 ? '+' : ''}${Number(eq.unitProfit).toFixed(2)}u` : '—'} />
-        <Metric label="Max DD" value={eq.maxDrawdown != null ? `${Number(eq.maxDrawdown).toFixed(2)}u` : '—'} />
+        <Metric label="W-L-P" value={`${eq.wins ?? 0}-${eq.losses ?? 0}-${eq.pushes ?? 0}`}
+          color={(eq.wins ?? 0) > (eq.losses ?? 0) ? GREEN : (eq.losses ?? 0) > (eq.wins ?? 0) ? RED : 'var(--ink-0)'} />
+        <Metric label={T(lang, 'Aciertos', 'Hit rate')} value={fmtPct(eq.winRate)}
+          color={(eq.winRate ?? 0) >= 0.6 ? GREEN : (eq.winRate ?? 0) < 0.5 ? RED : AMBER} />
+        <Metric label="ROI" value={fmtPct(eq.roi)}
+          color={(eq.roi ?? 0) > 0 ? GREEN : (eq.roi ?? 0) < 0 ? RED : 'var(--ink-0)'} />
+        <Metric label={T(lang, 'Unidades', 'Units')} value={eq.unitProfit != null ? `${eq.unitProfit >= 0 ? '+' : ''}${Number(eq.unitProfit).toFixed(2)}u` : '—'}
+          color={eq.unitProfit != null ? (eq.unitProfit > 0 ? GREEN : eq.unitProfit < 0 ? RED : 'var(--ink-0)') : MUTED} />
+        <Metric label="Max DD" value={eq.maxDrawdown != null ? `${Number(eq.maxDrawdown).toFixed(2)}u` : '—'}
+          color={eq.maxDrawdown != null && eq.maxDrawdown < 0 ? RED : 'var(--ink-0)'} />
       </Box>
       {runs.map((r) => (
         <Box key={r.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.6, borderBottom: `1px solid ${BORDER}` }}>
