@@ -26,6 +26,7 @@ import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp } from '../services/nflMlClient.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
+import { buildHexaNflBoard } from '../services/hexaNflBoardService.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
 import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
@@ -594,6 +595,21 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
     });
   } catch (err) {
     console.error(`[nfl-route] props/board error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// ── GET /api/nfl/board ─────────────────────────────────────────────────────────
+// Daily NFL "pizarra" — slate + division leaders + point-diff. Public read like
+// the NBA/soccer boards (no auth), cached until 04:00 ET.
+router.get('/board', async (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? req.query.date : null;
+  const force = req.query.force === '1' || req.query.force === 'true';
+  try {
+    const data = await buildHexaNflBoard({ date, force });
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error(`[nfl-route] board error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });
   }
 });

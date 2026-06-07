@@ -526,7 +526,8 @@ export default function App() {
   }
   if (window.location.pathname === '/props') {
     const token = localStorage.getItem('hexa_token');
-    return <PlayerPropsPage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
+    const propsSport = new URLSearchParams(window.location.search).get('sport') === 'nfl' ? 'nfl' : 'mlb';
+    return <PlayerPropsPage token={token} lang={lang} sport={propsSport} onBack={() => { window.location.href = '/'; }} />;
   }
 
 
