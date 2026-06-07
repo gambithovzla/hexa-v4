@@ -40,6 +40,7 @@ import { resolveParlayRunById, resolvePendingParlays } from './services/parlayRe
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
 import { captureClosingLines } from './closing-line-capture.js';
+import { captureSoccerClosingLines } from './closing-line-capture-soccer.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
 import { buildNbaPickLiveProgressEntry } from './pick-tracker-nba.js';
@@ -5264,6 +5265,13 @@ runMigrations()
           console.log(`[closing-line] Scheduled capture triggered (ET hour: ${etHour})`);
           captureClosingLines().catch(err => {
             console.error('[closing-line] Scheduled capture failed:', err.message);
+          });
+        }
+        // Soccer closing-line capture runs across a wider window (European
+        // matches kick off ~07:00–17:00 ET; MLS evenings) when soccer is on.
+        if (process.env.SOCCER_ANALYSIS_ENABLED === 'true') {
+          captureSoccerClosingLines().catch(err => {
+            console.error('[closing-line-soccer] Scheduled capture failed:', err.message);
           });
         }
       }, TWO_HOURS).unref();
