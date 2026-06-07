@@ -47,14 +47,8 @@ function normaliseTeamMap(teams) {
   return byAbbr;
 }
 
-/**
- * getNflAdvancedTeamStats(season) → { season, fetchedAt, byAbbr } or null.
- * byAbbr is keyed by canonical ESPN abbr; each value is
- * { epa_off, epa_def, success_rate_off, success_rate_def, proe, plays_per_game, games_played }.
- */
-export async function getNflAdvancedTeamStats(season) {
-  if (!ML_SIDECAR_ENABLED || !ML_API_URL || season == null) return null;
-
+/** Fetch a single season's stats from the sidecar. Null on any failure/empty. */
+async function _fetchSeasonStats(season) {
   const cacheKey = `nfl_adv:${season}`;
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
@@ -95,6 +89,38 @@ export async function getNflAdvancedTeamStats(season) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * getNflAdvancedTeamStats(season, { maxLookback }) → { season, requestedSeason,
+ * isFallback, fetchedAt, byAbbr } or null.
+ *
+ * byAbbr is keyed by canonical ESPN abbr; each value is
+ * { epa_off, epa_def, success_rate_off, success_rate_def, proe, plays_per_game, games_played }.
+ *
+ * Off-season / early-season fallback: nflverse has no play-by-play for the
+ * requested season until ~Week 2, so a request for an empty season walks back
+ * one year (default) to the last completed season's aggregates — a defensible
+ * prior that keeps the Oracle context rich instead of dropping EPA to null. The
+ * result is tagged `isFallback: true` and carries the original `requestedSeason`
+ * so context_meta can surface that the numbers are last-season's.
+ */
+export async function getNflAdvancedTeamStats(season, { maxLookback = 1 } = {}) {
+  if (!ML_SIDECAR_ENABLED || !ML_API_URL || season == null) return null;
+
+  const requested = Number(season);
+  for (let back = 0; back <= maxLookback; back++) {
+    const trySeason = requested - back;
+    const result = await _fetchSeasonStats(trySeason);
+    if (result && Object.keys(result.byAbbr ?? {}).length > 0) {
+      if (back > 0) {
+        console.log(`[nfl-advanced] season ${requested} empty → fell back to ${trySeason}`);
+        return { ...result, requestedSeason: requested, isFallback: true };
+      }
+      return { ...result, requestedSeason: requested, isFallback: false };
+    }
+  }
+  return null;
 }
 
 /** Lookup one team's advanced stats by canonical abbr. Null if absent. */

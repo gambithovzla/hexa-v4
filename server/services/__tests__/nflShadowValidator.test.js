@@ -63,6 +63,42 @@ test('low data completeness reduces confidence', () => {
   assert.ok(poor < full);
 });
 
+test('absent situational/trenches signals are re-weighted out, not diluted to 0.5', () => {
+  // With only strength carrying a strong edge and the rest neutral/absent, the
+  // re-normalization should let strength express its full discrimination instead
+  // of being dragged toward 0.5 by 24% of dead (situational+trenches) weight.
+  const r = calculateNflShadowScore(ctx({ home: { pointDiff: 100 }, away: { pointDiff: -40 } }), meta);
+  // signalCoverage = sum of present weights (strength+qb+injuries+form = 0.72),
+  // situational/trenches/rest absent.
+  assert.equal(r.breakdown.signalCoverage, 0.72);
+  assert.equal(r.breakdown.sitAdv, null);
+  assert.equal(r.breakdown.trAdv, null);
+  // The renormalized score is more decisive than the diluted version would be.
+  assert.ok(r.score > 75, `expected decisive score, got ${r.score}`);
+});
+
+test('EPA + situational + trenches present raises signal coverage to full', () => {
+  const r = calculateNflShadowScore(ctx({
+    home: { epaOff: 0.12, epaDef: -0.05, redZoneTdPctOff: 0.65, redZoneTdPctDef: 0.50, thirdDownConvOff: 0.45, thirdDownConvDef: 0.35, sackRateOff: 0.05, sackRateDef: 0.09, isOffBye: true },
+    away: { epaOff: -0.03, epaDef: 0.04, redZoneTdPctOff: 0.52, redZoneTdPctDef: 0.62, thirdDownConvOff: 0.36, thirdDownConvDef: 0.42, sackRateOff: 0.08, sackRateDef: 0.06, isShortWeek: true },
+  }), meta);
+  // strength+qb+situational+trenches+injuries+form+rest all present = 1.00
+  assert.equal(r.breakdown.signalCoverage, 1);
+  assert.ok(r.breakdown.sitAdv != null && r.breakdown.trAdv != null);
+  assert.equal(r.predicted_winner_abbr, 'KC');
+});
+
+test('all signals absent falls back to a coin flip plus home boost', () => {
+  const bare = {
+    home: { teamId: 12, teamAbbr: 'KC' },
+    away: { teamId: 2, teamAbbr: 'BUF' },
+    context_meta: { overallCompleteness: 0.2 },
+  };
+  const r = calculateNflShadowScore(bare, meta);
+  assert.ok(r.score >= 50 && r.score <= 55, `near coin-flip, got ${r.score}`);
+  assert.equal(r.predicted_winner_abbr, 'KC'); // home boost breaks the tie
+});
+
 test('exposes a stable model key', () => {
   assert.equal(NFL_SHADOW_MODEL_KEY, 'nfl_shadow_validator_v1');
 });

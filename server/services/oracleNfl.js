@@ -95,6 +95,7 @@ function describeScheduleLine(side) {
   if (side?.isShortWeek) tags.push('SHORT WEEK (-fatigue/prep)');
   const fat = side?.scheduleFatigue;
   if (fat?.gamesLast14d >= 3 && fat?.roadGamesLast14d >= 2) tags.push(`FATIGUE (${fat.gamesLast14d}g/14d, ${fat.roadGamesLast14d} road)`);
+  else if (fat?.shortRestGames >= 1) tags.push(`SHORT REST (${fat.shortRestGames} game(s) on ≤6 days)`);
   const restStr = rest != null ? `${rest} days rest` : 'rest n/a';
   return `  Schedule: ${restStr}${tags.length ? ` — ${tags.join(', ')}` : ''}`;
 }

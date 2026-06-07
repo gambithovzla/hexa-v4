@@ -60,3 +60,29 @@ test('getNflAdvancedTeamStats never throws on network error', async () => {
   const res = await getNflAdvancedTeamStats(20238);
   assert.equal(res, null);
 });
+
+test('empty requested season falls back to the prior season', async () => {
+  const seasons = [];
+  global.fetch = async (url) => {
+    const m = String(url).match(/season=(\d+)/);
+    const s = m ? Number(m[1]) : null;
+    seasons.push(s);
+    // 30000 (the "current" season) is empty; 29999 (prior) has data.
+    if (s === 30000) return { ok: true, json: async () => ({ season: 30000, teams: {} }) };
+    return { ok: true, json: async () => ({ season: 29999, teams: { KC: { team: 'KC', epa_off: 0.2 } } }) };
+  };
+  const res = await getNflAdvancedTeamStats(30000);
+  assert.equal(res.isFallback, true);
+  assert.equal(res.requestedSeason, 30000);
+  assert.equal(res.season, 29999);
+  assert.equal(res.byAbbr.KC?.epa_off, 0.2);
+  assert.deepEqual(seasons, [30000, 29999]); // tried current, then walked back one year
+});
+
+test('non-empty requested season does not fall back', async () => {
+  global.fetch = async () => ({ ok: true, json: async () => ({ season: 30001, teams: { KC: { team: 'KC', epa_off: 0.1 } } }) });
+  const res = await getNflAdvancedTeamStats(30001);
+  assert.equal(res.isFallback, false);
+  assert.equal(res.requestedSeason, 30001);
+  assert.equal(res.byAbbr.KC?.epa_off, 0.1);
+});

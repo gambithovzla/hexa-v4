@@ -154,27 +154,42 @@ function lookupTeamStats(teamStats, teamId, teamAbbr) {
   return null;
 }
 
-/** Cumulative schedule fatigue from last N games: road games + consecutive day streaks. */
+/**
+ * Cumulative schedule fatigue from the recent games: games & road games in the
+ * last 14 days plus short-rest games.
+ *
+ * NFL teams never play on back-to-back calendar days, so the MLB notion of
+ * "consecutive days played" is meaningless here (every Thu/Sun/Mon gap is 3-4
+ * days, which the old ≤4-day streak check wrongly flagged as fatigue for every
+ * single game). The real NFL fatigue signal is the SHORT WEEK: a game played on
+ * ≤6 days rest from the prior game. We count those within the 14-day window.
+ */
 function buildFatigueBlock(recentGames, gameDate) {
-  if (!recentGames?.length) return { gamesLast14d: 0, roadGamesLast14d: 0, consecutiveDaysPlayed: 0 };
+  const empty = { gamesLast14d: 0, roadGamesLast14d: 0, shortRestGames: 0 };
+  if (!recentGames?.length) return empty;
   const cutoff = gameDate ? new Date(new Date(gameDate).getTime() - 14 * 24 * 60 * 60 * 1000) : null;
   const recent = cutoff
     ? recentGames.filter(g => g.game_date && new Date(g.game_date) >= cutoff)
-    : recentGames.slice(0, 4);
+    : recentGames.slice(0, 3);
   const roadGames = recent.filter(g => g.home_away === 'away').length;
-  let streak = 0;
-  let prev = null;
-  for (const g of recent) {
-    if (!g.game_date) continue;
-    const curr = new Date(g.game_date);
-    if (prev == null || Math.abs(diffDays(g.game_date, prev)) <= 4) streak++;
-    else break;
-    prev = g.game_date;
+
+  // Walk chronologically and count games that followed the prior game on short
+  // rest (≤6 days), restricted to those that fall inside the 14-day window.
+  const chrono = recentGames
+    .filter(g => g.game_date)
+    .slice()
+    .sort((a, b) => new Date(a.game_date) - new Date(b.game_date));
+  let shortRestGames = 0;
+  for (let i = 1; i < chrono.length; i++) {
+    const gap = diffDays(chrono[i - 1].game_date, chrono[i].game_date);
+    if (gap == null || gap > 6) continue;
+    if (!cutoff || new Date(chrono[i].game_date) >= cutoff) shortRestGames++;
   }
+
   return {
     gamesLast14d: recent.length,
     roadGamesLast14d: roadGames,
-    consecutiveDaysPlayed: streak,
+    shortRestGames,
   };
 }
 
@@ -316,6 +331,7 @@ export async function buildNflGameContext({
   const situationalOk = !!(home.redZoneTdPctOff != null && away.redZoneTdPctOff != null);
   const trenchesOk = !!(home.sackRateDef != null && away.sackRateDef != null);
   if (!advancedOk) staleFlags.push('advanced_stats_unavailable');
+  else if (advancedStats?.isFallback) staleFlags.push('advanced_stats_prior_season');
   if (!situationalOk) staleFlags.push('situational_stats_unavailable');
 
   const completeness = {
@@ -352,6 +368,10 @@ export async function buildNflGameContext({
         ok: advancedOk,
         source: advancedStats ? 'nflverse-sidecar' : 'unavailable',
         season: advancedStats?.season ?? advSeason ?? null,
+        requestedSeason: advSeason ?? null,
+        // true when the requested season had no nflverse PBP yet (off-season /
+        // early season) and we fell back to the last completed season.
+        isFallback: advancedStats?.isFallback ?? false,
         fetchedAt: advancedStats?.fetchedAt ?? null,
       },
       recentForm: { ok: !!(homeGames.length && awayGames.length), source: 'espn', n: { home: homeGames.length, away: awayGames.length } },
