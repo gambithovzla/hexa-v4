@@ -162,3 +162,25 @@ export async function predictSoccerBtts(features) {
   if (!_guard()) return null;
   return _post('/predict/soccer_btts', features ?? {});
 }
+
+/**
+ * Predict all three soccer game markets at once for the parlay builder.
+ * Returns { moneyline: P(home win), total: P(over), btts: P(yes) } in [0,1]
+ * (null per market when the sidecar is down or that model isn't trained yet),
+ * or null when nothing resolved. Mirrors predictNflGameModel.
+ */
+export async function predictSoccerGameModel(context = {}, gameMeta = {}, marketOdds = {}) {
+  if (!_guard()) return null;
+  const features = buildSoccerFeaturePayload(context, gameMeta, marketOdds);
+  const [ml, tot, bt] = await Promise.all([
+    predictSoccerMoneyline(features),
+    predictSoccerTotal(features),
+    predictSoccerBtts(features),
+  ]);
+  const prob = r => (r && typeof r.probability === 'number' ? r.probability : null);
+  const moneyline = prob(ml);
+  const total = prob(tot);
+  const btts = prob(bt);
+  if (moneyline == null && total == null && btts == null) return null;
+  return { moneyline, total, btts };
+}
