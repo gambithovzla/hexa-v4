@@ -23,6 +23,7 @@ import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../n
 import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { parseNflProp } from '../nfl-props-resolver.js';
+import { buildNflPropFeaturePayload, predictNflProp } from '../services/nflMlClient.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
 import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
@@ -460,6 +461,8 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireAdmin, async (req, 
 // ML model probability is intentionally null until the dedicated NFL-prop model
 // ships (mirrors MLB props gating). Flag: NFL_PROPS_ENABLED.
 
+const MAX_MODEL_PREDICTIONS = 40; // cap sidecar calls per game on the admin board
+
 function todayEt() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
@@ -527,11 +530,27 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
             impliedProb: o.impliedProb,
             fairProb: o.fairProb,
             vig: o.vig,
-            modelProb: null, // gated until the NFL-prop ML model ships
+            modelProb: null, // filled below when the nfl_prop model is live
             edge: null,
           }))
           .sort((a, b) =>
             a.propKind.localeCompare(b.propKind) || String(a.playerName).localeCompare(String(b.playerName)));
+
+        // Admin board: attach the pooled nfl_prop model probability when the
+        // sidecar is up and the model is trained. predictNflProp returns null
+        // (circuit open / disabled / no artifact) → modelProb stays null.
+        const top = props.slice(0, MAX_MODEL_PREDICTIONS);
+        await Promise.all(top.map(async (p) => {
+          const payload = buildNflPropFeaturePayload({
+            propKind: p.propKind, side: p.side, line: p.line,
+            oddsAmerican: p.oddsAmerican, impliedProb: p.impliedProb, fairProb: p.fairProb,
+          });
+          const pred = await predictNflProp(payload);
+          if (pred && typeof pred.probability === 'number') {
+            p.modelProb = Math.round(pred.probability * 1e4) / 1e4;
+            if (p.impliedProb != null) p.edge = Math.round((p.modelProb - p.impliedProb) * 1e4) / 1e4;
+          }
+        }));
       }
       boardGames.push({
         gameId: game.game_id,
@@ -550,7 +569,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
       date,
       sport: 'nfl',
       mlPublic: false,
-      mlEnabled: false,
+      mlEnabled: boardGames.some(g => g.props.some(p => p.modelProb != null)),
       games: boardGames,
       oraclePropPicks,
       oddsAvailable,

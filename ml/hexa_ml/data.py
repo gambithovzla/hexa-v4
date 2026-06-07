@@ -70,6 +70,9 @@ OPTIONAL_FEATURE_COLUMNS = [
     "wind_mph",
     "spread_close", "total_close",
     "injuries_home_severe", "injuries_away_severe",
+    # NFL player-prop columns (Fase 2 — pooled nfl_prop market)
+    "nfl_prop_fair_prob",
+    "nfl_prop_player_season_avg", "nfl_prop_player_recent_avg", "nfl_prop_player_games",
     # Soccer-specific columns (Sprint 11 — soccer_* markets)
     "home_goals_for", "away_goals_for",
     "home_goals_against", "away_goals_against",
@@ -213,6 +216,8 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         out = df[df["market_type"].isin(["spread", "runline"])].copy()
     elif market == "nfl_total":
         out = df[df["market_type"].isin(["overunder", "totals"])].copy()
+    elif market == "nfl_prop":
+        out = df[df["market_type"] == "prop"].copy()
     elif market == "soccer_moneyline":
         out = df[df["market_type"] == "moneyline"].copy()
     elif market == "soccer_total":
@@ -244,6 +249,9 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         out = out[out["home_score"].notna() & out["away_score"].notna() & out["spread_close"].notna()]
     elif market == "nfl_total":
         out = out[out["total_runs"].notna() & out["total_close"].notna()]
+    elif market == "nfl_prop":
+        out = out[out["line"].notna()]
+        out = out[out["result"].astype(str).str.lower().isin(["win", "won", "loss", "lost"])]
     elif market == "soccer_moneyline":
         out = out[out["home_score"].notna() & out["away_score"].notna()]
     elif market == "soccer_total":
@@ -294,7 +302,7 @@ def make_target(df: pd.DataFrame, market: str) -> pd.Series:
         h = df["home_score"].astype(float)
         a = df["away_score"].astype(float)
         return ((h >= 1) & (a >= 1)).astype(int)
-    if market.startswith("prop_"):
+    if market.startswith("prop_") or market == "nfl_prop":
         normalized = df["result"].astype(str).str.lower()
         return normalized.isin(["win", "won"]).astype(int)
     if market.startswith("tennis_"):

@@ -155,6 +155,23 @@ PROP_NUMERIC_FEATURES = [
     "prop_implied_prob",
 ]
 
+# NFL player props (pooled "nfl_prop" market). Pick-aligned: the model predicts
+# P(the bet side wins). Player season/recent averages are null until the nflverse
+# player-stats fetcher lands (Fase 2.1) — XGBoost tolerates the NaNs; the strongest
+# present signal is the de-vigged market fair prob and the average-vs-line gap.
+NFL_PROP_KINDS = (
+    "pass_yds", "pass_tds", "pass_completions", "pass_attempts", "pass_interceptions",
+    "rush_yds", "rush_attempts", "reception_yds", "receptions", "anytime_td",
+)
+NFL_PROP_KIND_ONEHOT = [f"propkind_{k}" for k in NFL_PROP_KINDS]
+NFL_PROP_FEATURES = [
+    "line", "prop_side_over",
+    "prop_implied_prob", "nfl_prop_fair_prob",
+    "nfl_prop_player_season_avg", "nfl_prop_player_recent_avg", "nfl_prop_player_games",
+    "nfl_prop_season_minus_line", "nfl_prop_recent_minus_line",
+    *NFL_PROP_KIND_ONEHOT,
+]
+
 
 def _american_to_implied_prob(odds: pd.Series) -> pd.Series:
     """Convert American moneyline odds to implied probability."""
@@ -234,6 +251,9 @@ def feature_columns(market: str) -> list[str]:
     runline / moneyline don't need the line.
     NFL markets use NFL-specific columns.
     """
+    if market == "nfl_prop":
+        return list(NFL_PROP_FEATURES)
+
     if market.startswith("nfl_"):
         cols = list(NFL_BASE_NUMERIC) + list(NFL_BOOL_FEATURES) + list(NFL_DERIVED_FEATURES)
         if market == "nfl_spread":
@@ -287,6 +307,35 @@ def add_nfl_derived(df: pd.DataFrame) -> pd.DataFrame:
     for col in NFL_BOOL_FEATURES:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    return out
+
+
+def add_nfl_prop_derived(df: pd.DataFrame) -> pd.DataFrame:
+    """Append NFL player-prop computed features (pooled across prop kinds)."""
+    out = df.copy()
+
+    out["prop_side_over"] = (
+        out.get("side", pd.Series([None] * len(out), index=out.index))
+        .astype(str)
+        .str.lower()
+        .map({"over": 1.0, "under": 0.0})
+    )
+
+    # Prefer a stored implied prob; otherwise derive it from the American odds.
+    implied = _col_or_nan(out, "prop_implied_prob")
+    derived_implied = _american_to_implied_prob(_col_or_nan(out, "prop_odds_american"))
+    out["prop_implied_prob"] = implied.fillna(derived_implied)
+
+    line = _col_or_nan(out, "line")
+    season = _col_or_nan(out, "nfl_prop_player_season_avg")
+    recent = _col_or_nan(out, "nfl_prop_player_recent_avg")
+    out["nfl_prop_season_minus_line"] = season - line
+    out["nfl_prop_recent_minus_line"] = recent - line
+
+    kind = out.get("prop_kind", pd.Series([None] * len(out), index=out.index)).astype(str).str.lower()
+    for k in NFL_PROP_KINDS:
+        out[f"propkind_{k}"] = (kind == k).astype(float)
 
     return out
 
@@ -369,7 +418,9 @@ def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
     Columns missing from the input are filled with NaN so older snapshots
     still produce the right schema.
     """
-    if market.startswith("nfl_"):
+    if market == "nfl_prop":
+        enriched = add_nfl_prop_derived(df)
+    elif market.startswith("nfl_"):
         enriched = add_nfl_derived(df)
     elif market.startswith("soccer_"):
         enriched = add_soccer_derived(df)

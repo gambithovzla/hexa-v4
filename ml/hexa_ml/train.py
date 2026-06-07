@@ -39,12 +39,17 @@ MARKETS = (
 )
 
 NFL_MARKETS    = ("nfl_moneyline", "nfl_spread", "nfl_total")
+# Pooled player-prop market. Separate from NFL_MARKETS because it does NOT
+# pre-train from nflverse (no historical prop lines exist there) — it trains
+# only from resolved live picks (sport='nfl', market_type='prop').
+NFL_PROP_MARKETS = ("nfl_prop",)
 SOCCER_MARKETS = ("soccer_moneyline", "soccer_total", "soccer_btts")
 TENNIS_MARKETS = ("tennis_moneyline", "tennis_set_handicap", "tennis_total_games")
 
 # Market → sport (for dataset loading)
 MARKET_SPORT = {
     **{m: "nfl"    for m in NFL_MARKETS},
+    **{m: "nfl"    for m in NFL_PROP_MARKETS},
     **{m: "soccer" for m in SOCCER_MARKETS},
     **{m: "tennis" for m in TENNIS_MARKETS},
 }
@@ -124,7 +129,7 @@ def train_one_market(
     brier_test = brier(y_test, p_test)
     ll_test = logloss(y_test, p_test)
 
-    if market.startswith("prop_"):
+    if market.startswith("prop_") or market == "nfl_prop":
         odds_col = "prop_odds_american"
     elif market in {"moneyline", "runline", "nfl_moneyline"}:
         odds_col = "odds_ml_home"
@@ -184,10 +189,15 @@ def train_all(
     out_path.mkdir(parents=True, exist_ok=True)
 
     # Separate markets by sport — each loads its own isolated dataset.
-    nfl_markets    = [m for m in markets if m in NFL_MARKETS]
-    soccer_markets = [m for m in markets if m in SOCCER_MARKETS]
-    tennis_markets = [m for m in markets if m in TENNIS_MARKETS]
-    std_markets    = [m for m in markets if m not in NFL_MARKETS and m not in SOCCER_MARKETS and m not in TENNIS_MARKETS]
+    nfl_markets      = [m for m in markets if m in NFL_MARKETS]
+    nfl_prop_markets = [m for m in markets if m in NFL_PROP_MARKETS]
+    soccer_markets   = [m for m in markets if m in SOCCER_MARKETS]
+    tennis_markets   = [m for m in markets if m in TENNIS_MARKETS]
+    std_markets      = [
+        m for m in markets
+        if m not in NFL_MARKETS and m not in NFL_PROP_MARKETS
+        and m not in SOCCER_MARKETS and m not in TENNIS_MARKETS
+    ]
 
     # Load standard dataset once for all non-NFL/soccer markets
     df = None
@@ -201,7 +211,7 @@ def train_all(
     # concatenated per-market so models can train before any live pick resolves.
     nfl_df = None
     nfl_pretrain_years: list[int] | None = None
-    if nfl_markets and not csv_path:
+    if (nfl_markets or nfl_prop_markets) and not csv_path:
         logger.info("Loading NFL live dataset…")
         try:
             nfl_df = load_dataset(sport="nfl")
@@ -209,7 +219,7 @@ def train_all(
         except Exception as exc:
             logger.warning("NFL live dataset load failed (%s) — relying on nflverse history", exc)
             nfl_df = None
-        if settings.nfl_pretrain_enabled:
+        if nfl_markets and settings.nfl_pretrain_enabled:
             try:
                 from . import nflverse_loader
                 if nflverse_loader.is_available():
@@ -296,6 +306,15 @@ def train_all(
             combined = parts[0] if len(parts) == 1 else pd.concat(parts, ignore_index=True)
             _train_market(combined, market)
 
+    # NFL player props: live-only (no nflverse pre-training — no historical lines).
+    if nfl_prop_markets:
+        for market in nfl_prop_markets:
+            if nfl_df is None or nfl_df.empty:
+                logger.warning("NFL %s: no live picks yet — skipping", market)
+                summary[market] = {"skipped": True, "reason": "no_data"}
+                continue
+            _train_market(nfl_df, market)
+
     if soccer_df is not None:
         for market in soccer_markets:
             _train_market(soccer_df, market)
@@ -334,7 +353,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train H.E.X.A. ML models")
     parser.add_argument(
         "--market",
-        choices=[*MARKETS, *NFL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS, "all"],
+        choices=[*MARKETS, *NFL_MARKETS, *NFL_PROP_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS, "all"],
         default="all",
         help="Which market(s) to train",
     )

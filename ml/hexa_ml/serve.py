@@ -219,6 +219,14 @@ class FeaturePayload(BaseModel):
     draw_price: float | None = None
     btts_yes_price: float | None = None
     context_completeness: float | None = None
+    # NFL player props (Fase 2 — pooled nfl_prop market)
+    prop_kind: str | None = None
+    prop_odds_american: float | None = None
+    prop_implied_prob: float | None = None
+    nfl_prop_fair_prob: float | None = None
+    nfl_prop_player_season_avg: float | None = None
+    nfl_prop_player_recent_avg: float | None = None
+    nfl_prop_player_games: float | None = None
 
     model_config = {"extra": "allow"}
 
@@ -262,7 +270,7 @@ class HealthResponse(BaseModel):
 class RetrainRequest(BaseModel):
     market: str = Field(
         default="all",
-        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|nfl_moneyline|nfl_spread|nfl_total|soccer_moneyline|soccer_total|soccer_btts|tennis_moneyline|tennis_set_handicap|tennis_total_games|all)$",
+        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|nfl_moneyline|nfl_spread|nfl_total|nfl_prop|soccer_moneyline|soccer_total|soccer_btts|tennis_moneyline|tennis_set_handicap|tennis_total_games|all)$",
     )
     csv: str | None = None
     # Optional admin override — bypasses the per-market `min_train_size` floor.
@@ -409,6 +417,15 @@ def predict_nfl_spread(payload: FeaturePayload) -> PredictionOut:
 )
 def predict_nfl_total(payload: FeaturePayload) -> PredictionOut:
     return _predict_one("nfl_total", payload)
+
+
+@app.post(
+    "/predict/nfl_prop",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_nfl_prop(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("nfl_prop", payload)
 
 
 @app.post(
@@ -590,9 +607,12 @@ async def retrain(payload: RetrainRequest) -> RetrainResponse:
 
     Wrapped in a thread because XGBoost holds the GIL during fit().
     """
-    from .train import MARKETS, NFL_MARKETS, SOCCER_MARKETS, TENNIS_MARKETS, train_all
+    from .train import MARKETS, NFL_MARKETS, NFL_PROP_MARKETS, SOCCER_MARKETS, TENNIS_MARKETS, train_all
 
-    markets = (*MARKETS, *NFL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS) if payload.market == "all" else (payload.market,)
+    markets = (
+        (*MARKETS, *NFL_MARKETS, *NFL_PROP_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS)
+        if payload.market == "all" else (payload.market,)
+    )
 
     def _run() -> dict:
         return train_all(

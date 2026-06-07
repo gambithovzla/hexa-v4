@@ -10,6 +10,7 @@ import {
 } from '../nfl-props-resolver.js';
 import { normalizeNflPropEvent } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
+import { buildNflPropFeaturePayload } from '../services/nflMlClient.js';
 
 // ── parseNflProp ──────────────────────────────────────────────────────────────
 
@@ -200,4 +201,21 @@ test('enrichNflPropOffers: unpaired offer has null fairProb', () => {
   const td = enriched.find(o => o.propKind === 'anytime_td');
   assert.equal(td.fairProb, null);
   assert.equal(td.pairComplete, false);
+});
+
+// ── ML feature payload (Fase 2) ───────────────────────────────────────────────
+
+test('buildNflPropFeaturePayload: maps offer to pick-aligned sidecar payload', () => {
+  const payload = buildNflPropFeaturePayload({
+    propKind: 'pass_yds', side: 'over', line: 274.5,
+    oddsAmerican: -115, impliedProb: 0.5349, fairProb: 0.51,
+  });
+  assert.equal(payload.prop_kind, 'pass_yds');
+  assert.equal(payload.side, 'over');
+  assert.equal(payload.line, 274.5);
+  assert.equal(payload.prop_odds_american, -115);
+  assert.equal(payload.nfl_prop_fair_prob, 0.51);
+  // Player averages default to null until the nflverse player fetcher lands.
+  assert.equal(payload.nfl_prop_player_season_avg, null);
+  assert.equal(payload.nfl_prop_player_games, null);
 });

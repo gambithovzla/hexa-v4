@@ -78,3 +78,22 @@ def test_load_from_csv_missing_required_raises(tmp_path):
     minimal.to_csv(csv_path, index=False)
     with pytest.raises(ValueError, match="missing required columns"):
         load_from_csv(csv_path)
+
+
+def test_nfl_prop_filter_and_target():
+    """nfl_prop slices market_type=='prop', drops unresolved/no-line rows, and
+    builds a pick-aligned target (win→1)."""
+    df = pd.DataFrame({
+        "market_type": ["prop", "prop", "prop", "moneyline"],
+        "prop_kind": ["pass_yds", "rush_yds", "receptions", None],
+        "side": ["over", "under", "over", "home"],
+        "line": [274.5, 89.5, None, None],          # 3rd row dropped (no line)
+        "result": ["win", "loss", "win", "win"],     # 4th row dropped (not prop)
+        "home_score": [None, None, None, 24],
+        "away_score": [None, None, None, 20],
+        "total_runs": [None, None, None, None],
+    })
+    sub = filter_for_market(df, "nfl_prop")
+    assert len(sub) == 2  # only the two resolved prop rows with a line
+    y = make_target(sub, "nfl_prop")
+    assert y.tolist() == [1, 0]
