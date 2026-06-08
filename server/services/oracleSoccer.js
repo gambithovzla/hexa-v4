@@ -63,11 +63,36 @@ function describeRecentForm(side) {
   return `  Recent form: ${record}${streak}${gf}${ga}`;
 }
 
+function ppdaLabel(ppda) {
+  if (ppda == null) return null;
+  if (ppda < 8)   return 'elite press';
+  if (ppda < 10)  return 'high press';
+  if (ppda < 13)  return 'moderate press';
+  if (ppda < 17)  return 'low press';
+  return 'passive/low block';
+}
+
 function describeXgLine(side) {
-  if (side?.xG != null || side?.xGA != null) {
-    return `  xG: xG ${fmt(side.xG, 2)} | xGA ${fmt(side.xGA, 2)}`;
+  if (side?.xG == null && side?.xGA == null) {
+    return '  xG: unavailable — using goal differential + league profile as proxy';
   }
-  return '  xG: unavailable — using goal differential + league profile as proxy';
+  const season = `Season xG ${fmt(side.xG, 2)} | xGA ${fmt(side.xGA, 2)}`;
+  const parts = [season];
+
+  // Rolling windows — show last-7 (more stable than last-5 for comparison)
+  if (side.xG_7 != null || side.xGA_7 != null) {
+    const r7 = `Rolling-7 ${fmt(side.xG_7, 2)} xG / ${fmt(side.xGA_7, 2)} xGA per game`;
+    parts.push(r7);
+  }
+
+  // PPDA
+  if (side.ppda != null) {
+    const label = ppdaLabel(side.ppda);
+    const allowed = side.ppdaAllowed != null ? ` | Opp PPDA ${fmt(side.ppdaAllowed, 1)}` : '';
+    parts.push(`PPDA ${fmt(side.ppda, 1)} (${label})${allowed}`);
+  }
+
+  return parts.map((p, i) => i === 0 ? `  xG: ${p}` : `       ${p}`).join('\n');
 }
 
 function describeStrengthLine(side) {

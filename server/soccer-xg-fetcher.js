@@ -39,8 +39,67 @@ function normName(str) {
 }
 
 /**
+ * Compute xG stats (including rolling averages and PPDA) from a single team's
+ * Understat history array. Pure function — exported for testing.
+ *
+ * @param {Array} history — array of match objects from Understat teamsData
+ * @returns {{ xG, xGA, npxG, npxGA, wins, draws, losses, matches,
+ *             xG_7, xGA_7, xG_5, xGA_5, ppda, ppdaAllowed } | null}
+ */
+export function computeXgStats(history) {
+  if (!Array.isArray(history) || !history.length) return null;
+
+  let xG = 0, xGA = 0, npxG = 0, npxGA = 0;
+  let wins = 0, draws = 0, losses = 0;
+  let ppdaSum = 0, ppdaCount = 0, ppdaAllowedSum = 0, ppdaAllowedCount = 0;
+
+  for (const m of history) {
+    xG    += Number(m.xG    ?? 0);
+    xGA   += Number(m.xGA   ?? 0);
+    npxG  += Number(m.npxG  ?? 0);
+    npxGA += Number(m.npxGA ?? 0);
+    const scored = Number(m.scored ?? 0);
+    const missed = Number(m.missed ?? 0);
+    if (scored > missed)       wins++;
+    else if (scored === missed) draws++;
+    else                       losses++;
+
+    if (m.ppda?.att > 0 && m.ppda?.def > 0) {
+      ppdaSum += m.ppda.att / m.ppda.def;
+      ppdaCount++;
+    }
+    if (m.ppda_allowed?.att > 0 && m.ppda_allowed?.def > 0) {
+      ppdaAllowedSum += m.ppda_allowed.att / m.ppda_allowed.def;
+      ppdaAllowedCount++;
+    }
+  }
+
+  const last7 = history.slice(-7);
+  const last5 = history.slice(-5);
+  const rollingAvg = (arr, key) =>
+    arr.length
+      ? Math.round((arr.reduce((s, m) => s + Number(m[key] ?? 0), 0) / arr.length) * 100) / 100
+      : null;
+
+  return {
+    xG:    Math.round(xG    * 10) / 10,
+    xGA:   Math.round(xGA   * 10) / 10,
+    npxG:  Math.round(npxG  * 10) / 10,
+    npxGA: Math.round(npxGA * 10) / 10,
+    wins, draws, losses,
+    matches: history.length,
+    xG_7:  rollingAvg(last7, 'xG'),
+    xGA_7: rollingAvg(last7, 'xGA'),
+    xG_5:  rollingAvg(last5, 'xG'),
+    xGA_5: rollingAvg(last5, 'xGA'),
+    ppda:        ppdaCount        > 0 ? Math.round(ppdaSum        / ppdaCount        * 10) / 10 : null,
+    ppdaAllowed: ppdaAllowedCount > 0 ? Math.round(ppdaAllowedSum / ppdaAllowedCount * 10) / 10 : null,
+  };
+}
+
+/**
  * Fetch and parse Understat's embedded teamsData JSON for a league.
- * Returns Map<canonicalName → { xG, xGA, npxG, npxGA, wins, draws, losses }> or null.
+ * Returns Map<canonicalName → xgStats> or null.
  */
 async function fetchLeagueXg(leagueSlug, season = CURRENT_SEASON) {
   const ustSlug = UNDERSTAT_SLUGS[leagueSlug];
@@ -73,33 +132,9 @@ async function fetchLeagueXg(leagueSlug, season = CURRENT_SEASON) {
     const result = new Map();
     for (const [teamName, data] of Object.entries(teamsData)) {
       const h = data?.history ?? [];
-      if (!h.length) continue;
-
-      // Sum up all available match history
-      let xG = 0, xGA = 0, npxG = 0, npxGA = 0;
-      let wins = 0, draws = 0, losses = 0;
-      for (const match of h) {
-        xG    += Number(match.xG    ?? 0);
-        xGA   += Number(match.xGA   ?? 0);
-        npxG  += Number(match.npxG  ?? 0);
-        npxGA += Number(match.npxGA ?? 0);
-        const scored   = Number(match.scored   ?? 0);
-        const missed   = Number(match.missed   ?? 0);
-        if (scored > missed)  wins   += 1;
-        else if (scored === missed) draws += 1;
-        else                  losses += 1;
-      }
-
-      result.set(normName(teamName), {
-        xG:    Math.round(xG   * 10) / 10,
-        xGA:   Math.round(xGA  * 10) / 10,
-        npxG:  Math.round(npxG * 10) / 10,
-        npxGA: Math.round(npxGA* 10) / 10,
-        wins,
-        draws,
-        losses,
-        matches: h.length,
-      });
+      const stats = computeXgStats(h);
+      if (!stats) continue;
+      result.set(normName(teamName), stats);
     }
 
     _cache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });

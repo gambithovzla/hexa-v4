@@ -244,6 +244,11 @@ function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
     // xG/xGA from Understat (null for MLS or when fetch fails)
     xG:  null,
     xGA: null,
+    // Rolling xG averages (last 5 / last 7 matches) — null until Understat enrichment
+    xG_7: null, xGA_7: null,
+    xG_5: null, xGA_5: null,
+    // PPDA (Passes Per Defensive Action) — lower = more intense pressing
+    ppda: null, ppdaAllowed: null,
     lineupStatus: 'unknown',
     formation:    null,
     injuries:     [],
@@ -307,14 +312,26 @@ export async function buildSoccerGameContext({
   home.motivation = buildMotivationBlock(home.points, homeStats?.position ?? null, fullStandings, leagueSlug);
   away.motivation = buildMotivationBlock(away.points, awayStats?.position ?? null, fullStandings, leagueSlug);
 
-  // Enrich xG from Understat (null if league unsupported or fetch failed)
+  // Enrich xG, rolling xG, and PPDA from Understat (null if MLS or fetch failed)
   if (xgData?.home) {
-    home.xG  = xgData.home.xG  ?? null;
-    home.xGA = xgData.home.xGA ?? null;
+    home.xG          = xgData.home.xG          ?? null;
+    home.xGA         = xgData.home.xGA         ?? null;
+    home.xG_7        = xgData.home.xG_7        ?? null;
+    home.xGA_7       = xgData.home.xGA_7       ?? null;
+    home.xG_5        = xgData.home.xG_5        ?? null;
+    home.xGA_5       = xgData.home.xGA_5       ?? null;
+    home.ppda        = xgData.home.ppda        ?? null;
+    home.ppdaAllowed = xgData.home.ppdaAllowed ?? null;
   }
   if (xgData?.away) {
-    away.xG  = xgData.away.xG  ?? null;
-    away.xGA = xgData.away.xGA ?? null;
+    away.xG          = xgData.away.xG          ?? null;
+    away.xGA         = xgData.away.xGA         ?? null;
+    away.xG_7        = xgData.away.xG_7        ?? null;
+    away.xGA_7       = xgData.away.xGA_7       ?? null;
+    away.xG_5        = xgData.away.xG_5        ?? null;
+    away.xGA_5       = xgData.away.xGA_5       ?? null;
+    away.ppda        = xgData.away.ppda        ?? null;
+    away.ppdaAllowed = xgData.away.ppdaAllowed ?? null;
   }
 
   // Enrich availability from API-Football (lineups + injuries + suspensions).
