@@ -2,6 +2,21 @@ const MLB_MARKETS = [
   'moneyline', 'overunder', 'runline',
   'prop_hits', 'prop_strikeouts', 'prop_total_bases', 'prop_home_runs', 'prop_rbis',
 ];
+const NFL_MARKETS = ['nfl_moneyline', 'nfl_spread', 'nfl_total', 'nfl_prop'];
+const SOCCER_MARKETS = ['soccer_moneyline', 'soccer_total', 'soccer_btts'];
+
+// Every market the HUD inference panel reports, in display order (MLB first so
+// existing consumers that read markets[0] still get moneyline). NFL + soccer are
+// appended so their pre-trained models surface in /admin/ml-control instead of
+// being invisible.
+const HUD_MARKETS = [...MLB_MARKETS, ...NFL_MARKETS, ...SOCCER_MARKETS];
+
+const MARKET_SPORT = {
+  ...Object.fromEntries(MLB_MARKETS.map((m) => [m, 'mlb'])),
+  ...Object.fromEntries(NFL_MARKETS.map((m) => [m, 'nfl'])),
+  ...Object.fromEntries(SOCCER_MARKETS.map((m) => [m, 'soccer'])),
+};
+
 const RUNLINE_EARLY_FLOOR = 60;
 const RUNLINE_MIN_FLOOR_DEFAULT = 25;
 
@@ -61,7 +76,7 @@ export function buildMlObservability({
   const ensemblesAvailable = normalizeList(health?.ensembles_available);
   const manifestMarkets = health?.manifest?.markets ?? {};
 
-  const markets = MLB_MARKETS.map((market) => {
+  const markets = HUD_MARKETS.map((market) => {
     const manifest = manifestMarkets[market] ?? null;
     const trained = !!(manifest && !manifest.skipped && !manifest.error);
     const artifact = modelsAvailable.includes(market);
@@ -76,6 +91,7 @@ export function buildMlObservability({
 
     return {
       market,
+      sport: MARKET_SPORT[market] ?? 'mlb',
       trained,
       artifact,
       loaded,
@@ -123,4 +139,4 @@ export function buildMlObservability({
   };
 }
 
-export { MLB_MARKETS, RUNLINE_EARLY_FLOOR, RUNLINE_MIN_FLOOR_DEFAULT };
+export { MLB_MARKETS, NFL_MARKETS, SOCCER_MARKETS, HUD_MARKETS, RUNLINE_EARLY_FLOOR, RUNLINE_MIN_FLOOR_DEFAULT };
