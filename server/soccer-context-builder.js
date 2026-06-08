@@ -15,6 +15,7 @@ import { getSoccerGamesForDate, getSoccerStandings, getSoccerTeams } from './soc
 import { getSoccerLeague, isSupportedLeague } from './soccer-league-map.js';
 import { findSoccerTeam } from './soccer-team-map.js';
 import { getSoccerGameXg } from './soccer-xg-fetcher.js';
+import { getSoccerMatchAvailability, isSoccerLineupsEnabled } from './soccer-lineups-api.js';
 
 function recentFormSummary(games) {
   if (!games?.length) return null;
@@ -114,7 +115,13 @@ function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
     // xG/xGA: null until FBref/Understat integration
     xG:  null,
     xGA: null,
+    // Availability (Sprint 11.3 — API-Football): 'unknown' until lineups confirm
+    // ~1h pre-kick. Injuries + suspensions (yellow accumulation / red card) are
+    // unique to soccer and invisible to ESPN.
     lineupStatus: 'unknown',
+    formation: null,
+    injuries: [],
+    suspensions: [],
   };
 }
 
@@ -147,12 +154,14 @@ export async function buildSoccerGameContext({
   const startedAt = Date.now();
   const leagueMeta = getSoccerLeague(leagueSlug);
 
-  const [standingsPayload, xgData] = await Promise.all([
+  const [standingsPayload, xgData, availability] = await Promise.all([
     getSoccerStandings(leagueSlug).catch(err => {
       console.warn(`[soccer-context] standings failed (${leagueSlug}): ${err.message}`);
       return null;
     }),
     getSoccerGameXg(leagueSlug, homeTeamName, awayTeamName).catch(() => ({ home: null, away: null })),
+    getSoccerMatchAvailability({ leagueSlug, date: gameDate, homeName: homeTeamName, awayName: awayTeamName })
+      .catch(() => null),
   ]);
 
   const homeStats = extractTeamFromStandings(standingsPayload, homeTeamName, leagueSlug);
@@ -171,6 +180,22 @@ export async function buildSoccerGameContext({
     away.xGA = xgData.away.xGA ?? null;
   }
 
+  // Enrich availability from API-Football (lineups + injuries + suspensions).
+  // Null when the feature is off (no key), MLS coverage gaps, or fetch failure.
+  if (availability?.home) {
+    home.lineupStatus = availability.home.lineupStatus ?? home.lineupStatus;
+    home.formation    = availability.home.formation ?? null;
+    home.injuries     = availability.home.injuries ?? [];
+    home.suspensions  = availability.home.suspensions ?? [];
+  }
+  if (availability?.away) {
+    away.lineupStatus = availability.away.lineupStatus ?? away.lineupStatus;
+    away.formation    = availability.away.formation ?? null;
+    away.injuries     = availability.away.injuries ?? [];
+    away.suspensions  = availability.away.suspensions ?? [];
+  }
+  const lineupsConfirmed = !!availability?.lineupsConfirmed;
+
   const staleFlags = [];
   if (!homeStats) staleFlags.push('home_team_stats_missing');
   if (!awayStats) staleFlags.push('away_team_stats_missing');
@@ -179,18 +204,23 @@ export async function buildSoccerGameContext({
   if (!marketOdds?.threeWay) staleFlags.push('three_way_odds_missing');
   const xgAvailable = !!(xgData?.home?.xG || xgData?.away?.xG);
   if (!xgAvailable) staleFlags.push('xg_unavailable');
+  const lineupsAvailable = !!availability;
+  if (isSoccerLineupsEnabled() && !lineupsConfirmed) staleFlags.push('lineups_unconfirmed');
+  if (!lineupsAvailable) staleFlags.push('availability_unavailable');
 
   const completeness = {
     teamStats:  fractionPresent(homeStats, awayStats),
     recentForm: fractionPresent(home.recentForm, away.recentForm),
     marketOdds: marketOdds?.threeWay ? 1 : 0,
     xG: xgAvailable ? 1 : 0,
+    lineups: lineupsConfirmed ? 1 : 0,
   };
   const overall = +(
-    (completeness.teamStats  * 0.40 +
-     completeness.recentForm * 0.25 +
-     completeness.marketOdds * 0.25 +
-     completeness.xG         * 0.10).toFixed(2)
+    (completeness.teamStats  * 0.35 +
+     completeness.recentForm * 0.20 +
+     completeness.marketOdds * 0.20 +
+     completeness.xG         * 0.10 +
+     completeness.lineups    * 0.15).toFixed(2)
   );
 
   const context_meta = {
@@ -211,6 +241,12 @@ export async function buildSoccerGameContext({
         ok: !!(marketOdds?.threeWay),
         source: marketOdds?.source ?? null,
         provided: marketOdds ? (marketOdds.provided ?? 'server') : null,
+      },
+      availability: {
+        ok: lineupsAvailable,
+        lineupsConfirmed,
+        source: lineupsAvailable ? 'api-football' : (isSoccerLineupsEnabled() ? 'no-fixture-match' : 'disabled — no API_FOOTBALL_KEY'),
+        fixtureId: availability?.fixtureId ?? null,
       },
     },
     completeness,
