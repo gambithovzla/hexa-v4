@@ -109,12 +109,29 @@ function describeCongestionLine(side) {
   return `${parts.join(' | ')}${tagStr}`;
 }
 
+function describeVenueSplitLine(side, venueKey) {
+  const vs = side?.venueSplits;
+  const v = vs?.[venueKey];
+  if (!v || v.played == null) return null;
+  const label = venueKey === 'home' ? 'Home split' : 'Away split';
+  const gf = v.gfAvg != null ? `${fmt(v.gfAvg, 2)} GF` : 'GF n/a';
+  const ga = v.gaAvg != null ? `${fmt(v.gaAvg, 2)} GA` : 'GA n/a';
+  return (
+    `  ${label}: ${v.wins ?? 0}W-${v.draws ?? 0}D-${v.losses ?? 0}L in ${v.played} ${venueKey} games` +
+    ` | ${gf} / ${ga} per game | ${v.cleanSheets ?? 0} CS, ${v.failedToScore ?? 0} FTS`
+  );
+}
+
 function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
+  // The relevant venue split: home club's HOME record, away club's AWAY record.
+  const venueKey = label === 'HOME' ? 'home' : 'away';
+  const venueSplitLine = describeVenueSplitLine(side, venueKey);
   const congestionLine = describeCongestionLine(side);
   return [
     `${label} — ${teamLabel(side)}`,
     describeStrengthLine(side),
+    ...(venueSplitLine ? [venueSplitLine] : []),
     describeXgLine(side),
     describeRecentForm(side),
     ...(congestionLine ? [congestionLine] : []),

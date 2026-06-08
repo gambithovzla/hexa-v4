@@ -23,9 +23,13 @@
  * across ALL competitions (+1 call per team to /fixtures?team&last): a midweek
  * cup/European game or a 2-day rest is the rotation signal ESPN can't give.
  *
+ * Home/away venue splits come from /teams/statistics (+1 call per team): a
+ * club's home-vs-away record + goals — the split ESPN standings don't expose
+ * reliably. Fortress-at-home and poor-travellers are real 1X2 signals.
+ *
  * Pure helpers (exported for tests): apiFootballLeagueId, apiFootballSeason,
  * buildApiFootballRequest, matchFixtureByTeams, normalizeLineups,
- * normalizeAvailability, normalizeH2H, normalizeCongestion.
+ * normalizeAvailability, normalizeH2H, normalizeCongestion, normalizeTeamSplits.
  */
 
 // Internal soccer-league slug → API-Football numeric league id.
@@ -290,6 +294,44 @@ export function normalizeCongestion(fixturesResp, { domesticLeagueId, referenceD
   return out;
 }
 
+function _numOrNull(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Home/away venue splits from an API-Football /teams/statistics response.
+ * Returns per-venue record + goal averages + clean sheets / failed-to-score, or
+ * null when the payload is empty.
+ *
+ * @returns {{ home, away } | null}
+ *   each venue: { played, wins, draws, losses, gfAvg, gaAvg, cleanSheets, failedToScore }
+ */
+export function normalizeTeamSplits(statsResp) {
+  const r = statsResp?.response ?? statsResp ?? null;
+  if (!r || typeof r !== 'object' || !r.fixtures) return null;
+  const fx = r.fixtures ?? {};
+  const gf = r.goals?.for ?? {};
+  const ga = r.goals?.against ?? {};
+  const cs = r.clean_sheet ?? {};
+  const fts = r.failed_to_score ?? {};
+  const venue = (v) => ({
+    played: fx.played?.[v] ?? null,
+    wins:   fx.wins?.[v]   ?? null,
+    draws:  fx.draws?.[v]  ?? null,
+    losses: fx.loses?.[v]  ?? null,           // API-Football spelling: "loses"
+    gfAvg:  _numOrNull(gf.average?.[v]),
+    gaAvg:  _numOrNull(ga.average?.[v]),
+    cleanSheets:   cs[v]  ?? null,
+    failedToScore: fts[v] ?? null,
+  });
+  const home = venue('home');
+  const away = venue('away');
+  if (home.played == null && away.played == null) return null;
+  return { home, away };
+}
+
 async function _fetchJson(path, query, cacheKey) {
   const cached = _cache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.data;
@@ -313,11 +355,12 @@ async function _fetchJson(path, query, cacheKey) {
  * injuries. Returns a per-side availability block, or null when disabled / no
  * fixture / total failure (caller treats null as "unknown", ESPN-only).
  *
- * @returns {{ fixtureId, lineupsConfirmed, referee, h2h, congestion, home, away } | null}
+ * @returns {{ fixtureId, lineupsConfirmed, referee, h2h, congestion, venueSplits, home, away } | null}
  *   home/away: { lineupStatus:'confirmed'|'unknown', formation, injuries[], suspensions[] }
  *   referee: string | null (free from the fixture object)
  *   h2h: aggregate from normalizeH2H | null
  *   congestion: { home, away } from normalizeCongestion | null
+ *   venueSplits: { home, away } each from normalizeTeamSplits | null
  */
 export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, awayName }) {
   if (!isSoccerLineupsEnabled()) return null;
@@ -341,7 +384,7 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
   const apAwayId = fixture.teams?.away?.id ?? null;
   const h2hKey = apHomeId && apAwayId ? `${apHomeId}-${apAwayId}` : null;
 
-  const [lineupResp, injuriesResp, h2hResp, homeFixturesResp, awayFixturesResp] = await Promise.all([
+  const [lineupResp, injuriesResp, h2hResp, homeFixturesResp, awayFixturesResp, homeStatsResp, awayStatsResp] = await Promise.all([
     _fetchJson('/fixtures/lineups', { fixture: fixtureId }, `af:lineups:${fixtureId}`),
     _fetchJson('/injuries', { fixture: fixtureId }, `af:injuries:${fixtureId}`),
     h2hKey
@@ -349,6 +392,8 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
       : Promise.resolve(null),
     apHomeId ? _fetchJson('/fixtures', { team: apHomeId, last: 6 }, `af:teamfix:${apHomeId}`) : Promise.resolve(null),
     apAwayId ? _fetchJson('/fixtures', { team: apAwayId, last: 6 }, `af:teamfix:${apAwayId}`) : Promise.resolve(null),
+    apHomeId ? _fetchJson('/teams/statistics', { league: leagueId, season, team: apHomeId }, `af:teamstats:${leagueId}:${season}:${apHomeId}`) : Promise.resolve(null),
+    apAwayId ? _fetchJson('/teams/statistics', { league: leagueId, season, team: apAwayId }, `af:teamstats:${leagueId}:${season}:${apAwayId}`) : Promise.resolve(null),
   ]);
 
   const lineups = normalizeLineups(lineupResp ?? {}, homeName, awayName);
@@ -360,6 +405,10 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
     home: normalizeCongestion(homeFixturesResp, { domesticLeagueId: leagueId, referenceDate: date }),
     away: normalizeCongestion(awayFixturesResp, { domesticLeagueId: leagueId, referenceDate: date }),
   } : null;
+
+  const homeSplits = normalizeTeamSplits(homeStatsResp);
+  const awaySplits = normalizeTeamSplits(awayStatsResp);
+  const venueSplits = (homeSplits || awaySplits) ? { home: homeSplits, away: awaySplits } : null;
 
   const side = (s) => ({
     lineupStatus: lineups[s].confirmed ? 'confirmed' : 'unknown',
@@ -374,6 +423,7 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
     referee,
     h2h,
     congestion,
+    venueSplits,
     home: side('home'),
     away: side('away'),
   };

@@ -125,6 +125,8 @@ function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
     suspensions: [],
     // Schedule congestion / rotation risk (API-Football recent fixtures).
     congestion: null,
+    // Home/away venue splits ({ home, away }) from API-Football /teams/statistics.
+    venueSplits: null,
   };
 }
 
@@ -206,6 +208,9 @@ export async function buildSoccerGameContext({
   const congestion = availability?.congestion ?? null;
   if (congestion?.home) home.congestion = congestion.home;
   if (congestion?.away) away.congestion = congestion.away;
+  const venueSplits = availability?.venueSplits ?? null;
+  if (venueSplits?.home) home.venueSplits = venueSplits.home;
+  if (venueSplits?.away) away.venueSplits = venueSplits.away;
 
   const staleFlags = [];
   if (!homeStats) staleFlags.push('home_team_stats_missing');
@@ -226,6 +231,7 @@ export async function buildSoccerGameContext({
   if (availability && !referee) staleFlags.push('referee_unavailable');
   if (availability && !h2h) staleFlags.push('h2h_unavailable');
   if (availability && !congestion) staleFlags.push('congestion_unavailable');
+  if (availability && !venueSplits) staleFlags.push('venue_splits_unavailable');
 
   const completeness = {
     teamStats:  fractionPresent(homeStats, awayStats),
@@ -287,6 +293,10 @@ export async function buildSoccerGameContext({
       congestion: {
         ok: !!congestion,
         source: congestion ? 'api-football' : (availability ? 'no-recent-fixtures' : null),
+      },
+      venueSplits: {
+        ok: !!venueSplits,
+        source: venueSplits ? 'api-football' : (availability ? 'no-team-statistics' : null),
       },
     },
     completeness,

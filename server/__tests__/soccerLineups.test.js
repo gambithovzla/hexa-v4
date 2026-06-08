@@ -10,6 +10,7 @@ import {
   normalizeAvailability,
   normalizeH2H,
   normalizeCongestion,
+  normalizeTeamSplits,
 } from '../soccer-lineups-api.js';
 
 test('apiFootballLeagueId maps the 6 supported leagues', () => {
@@ -151,6 +152,38 @@ test('normalizeCongestion: well-rested single league game = no flags', () => {
 test('normalizeCongestion tolerates empty/missing input', () => {
   assert.equal(normalizeCongestion(null, {}).matchesLast14d, 0);
   assert.equal(normalizeCongestion({ response: [] }, { domesticLeagueId: 39, referenceDate: '2026-03-15' }).daysSinceLast, null);
+});
+
+test('normalizeTeamSplits parses home/away record + goal averages', () => {
+  const resp = { response: {
+    fixtures: {
+      played: { home: 9, away: 8, total: 17 },
+      wins:   { home: 7, away: 3, total: 10 },
+      draws:  { home: 1, away: 2, total: 3 },
+      loses:  { home: 1, away: 3, total: 4 },
+    },
+    goals: {
+      for:     { average: { home: '2.4', away: '1.1' } },
+      against: { average: { home: '0.7', away: '1.6' } },
+    },
+    clean_sheet:     { home: 5, away: 2, total: 7 },
+    failed_to_score: { home: 0, away: 3, total: 3 },
+  } };
+  const s = normalizeTeamSplits(resp);
+  assert.equal(s.home.wins, 7);
+  assert.equal(s.home.losses, 1);          // mapped from API-Football "loses"
+  assert.equal(s.home.gfAvg, 2.4);
+  assert.equal(s.home.gaAvg, 0.7);
+  assert.equal(s.home.cleanSheets, 5);
+  assert.equal(s.away.played, 8);
+  assert.equal(s.away.gfAvg, 1.1);
+  assert.equal(s.away.failedToScore, 3);
+});
+
+test('normalizeTeamSplits returns null for empty/missing payload', () => {
+  assert.equal(normalizeTeamSplits(null), null);
+  assert.equal(normalizeTeamSplits({ response: {} }), null);
+  assert.equal(normalizeTeamSplits({ response: { fixtures: { played: { home: null, away: null } } } }), null);
 });
 
 test('normalizeH2H ignores unrelated fixtures and empty input', () => {
