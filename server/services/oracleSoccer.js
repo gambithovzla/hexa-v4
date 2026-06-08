@@ -79,6 +79,23 @@ function describeStrengthLine(side) {
   );
 }
 
+function describeAvailabilityLines(side) {
+  const status = side.lineupStatus === 'confirmed'
+    ? `confirmed${side.formation ? ` (${side.formation})` : ''}`
+    : (side.lineupStatus ?? 'unknown — verify ~1hr pre-kick');
+  const lines = [`  Lineup status: ${status}`];
+  const susp = Array.isArray(side.suspensions) ? side.suspensions : [];
+  const inj = Array.isArray(side.injuries) ? side.injuries : [];
+  if (susp.length) {
+    lines.push(`  Suspended (OUT): ${susp.map(s => s.player).filter(Boolean).join(', ')}`);
+  }
+  if (inj.length) {
+    const top = inj.slice(0, 6).map(i => `${i.player}${i.reason ? ` (${i.reason})` : ''}`).filter(Boolean);
+    lines.push(`  Injuries/doubts: ${top.join('; ')}`);
+  }
+  return lines;
+}
+
 function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
   return [
@@ -86,7 +103,7 @@ function describeTeamBlock(label, side) {
     describeStrengthLine(side),
     describeXgLine(side),
     describeRecentForm(side),
-    `  Lineup status: ${side.lineupStatus ?? 'unknown — verify ~1hr pre-kick'}`,
+    ...describeAvailabilityLines(side),
   ].join('\n');
 }
 
