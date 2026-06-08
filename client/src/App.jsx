@@ -45,6 +45,7 @@ import AdminMLControlCenter   from './pages/AdminMLControlCenter';
 import PlayerPropsPage        from './pages/PlayerPropsPage';
 import EquityDashboard        from './pages/EquityDashboard';
 import ImperdiblePage         from './pages/ImperdiblePage';
+import ImperdibleSoccerPage  from './pages/ImperdibleSoccerPage';
 import PostmortemDashboard    from './pages/PostmortemDashboard';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
@@ -519,6 +520,10 @@ export default function App() {
   if (window.location.pathname === '/admin/imperdible') {
     const token = localStorage.getItem('hexa_token');
     return <ImperdiblePage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/imperdible-soccer') {
+    const token = localStorage.getItem('hexa_token');
+    return <ImperdibleSoccerPage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
   if (window.location.pathname === '/admin/postmortem') {
     const token = localStorage.getItem('hexa_token');
