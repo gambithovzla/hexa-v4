@@ -46,6 +46,9 @@ const ALLOWED_MARKETS = new Set([
   'all',
   'moneyline', 'overunder', 'runline',
   'prop_hits', 'prop_strikeouts', 'prop_total_bases', 'prop_home_runs', 'prop_rbis',
+  // NFL + Soccer game markets (pre-trained from nflverse / football-data history)
+  'nfl_moneyline', 'nfl_spread', 'nfl_total', 'nfl_prop',
+  'soccer_moneyline', 'soccer_total', 'soccer_btts',
 ]);
 
 // In-process rate limit: 1 retrain per scope every 5 minutes.

@@ -47,6 +47,9 @@ const DIM     = 'var(--neon-cyan-dim)';
 
 const MARKETS = ['moneyline', 'overunder', 'runline'];
 const PROP_MARKETS = ['prop_hits', 'prop_strikeouts', 'prop_total_bases', 'prop_home_runs', 'prop_rbis'];
+// NFL + Soccer game markets — pre-trained from nflverse / football-data history,
+// so they have Brier/n_train cards even before any live pick resolves.
+const OTHER_SPORT_MARKETS = ['nfl_moneyline', 'nfl_spread', 'nfl_total', 'soccer_moneyline', 'soccer_total', 'soccer_btts'];
 const MARKET_LABELS = {
   moneyline: 'Moneyline', overunder: 'Over / Under', runline: 'Runline',
   prop_hits: 'Hits', prop_strikeouts: 'Strikeouts', prop_total_bases: 'Total Bases',
@@ -1460,6 +1463,23 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
       </Box>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
         {PROP_MARKETS.map((m, i) => (
+          <MarketCard
+            key={m}
+            market={m}
+            manifest={manifest}
+            marketObs={status?.observability?.markets?.find((row) => row.market === m)}
+            onRetrain={handleRetrain}
+            busy={busyMarket === m || busyMarket === 'all'}
+            index={i}
+            T={T}
+          />
+        ))}
+      </Box>
+
+      {/* NFL + Soccer game-market cards (pre-trained from historical data) */}
+      <SectionTitle help={T.help?.perMarket}>NFL · SOCCER</SectionTitle>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+        {OTHER_SPORT_MARKETS.map((m, i) => (
           <MarketCard
             key={m}
             market={m}
