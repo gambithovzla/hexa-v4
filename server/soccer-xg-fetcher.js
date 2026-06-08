@@ -50,6 +50,7 @@ export function computeXgStats(history) {
   if (!Array.isArray(history) || !history.length) return null;
 
   let xG = 0, xGA = 0, npxG = 0, npxGA = 0;
+  let actualGoals = 0, actualGoalsAgainst = 0;
   let wins = 0, draws = 0, losses = 0;
   let ppdaSum = 0, ppdaCount = 0, ppdaAllowedSum = 0, ppdaAllowedCount = 0;
 
@@ -60,6 +61,8 @@ export function computeXgStats(history) {
     npxGA += Number(m.npxGA ?? 0);
     const scored = Number(m.scored ?? 0);
     const missed = Number(m.missed ?? 0);
+    actualGoals        += scored;
+    actualGoalsAgainst += missed;
     if (scored > missed)       wins++;
     else if (scored === missed) draws++;
     else                       losses++;
@@ -81,11 +84,20 @@ export function computeXgStats(history) {
       ? Math.round((arr.reduce((s, m) => s + Number(m[key] ?? 0), 0) / arr.length) * 100) / 100
       : null;
 
+  const xGRounded  = Math.round(xG  * 10) / 10;
+  const xGARounded = Math.round(xGA * 10) / 10;
+
   return {
-    xG:    Math.round(xG    * 10) / 10,
-    xGA:   Math.round(xGA   * 10) / 10,
+    xG:    xGRounded,
+    xGA:   xGARounded,
     npxG:  Math.round(npxG  * 10) / 10,
     npxGA: Math.round(npxGA * 10) / 10,
+    actualGoals:        actualGoals,
+    actualGoalsAgainst: actualGoalsAgainst,
+    // xGDiff > 0 means team scored more than xG suggests (overperforming — regression risk)
+    // xGDiff < 0 means team scored less than xG suggests (underperforming — recovery potential)
+    xGDiff:  Math.round((actualGoals        - xGRounded)  * 10) / 10,
+    xGADiff: Math.round((actualGoalsAgainst - xGARounded) * 10) / 10,
     wins, draws, losses,
     matches: history.length,
     xG_7:  rollingAvg(last7, 'xG'),

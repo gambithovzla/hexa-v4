@@ -86,6 +86,24 @@ function refereePenaltyLabel(penaltiesPerGame) {
   return null; // low pen rate is unremarkable
 }
 
+function xgDiffLabel(diff, isDefense = false) {
+  const d = Math.abs(diff);
+  if (!isDefense) {
+    if (diff >= 5)  return 'large outperformance — strong regression risk';
+    if (diff >= 3)  return 'outperforming xG — regression risk';
+    if (diff >= 1.5) return 'slightly over xG';
+    if (diff <= -5) return 'large underperformance — strong recovery potential';
+    if (diff <= -3) return 'underperforming xG — recovery potential';
+    if (diff <= -1.5) return 'slightly under xG';
+    return null; // within ±1.5 is unremarkable
+  } else {
+    // Defensive: positive = conceding more than expected
+    if (diff >= 3)  return 'conceding over expected — defense may be fragile';
+    if (diff <= -3) return 'conceding less than expected — goalkeeper/luck factor';
+    return null;
+  }
+}
+
 function describeXgLine(side) {
   if (side?.xG == null && side?.xGA == null) {
     return '  xG: unavailable — using goal differential + league profile as proxy';
@@ -95,8 +113,7 @@ function describeXgLine(side) {
 
   // Rolling windows — show last-7 (more stable than last-5 for comparison)
   if (side.xG_7 != null || side.xGA_7 != null) {
-    const r7 = `Rolling-7 ${fmt(side.xG_7, 2)} xG / ${fmt(side.xGA_7, 2)} xGA per game`;
-    parts.push(r7);
+    parts.push(`Rolling-7 ${fmt(side.xG_7, 2)} xG / ${fmt(side.xGA_7, 2)} xGA per game`);
   }
 
   // PPDA
@@ -106,7 +123,42 @@ function describeXgLine(side) {
     parts.push(`PPDA ${fmt(side.ppda, 1)} (${label})${allowed}`);
   }
 
+  // xG over/underperformance — regression / recovery signal
+  if (side.xGDiff != null && Math.abs(side.xGDiff) >= 1.5) {
+    const sign = side.xGDiff > 0 ? '+' : '';
+    const attLbl = xgDiffLabel(side.xGDiff, false);
+    const attStr = attLbl ? ` [${attLbl}]` : '';
+    parts.push(`Attack: ${sign}${fmt(side.xGDiff, 1)} vs xG${attStr}`);
+  }
+  if (side.xGADiff != null && Math.abs(side.xGADiff) >= 1.5) {
+    const sign = side.xGADiff > 0 ? '+' : '';
+    const defLbl = xgDiffLabel(side.xGADiff, true);
+    const defStr = defLbl ? ` [${defLbl}]` : '';
+    parts.push(`Defense: ${sign}${fmt(side.xGADiff, 1)} vs xGA${defStr}`);
+  }
+
   return parts.map((p, i) => i === 0 ? `  xG: ${p}` : `       ${p}`).join('\n');
+}
+
+function describeSetPieceLine(side) {
+  const sp = side?.setpiece;
+  if (!sp) return null;
+  const { scaDeadBallPer90, gcaDeadBallPer90, scaDeadBallAllowedPer90, gcaDeadBallAllowedPer90 } = sp;
+  if (scaDeadBallPer90 == null && gcaDeadBallPer90 == null) return null;
+
+  const parts = [];
+  if (scaDeadBallPer90 != null) {
+    const tag = scaDeadBallPer90 >= 2.0 ? ' ★ high set-piece threat' : scaDeadBallPer90 <= 0.8 ? ' (low set-piece threat)' : '';
+    parts.push(`Off: ${fmt(scaDeadBallPer90, 2)} dead-ball SCA/90${tag}`);
+  }
+  if (gcaDeadBallPer90 != null) parts.push(`${fmt(gcaDeadBallPer90, 2)} GCA/90`);
+  if (scaDeadBallAllowedPer90 != null) {
+    const tag = scaDeadBallAllowedPer90 >= 2.0 ? ' ★ vulnerable to set pieces' : '';
+    parts.push(`Def: ${fmt(scaDeadBallAllowedPer90, 2)} dead-ball SCA allowed/90${tag}`);
+  }
+  if (gcaDeadBallAllowedPer90 != null) parts.push(`${fmt(gcaDeadBallAllowedPer90, 2)} GCA allowed/90`);
+
+  return `  Set pieces: ${parts.join(' | ')}`;
 }
 
 function describeStrengthLine(side) {
@@ -176,12 +228,14 @@ function describeTeamBlock(label, side) {
   const venueSplitLine = describeVenueSplitLine(side, venueKey);
   const congestionLine = describeCongestionLine(side);
   const motivationLine = describeMotivationLine(side);
+  const setpieceLine   = describeSetPieceLine(side);
   return [
     `${label} — ${teamLabel(side)}`,
     describeStrengthLine(side),
     ...(motivationLine ? [motivationLine] : []),
     ...(venueSplitLine ? [venueSplitLine] : []),
     describeXgLine(side),
+    ...(setpieceLine ? [setpieceLine] : []),
     describeRecentForm(side),
     ...(congestionLine ? [congestionLine] : []),
     ...describeAvailabilityLines(side),

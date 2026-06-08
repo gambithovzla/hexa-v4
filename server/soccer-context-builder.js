@@ -17,6 +17,7 @@ import { findSoccerTeam } from './soccer-team-map.js';
 import { getSoccerGameXg } from './soccer-xg-fetcher.js';
 import { getSoccerMatchAvailability, isSoccerLineupsEnabled } from './soccer-lineups-api.js';
 import { getSoccerWeather } from './soccer-weather-api.js';
+import { getSoccerGameSetPieceStats } from './soccer-fbref-fetcher.js';
 
 // European/relegation spots per league — source of truth for motivation/stakes analysis.
 // playoffPos: Bundesliga/Ligue 1 have a 16th-place relegation playoff vs 3rd-tier.
@@ -249,6 +250,10 @@ function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
     xG_5: null, xGA_5: null,
     // PPDA (Passes Per Defensive Action) — lower = more intense pressing
     ppda: null, ppdaAllowed: null,
+    // xG over/underperformance vs actual goals (regression / recovery signal)
+    xGDiff: null, xGADiff: null,
+    // Set-piece stats from FBref (dead-ball SCA/GCA per 90)
+    setpiece: null,
     lineupStatus: 'unknown',
     formation:    null,
     injuries:     [],
@@ -290,7 +295,7 @@ export async function buildSoccerGameContext({
   const startedAt = Date.now();
   const leagueMeta = getSoccerLeague(leagueSlug);
 
-  const [standingsPayload, xgData, availability, weather] = await Promise.all([
+  const [standingsPayload, xgData, availability, weather, setpieceData] = await Promise.all([
     getSoccerStandings(leagueSlug).catch(err => {
       console.warn(`[soccer-context] standings failed (${leagueSlug}): ${err.message}`);
       return null;
@@ -299,6 +304,7 @@ export async function buildSoccerGameContext({
     getSoccerMatchAvailability({ leagueSlug, date: gameDate, homeName: homeTeamName, awayName: awayTeamName })
       .catch(() => null),
     getSoccerWeather({ homeTeamName, leagueSlug, gameTime: gameTime ?? gameDate }).catch(() => null),
+    getSoccerGameSetPieceStats(leagueSlug, homeTeamName, awayTeamName).catch(() => ({ home: null, away: null })),
   ]);
 
   const homeStats = extractTeamFromStandings(standingsPayload, homeTeamName, leagueSlug);
@@ -322,6 +328,8 @@ export async function buildSoccerGameContext({
     home.xGA_5       = xgData.home.xGA_5       ?? null;
     home.ppda        = xgData.home.ppda        ?? null;
     home.ppdaAllowed = xgData.home.ppdaAllowed ?? null;
+    home.xGDiff      = xgData.home.xGDiff      ?? null;
+    home.xGADiff     = xgData.home.xGADiff     ?? null;
   }
   if (xgData?.away) {
     away.xG          = xgData.away.xG          ?? null;
@@ -332,7 +340,11 @@ export async function buildSoccerGameContext({
     away.xGA_5       = xgData.away.xGA_5       ?? null;
     away.ppda        = xgData.away.ppda        ?? null;
     away.ppdaAllowed = xgData.away.ppdaAllowed ?? null;
+    away.xGDiff      = xgData.away.xGDiff      ?? null;
+    away.xGADiff     = xgData.away.xGADiff     ?? null;
   }
+  if (setpieceData?.home) home.setpiece = setpieceData.home;
+  if (setpieceData?.away) away.setpiece = setpieceData.away;
 
   // Enrich availability from API-Football (lineups + injuries + suspensions).
   // Null when the feature is off (no key), MLS coverage gaps, or fetch failure.
@@ -370,6 +382,8 @@ export async function buildSoccerGameContext({
   if (!marketOdds?.threeWay) staleFlags.push('three_way_odds_missing');
   const xgAvailable = !!(xgData?.home?.xG || xgData?.away?.xG);
   if (!xgAvailable) staleFlags.push('xg_unavailable');
+  const setpieceAvailable = !!(setpieceData?.home || setpieceData?.away);
+  if (!setpieceAvailable) staleFlags.push('setpiece_unavailable');
   const lineupsAvailable = !!availability;
   if (isSoccerLineupsEnabled() && !lineupsConfirmed) staleFlags.push('lineups_unconfirmed');
   if (!lineupsAvailable) staleFlags.push('availability_unavailable');
@@ -415,6 +429,7 @@ export async function buildSoccerGameContext({
         source: 'espn-standings-form',
       },
       xG: { ok: xgAvailable, source: xgAvailable ? 'understat' : 'unavailable — MLS or fetch failed' },
+      setpiece: { ok: setpieceAvailable, source: setpieceAvailable ? 'fbref' : 'unavailable — fbref blocked or no data' },
       marketOdds: {
         ok: !!(marketOdds?.threeWay),
         source: marketOdds?.source ?? null,

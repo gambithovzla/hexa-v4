@@ -97,6 +97,32 @@ describe('computeXgStats — rolling xG and PPDA', () => {
     assert.equal(result.ppdaAllowed, null);
   });
 
+  test('xGDiff positive when team outscores xG', () => {
+    // Each entry: xG=1.0 but scored=2 → outperforming
+    const history = Array.from({ length: 5 }, () => entry(1.0, 0.5, 2, 0));
+    const result = computeXgStats(history);
+    // actualGoals=10, xG=5.0 → xGDiff=+5.0
+    assert.equal(result.actualGoals, 10);
+    assert.equal(result.xGDiff, 5.0);
+  });
+
+  test('xGDiff negative when team underscores xG', () => {
+    // xG=2.0 but scored=0
+    const history = Array.from({ length: 4 }, () => entry(2.0, 1.0, 0, 1));
+    const result = computeXgStats(history);
+    // actualGoals=0, xG=8.0 → xGDiff=-8.0
+    assert.equal(result.xGDiff, -8.0);
+  });
+
+  test('xGADiff reflects defensive over/underperformance', () => {
+    // xGA=1.0, missed (conceded)=0 — conceding less than xGA
+    const history = Array.from({ length: 5 }, () => entry(1.5, 1.0, 2, 0));
+    const result = computeXgStats(history);
+    // actualGoalsAgainst=0, xGA=5.0 → xGADiff=-5.0
+    assert.equal(result.actualGoalsAgainst, 0);
+    assert.equal(result.xGADiff, -5.0);
+  });
+
   test('PPDA skips entries with zero def to avoid division by zero', () => {
     const history = [
       { ...entry(1.0, 0.5, 1, 0), ppda: { att: 80, def: 0 } },  // def=0, skip
