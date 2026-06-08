@@ -17,6 +17,19 @@ import { findSoccerTeam } from './soccer-team-map.js';
 import { getSoccerGameXg } from './soccer-xg-fetcher.js';
 import { getSoccerMatchAvailability, isSoccerLineupsEnabled } from './soccer-lineups-api.js';
 import { getSoccerWeather } from './soccer-weather-api.js';
+import { getSoccerGameSetPieceStats } from './soccer-fbref-fetcher.js';
+
+// European/relegation spots per league — source of truth for motivation/stakes analysis.
+// playoffPos: Bundesliga/Ligue 1 have a 16th-place relegation playoff vs 3rd-tier.
+// mls: true skips European spots / relegation in favour of conference playoff logic.
+const LEAGUE_SPOTS = {
+  'eng.1': { totalTeams: 20, ucl: 4, uel: 6, uecl: 7,    relegation: 3, playoffPos: null },
+  'esp.1': { totalTeams: 20, ucl: 4, uel: 6, uecl: null,  relegation: 3, playoffPos: null },
+  'ger.1': { totalTeams: 18, ucl: 4, uel: 6, uecl: null,  relegation: 2, playoffPos: 16  },
+  'ita.1': { totalTeams: 20, ucl: 4, uel: 6, uecl: 7,    relegation: 3, playoffPos: null },
+  'fra.1': { totalTeams: 18, ucl: 3, uel: 5, uecl: 6,    relegation: 2, playoffPos: 16  },
+  'usa.1': { totalTeams: 14, ucl: null, uel: null, uecl: null, relegation: 0, playoffPos: 9, mls: true },
+};
 
 function recentFormSummary(games) {
   if (!games?.length) return null;
@@ -71,25 +84,27 @@ function extractTeamFromStandings(standingsPayload, teamName, leagueSlug) {
   try {
     const groups = standingsPayload?.standings?.entries ?? standingsPayload?.entries ?? [];
     const entries = Array.isArray(groups) ? groups : [];
-    for (const entry of entries) {
+    for (let idx = 0; idx < entries.length; idx++) {
+      const entry = entries[idx];
       const eName = entry?.team?.displayName ?? entry?.team?.name ?? '';
       const seeded = findSoccerTeam(eName, leagueSlug);
       const canonical = seeded?.name ?? eName;
       const target    = findSoccerTeam(teamName, leagueSlug);
       if (canonical === (target?.name ?? teamName)) {
         const stats = {};
-        for (const s of (entry?.stats ?? [])) {
-          stats[s.name] = s.value;
-        }
+        for (const s of (entry?.stats ?? [])) stats[s.name] = s.value;
+        const rank = typeof stats.rank === 'number' ? stats.rank : (idx + 1);
         return {
-          wins:   stats.wins   ?? null,
-          draws:  stats.draws  ?? null,
-          losses: stats.losses ?? null,
+          wins:         stats.wins   ?? null,
+          draws:        stats.draws  ?? null,
+          losses:       stats.losses ?? null,
           goalsFor:     stats.pointsFor   ?? stats.goalsFor     ?? null,
           goalsAgainst: stats.pointsAgainst ?? stats.goalsAgainst ?? null,
           goalDiff:     stats.pointDifferential ?? null,
           points:       stats.points ?? null,
           form:         parseEspnFormString(stats.form ?? null),
+          position:     rank,
+          gamesPlayed:  stats.gamesPlayed ?? stats.played ?? null,
         };
       }
     }
@@ -99,34 +114,154 @@ function extractTeamFromStandings(standingsPayload, teamName, leagueSlug) {
   return null;
 }
 
+/**
+ * Build a flat standings table [{position, points}] sorted by position.
+ * Used by buildMotivationBlock to compute gaps to relevant cutoff positions.
+ */
+function extractFullStandings(standingsPayload) {
+  if (!standingsPayload) return [];
+  try {
+    const entries = standingsPayload?.standings?.entries ?? standingsPayload?.entries ?? [];
+    if (!Array.isArray(entries)) return [];
+    return entries
+      .map((entry, idx) => {
+        const stats = {};
+        for (const s of (entry?.stats ?? [])) stats[s.name] = s.value;
+        const rank = typeof stats.rank === 'number' ? stats.rank : (idx + 1);
+        const pts = typeof stats.points === 'number' ? stats.points : null;
+        return { position: rank, points: pts };
+      })
+      .filter(e => e.points != null)
+      .sort((a, b) => a.position - b.position);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Categorise a team's stakes given its table position and the full standings.
+ * Returns { position, totalTeams, gapToTop, gapToUcl, gapToRelegation, tags }.
+ * tags[] examples: ['TITLE LEADERS'], ['UCL PLACE (3)'], ['RELEGATION ZONE (18/20)'],
+ *   ['MID-TABLE (11/20)'], ['RELEGATION BATTLE (+2pts off drop)'].
+ */
+export function buildMotivationBlock(teamPoints, teamPosition, fullStandings, leagueSlug) {
+  if (!teamPosition || !fullStandings.length || teamPoints == null) return null;
+  const config = LEAGUE_SPOTS[leagueSlug];
+  if (!config) return null;
+
+  const totalTeams = fullStandings.length || config.totalTeams;
+  const leaderPoints = fullStandings[0]?.points ?? null;
+  if (leaderPoints == null) return null;
+
+  const gapToTop = leaderPoints - teamPoints;
+  const tags = [];
+
+  // MLS: conference-based playoffs, no European spots, no relegation
+  if (config.mls) {
+    const playoffCutoff = config.playoffPos ?? 9;
+    const playoffBoundaryPts = fullStandings[Math.min(playoffCutoff - 1, fullStandings.length - 1)]?.points ?? null;
+    if (teamPosition <= playoffCutoff) {
+      tags.push(`PLAYOFF ZONE (${teamPosition}/${totalTeams})`);
+    } else {
+      const deficit = playoffBoundaryPts != null ? playoffBoundaryPts - teamPoints : null;
+      tags.push(`OUT OF PLAYOFFS (${teamPosition}/${totalTeams}${deficit != null ? `, -${deficit}pts` : ''})`);
+    }
+    return { position: teamPosition, totalTeams, gapToTop, gapToUcl: null, gapToRelegation: null, tags };
+  }
+
+  const uclCutoff  = config.ucl  ?? 0;
+  const uelCutoff  = config.uel  ?? 0;
+  const ueclCutoff = config.uecl ?? 0;
+  const uclBoundaryPts  = uclCutoff  > 0 ? (fullStandings[uclCutoff  - 1]?.points ?? null) : null;
+  const uelBoundaryPts  = uelCutoff  > 0 ? (fullStandings[uelCutoff  - 1]?.points ?? null) : null;
+  const gapToUcl = uclBoundaryPts != null ? uclBoundaryPts - teamPoints : null;
+
+  // Title
+  if (teamPosition === 1) {
+    tags.push('TITLE LEADERS');
+  } else if (gapToTop <= 5) {
+    tags.push(`TITLE RACE (-${gapToTop}pts)`);
+  }
+
+  // European
+  if (teamPosition <= uclCutoff) {
+    tags.push(`UCL PLACE (${teamPosition})`);
+  } else if (uclBoundaryPts != null && teamPoints >= uclBoundaryPts - 3) {
+    tags.push(`UCL CONTENDER (-${uclBoundaryPts - teamPoints}pts)`);
+  } else if (uelCutoff > 0 && teamPosition <= uelCutoff) {
+    tags.push(`UEL PLACE (${teamPosition})`);
+  } else if (uelBoundaryPts != null && teamPoints >= uelBoundaryPts - 3 && teamPosition > uclCutoff) {
+    tags.push(`UEL CONTENDER (-${uelBoundaryPts - teamPoints}pts)`);
+  } else if (ueclCutoff > 0 && teamPosition <= ueclCutoff) {
+    tags.push(`UECL PLACE (${teamPosition})`);
+  }
+
+  // Relegation playoff (Bundesliga/Ligue 1 position 16)
+  if (config.playoffPos) {
+    const poPts = fullStandings[config.playoffPos - 1]?.points ?? null;
+    if (teamPosition === config.playoffPos) {
+      tags.push('RELEGATION PLAYOFF PLACE');
+    } else if (poPts != null && Math.abs(teamPoints - poPts) <= 2 &&
+               teamPosition > uelCutoff && teamPosition < config.playoffPos) {
+      tags.push(`NEAR PLAYOFF ZONE (+${teamPoints - poPts}pts)`);
+    }
+  }
+
+  // Relegation zone
+  let gapToRelegation = null;
+  if (config.relegation > 0) {
+    const relegStart = totalTeams - config.relegation + 1;
+    const safetyLine = fullStandings[Math.max(0, totalTeams - config.relegation - 1)]?.points ?? null;
+    gapToRelegation = safetyLine != null ? teamPoints - safetyLine : null;
+    if (teamPosition >= relegStart) {
+      tags.push(`RELEGATION ZONE (${teamPosition}/${totalTeams})`);
+    } else if (gapToRelegation != null && gapToRelegation <= 3) {
+      tags.push(`RELEGATION BATTLE (+${gapToRelegation}pts off drop)`);
+    }
+  }
+
+  // Mid-table / dead rubber
+  if (!tags.length) tags.push(`MID-TABLE (${teamPosition}/${totalTeams})`);
+
+  return { position: teamPosition, totalTeams, gapToTop, gapToUcl, gapToRelegation, tags };
+}
+
 function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
   const seeded = findSoccerTeam(teamName, leagueSlug);
   return {
-    teamId: teamId ?? null,
-    teamName: seeded?.name ?? teamName ?? null,
-    teamAbbr: seeded?.short ?? null,
-    wins:        statsFromStandings?.wins        ?? null,
-    draws:       statsFromStandings?.draws       ?? null,
-    losses:      statsFromStandings?.losses      ?? null,
-    goalsFor:    statsFromStandings?.goalsFor    ?? null,
+    teamId:       teamId ?? null,
+    teamName:     seeded?.name ?? teamName ?? null,
+    teamAbbr:     seeded?.short ?? null,
+    wins:         statsFromStandings?.wins        ?? null,
+    draws:        statsFromStandings?.draws       ?? null,
+    losses:       statsFromStandings?.losses      ?? null,
+    goalsFor:     statsFromStandings?.goalsFor    ?? null,
     goalsAgainst: statsFromStandings?.goalsAgainst ?? null,
-    goalDiff:    statsFromStandings?.goalDiff    ?? null,
-    points:      statsFromStandings?.points      ?? null,
-    recentForm:  statsFromStandings?.form        ?? null,
-    // xG/xGA: null until FBref/Understat integration
+    goalDiff:     statsFromStandings?.goalDiff    ?? null,
+    points:       statsFromStandings?.points      ?? null,
+    recentForm:   statsFromStandings?.form        ?? null,
+    position:     statsFromStandings?.position    ?? null,
+    gamesPlayed:  statsFromStandings?.gamesPlayed ?? null,
+    // xG/xGA from Understat (null for MLS or when fetch fails)
     xG:  null,
     xGA: null,
-    // Availability (Sprint 11.3 — API-Football): 'unknown' until lineups confirm
-    // ~1h pre-kick. Injuries + suspensions (yellow accumulation / red card) are
-    // unique to soccer and invisible to ESPN.
+    // Rolling xG averages (last 5 / last 7 matches) — null until Understat enrichment
+    xG_7: null, xGA_7: null,
+    xG_5: null, xGA_5: null,
+    // PPDA (Passes Per Defensive Action) — lower = more intense pressing
+    ppda: null, ppdaAllowed: null,
+    // xG over/underperformance vs actual goals (regression / recovery signal)
+    xGDiff: null, xGADiff: null,
+    // Set-piece stats from FBref (dead-ball SCA/GCA per 90)
+    setpiece: null,
     lineupStatus: 'unknown',
-    formation: null,
-    injuries: [],
-    suspensions: [],
-    // Schedule congestion / rotation risk (API-Football recent fixtures).
-    congestion: null,
-    // Home/away venue splits ({ home, away }) from API-Football /teams/statistics.
-    venueSplits: null,
+    formation:    null,
+    injuries:     [],
+    suspensions:  [],
+    congestion:   null,
+    venueSplits:  null,
+    // Stakes / motivation — populated below once the full standings table is extracted.
+    motivation:   null,
   };
 }
 
@@ -160,7 +295,7 @@ export async function buildSoccerGameContext({
   const startedAt = Date.now();
   const leagueMeta = getSoccerLeague(leagueSlug);
 
-  const [standingsPayload, xgData, availability, weather] = await Promise.all([
+  const [standingsPayload, xgData, availability, weather, setpieceData] = await Promise.all([
     getSoccerStandings(leagueSlug).catch(err => {
       console.warn(`[soccer-context] standings failed (${leagueSlug}): ${err.message}`);
       return null;
@@ -169,6 +304,7 @@ export async function buildSoccerGameContext({
     getSoccerMatchAvailability({ leagueSlug, date: gameDate, homeName: homeTeamName, awayName: awayTeamName })
       .catch(() => null),
     getSoccerWeather({ homeTeamName, leagueSlug, gameTime: gameTime ?? gameDate }).catch(() => null),
+    getSoccerGameSetPieceStats(leagueSlug, homeTeamName, awayTeamName).catch(() => ({ home: null, away: null })),
   ]);
 
   const homeStats = extractTeamFromStandings(standingsPayload, homeTeamName, leagueSlug);
@@ -177,15 +313,38 @@ export async function buildSoccerGameContext({
   const home = buildTeamBlock(homeTeamName, homeTeamId, homeStats, leagueSlug);
   const away = buildTeamBlock(awayTeamName, awayTeamId, awayStats, leagueSlug);
 
-  // Enrich xG from Understat (null if league unsupported or fetch failed)
+  // Stakes / motivation: derived from the full standings table (no new data source).
+  const fullStandings = extractFullStandings(standingsPayload);
+  home.motivation = buildMotivationBlock(home.points, homeStats?.position ?? null, fullStandings, leagueSlug);
+  away.motivation = buildMotivationBlock(away.points, awayStats?.position ?? null, fullStandings, leagueSlug);
+
+  // Enrich xG, rolling xG, and PPDA from Understat (null if MLS or fetch failed)
   if (xgData?.home) {
-    home.xG  = xgData.home.xG  ?? null;
-    home.xGA = xgData.home.xGA ?? null;
+    home.xG          = xgData.home.xG          ?? null;
+    home.xGA         = xgData.home.xGA         ?? null;
+    home.xG_7        = xgData.home.xG_7        ?? null;
+    home.xGA_7       = xgData.home.xGA_7       ?? null;
+    home.xG_5        = xgData.home.xG_5        ?? null;
+    home.xGA_5       = xgData.home.xGA_5       ?? null;
+    home.ppda        = xgData.home.ppda        ?? null;
+    home.ppdaAllowed = xgData.home.ppdaAllowed ?? null;
+    home.xGDiff      = xgData.home.xGDiff      ?? null;
+    home.xGADiff     = xgData.home.xGADiff     ?? null;
   }
   if (xgData?.away) {
-    away.xG  = xgData.away.xG  ?? null;
-    away.xGA = xgData.away.xGA ?? null;
+    away.xG          = xgData.away.xG          ?? null;
+    away.xGA         = xgData.away.xGA         ?? null;
+    away.xG_7        = xgData.away.xG_7        ?? null;
+    away.xGA_7       = xgData.away.xGA_7       ?? null;
+    away.xG_5        = xgData.away.xG_5        ?? null;
+    away.xGA_5       = xgData.away.xGA_5       ?? null;
+    away.ppda        = xgData.away.ppda        ?? null;
+    away.ppdaAllowed = xgData.away.ppdaAllowed ?? null;
+    away.xGDiff      = xgData.away.xGDiff      ?? null;
+    away.xGADiff     = xgData.away.xGADiff     ?? null;
   }
+  if (setpieceData?.home) home.setpiece = setpieceData.home;
+  if (setpieceData?.away) away.setpiece = setpieceData.away;
 
   // Enrich availability from API-Football (lineups + injuries + suspensions).
   // Null when the feature is off (no key), MLS coverage gaps, or fetch failure.
@@ -202,8 +361,9 @@ export async function buildSoccerGameContext({
     away.suspensions  = availability.away.suspensions ?? [];
   }
   const lineupsConfirmed = !!availability?.lineupsConfirmed;
-  // Referee (free from the fixture) + recent head-to-head — auxiliary signals.
+  // Referee (free from the fixture) + season stats (per-game YC/RC/pen) + H2H.
   const referee = availability?.referee ?? null;
+  const refereeStats = availability?.refereeStats ?? null;
   const h2h = availability?.h2h ?? null;
   const congestion = availability?.congestion ?? null;
   if (congestion?.home) home.congestion = congestion.home;
@@ -217,9 +377,13 @@ export async function buildSoccerGameContext({
   if (!awayStats) staleFlags.push('away_team_stats_missing');
   if (!home.recentForm) staleFlags.push('home_recent_form_missing');
   if (!away.recentForm) staleFlags.push('away_recent_form_missing');
+  const motivationAvailable = !!(home.motivation && away.motivation);
+  if (standingsPayload && !motivationAvailable) staleFlags.push('motivation_unavailable');
   if (!marketOdds?.threeWay) staleFlags.push('three_way_odds_missing');
   const xgAvailable = !!(xgData?.home?.xG || xgData?.away?.xG);
   if (!xgAvailable) staleFlags.push('xg_unavailable');
+  const setpieceAvailable = !!(setpieceData?.home || setpieceData?.away);
+  if (!setpieceAvailable) staleFlags.push('setpiece_unavailable');
   const lineupsAvailable = !!availability;
   if (isSoccerLineupsEnabled() && !lineupsConfirmed) staleFlags.push('lineups_unconfirmed');
   if (!lineupsAvailable) staleFlags.push('availability_unavailable');
@@ -229,6 +393,7 @@ export async function buildSoccerGameContext({
   // Only flag referee/H2H as missing when the fixture matched but the datum is
   // absent — a total availability miss is already covered above.
   if (availability && !referee) staleFlags.push('referee_unavailable');
+  if (availability && referee && !refereeStats) staleFlags.push('referee_stats_unavailable');
   if (availability && !h2h) staleFlags.push('h2h_unavailable');
   if (availability && !congestion) staleFlags.push('congestion_unavailable');
   if (availability && !venueSplits) staleFlags.push('venue_splits_unavailable');
@@ -264,6 +429,7 @@ export async function buildSoccerGameContext({
         source: 'espn-standings-form',
       },
       xG: { ok: xgAvailable, source: xgAvailable ? 'understat' : 'unavailable — MLS or fetch failed' },
+      setpiece: { ok: setpieceAvailable, source: setpieceAvailable ? 'fbref' : 'unavailable — fbref blocked or no data' },
       marketOdds: {
         ok: !!(marketOdds?.threeWay),
         source: marketOdds?.source ?? null,
@@ -285,6 +451,11 @@ export async function buildSoccerGameContext({
         ok: !!referee,
         source: referee ? 'api-football' : (availability ? 'not-assigned-yet' : null),
       },
+      refereeStats: {
+        ok: !!refereeStats,
+        source: refereeStats ? 'api-football' : (referee ? 'lookup-failed' : null),
+        gamesOfficiated: refereeStats?.gamesOfficiated ?? null,
+      },
       h2h: {
         ok: !!h2h,
         source: h2h ? 'api-football' : (availability ? 'no-history' : null),
@@ -297,6 +468,10 @@ export async function buildSoccerGameContext({
       venueSplits: {
         ok: !!venueSplits,
         source: venueSplits ? 'api-football' : (availability ? 'no-team-statistics' : null),
+      },
+      motivation: {
+        ok: motivationAvailable,
+        source: motivationAvailable ? 'espn-standings' : (standingsPayload ? 'position-missing' : 'standings-unavailable'),
       },
     },
     completeness,
@@ -312,6 +487,7 @@ export async function buildSoccerGameContext({
     away,
     weather: weather ?? null,
     referee: referee ?? null,
+    refereeStats: refereeStats ?? null,
     h2h: h2h ?? null,
     context_meta,
   };

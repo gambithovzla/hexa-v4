@@ -42,7 +42,8 @@ const API_FOOTBALL_LEAGUE_ID = {
   'usa.1': 253,  // MLS
 };
 
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min — lineups change near kickoff
+const CACHE_TTL_MS = 10 * 60 * 1000;          // 10 min — lineups change near kickoff
+const REFEREE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 h — referee season stats are stable
 const _cache = new Map();
 
 export function isSoccerLineupsEnabled() {
@@ -332,6 +333,67 @@ export function normalizeTeamSplits(statsResp) {
   return { home, away };
 }
 
+/**
+ * Normalize an API-Football /referees response into per-season per-game averages.
+ * Prefers the stats entry matching leagueId+season; falls back to first entry.
+ *
+ * @returns {{ name, gamesOfficiated, yellowsPerGame, redsPerGame, penaltiesPerGame } | null}
+ *   redsPerGame includes both direct reds and second-yellow reds.
+ *   penaltiesPerGame is penalties awarded (null when field absent).
+ */
+export function normalizeRefereeStats(refereesResp, leagueId, season) {
+  const arr = refereesResp?.response ?? refereesResp ?? [];
+  if (!Array.isArray(arr) || !arr.length) return null;
+
+  const ref = arr[0];
+  if (!ref) return null;
+
+  const statsArr = Array.isArray(ref.statistics) ? ref.statistics : [];
+  const stats = statsArr.find(s =>
+    (!leagueId || s.league?.id === leagueId) && (!season || s.season === season)
+  ) ?? statsArr[0] ?? null;
+  if (!stats) return null;
+
+  const games = stats.games?.played ?? 0;
+  if (!games) return null;
+
+  const yellow    = stats.cards?.yellow     ?? null;
+  const red       = (stats.cards?.red ?? 0) + (stats.cards?.yellowred ?? 0);
+  // API-Football spells it "commited" (sic) under either penalty or penalties
+  const penalties = stats.penalty?.commited ?? stats.penalties?.commited ?? null;
+
+  return {
+    name:             ref.name ?? null,
+    gamesOfficiated:  games,
+    yellowsPerGame:   yellow    != null ? Math.round(yellow    / games * 10)  / 10  : null,
+    redsPerGame:      red > 0           ? Math.round(red       / games * 100) / 100 : 0,
+    penaltiesPerGame: penalties != null ? Math.round(penalties / games * 100) / 100 : null,
+  };
+}
+
+async function _fetchRefereeStats(refereeName, leagueId, season) {
+  const norm = String(refereeName).toLowerCase().replace(/\s+/g, '_');
+  const cacheKey = `af:refstats:${leagueId}:${season}:${norm}`;
+  const cached = _cache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+
+  const { url, headers } = buildApiFootballRequest('/referees', {
+    name: refereeName, league: leagueId, season,
+  });
+  try {
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`API-Football HTTP ${res.status}`);
+    const json = await res.json();
+    const stats = normalizeRefereeStats(json, leagueId, season);
+    _cache.set(cacheKey, { data: stats, expiresAt: Date.now() + REFEREE_CACHE_TTL_MS });
+    return stats;
+  } catch (err) {
+    console.warn(`[soccer-lineups] /referees lookup failed for "${refereeName}": ${err.message}`);
+    if (cached) return cached.data;
+    return null;
+  }
+}
+
 async function _fetchJson(path, query, cacheKey) {
   const cached = _cache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.data;
@@ -384,7 +446,7 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
   const apAwayId = fixture.teams?.away?.id ?? null;
   const h2hKey = apHomeId && apAwayId ? `${apHomeId}-${apAwayId}` : null;
 
-  const [lineupResp, injuriesResp, h2hResp, homeFixturesResp, awayFixturesResp, homeStatsResp, awayStatsResp] = await Promise.all([
+  const [lineupResp, injuriesResp, h2hResp, homeFixturesResp, awayFixturesResp, homeStatsResp, awayStatsResp, refStatsData] = await Promise.all([
     _fetchJson('/fixtures/lineups', { fixture: fixtureId }, `af:lineups:${fixtureId}`),
     _fetchJson('/injuries', { fixture: fixtureId }, `af:injuries:${fixtureId}`),
     h2hKey
@@ -394,6 +456,7 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
     apAwayId ? _fetchJson('/fixtures', { team: apAwayId, last: 6 }, `af:teamfix:${apAwayId}`) : Promise.resolve(null),
     apHomeId ? _fetchJson('/teams/statistics', { league: leagueId, season, team: apHomeId }, `af:teamstats:${leagueId}:${season}:${apHomeId}`) : Promise.resolve(null),
     apAwayId ? _fetchJson('/teams/statistics', { league: leagueId, season, team: apAwayId }, `af:teamstats:${leagueId}:${season}:${apAwayId}`) : Promise.resolve(null),
+    referee  ? _fetchRefereeStats(referee, leagueId, season) : Promise.resolve(null),
   ]);
 
   const lineups = normalizeLineups(lineupResp ?? {}, homeName, awayName);
@@ -421,6 +484,7 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
     fixtureId,
     lineupsConfirmed: lineups.home.confirmed && lineups.away.confirmed,
     referee,
+    refereeStats: refStatsData ?? null,
     h2h,
     congestion,
     venueSplits,

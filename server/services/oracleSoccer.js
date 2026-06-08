@@ -63,11 +63,102 @@ function describeRecentForm(side) {
   return `  Recent form: ${record}${streak}${gf}${ga}`;
 }
 
-function describeXgLine(side) {
-  if (side?.xG != null || side?.xGA != null) {
-    return `  xG: xG ${fmt(side.xG, 2)} | xGA ${fmt(side.xGA, 2)}`;
+function ppdaLabel(ppda) {
+  if (ppda == null) return null;
+  if (ppda < 8)   return 'elite press';
+  if (ppda < 10)  return 'high press';
+  if (ppda < 13)  return 'moderate press';
+  if (ppda < 17)  return 'low press';
+  return 'passive/low block';
+}
+
+function refereeCardLabel(yellowsPerGame) {
+  if (yellowsPerGame == null) return null;
+  if (yellowsPerGame < 2.5) return 'lenient';
+  if (yellowsPerGame < 4.0) return 'average';
+  return 'card-heavy';
+}
+
+function refereePenaltyLabel(penaltiesPerGame) {
+  if (penaltiesPerGame == null) return null;
+  if (penaltiesPerGame >= 0.4) return 'high pen rate — Over/BTTS prior';
+  if (penaltiesPerGame >= 0.2) return 'moderate pen rate';
+  return null; // low pen rate is unremarkable
+}
+
+function xgDiffLabel(diff, isDefense = false) {
+  const d = Math.abs(diff);
+  if (!isDefense) {
+    if (diff >= 5)  return 'large outperformance — strong regression risk';
+    if (diff >= 3)  return 'outperforming xG — regression risk';
+    if (diff >= 1.5) return 'slightly over xG';
+    if (diff <= -5) return 'large underperformance — strong recovery potential';
+    if (diff <= -3) return 'underperforming xG — recovery potential';
+    if (diff <= -1.5) return 'slightly under xG';
+    return null; // within ±1.5 is unremarkable
+  } else {
+    // Defensive: positive = conceding more than expected
+    if (diff >= 3)  return 'conceding over expected — defense may be fragile';
+    if (diff <= -3) return 'conceding less than expected — goalkeeper/luck factor';
+    return null;
   }
-  return '  xG: unavailable — using goal differential + league profile as proxy';
+}
+
+function describeXgLine(side) {
+  if (side?.xG == null && side?.xGA == null) {
+    return '  xG: unavailable — using goal differential + league profile as proxy';
+  }
+  const season = `Season xG ${fmt(side.xG, 2)} | xGA ${fmt(side.xGA, 2)}`;
+  const parts = [season];
+
+  // Rolling windows — show last-7 (more stable than last-5 for comparison)
+  if (side.xG_7 != null || side.xGA_7 != null) {
+    parts.push(`Rolling-7 ${fmt(side.xG_7, 2)} xG / ${fmt(side.xGA_7, 2)} xGA per game`);
+  }
+
+  // PPDA
+  if (side.ppda != null) {
+    const label = ppdaLabel(side.ppda);
+    const allowed = side.ppdaAllowed != null ? ` | Opp PPDA ${fmt(side.ppdaAllowed, 1)}` : '';
+    parts.push(`PPDA ${fmt(side.ppda, 1)} (${label})${allowed}`);
+  }
+
+  // xG over/underperformance — regression / recovery signal
+  if (side.xGDiff != null && Math.abs(side.xGDiff) >= 1.5) {
+    const sign = side.xGDiff > 0 ? '+' : '';
+    const attLbl = xgDiffLabel(side.xGDiff, false);
+    const attStr = attLbl ? ` [${attLbl}]` : '';
+    parts.push(`Attack: ${sign}${fmt(side.xGDiff, 1)} vs xG${attStr}`);
+  }
+  if (side.xGADiff != null && Math.abs(side.xGADiff) >= 1.5) {
+    const sign = side.xGADiff > 0 ? '+' : '';
+    const defLbl = xgDiffLabel(side.xGADiff, true);
+    const defStr = defLbl ? ` [${defLbl}]` : '';
+    parts.push(`Defense: ${sign}${fmt(side.xGADiff, 1)} vs xGA${defStr}`);
+  }
+
+  return parts.map((p, i) => i === 0 ? `  xG: ${p}` : `       ${p}`).join('\n');
+}
+
+function describeSetPieceLine(side) {
+  const sp = side?.setpiece;
+  if (!sp) return null;
+  const { scaDeadBallPer90, gcaDeadBallPer90, scaDeadBallAllowedPer90, gcaDeadBallAllowedPer90 } = sp;
+  if (scaDeadBallPer90 == null && gcaDeadBallPer90 == null) return null;
+
+  const parts = [];
+  if (scaDeadBallPer90 != null) {
+    const tag = scaDeadBallPer90 >= 2.0 ? ' ★ high set-piece threat' : scaDeadBallPer90 <= 0.8 ? ' (low set-piece threat)' : '';
+    parts.push(`Off: ${fmt(scaDeadBallPer90, 2)} dead-ball SCA/90${tag}`);
+  }
+  if (gcaDeadBallPer90 != null) parts.push(`${fmt(gcaDeadBallPer90, 2)} GCA/90`);
+  if (scaDeadBallAllowedPer90 != null) {
+    const tag = scaDeadBallAllowedPer90 >= 2.0 ? ' ★ vulnerable to set pieces' : '';
+    parts.push(`Def: ${fmt(scaDeadBallAllowedPer90, 2)} dead-ball SCA allowed/90${tag}`);
+  }
+  if (gcaDeadBallAllowedPer90 != null) parts.push(`${fmt(gcaDeadBallAllowedPer90, 2)} GCA allowed/90`);
+
+  return `  Set pieces: ${parts.join(' | ')}`;
 }
 
 function describeStrengthLine(side) {
@@ -122,17 +213,29 @@ function describeVenueSplitLine(side, venueKey) {
   );
 }
 
+function describeMotivationLine(side) {
+  const m = side?.motivation;
+  if (!m || !m.tags?.length) return null;
+  const pos = m.position != null ? ` — Table: ${m.position}/${m.totalTeams}` : '';
+  const gapTop = m.gapToTop > 0 ? ` | -${m.gapToTop}pts to leader` : ' (leaders)';
+  return `  Stakes${pos}: ${m.tags.join(' / ')}${gapTop}`;
+}
+
 function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
   // The relevant venue split: home club's HOME record, away club's AWAY record.
   const venueKey = label === 'HOME' ? 'home' : 'away';
   const venueSplitLine = describeVenueSplitLine(side, venueKey);
   const congestionLine = describeCongestionLine(side);
+  const motivationLine = describeMotivationLine(side);
+  const setpieceLine   = describeSetPieceLine(side);
   return [
     `${label} — ${teamLabel(side)}`,
     describeStrengthLine(side),
+    ...(motivationLine ? [motivationLine] : []),
     ...(venueSplitLine ? [venueSplitLine] : []),
     describeXgLine(side),
+    ...(setpieceLine ? [setpieceLine] : []),
     describeRecentForm(side),
     ...(congestionLine ? [congestionLine] : []),
     ...describeAvailabilityLines(side),
@@ -206,7 +309,7 @@ function describeWeatherBlock(weather, home) {
   return parts.join('\n');
 }
 
-function describeH2HBlock(h2h, referee, home, away) {
+function describeH2HBlock(h2h, referee, refereeStats, home, away) {
   const lines = [];
   const host = teamLabel(home);
   const visitor = teamLabel(away);
@@ -224,7 +327,20 @@ function describeH2HBlock(h2h, referee, home, away) {
     lines.push('HEAD-TO-HEAD — no recent meeting data available.');
   }
   if (referee) {
-    lines.push(`  Referee: ${referee} (tendency unknown — do not assume card/penalty bias without data).`);
+    if (refereeStats) {
+      const g     = refereeStats.gamesOfficiated ? `(${refereeStats.gamesOfficiated}g)` : '';
+      const yc    = refereeStats.yellowsPerGame  != null ? `${fmt(refereeStats.yellowsPerGame, 1)} YC/g` : null;
+      const rc    = refereeStats.redsPerGame > 0 ? `${fmt(refereeStats.redsPerGame, 2)} RC/g` : null;
+      const pen   = refereeStats.penaltiesPerGame != null ? `${fmt(refereeStats.penaltiesPerGame, 2)} pen/g` : null;
+      const stats = [yc, rc, pen].filter(Boolean).join(' | ');
+      const cardLbl = refereeCardLabel(refereeStats.yellowsPerGame);
+      const penLbl  = refereePenaltyLabel(refereeStats.penaltiesPerGame);
+      const labels  = [cardLbl, penLbl].filter(Boolean);
+      const labelStr = labels.length ? ` → ${labels.join(', ')}` : '';
+      lines.push(`  Referee: ${referee} ${g} | ${stats}${labelStr}`);
+    } else {
+      lines.push(`  Referee: ${referee} — no season stats available; tendency unknown.`);
+    }
   }
   return lines.join('\n');
 }
@@ -243,7 +359,7 @@ function describeDataQuality(context_meta) {
  */
 export function serializeSoccerContext({ context, marketOdds }) {
   if (!context) return 'No soccer context provided.';
-  const { league, leagueMeta, gameDate, home, away, weather, referee, h2h, context_meta } = context;
+  const { league, leagueMeta, gameDate, home, away, weather, referee, refereeStats, h2h, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   return [
     `H.E.X.A. SOCCER CONTEXT — ${gameDate} (${league ?? 'unknown league'})`,
@@ -258,7 +374,7 @@ export function serializeSoccerContext({ context, marketOdds }) {
     '',
     describeWeatherBlock(weather, home),
     '',
-    describeH2HBlock(h2h, referee, home, away),
+    describeH2HBlock(h2h, referee, refereeStats ?? null, home, away),
     '',
     describeMarketOdds(marketOdds),
     ...(dataQualityLine ? ['', dataQualityLine] : []),

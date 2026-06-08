@@ -45,6 +45,7 @@ import AdminMLControlCenter   from './pages/AdminMLControlCenter';
 import PlayerPropsPage        from './pages/PlayerPropsPage';
 import EquityDashboard        from './pages/EquityDashboard';
 import ImperdiblePage         from './pages/ImperdiblePage';
+import ImperdibleSoccerPage  from './pages/ImperdibleSoccerPage';
 import PostmortemDashboard    from './pages/PostmortemDashboard';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
@@ -520,13 +521,18 @@ export default function App() {
     const token = localStorage.getItem('hexa_token');
     return <ImperdiblePage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
+  if (window.location.pathname === '/admin/imperdible-soccer') {
+    const token = localStorage.getItem('hexa_token');
+    return <ImperdibleSoccerPage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
   if (window.location.pathname === '/admin/postmortem') {
     const token = localStorage.getItem('hexa_token');
     return <PostmortemDashboard token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
   if (window.location.pathname === '/props') {
     const token = localStorage.getItem('hexa_token');
-    const propsSport = new URLSearchParams(window.location.search).get('sport') === 'nfl' ? 'nfl' : 'mlb';
+    const propsSportRaw = new URLSearchParams(window.location.search).get('sport');
+    const propsSport = ['nfl', 'soccer'].includes(propsSportRaw) ? propsSportRaw : 'mlb';
     return <PlayerPropsPage token={token} lang={lang} sport={propsSport} onBack={() => { window.location.href = '/'; }} />;
   }
 
