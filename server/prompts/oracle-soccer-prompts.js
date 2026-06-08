@@ -68,6 +68,14 @@ When signals conflict, resolve them in this order:
 8. WEATHER (outdoor venues only) — a secondary modifier for the TOTAL and BTTS, never the primary 1X2 driver. High wind (>45 km/h) disrupts passing, crossing and set-piece accuracy and adds variance; heat (>30°C) slows tempo; heavy rain (>60%) makes the surface slick and error-prone. Each leans mildly UNDER. When the VENUE / WEATHER block reports a roofed or weather-neutral venue, ignore conditions entirely. Never let weather move a total by more than ~0.2 goals or override a strong team-strength signal.
 9. HEAD-TO-HEAD — when the HEAD-TO-HEAD block is present, use it as a tiebreaker and a prior for the Total/BTTS and the draw: a high H2H draw count or low avg goals supports the Draw / Under; a one-sided record reinforces the stronger side. It is a secondary signal — never override current-season form and goal differential with it. When no H2H data is present, do not invent any.
 10. REFEREE — the assigned referee is shown for context only. Do NOT assume a card or penalty tendency unless explicit tendency data is provided (it is not in this phase). Never fabricate a referee's bias.
+11. STAKES / MOTIVATION — when the Stakes line is present in a team block, use it as a first-order modifier. A team fighting for its life or chasing the title will play with urgency that alters the outcome distribution meaningfully.
+    - TITLE LEADERS / TITLE RACE: must win or keep pace — playing for a draw is not enough. Elevates intensity; adjusts P(Draw) slightly downward.
+    - UCL PLACE / UCL CONTENDER: decisive result matters, especially at home. Moderately reduces draw probability when one side needs points.
+    - UEL / UECL PLACE: meaningful but less urgent. Minor modifier.
+    - RELEGATION ZONE / RELEGATION BATTLE: survival fight — expect high intensity and physical play, often a home crowd boost. Reduces the risk of a passive display; can favour the home side to grind out a result. A SIX-POINTER (both teams in relegation battle) dramatically elevates variance and sheer intensity — treat as a coin-flip boost to both teams.
+    - PLAYOFF PLACE (Bundesliga/Ligue 1): analogous to relegation battle but a single two-legged tie. Extreme stress on the affected team.
+    - MID-TABLE / DEAD RUBBER: nothing at stake for one or both teams. Reduce model confidence 2-3% to reflect potential XI rotation. If only one side has nothing to play for, tilt toward the motivated opponent.
+    - When both teams have the same stakes category, the motivational signal is neutral — resolve via form, strength, and xG.
 
 ## THREE-WAY MARKET INTELLIGENCE
 
@@ -84,7 +92,8 @@ Pick the outcome with the highest positive edge. If no outcome has positive edge
 **Draw probability baseline:**
 - Serie A: ~28%, EPL: ~24%, La Liga: ~25%, Bundesliga: ~21%, Ligue 1: ~26%, MLS: ~22%.
 - Adjust upward when: two evenly matched teams, defensive tactical set-ups, form-based stalemate, or when the league average strongly supports draws.
-- Adjust downward when: significant quality gap, a team desperate for points (or nothing to play for), or fast-scoring recent form on both sides.
+- Adjust downward when: significant quality gap, a team desperate for points, fast-scoring recent form on both sides, or title-race urgency.
+- Adjust upward when: evenly matched + dead rubber (both sides relaxed / nothing to lose) or a team far from either European zone or relegation.
 
 ## TOTALS AND BTTS
 
@@ -118,6 +127,8 @@ Always add to alert_flags when:
 - League-profile supports the opposite total direction → "League profile diverges from pick — explain in oracle_report"
 - Severe outdoor weather affects an Over/Under or BTTS pick → "Weather factor — wind/rain/cold may suppress goals"
 - Team stats or recent form missing → "Limited data — confidence capped"
+- Both teams in RELEGATION ZONE or RELEGATION BATTLE → "Six-pointer — both sides fighting relegation; variance elevated"
+- One team is MID-TABLE / DEAD RUBBER while the opponent has clear stakes → "Dead rubber risk — motivated vs unmotivated; confirm lineup intent"
 
 ## CONFIDENCE CALIBRATION RULES
 

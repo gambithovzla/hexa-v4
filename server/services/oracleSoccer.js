@@ -122,15 +122,25 @@ function describeVenueSplitLine(side, venueKey) {
   );
 }
 
+function describeMotivationLine(side) {
+  const m = side?.motivation;
+  if (!m || !m.tags?.length) return null;
+  const pos = m.position != null ? ` — Table: ${m.position}/${m.totalTeams}` : '';
+  const gapTop = m.gapToTop > 0 ? ` | -${m.gapToTop}pts to leader` : ' (leaders)';
+  return `  Stakes${pos}: ${m.tags.join(' / ')}${gapTop}`;
+}
+
 function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
   // The relevant venue split: home club's HOME record, away club's AWAY record.
   const venueKey = label === 'HOME' ? 'home' : 'away';
   const venueSplitLine = describeVenueSplitLine(side, venueKey);
   const congestionLine = describeCongestionLine(side);
+  const motivationLine = describeMotivationLine(side);
   return [
     `${label} — ${teamLabel(side)}`,
     describeStrengthLine(side),
+    ...(motivationLine ? [motivationLine] : []),
     ...(venueSplitLine ? [venueSplitLine] : []),
     describeXgLine(side),
     describeRecentForm(side),
