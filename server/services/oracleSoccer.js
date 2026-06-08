@@ -18,7 +18,7 @@
  *   - threeWay odds (home/draw/away) instead of moneyline + puck line
  *   - BTTS market
  *   - league style profile block (avgGoals, drawPct, style)
- *   - no weather block
+ *   - weather block for outdoor venues (roofed venues marked weather-neutral)
  *   - xG/xGA surfaced when non-null; labelled "unavailable" when null
  */
 
@@ -150,6 +150,30 @@ function describeMarketOdds(marketOdds) {
   return parts.join('\n');
 }
 
+function describeWeatherBlock(weather, home) {
+  const venue = weather?.stadium ?? null;
+  const at = venue ? ` at ${venue}` : '';
+  const host = teamLabel(home);
+  if (!weather) {
+    return `VENUE / WEATHER — ${host} home: stadium unmapped; weather not modeled this match.`;
+  }
+  if (weather.roof) {
+    return `VENUE / WEATHER — ${host} home${at}: roofed / weather-neutral venue. Conditions do not affect this match.`;
+  }
+  const parts = [`VENUE / WEATHER — ${host} home${at}`];
+  const t = weather.temperature != null ? `${Math.round(weather.temperature)}°C` : 'n/a';
+  const w = weather.windSpeed != null ? `${Math.round(weather.windSpeed)}km/h wind` : 'wind n/a';
+  const p = weather.precipitationProbability != null ? `${Math.round(weather.precipitationProbability)}% precip` : 'precip n/a';
+  parts.push(`  Conditions: ${t} | ${w} | ${p}`);
+  const flags = Array.isArray(weather.analysis) ? weather.analysis : [];
+  if (flags.length) {
+    parts.push(`  Impact: ${flags.join('; ')}`);
+  } else {
+    parts.push('  Impact: benign conditions — no material weather edge.');
+  }
+  return parts.join('\n');
+}
+
 function describeDataQuality(context_meta) {
   if (!context_meta) return null;
   const flags = Array.isArray(context_meta.staleFlags) ? context_meta.staleFlags : [];
@@ -164,7 +188,7 @@ function describeDataQuality(context_meta) {
  */
 export function serializeSoccerContext({ context, marketOdds }) {
   if (!context) return 'No soccer context provided.';
-  const { league, leagueMeta, gameDate, home, away, context_meta } = context;
+  const { league, leagueMeta, gameDate, home, away, weather, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   return [
     `H.E.X.A. SOCCER CONTEXT — ${gameDate} (${league ?? 'unknown league'})`,
@@ -176,6 +200,8 @@ export function serializeSoccerContext({ context, marketOdds }) {
     describeTeamBlock('HOME', home),
     '',
     describeTeamBlock('AWAY', away),
+    '',
+    describeWeatherBlock(weather, home),
     '',
     describeMarketOdds(marketOdds),
     ...(dataQualityLine ? ['', dataQualityLine] : []),
