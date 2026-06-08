@@ -107,7 +107,7 @@ hexa-v4/
 ### Admin
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
 - Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
-- [server/services/mlModelHealth.js](server/services/mlModelHealth.js) — observabilidad del sidecar ML: estado por mercado, modelos cargados, runline early-model flag, ensemble disponibilidad. Usado en HUD de `/admin/ml-control`.
+- [server/services/mlModelHealth.js](server/services/mlModelHealth.js) — observabilidad del sidecar ML: estado por mercado, modelos cargados, runline early-model flag, ensemble disponibilidad. Usado en HUD de `/admin/ml-control`. El panel de inferencia lista **MLB + NFL + Soccer** (`HUD_MARKETS`); cada fila lleva `sport` y los modelos pre-entrenados NFL/Soccer (`nfl_*`, `soccer_*`) aparecen LIVE/READY igual que MLB (antes el HUD era MLB-only y ocultaba los otros deportes).
 - [server/services/backtestRegrader.js](server/services/backtestRegrader.js) — lógica de re-grading de props en `backtest_results`. Compartida entre el script CLI (`scripts/regrade-backtest-props.js`) y el endpoint admin del dashboard.
 - [server/services/public-stats.js](server/services/public-stats.js) — cálculo puro de ROI/performance summary público. Reutilizado por `GET /api/picks/public-stats` y el Content API (`/api/content/v1/performance/summary`).
 

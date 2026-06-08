@@ -51,11 +51,15 @@ const MARKET_LABELS = {
   moneyline: 'Moneyline', overunder: 'Over / Under', runline: 'Runline',
   prop_hits: 'Hits', prop_strikeouts: 'Strikeouts', prop_total_bases: 'Total Bases',
   prop_home_runs: 'Home Runs', prop_rbis: 'RBIs',
+  nfl_moneyline: 'NFL · Moneyline', nfl_spread: 'NFL · Spread', nfl_total: 'NFL · Total', nfl_prop: 'NFL · Props',
+  soccer_moneyline: 'Soccer · 1X2', soccer_total: 'Soccer · Over/Under', soccer_btts: 'Soccer · BTTS',
 };
 const MARKET_TINTS  = {
   moneyline: CYAN, overunder: GREEN, runline: AMBER,
   prop_hits: CYAN, prop_strikeouts: GREEN, prop_total_bases: AMBER,
   prop_home_runs: ACCENT, prop_rbis: CYAN,
+  nfl_moneyline: ACCENT, nfl_spread: ACCENT, nfl_total: ACCENT, nfl_prop: ACCENT,
+  soccer_moneyline: GREEN, soccer_total: GREEN, soccer_btts: GREEN,
 };
 
 // ── Bilingual strings ─────────────────────────────────────────────────────────
