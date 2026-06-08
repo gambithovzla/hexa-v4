@@ -198,6 +198,9 @@ export async function buildSoccerGameContext({
     away.suspensions  = availability.away.suspensions ?? [];
   }
   const lineupsConfirmed = !!availability?.lineupsConfirmed;
+  // Referee (free from the fixture) + recent head-to-head — auxiliary signals.
+  const referee = availability?.referee ?? null;
+  const h2h = availability?.h2h ?? null;
 
   const staleFlags = [];
   if (!homeStats) staleFlags.push('home_team_stats_missing');
@@ -213,6 +216,10 @@ export async function buildSoccerGameContext({
   const isRoofed = !!weather?.roof;
   const weatherAvailable = !!weather;            // mapped venue (roofed or with a forecast)
   if (!weatherAvailable) staleFlags.push('weather_unavailable');
+  // Only flag referee/H2H as missing when the fixture matched but the datum is
+  // absent — a total availability miss is already covered above.
+  if (availability && !referee) staleFlags.push('referee_unavailable');
+  if (availability && !h2h) staleFlags.push('h2h_unavailable');
 
   const completeness = {
     teamStats:  fractionPresent(homeStats, awayStats),
@@ -262,6 +269,15 @@ export async function buildSoccerGameContext({
         roof: isRoofed,
         stadium: weather?.stadium ?? null,
       },
+      referee: {
+        ok: !!referee,
+        source: referee ? 'api-football' : (availability ? 'not-assigned-yet' : null),
+      },
+      h2h: {
+        ok: !!h2h,
+        source: h2h ? 'api-football' : (availability ? 'no-history' : null),
+        meetings: h2h?.meetings ?? 0,
+      },
     },
     completeness,
     overallCompleteness: overall,
@@ -275,6 +291,8 @@ export async function buildSoccerGameContext({
     home,
     away,
     weather: weather ?? null,
+    referee: referee ?? null,
+    h2h: h2h ?? null,
     context_meta,
   };
 }

@@ -174,6 +174,29 @@ function describeWeatherBlock(weather, home) {
   return parts.join('\n');
 }
 
+function describeH2HBlock(h2h, referee, home, away) {
+  const lines = [];
+  const host = teamLabel(home);
+  const visitor = teamLabel(away);
+  if (h2h && h2h.meetings > 0) {
+    lines.push(`HEAD-TO-HEAD — last ${h2h.meetings} meetings`);
+    lines.push(`  Record: ${host} ${h2h.homeWins}W | Draws ${h2h.draws} | ${visitor} ${h2h.awayWins}W`);
+    const avg = h2h.avgTotalGoals != null ? `${fmt(h2h.avgTotalGoals, 2)} goals/game` : 'n/a';
+    const btts = h2h.bttsPct != null ? `${h2h.bttsPct}% BTTS` : 'n/a';
+    lines.push(`  Scoring: ${avg} | ${btts}`);
+    const recent = Array.isArray(h2h.last) ? h2h.last.slice(0, 5) : [];
+    if (recent.length) {
+      lines.push(`  Recent: ${recent.map(m => `${m.home} ${m.score} ${m.away}`).join(' · ')}`);
+    }
+  } else {
+    lines.push('HEAD-TO-HEAD — no recent meeting data available.');
+  }
+  if (referee) {
+    lines.push(`  Referee: ${referee} (tendency unknown — do not assume card/penalty bias without data).`);
+  }
+  return lines.join('\n');
+}
+
 function describeDataQuality(context_meta) {
   if (!context_meta) return null;
   const flags = Array.isArray(context_meta.staleFlags) ? context_meta.staleFlags : [];
@@ -188,7 +211,7 @@ function describeDataQuality(context_meta) {
  */
 export function serializeSoccerContext({ context, marketOdds }) {
   if (!context) return 'No soccer context provided.';
-  const { league, leagueMeta, gameDate, home, away, weather, context_meta } = context;
+  const { league, leagueMeta, gameDate, home, away, weather, referee, h2h, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   return [
     `H.E.X.A. SOCCER CONTEXT — ${gameDate} (${league ?? 'unknown league'})`,
@@ -202,6 +225,8 @@ export function serializeSoccerContext({ context, marketOdds }) {
     describeTeamBlock('AWAY', away),
     '',
     describeWeatherBlock(weather, home),
+    '',
+    describeH2HBlock(h2h, referee, home, away),
     '',
     describeMarketOdds(marketOdds),
     ...(dataQualityLine ? ['', dataQualityLine] : []),

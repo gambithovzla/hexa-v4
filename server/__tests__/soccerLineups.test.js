@@ -8,6 +8,7 @@ import {
   matchFixtureByTeams,
   normalizeLineups,
   normalizeAvailability,
+  normalizeH2H,
 } from '../soccer-lineups-api.js';
 
 test('apiFootballLeagueId maps the 6 supported leagues', () => {
@@ -94,4 +95,32 @@ test('normalizers tolerate empty/missing input', () => {
   assert.deepEqual(normalizeLineups({}, 'A', 'B').home.confirmed, false);
   assert.deepEqual(normalizeAvailability(null, 'A', 'B').home.injuries, []);
   assert.equal(matchFixtureByTeams(null, 'A', 'B'), null);
+});
+
+test('normalizeH2H aggregates from the upcoming home/away perspective', () => {
+  // Arsenal (upcoming home) vs Chelsea (upcoming away). Past meetings include
+  // both orientations — the helper must orient by club name, not past side.
+  const resp = { response: [
+    { fixture: { date: '2025-03-01T00:00:00Z' }, teams: { home: { name: 'Arsenal' }, away: { name: 'Chelsea' } }, goals: { home: 2, away: 1 } }, // Arsenal win
+    { fixture: { date: '2024-11-10T00:00:00Z' }, teams: { home: { name: 'Chelsea' }, away: { name: 'Arsenal' } }, goals: { home: 0, away: 0 } }, // draw, BTTS no
+    { fixture: { date: '2024-04-20T00:00:00Z' }, teams: { home: { name: 'Chelsea' }, away: { name: 'Arsenal' } }, goals: { home: 3, away: 1 } }, // Chelsea win, BTTS yes
+    { fixture: { date: '2024-01-01T00:00:00Z' }, teams: { home: { name: 'Arsenal' }, away: { name: 'Chelsea' } }, goals: { home: null, away: null } }, // unfinished, ignored
+  ] };
+  const h = normalizeH2H(resp, 'Arsenal', 'Chelsea');
+  assert.equal(h.meetings, 3);
+  assert.equal(h.homeWins, 1); // Arsenal
+  assert.equal(h.awayWins, 1); // Chelsea
+  assert.equal(h.draws, 1);
+  assert.equal(h.avgTotalGoals, Math.round(((3 + 0 + 4) / 3) * 100) / 100);
+  assert.equal(h.bttsPct, Math.round((2 / 3) * 100)); // meetings 1 & 3 had both scoring
+  assert.equal(h.last.length, 3);
+});
+
+test('normalizeH2H ignores unrelated fixtures and empty input', () => {
+  const resp = { response: [
+    { fixture: { date: '2025-01-01' }, teams: { home: { name: 'Liverpool' }, away: { name: 'Everton' } }, goals: { home: 1, away: 1 } },
+  ] };
+  assert.equal(normalizeH2H(resp, 'Arsenal', 'Chelsea').meetings, 0);
+  assert.equal(normalizeH2H(null, 'A', 'B').meetings, 0);
+  assert.deepEqual(normalizeH2H({ response: [] }, 'A', 'B').last, []);
 });

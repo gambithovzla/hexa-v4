@@ -11,13 +11,17 @@
  * Suspensions (yellow-card accumulation / red cards) are unique to soccer and
  * invisible to ESPN — they surface here through the /injuries endpoint's reason.
  *
+ * Beyond availability, the same matched fixture also yields two extra signals at
+ * little/no quota cost: the assigned REFEREE (free — already in the fixture
+ * object) and recent HEAD-TO-HEAD history (+1 call to /fixtures/headtohead).
+ *
  * Every network call degrades to null and never throws (mirrors soccer-xg-fetcher
  * and the other soccer fetchers). The whole feature is a no-op when
  * API_FOOTBALL_KEY is unset, so the context builder keeps working ESPN-only.
  *
  * Pure helpers (exported for tests): apiFootballLeagueId, apiFootballSeason,
  * buildApiFootballRequest, matchFixtureByTeams, normalizeLineups,
- * normalizeAvailability.
+ * normalizeAvailability, normalizeH2H.
  */
 
 // Internal soccer-league slug → API-Football numeric league id.
@@ -159,6 +163,68 @@ export function normalizeAvailability(injuriesResp, homeName, awayName) {
   return out;
 }
 
+/**
+ * Normalize a /fixtures/headtohead response into recent-meeting aggregates, from
+ * the perspective of the UPCOMING match's home/away teams (by name, since a club
+ * is home in some past meetings and away in others). Only finished meetings with
+ * a final score are counted.
+ *
+ * @returns {{ meetings, homeWins, awayWins, draws, avgTotalGoals, bttsPct, last }}
+ *   homeWins/awayWins are wins for the upcoming home/away club respectively.
+ *   last: up to 5 recent meetings { date, home, away, score } for display.
+ */
+export function normalizeH2H(h2hResp, homeName, awayName) {
+  const arr = h2hResp?.response ?? h2hResp ?? [];
+  const empty = { meetings: 0, homeWins: 0, awayWins: 0, draws: 0, avgTotalGoals: null, bttsPct: null, last: [] };
+  if (!Array.isArray(arr) || !arr.length) return empty;
+
+  let homeWins = 0, awayWins = 0, draws = 0, totalGoals = 0, bttsCount = 0, counted = 0;
+  const last = [];
+
+  for (const m of arr) {
+    const hg = m?.goals?.home;
+    const ag = m?.goals?.away;
+    if (hg == null || ag == null) continue; // not finished
+    const pastHome = m?.teams?.home?.name;
+    const pastAway = m?.teams?.away?.name;
+
+    // Goals for the upcoming home/away club, regardless of which side they were on.
+    let upHomeGoals = null, upAwayGoals = null;
+    if (nameMatches(pastHome, homeName) && nameMatches(pastAway, awayName)) {
+      upHomeGoals = hg; upAwayGoals = ag;
+    } else if (nameMatches(pastHome, awayName) && nameMatches(pastAway, homeName)) {
+      upHomeGoals = ag; upAwayGoals = hg;
+    } else {
+      continue; // unrelated fixture
+    }
+
+    counted += 1;
+    totalGoals += hg + ag;
+    if (hg > 0 && ag > 0) bttsCount += 1;
+    if (upHomeGoals > upAwayGoals) homeWins += 1;
+    else if (upHomeGoals < upAwayGoals) awayWins += 1;
+    else draws += 1;
+
+    if (last.length < 5) {
+      last.push({
+        date: (m?.fixture?.date ?? '').slice(0, 10) || null,
+        home: pastHome ?? null,
+        away: pastAway ?? null,
+        score: `${hg}-${ag}`,
+      });
+    }
+  }
+
+  if (!counted) return empty;
+  return {
+    meetings: counted,
+    homeWins, awayWins, draws,
+    avgTotalGoals: Math.round((totalGoals / counted) * 100) / 100,
+    bttsPct: Math.round((bttsCount / counted) * 100),
+    last,
+  };
+}
+
 async function _fetchJson(path, query, cacheKey) {
   const cached = _cache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.data;
@@ -182,8 +248,10 @@ async function _fetchJson(path, query, cacheKey) {
  * injuries. Returns a per-side availability block, or null when disabled / no
  * fixture / total failure (caller treats null as "unknown", ESPN-only).
  *
- * @returns {{ fixtureId, lineupsConfirmed, home, away } | null}
+ * @returns {{ fixtureId, lineupsConfirmed, referee, h2h, home, away } | null}
  *   home/away: { lineupStatus:'confirmed'|'unknown', formation, injuries[], suspensions[] }
+ *   referee: string | null (free from the fixture object)
+ *   h2h: aggregate from normalizeH2H | null
  */
 export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, awayName }) {
   if (!isSoccerLineupsEnabled()) return null;
@@ -199,13 +267,26 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
   if (!fixture?.fixture?.id) return null;
   const fixtureId = fixture.fixture.id;
 
-  const [lineupResp, injuriesResp] = await Promise.all([
+  // Referee is already on the matched fixture — zero extra cost.
+  const referee = fixture.fixture?.referee ?? null;
+
+  // API-Football team ids drive the head-to-head lookup (names aren't accepted).
+  const apHomeId = fixture.teams?.home?.id ?? null;
+  const apAwayId = fixture.teams?.away?.id ?? null;
+  const h2hKey = apHomeId && apAwayId ? `${apHomeId}-${apAwayId}` : null;
+
+  const [lineupResp, injuriesResp, h2hResp] = await Promise.all([
     _fetchJson('/fixtures/lineups', { fixture: fixtureId }, `af:lineups:${fixtureId}`),
     _fetchJson('/injuries', { fixture: fixtureId }, `af:injuries:${fixtureId}`),
+    h2hKey
+      ? _fetchJson('/fixtures/headtohead', { h2h: h2hKey, last: 10 }, `af:h2h:${h2hKey}`)
+      : Promise.resolve(null),
   ]);
 
   const lineups = normalizeLineups(lineupResp ?? {}, homeName, awayName);
   const avail = normalizeAvailability(injuriesResp ?? {}, homeName, awayName);
+  const h2hAgg = h2hResp ? normalizeH2H(h2hResp, homeName, awayName) : null;
+  const h2h = h2hAgg && h2hAgg.meetings > 0 ? h2hAgg : null;
 
   const side = (s) => ({
     lineupStatus: lineups[s].confirmed ? 'confirmed' : 'unknown',
@@ -217,6 +298,8 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
   return {
     fixtureId,
     lineupsConfirmed: lineups.home.confirmed && lineups.away.confirmed,
+    referee,
+    h2h,
     home: side('home'),
     away: side('away'),
   };
