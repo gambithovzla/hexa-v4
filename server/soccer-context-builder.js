@@ -349,8 +349,9 @@ export async function buildSoccerGameContext({
     away.suspensions  = availability.away.suspensions ?? [];
   }
   const lineupsConfirmed = !!availability?.lineupsConfirmed;
-  // Referee (free from the fixture) + recent head-to-head — auxiliary signals.
+  // Referee (free from the fixture) + season stats (per-game YC/RC/pen) + H2H.
   const referee = availability?.referee ?? null;
+  const refereeStats = availability?.refereeStats ?? null;
   const h2h = availability?.h2h ?? null;
   const congestion = availability?.congestion ?? null;
   if (congestion?.home) home.congestion = congestion.home;
@@ -378,6 +379,7 @@ export async function buildSoccerGameContext({
   // Only flag referee/H2H as missing when the fixture matched but the datum is
   // absent — a total availability miss is already covered above.
   if (availability && !referee) staleFlags.push('referee_unavailable');
+  if (availability && referee && !refereeStats) staleFlags.push('referee_stats_unavailable');
   if (availability && !h2h) staleFlags.push('h2h_unavailable');
   if (availability && !congestion) staleFlags.push('congestion_unavailable');
   if (availability && !venueSplits) staleFlags.push('venue_splits_unavailable');
@@ -434,6 +436,11 @@ export async function buildSoccerGameContext({
         ok: !!referee,
         source: referee ? 'api-football' : (availability ? 'not-assigned-yet' : null),
       },
+      refereeStats: {
+        ok: !!refereeStats,
+        source: refereeStats ? 'api-football' : (referee ? 'lookup-failed' : null),
+        gamesOfficiated: refereeStats?.gamesOfficiated ?? null,
+      },
       h2h: {
         ok: !!h2h,
         source: h2h ? 'api-football' : (availability ? 'no-history' : null),
@@ -465,6 +472,7 @@ export async function buildSoccerGameContext({
     away,
     weather: weather ?? null,
     referee: referee ?? null,
+    refereeStats: refereeStats ?? null,
     h2h: h2h ?? null,
     context_meta,
   };

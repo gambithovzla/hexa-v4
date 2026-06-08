@@ -71,7 +71,13 @@ When signals conflict, resolve them in this order:
 7. MARKET ODDS — use to detect value gaps. The market's implied three-way probabilities must sum to ~100% plus the vig. Compare your modeled probabilities against the market's implied probabilities for all THREE outcomes.
 8. WEATHER (outdoor venues only) — a secondary modifier for the TOTAL and BTTS, never the primary 1X2 driver. High wind (>45 km/h) disrupts passing, crossing and set-piece accuracy and adds variance; heat (>30°C) slows tempo; heavy rain (>60%) makes the surface slick and error-prone. Each leans mildly UNDER. When the VENUE / WEATHER block reports a roofed or weather-neutral venue, ignore conditions entirely. Never let weather move a total by more than ~0.2 goals or override a strong team-strength signal.
 9. HEAD-TO-HEAD — when the HEAD-TO-HEAD block is present, use it as a tiebreaker and a prior for the Total/BTTS and the draw: a high H2H draw count or low avg goals supports the Draw / Under; a one-sided record reinforces the stronger side. It is a secondary signal — never override current-season form and goal differential with it. When no H2H data is present, do not invent any.
-10. REFEREE — the assigned referee is shown for context only. Do NOT assume a card or penalty tendency unless explicit tendency data is provided (it is not in this phase). Never fabricate a referee's bias.
+10. REFEREE — interpret based on what is shown:
+    - Name only (no stats): tendency unknown — do NOT assume any card or penalty bias; never fabricate.
+    - Stats present (YC/g, RC/g, pen/g): apply as a weak auxiliary signal (max ±2% confidence shift):
+      • High pen rate (≥ 0.4/g): adds a small prior toward Over/BTTS — penalties create direct goal chances.
+      • Card-heavy (≥ 4.0 YC/g): physical, confrontational game; may disrupt technical play but does NOT directly change goal totals.
+      • Lenient (< 2.5 YC/g): free-flowing game; slightly favours technical possession teams.
+    - Referee is always a secondary signal — never outweigh form, xG, or market odds.
 11. STAKES / MOTIVATION — when the Stakes line is present in a team block, use it as a first-order modifier. A team fighting for its life or chasing the title will play with urgency that alters the outcome distribution meaningfully.
     - TITLE LEADERS / TITLE RACE: must win or keep pace — playing for a draw is not enough. Elevates intensity; adjusts P(Draw) slightly downward.
     - UCL PLACE / UCL CONTENDER: decisive result matters, especially at home. Moderately reduces draw probability when one side needs points.

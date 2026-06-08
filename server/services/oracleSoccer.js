@@ -72,6 +72,20 @@ function ppdaLabel(ppda) {
   return 'passive/low block';
 }
 
+function refereeCardLabel(yellowsPerGame) {
+  if (yellowsPerGame == null) return null;
+  if (yellowsPerGame < 2.5) return 'lenient';
+  if (yellowsPerGame < 4.0) return 'average';
+  return 'card-heavy';
+}
+
+function refereePenaltyLabel(penaltiesPerGame) {
+  if (penaltiesPerGame == null) return null;
+  if (penaltiesPerGame >= 0.4) return 'high pen rate — Over/BTTS prior';
+  if (penaltiesPerGame >= 0.2) return 'moderate pen rate';
+  return null; // low pen rate is unremarkable
+}
+
 function describeXgLine(side) {
   if (side?.xG == null && side?.xGA == null) {
     return '  xG: unavailable — using goal differential + league profile as proxy';
@@ -241,7 +255,7 @@ function describeWeatherBlock(weather, home) {
   return parts.join('\n');
 }
 
-function describeH2HBlock(h2h, referee, home, away) {
+function describeH2HBlock(h2h, referee, refereeStats, home, away) {
   const lines = [];
   const host = teamLabel(home);
   const visitor = teamLabel(away);
@@ -259,7 +273,20 @@ function describeH2HBlock(h2h, referee, home, away) {
     lines.push('HEAD-TO-HEAD — no recent meeting data available.');
   }
   if (referee) {
-    lines.push(`  Referee: ${referee} (tendency unknown — do not assume card/penalty bias without data).`);
+    if (refereeStats) {
+      const g     = refereeStats.gamesOfficiated ? `(${refereeStats.gamesOfficiated}g)` : '';
+      const yc    = refereeStats.yellowsPerGame  != null ? `${fmt(refereeStats.yellowsPerGame, 1)} YC/g` : null;
+      const rc    = refereeStats.redsPerGame > 0 ? `${fmt(refereeStats.redsPerGame, 2)} RC/g` : null;
+      const pen   = refereeStats.penaltiesPerGame != null ? `${fmt(refereeStats.penaltiesPerGame, 2)} pen/g` : null;
+      const stats = [yc, rc, pen].filter(Boolean).join(' | ');
+      const cardLbl = refereeCardLabel(refereeStats.yellowsPerGame);
+      const penLbl  = refereePenaltyLabel(refereeStats.penaltiesPerGame);
+      const labels  = [cardLbl, penLbl].filter(Boolean);
+      const labelStr = labels.length ? ` → ${labels.join(', ')}` : '';
+      lines.push(`  Referee: ${referee} ${g} | ${stats}${labelStr}`);
+    } else {
+      lines.push(`  Referee: ${referee} — no season stats available; tendency unknown.`);
+    }
   }
   return lines.join('\n');
 }
@@ -278,7 +305,7 @@ function describeDataQuality(context_meta) {
  */
 export function serializeSoccerContext({ context, marketOdds }) {
   if (!context) return 'No soccer context provided.';
-  const { league, leagueMeta, gameDate, home, away, weather, referee, h2h, context_meta } = context;
+  const { league, leagueMeta, gameDate, home, away, weather, referee, refereeStats, h2h, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   return [
     `H.E.X.A. SOCCER CONTEXT — ${gameDate} (${league ?? 'unknown league'})`,
@@ -293,7 +320,7 @@ export function serializeSoccerContext({ context, marketOdds }) {
     '',
     describeWeatherBlock(weather, home),
     '',
-    describeH2HBlock(h2h, referee, home, away),
+    describeH2HBlock(h2h, referee, refereeStats ?? null, home, away),
     '',
     describeMarketOdds(marketOdds),
     ...(dataQualityLine ? ['', dataQualityLine] : []),
