@@ -198,6 +198,7 @@ router.post('/analyze/game', soccerEnabled, verifyToken, requireAdmin, async (re
       homeTeamId: game.teams?.home?.id ?? null,
       awayTeamId: game.teams?.away?.id ?? null,
       gameDate,
+      gameTime: game.gameDate ?? null,
       marketOdds: resolvedOdds,
     });
 
@@ -387,6 +388,7 @@ router.post('/analyze/chat', soccerEnabled, verifyToken, requireAdmin, async (re
       homeTeamId: game.teams?.home?.id ?? null,
       awayTeamId: game.teams?.away?.id ?? null,
       gameDate,
+      gameTime: game.gameDate ?? null,
       marketOdds: resolvedOdds,
     });
 

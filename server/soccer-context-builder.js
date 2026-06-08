@@ -4,7 +4,7 @@
  * League-aware by design: every function takes a `leagueSlug` and delegates to
  * soccer-api.js (one ESPN wrapper for all six leagues). Mirrors nhl-context-builder.js
  * but with soccer-specific dimensions:
- *   - NO weather block (outdoor, but weather is not modeled in this version)
+ *   - weather block (outdoor venues via Open-Meteo; roofed venues weather-neutral)
  *   - NO "starter confirmed" gate (lineups come ~1h pre-kick, too late for most flows)
  *   - league style profile injected from soccer-league-map.js (avgGoals, drawPct, style)
  *   - xG/xGA: null until FBref/Understat integration in a later sprint
@@ -16,6 +16,7 @@ import { getSoccerLeague, isSupportedLeague } from './soccer-league-map.js';
 import { findSoccerTeam } from './soccer-team-map.js';
 import { getSoccerGameXg } from './soccer-xg-fetcher.js';
 import { getSoccerMatchAvailability, isSoccerLineupsEnabled } from './soccer-lineups-api.js';
+import { getSoccerWeather } from './soccer-weather-api.js';
 
 function recentFormSummary(games) {
   if (!games?.length) return null;
@@ -145,6 +146,7 @@ export async function buildSoccerGameContext({
   homeTeamId = null,
   awayTeamId = null,
   gameDate,
+  gameTime = null,
   marketOdds = null,
 }) {
   if (!isSupportedLeague(leagueSlug)) {
@@ -154,7 +156,7 @@ export async function buildSoccerGameContext({
   const startedAt = Date.now();
   const leagueMeta = getSoccerLeague(leagueSlug);
 
-  const [standingsPayload, xgData, availability] = await Promise.all([
+  const [standingsPayload, xgData, availability, weather] = await Promise.all([
     getSoccerStandings(leagueSlug).catch(err => {
       console.warn(`[soccer-context] standings failed (${leagueSlug}): ${err.message}`);
       return null;
@@ -162,6 +164,7 @@ export async function buildSoccerGameContext({
     getSoccerGameXg(leagueSlug, homeTeamName, awayTeamName).catch(() => ({ home: null, away: null })),
     getSoccerMatchAvailability({ leagueSlug, date: gameDate, homeName: homeTeamName, awayName: awayTeamName })
       .catch(() => null),
+    getSoccerWeather({ homeTeamName, leagueSlug, gameTime: gameTime ?? gameDate }).catch(() => null),
   ]);
 
   const homeStats = extractTeamFromStandings(standingsPayload, homeTeamName, leagueSlug);
@@ -207,6 +210,9 @@ export async function buildSoccerGameContext({
   const lineupsAvailable = !!availability;
   if (isSoccerLineupsEnabled() && !lineupsConfirmed) staleFlags.push('lineups_unconfirmed');
   if (!lineupsAvailable) staleFlags.push('availability_unavailable');
+  const isRoofed = !!weather?.roof;
+  const weatherAvailable = !!weather;            // mapped venue (roofed or with a forecast)
+  if (!weatherAvailable) staleFlags.push('weather_unavailable');
 
   const completeness = {
     teamStats:  fractionPresent(homeStats, awayStats),
@@ -214,13 +220,15 @@ export async function buildSoccerGameContext({
     marketOdds: marketOdds?.threeWay ? 1 : 0,
     xG: xgAvailable ? 1 : 0,
     lineups: lineupsConfirmed ? 1 : 0,
+    weather: weatherAvailable ? 1 : 0,
   };
   const overall = +(
-    (completeness.teamStats  * 0.35 +
+    (completeness.teamStats  * 0.30 +
      completeness.recentForm * 0.20 +
      completeness.marketOdds * 0.20 +
      completeness.xG         * 0.10 +
-     completeness.lineups    * 0.15).toFixed(2)
+     completeness.lineups    * 0.15 +
+     completeness.weather    * 0.05).toFixed(2)
   );
 
   const context_meta = {
@@ -248,6 +256,12 @@ export async function buildSoccerGameContext({
         source: lineupsAvailable ? 'api-football' : (isSoccerLineupsEnabled() ? 'no-fixture-match' : 'disabled — no API_FOOTBALL_KEY'),
         fixtureId: availability?.fixtureId ?? null,
       },
+      weather: {
+        ok: weatherAvailable,
+        source: weatherAvailable ? (isRoofed ? 'roofed-venue' : 'open-meteo') : 'unavailable — venue unmapped',
+        roof: isRoofed,
+        stadium: weather?.stadium ?? null,
+      },
     },
     completeness,
     overallCompleteness: overall,
@@ -260,6 +274,7 @@ export async function buildSoccerGameContext({
     gameDate,
     home,
     away,
+    weather: weather ?? null,
     context_meta,
   };
 }

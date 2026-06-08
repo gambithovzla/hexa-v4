@@ -19,7 +19,8 @@
  *   - League profile adjusts the prior: Bundesliga favors Over (~3.1 g/p); Serie A
  *     favors Under/Draw (~2.4 g/p). Always cite the league average.
  *   - No confirmed lineup gate (lineups come ~1 hour pre-kick).
- *   - No weather block (outdoor but not modeled in this version).
+ *   - Weather block for outdoor venues (wind/cold/rain nudge totals & set pieces);
+ *     roofed venues are weather-neutral.
  *
  * Confidence calibration:
  *   MLB hard cap 70%   — high single-game variance.
@@ -62,7 +63,8 @@ When signals conflict, resolve them in this order:
 5. HOME ADVANTAGE — home edge in top-flight soccer is real but already priced. Only cite home advantage when the data confirms a meaningful home win rate.
 6. INJURIES / LINEUP STATUS — when any key player is flagged OUT (especially a striker or goalkeeper), adjust the pick. Lineups are confirmed ~1 hour pre-kick; flag the uncertainty.
 7. MARKET ODDS — use to detect value gaps. The market's implied three-way probabilities must sum to ~100% plus the vig. Compare your modeled probabilities against the market's implied probabilities for all THREE outcomes.
-8. H2H (head-to-head) — a tiebreaker only, not a primary signal.
+8. WEATHER (outdoor venues only) — a secondary modifier for the TOTAL and BTTS, never the primary 1X2 driver. High wind (>45 km/h) disrupts passing, crossing and set-piece accuracy and adds variance; heat (>30°C) slows tempo; heavy rain (>60%) makes the surface slick and error-prone. Each leans mildly UNDER. When the VENUE / WEATHER block reports a roofed or weather-neutral venue, ignore conditions entirely. Never let weather move a total by more than ~0.2 goals or override a strong team-strength signal.
+9. H2H (head-to-head) — a tiebreaker only, not a primary signal.
 
 ## THREE-WAY MARKET INTELLIGENCE
 
@@ -111,6 +113,7 @@ Always add to alert_flags when:
 - Pick is the Draw → "Draw pick — 1X2 draw; verify ~1hr pre-kick for lineup impact"
 - Pick is Away Win with odds > +250 → "High-price away win — check lineup status"
 - League-profile supports the opposite total direction → "League profile diverges from pick — explain in oracle_report"
+- Severe outdoor weather affects an Over/Under or BTTS pick → "Weather factor — wind/rain/cold may suppress goals"
 - Team stats or recent form missing → "Limited data — confidence capped"
 
 ## CONFIDENCE CALIBRATION RULES
