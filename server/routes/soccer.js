@@ -21,7 +21,10 @@ import { Router } from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
 import { getSoccerGamesForDate } from '../soccer-api.js';
-import { isSupportedLeague } from '../soccer-league-map.js';
+import { isSupportedLeague, SOCCER_LEAGUE_SLUGS } from '../soccer-league-map.js';
+import { getSoccerPlayerPropOdds } from '../soccer-props-odds.js';
+import { enrichSoccerPropOffers } from '../services/soccerPropFeatureEnricher.js';
+import { parseSoccerProp } from '../soccer-props-resolver.js';
 import { buildSoccerGameContext } from '../soccer-context-builder.js';
 import { analyzeSoccerGame, analyzeSoccerChat } from '../services/oracleSoccer.js';
 import { getSoccerGameOdds, matchSoccerOddsToGame, buildMarketOddsForGame } from '../soccer-odds.js';
@@ -49,6 +52,13 @@ function soccerEnabled(req, res, next) {
 function soccerParlayEnabled(req, res, next) {
   if (process.env.PARLAY_SYNERGY_SOCCER_ENABLED !== 'true') {
     return res.status(503).json({ success: false, error: 'Soccer parlay synergy is not yet enabled on this instance.' });
+  }
+  return next();
+}
+
+function soccerPropsEnabled(req, res, next) {
+  if (process.env.SOCCER_PROPS_ENABLED !== 'true') {
+    return res.status(503).json({ success: false, error: 'Soccer player props are not yet enabled on this instance.' });
   }
   return next();
 }
@@ -573,6 +583,120 @@ router.post('/parlay', soccerParlayEnabled, verifyToken, requireAdmin, async (re
     return res.json({ success: true, sport: 'soccer', league: leagueSlug, mode, lang, candidateCount: candidates.length, modelEnriched, parlays: enriched, meta });
   } catch (err) {
     console.error(`[soccer-route] parlay error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// ── GET /api/soccer/props/board ──────────────────────────────────────────────────
+//
+// Admin-only soccer player-props board: market odds (Odds API event endpoint) +
+// no-vig fair probability. Accepts `league` param to scope to one league; defaults
+// to all six. ML modelProb is null until a dedicated soccer_prop model ships.
+// Flag: SOCCER_PROPS_ENABLED.
+
+function todaySoccerEt() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+async function fetchSoccerOraclePropPicks(userId, date) {
+  const { rows } = await pool.query(
+    `SELECT id, pick, matchup, game_pk, game_date::text AS game_date,
+            oracle_confidence, result, created_at, league
+     FROM picks
+     WHERE user_id = $1 AND sport = 'soccer' AND deleted_at IS NULL AND pick IS NOT NULL
+       AND (game_date::date = $2 OR created_at::date = $2)
+     ORDER BY created_at DESC
+     LIMIT 80`,
+    [userId, date],
+  );
+  const out = [];
+  for (const r of rows) {
+    const parsed = parseSoccerProp(r.pick);
+    if (!parsed) continue;
+    out.push({
+      pickId: r.id,
+      pick: r.pick,
+      matchup: r.matchup,
+      gamePk: r.game_pk,
+      league: r.league,
+      propKind: parsed.propKind,
+      side: parsed.side,
+      line: parsed.line,
+      playerName: parsed.playerName,
+      confidence: r.oracle_confidence,
+      result: r.result,
+      createdAt: r.created_at,
+    });
+  }
+  return out;
+}
+
+router.get('/props/board', soccerPropsEnabled, verifyToken, requireAdmin, async (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? req.query.date : todaySoccerEt();
+  const leagueFilter = req.query.league && isSupportedLeague(req.query.league) ? req.query.league : null;
+  const propKindFilter = req.query.propKind ? String(req.query.propKind) : null;
+  const leagues = leagueFilter ? [leagueFilter] : SOCCER_LEAGUE_SLUGS;
+
+  try {
+    const boardGames = [];
+    let oddsAvailable = false;
+
+    for (const leagueSlug of leagues) {
+      const [games, oddsEvents] = await Promise.all([
+        getSoccerGamesForDate(leagueSlug, date),
+        getSoccerGameOdds({ leagueSlug, date }),
+      ]);
+
+      for (const game of games) {
+        const event = matchSoccerOddsToGame(oddsEvents, game.home_team_name, game.away_team_name);
+        let props = [];
+        if (event?.eventId) {
+          const offers = await getSoccerPlayerPropOdds({ leagueSlug, eventId: event.eventId });
+          if (offers.length) oddsAvailable = true;
+          props = enrichSoccerPropOffers(offers)
+            .filter(o => !propKindFilter || o.propKind === propKindFilter)
+            .map(o => ({
+              propKind: o.propKind,
+              playerName: o.playerName,
+              side: o.side,
+              line: o.line,
+              oddsAmerican: o.oddsAmerican,
+              impliedProb: o.impliedProb,
+              fairProb: o.fairProb,
+              vig: o.vig,
+              modelProb: null, // soccer_prop model — pending sufficient pick volume
+              edge: null,
+            }))
+            .sort((a, b) =>
+              a.propKind.localeCompare(b.propKind) || String(a.playerName).localeCompare(String(b.playerName)));
+        }
+        boardGames.push({
+          gameId: game.game_id,
+          eventId: event?.eventId ?? null,
+          leagueSlug,
+          awayTeam: game.away_team_name,
+          homeTeam: game.home_team_name,
+          startTime: game.game_datetime ?? null,
+          props,
+        });
+      }
+    }
+
+    const oraclePropPicks = await fetchSoccerOraclePropPicks(req.user.id, date);
+
+    return res.json({
+      success: true,
+      date,
+      sport: 'soccer',
+      league: leagueFilter ?? 'all',
+      mlPublic: false,
+      mlEnabled: false, // no soccer_prop model yet
+      games: boardGames,
+      oraclePropPicks,
+      oddsAvailable,
+    });
+  } catch (err) {
+    console.error(`[soccer-route] props/board error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });
   }
 });

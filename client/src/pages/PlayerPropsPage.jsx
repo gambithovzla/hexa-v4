@@ -160,7 +160,27 @@ const KIND_LABELS = {
       reception_yds: 'Yds Recep', receptions: 'Recepciones', anytime_td: 'TD Anytime',
     },
   },
+  soccer: {
+    en: {
+      anytime_goal: 'Anytime Goal', shots_on_target: 'Shots on Target',
+      shots: 'Shots', card: 'To Receive Card',
+    },
+    es: {
+      anytime_goal: 'Gol en cualquier momento', shots_on_target: 'Tiros a puerta',
+      shots: 'Tiros', card: 'Recibir tarjeta',
+    },
+  },
 };
+
+const SOCCER_LEAGUE_OPTIONS = [
+  { value: '', label: 'All leagues' },
+  { value: 'eng.1', label: 'Premier League' },
+  { value: 'esp.1', label: 'La Liga' },
+  { value: 'ita.1', label: 'Serie A' },
+  { value: 'ger.1', label: 'Bundesliga' },
+  { value: 'fra.1', label: 'Ligue 1' },
+  { value: 'usa.1', label: 'MLS' },
+];
 
 function fmtPct(v) {
   if (v == null) return '—';
@@ -177,13 +197,15 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
   const T = { ...(STRINGS[lang] ?? STRINGS.es), lang };
   const H = T.help ?? {};
 
-  const [sport, setSport] = useState(initialSport === 'nfl' ? 'nfl' : 'mlb');
-  const isNfl = sport === 'nfl';
+  const [sport, setSport] = useState(['nfl', 'soccer'].includes(initialSport) ? initialSport : 'mlb');
+  const isNfl    = sport === 'nfl';
+  const isSoccer = sport === 'soccer';
   const KL = (KIND_LABELS[sport] ?? KIND_LABELS.mlb)[lang] ?? (KIND_LABELS[sport] ?? KIND_LABELS.mlb).es;
 
   const [date, setDate] = useState(() =>
     new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
   );
+  const [soccerLeague, setSoccerLeague] = useState('');
   const [propKind, setPropKind] = useState('');
   const [minEdge, setMinEdge] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
@@ -201,7 +223,9 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
       const params = new URLSearchParams({ date });
       if (propKind) params.set('propKind', propKind);
       if (minEdge) params.set('minEdge', minEdge);
-      const boardPath = isNfl ? '/api/nfl/props/board' : '/api/mlb/props/board';
+      if (isSoccer && soccerLeague) params.set('league', soccerLeague);
+      const boardPath = isSoccer ? '/api/soccer/props/board'
+        : isNfl ? '/api/nfl/props/board' : '/api/mlb/props/board';
       const res = await fetch(`${API_URL}${boardPath}?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -213,7 +237,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
     } finally {
       setLoading(false);
     }
-  }, [token, date, propKind, minEdge, isNfl]);
+  }, [token, date, propKind, minEdge, isNfl, isSoccer, soccerLeague]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -242,22 +266,26 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
           <HelpTip title={H.page} />
         </Box>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          {['mlb', 'nfl'].map((s) => (
-            <Button
-              key={s}
-              onClick={() => { setSport(s); setPropKind(''); }}
-              size="small"
-              sx={{
-                color: sport === s ? '#000' : MUTED,
-                background: sport === s ? (s === 'nfl' ? 'var(--brand-field, #2e7d32)' : CYAN) : 'transparent',
-                fontFamily: MONO, fontSize: '10px', fontWeight: 700,
-                border: `1px solid ${sport === s ? (s === 'nfl' ? 'var(--brand-field, #2e7d32)' : CYAN) : BORDER}`,
-                minWidth: 44,
-              }}
-            >
-              {s.toUpperCase()}
-            </Button>
-          ))}
+          {['mlb', 'nfl', 'soccer'].map((s) => {
+            const active = sport === s;
+            const bg = s === 'soccer' ? '#2d6a2d' : s === 'nfl' ? 'var(--brand-field, #2e7d32)' : CYAN;
+            return (
+              <Button
+                key={s}
+                onClick={() => { setSport(s); setPropKind(''); setSoccerLeague(''); }}
+                size="small"
+                sx={{
+                  color: active ? '#fff' : MUTED,
+                  background: active ? bg : 'transparent',
+                  fontFamily: MONO, fontSize: '10px', fontWeight: 700,
+                  border: `1px solid ${active ? bg : BORDER}`,
+                  minWidth: 44,
+                }}
+              >
+                {s === 'soccer' ? '⚽' : s.toUpperCase()}
+              </Button>
+            );
+          })}
         </Box>
       </Box>
 
@@ -271,6 +299,21 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
           />
           <HelpTip title={H.date} />
         </Box>
+        {isSoccer && (
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED }}>League</InputLabel>
+            <Select
+              value={soccerLeague}
+              label="League"
+              onChange={(e) => setSoccerLeague(e.target.value)}
+              sx={{ fontFamily: MONO, fontSize: '11px', color: INK0, border: `1px solid ${BORDER}` }}
+            >
+              {SOCCER_LEAGUE_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED }}>{T.market}</InputLabel>
@@ -310,7 +353,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
             style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', width: 160, fontFamily: MONO, fontSize: '11px' }}
           />
         </Box>
-        {!isNfl && (
+        {!isNfl && !isSoccer && (
           <Button
             onClick={() => setShowSavant((v) => !v)}
             size="small"
@@ -405,12 +448,12 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
                   <ThLabel label={T.line} help={H.lineCol} />
                   <ThLabel label={T.odds} help={H.oddsCol} />
                   <ThLabel label={T.implied} help={H.implied} />
-                  {isNfl && <ThLabel label={T.fair} help={H.fair} />}
+                  {(isNfl || isSoccer) && <ThLabel label={T.fair} help={H.fair} />}
                   <ThLabel label={T.model} help={H.model} />
                   <ThLabel label={T.edge} help={H.edge} />
-                  {!isNfl && showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>xBA / xSLG</th>}
-                  {!isNfl && showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>wOBA 7d</th>}
-                  {!isNfl && g.eventId && <th style={{ padding: '6px 8px', color: MUTED }}></th>}
+                  {!isNfl && !isSoccer && showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>xBA / xSLG</th>}
+                  {!isNfl && !isSoccer && showSavant && <th style={{ padding: '6px 8px', color: MUTED }}>wOBA 7d</th>}
+                  {!isNfl && !isSoccer && g.eventId && <th style={{ padding: '6px 8px', color: MUTED }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -432,22 +475,22 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
                       <td>{p.line}</td>
                       <td>{p.oddsAmerican > 0 ? `+${p.oddsAmerican}` : p.oddsAmerican}</td>
                       <td>{fmtPct(p.impliedProb)}</td>
-                      {isNfl && <td style={{ color: p.fairProb != null ? GREEN : MUTED }}>{fmtPct(p.fairProb)}</td>}
+                      {(isNfl || isSoccer) && <td style={{ color: p.fairProb != null ? GREEN : MUTED }}>{fmtPct(p.fairProb)}</td>}
                       <td style={{ color: p.modelProb != null ? CYAN : MUTED }}>{fmtPct(p.modelProb)}</td>
                       <td style={{ color: edgeColor, fontWeight: 700 }}>{fmtEdge(p.edge)}</td>
-                      {!isNfl && showSavant && (
+                      {!isNfl && !isSoccer && showSavant && (
                         <td style={{ color: MUTED }}>
                           {p.savant?.xba != null ? p.savant.xba.toFixed(3) : '—'}
                           {' / '}
                           {p.savant?.xslg != null ? p.savant.xslg.toFixed(3) : '—'}
                         </td>
                       )}
-                      {!isNfl && showSavant && (
+                      {!isNfl && !isSoccer && showSavant && (
                         <td style={{ color: MUTED }}>
                           {p.savant?.rolling7d != null ? p.savant.rolling7d.toFixed(3) : '—'}
                         </td>
                       )}
-                      {!isNfl && g.eventId && (
+                      {!isNfl && !isSoccer && g.eventId && (
                         <td style={{ padding: '4px 8px' }}>
                           <button
                             onClick={() => setAltLines({ eventId: g.eventId, playerName: p.playerName, propKind: p.propKind })}
