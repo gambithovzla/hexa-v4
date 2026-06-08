@@ -11,13 +11,25 @@
  * Suspensions (yellow-card accumulation / red cards) are unique to soccer and
  * invisible to ESPN — they surface here through the /injuries endpoint's reason.
  *
+ * Beyond availability, the same matched fixture also yields two extra signals at
+ * little/no quota cost: the assigned REFEREE (free — already in the fixture
+ * object) and recent HEAD-TO-HEAD history (+1 call to /fixtures/headtohead).
+ *
  * Every network call degrades to null and never throws (mirrors soccer-xg-fetcher
  * and the other soccer fetchers). The whole feature is a no-op when
  * API_FOOTBALL_KEY is unset, so the context builder keeps working ESPN-only.
  *
+ * Schedule congestion / rotation risk comes from each club's recent fixtures
+ * across ALL competitions (+1 call per team to /fixtures?team&last): a midweek
+ * cup/European game or a 2-day rest is the rotation signal ESPN can't give.
+ *
+ * Home/away venue splits come from /teams/statistics (+1 call per team): a
+ * club's home-vs-away record + goals — the split ESPN standings don't expose
+ * reliably. Fortress-at-home and poor-travellers are real 1X2 signals.
+ *
  * Pure helpers (exported for tests): apiFootballLeagueId, apiFootballSeason,
  * buildApiFootballRequest, matchFixtureByTeams, normalizeLineups,
- * normalizeAvailability.
+ * normalizeAvailability, normalizeH2H, normalizeCongestion, normalizeTeamSplits.
  */
 
 // Internal soccer-league slug → API-Football numeric league id.
@@ -159,6 +171,167 @@ export function normalizeAvailability(injuriesResp, homeName, awayName) {
   return out;
 }
 
+/**
+ * Normalize a /fixtures/headtohead response into recent-meeting aggregates, from
+ * the perspective of the UPCOMING match's home/away teams (by name, since a club
+ * is home in some past meetings and away in others). Only finished meetings with
+ * a final score are counted.
+ *
+ * @returns {{ meetings, homeWins, awayWins, draws, avgTotalGoals, bttsPct, last }}
+ *   homeWins/awayWins are wins for the upcoming home/away club respectively.
+ *   last: up to 5 recent meetings { date, home, away, score } for display.
+ */
+export function normalizeH2H(h2hResp, homeName, awayName) {
+  const arr = h2hResp?.response ?? h2hResp ?? [];
+  const empty = { meetings: 0, homeWins: 0, awayWins: 0, draws: 0, avgTotalGoals: null, bttsPct: null, last: [] };
+  if (!Array.isArray(arr) || !arr.length) return empty;
+
+  let homeWins = 0, awayWins = 0, draws = 0, totalGoals = 0, bttsCount = 0, counted = 0;
+  const last = [];
+
+  for (const m of arr) {
+    const hg = m?.goals?.home;
+    const ag = m?.goals?.away;
+    if (hg == null || ag == null) continue; // not finished
+    const pastHome = m?.teams?.home?.name;
+    const pastAway = m?.teams?.away?.name;
+
+    // Goals for the upcoming home/away club, regardless of which side they were on.
+    let upHomeGoals = null, upAwayGoals = null;
+    if (nameMatches(pastHome, homeName) && nameMatches(pastAway, awayName)) {
+      upHomeGoals = hg; upAwayGoals = ag;
+    } else if (nameMatches(pastHome, awayName) && nameMatches(pastAway, homeName)) {
+      upHomeGoals = ag; upAwayGoals = hg;
+    } else {
+      continue; // unrelated fixture
+    }
+
+    counted += 1;
+    totalGoals += hg + ag;
+    if (hg > 0 && ag > 0) bttsCount += 1;
+    if (upHomeGoals > upAwayGoals) homeWins += 1;
+    else if (upHomeGoals < upAwayGoals) awayWins += 1;
+    else draws += 1;
+
+    if (last.length < 5) {
+      last.push({
+        date: (m?.fixture?.date ?? '').slice(0, 10) || null,
+        home: pastHome ?? null,
+        away: pastAway ?? null,
+        score: `${hg}-${ag}`,
+      });
+    }
+  }
+
+  if (!counted) return empty;
+  return {
+    meetings: counted,
+    homeWins, awayWins, draws,
+    avgTotalGoals: Math.round((totalGoals / counted) * 100) / 100,
+    bttsPct: Math.round((bttsCount / counted) * 100),
+    last,
+  };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Schedule-congestion / rotation risk for one club from its recent fixtures
+ * across all competitions. A pile-up of matches, a short rest, or a midweek game
+ * in a different competition (domestic cup / European tie) than the upcoming
+ * league fixture all point to likely rotation and fatigue.
+ *
+ * @param {object} fixturesResp     — API-Football /fixtures?team&last response
+ * @param {object} opts
+ * @param {number} opts.domesticLeagueId — the upcoming match's league id
+ * @param {string|Date} opts.referenceDate — the upcoming match date (kickoff)
+ * @returns {{ matchesLast14d, daysSinceLast, otherCompMatches, lastCompetition,
+ *             shortRest, midweekCongestion }}
+ */
+export function normalizeCongestion(fixturesResp, { domesticLeagueId, referenceDate } = {}) {
+  const arr = fixturesResp?.response ?? fixturesResp ?? [];
+  const out = {
+    matchesLast14d: 0,
+    daysSinceLast: null,
+    otherCompMatches: 0,
+    lastCompetition: null,
+    shortRest: false,
+    midweekCongestion: false,
+  };
+  if (!Array.isArray(arr) || !arr.length) return out;
+
+  const ref = referenceDate ? new Date(referenceDate) : new Date();
+  if (Number.isNaN(ref.getTime())) return out;
+
+  let mostRecent = null; // { diffDays, competition }
+  for (const f of arr) {
+    const raw = f?.fixture?.date;
+    if (!raw) continue;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) continue;
+    const diffMs = ref.getTime() - d.getTime();
+    if (diffMs <= 0) continue;                 // future fixture, ignore
+    const diffDays = diffMs / DAY_MS;
+    if (diffDays > 14) continue;               // outside the congestion window
+
+    out.matchesLast14d += 1;
+    const compId = f?.league?.id ?? null;
+    const compName = f?.league?.name ?? null;
+    if (compId != null && domesticLeagueId != null && compId !== domesticLeagueId) {
+      out.otherCompMatches += 1;
+    }
+    if (!mostRecent || diffDays < mostRecent.diffDays) {
+      mostRecent = { diffDays, competition: compName };
+    }
+  }
+
+  if (mostRecent) {
+    out.daysSinceLast = Math.round(mostRecent.diffDays * 10) / 10;
+    out.lastCompetition = mostRecent.competition;
+    out.shortRest = mostRecent.diffDays <= 3;
+  }
+  out.midweekCongestion = out.otherCompMatches >= 1;
+  return out;
+}
+
+function _numOrNull(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Home/away venue splits from an API-Football /teams/statistics response.
+ * Returns per-venue record + goal averages + clean sheets / failed-to-score, or
+ * null when the payload is empty.
+ *
+ * @returns {{ home, away } | null}
+ *   each venue: { played, wins, draws, losses, gfAvg, gaAvg, cleanSheets, failedToScore }
+ */
+export function normalizeTeamSplits(statsResp) {
+  const r = statsResp?.response ?? statsResp ?? null;
+  if (!r || typeof r !== 'object' || !r.fixtures) return null;
+  const fx = r.fixtures ?? {};
+  const gf = r.goals?.for ?? {};
+  const ga = r.goals?.against ?? {};
+  const cs = r.clean_sheet ?? {};
+  const fts = r.failed_to_score ?? {};
+  const venue = (v) => ({
+    played: fx.played?.[v] ?? null,
+    wins:   fx.wins?.[v]   ?? null,
+    draws:  fx.draws?.[v]  ?? null,
+    losses: fx.loses?.[v]  ?? null,           // API-Football spelling: "loses"
+    gfAvg:  _numOrNull(gf.average?.[v]),
+    gaAvg:  _numOrNull(ga.average?.[v]),
+    cleanSheets:   cs[v]  ?? null,
+    failedToScore: fts[v] ?? null,
+  });
+  const home = venue('home');
+  const away = venue('away');
+  if (home.played == null && away.played == null) return null;
+  return { home, away };
+}
+
 async function _fetchJson(path, query, cacheKey) {
   const cached = _cache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.data;
@@ -182,8 +355,12 @@ async function _fetchJson(path, query, cacheKey) {
  * injuries. Returns a per-side availability block, or null when disabled / no
  * fixture / total failure (caller treats null as "unknown", ESPN-only).
  *
- * @returns {{ fixtureId, lineupsConfirmed, home, away } | null}
+ * @returns {{ fixtureId, lineupsConfirmed, referee, h2h, congestion, venueSplits, home, away } | null}
  *   home/away: { lineupStatus:'confirmed'|'unknown', formation, injuries[], suspensions[] }
+ *   referee: string | null (free from the fixture object)
+ *   h2h: aggregate from normalizeH2H | null
+ *   congestion: { home, away } from normalizeCongestion | null
+ *   venueSplits: { home, away } each from normalizeTeamSplits | null
  */
 export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, awayName }) {
   if (!isSoccerLineupsEnabled()) return null;
@@ -199,13 +376,39 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
   if (!fixture?.fixture?.id) return null;
   const fixtureId = fixture.fixture.id;
 
-  const [lineupResp, injuriesResp] = await Promise.all([
+  // Referee is already on the matched fixture — zero extra cost.
+  const referee = fixture.fixture?.referee ?? null;
+
+  // API-Football team ids drive the head-to-head lookup (names aren't accepted).
+  const apHomeId = fixture.teams?.home?.id ?? null;
+  const apAwayId = fixture.teams?.away?.id ?? null;
+  const h2hKey = apHomeId && apAwayId ? `${apHomeId}-${apAwayId}` : null;
+
+  const [lineupResp, injuriesResp, h2hResp, homeFixturesResp, awayFixturesResp, homeStatsResp, awayStatsResp] = await Promise.all([
     _fetchJson('/fixtures/lineups', { fixture: fixtureId }, `af:lineups:${fixtureId}`),
     _fetchJson('/injuries', { fixture: fixtureId }, `af:injuries:${fixtureId}`),
+    h2hKey
+      ? _fetchJson('/fixtures/headtohead', { h2h: h2hKey, last: 10 }, `af:h2h:${h2hKey}`)
+      : Promise.resolve(null),
+    apHomeId ? _fetchJson('/fixtures', { team: apHomeId, last: 6 }, `af:teamfix:${apHomeId}`) : Promise.resolve(null),
+    apAwayId ? _fetchJson('/fixtures', { team: apAwayId, last: 6 }, `af:teamfix:${apAwayId}`) : Promise.resolve(null),
+    apHomeId ? _fetchJson('/teams/statistics', { league: leagueId, season, team: apHomeId }, `af:teamstats:${leagueId}:${season}:${apHomeId}`) : Promise.resolve(null),
+    apAwayId ? _fetchJson('/teams/statistics', { league: leagueId, season, team: apAwayId }, `af:teamstats:${leagueId}:${season}:${apAwayId}`) : Promise.resolve(null),
   ]);
 
   const lineups = normalizeLineups(lineupResp ?? {}, homeName, awayName);
   const avail = normalizeAvailability(injuriesResp ?? {}, homeName, awayName);
+  const h2hAgg = h2hResp ? normalizeH2H(h2hResp, homeName, awayName) : null;
+  const h2h = h2hAgg && h2hAgg.meetings > 0 ? h2hAgg : null;
+
+  const congestion = (homeFixturesResp || awayFixturesResp) ? {
+    home: normalizeCongestion(homeFixturesResp, { domesticLeagueId: leagueId, referenceDate: date }),
+    away: normalizeCongestion(awayFixturesResp, { domesticLeagueId: leagueId, referenceDate: date }),
+  } : null;
+
+  const homeSplits = normalizeTeamSplits(homeStatsResp);
+  const awaySplits = normalizeTeamSplits(awayStatsResp);
+  const venueSplits = (homeSplits || awaySplits) ? { home: homeSplits, away: awaySplits } : null;
 
   const side = (s) => ({
     lineupStatus: lineups[s].confirmed ? 'confirmed' : 'unknown',
@@ -217,6 +420,10 @@ export async function getSoccerMatchAvailability({ leagueSlug, date, homeName, a
   return {
     fixtureId,
     lineupsConfirmed: lineups.home.confirmed && lineups.away.confirmed,
+    referee,
+    h2h,
+    congestion,
+    venueSplits,
     home: side('home'),
     away: side('away'),
   };

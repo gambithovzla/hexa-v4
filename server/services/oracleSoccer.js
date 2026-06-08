@@ -96,13 +96,45 @@ function describeAvailabilityLines(side) {
   return lines;
 }
 
+function describeCongestionLine(side) {
+  const c = side?.congestion;
+  if (!c || c.matchesLast14d == null) return null;
+  const parts = [`  Schedule: ${c.matchesLast14d} match(es) in last 14 days`];
+  if (c.daysSinceLast != null) parts.push(`${c.daysSinceLast}d rest`);
+  if (c.lastCompetition) parts.push(`last: ${c.lastCompetition}`);
+  const tags = [];
+  if (c.shortRest) tags.push('SHORT REST (≤3d)');
+  if (c.midweekCongestion) tags.push(`MIDWEEK CONGESTION (${c.otherCompMatches} cup/European)`);
+  const tagStr = tags.length ? ` [${tags.join(' · ')} — rotation/fatigue risk]` : '';
+  return `${parts.join(' | ')}${tagStr}`;
+}
+
+function describeVenueSplitLine(side, venueKey) {
+  const vs = side?.venueSplits;
+  const v = vs?.[venueKey];
+  if (!v || v.played == null) return null;
+  const label = venueKey === 'home' ? 'Home split' : 'Away split';
+  const gf = v.gfAvg != null ? `${fmt(v.gfAvg, 2)} GF` : 'GF n/a';
+  const ga = v.gaAvg != null ? `${fmt(v.gaAvg, 2)} GA` : 'GA n/a';
+  return (
+    `  ${label}: ${v.wins ?? 0}W-${v.draws ?? 0}D-${v.losses ?? 0}L in ${v.played} ${venueKey} games` +
+    ` | ${gf} / ${ga} per game | ${v.cleanSheets ?? 0} CS, ${v.failedToScore ?? 0} FTS`
+  );
+}
+
 function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
+  // The relevant venue split: home club's HOME record, away club's AWAY record.
+  const venueKey = label === 'HOME' ? 'home' : 'away';
+  const venueSplitLine = describeVenueSplitLine(side, venueKey);
+  const congestionLine = describeCongestionLine(side);
   return [
     `${label} — ${teamLabel(side)}`,
     describeStrengthLine(side),
+    ...(venueSplitLine ? [venueSplitLine] : []),
     describeXgLine(side),
     describeRecentForm(side),
+    ...(congestionLine ? [congestionLine] : []),
     ...describeAvailabilityLines(side),
   ].join('\n');
 }
@@ -174,6 +206,29 @@ function describeWeatherBlock(weather, home) {
   return parts.join('\n');
 }
 
+function describeH2HBlock(h2h, referee, home, away) {
+  const lines = [];
+  const host = teamLabel(home);
+  const visitor = teamLabel(away);
+  if (h2h && h2h.meetings > 0) {
+    lines.push(`HEAD-TO-HEAD — last ${h2h.meetings} meetings`);
+    lines.push(`  Record: ${host} ${h2h.homeWins}W | Draws ${h2h.draws} | ${visitor} ${h2h.awayWins}W`);
+    const avg = h2h.avgTotalGoals != null ? `${fmt(h2h.avgTotalGoals, 2)} goals/game` : 'n/a';
+    const btts = h2h.bttsPct != null ? `${h2h.bttsPct}% BTTS` : 'n/a';
+    lines.push(`  Scoring: ${avg} | ${btts}`);
+    const recent = Array.isArray(h2h.last) ? h2h.last.slice(0, 5) : [];
+    if (recent.length) {
+      lines.push(`  Recent: ${recent.map(m => `${m.home} ${m.score} ${m.away}`).join(' · ')}`);
+    }
+  } else {
+    lines.push('HEAD-TO-HEAD — no recent meeting data available.');
+  }
+  if (referee) {
+    lines.push(`  Referee: ${referee} (tendency unknown — do not assume card/penalty bias without data).`);
+  }
+  return lines.join('\n');
+}
+
 function describeDataQuality(context_meta) {
   if (!context_meta) return null;
   const flags = Array.isArray(context_meta.staleFlags) ? context_meta.staleFlags : [];
@@ -188,7 +243,7 @@ function describeDataQuality(context_meta) {
  */
 export function serializeSoccerContext({ context, marketOdds }) {
   if (!context) return 'No soccer context provided.';
-  const { league, leagueMeta, gameDate, home, away, weather, context_meta } = context;
+  const { league, leagueMeta, gameDate, home, away, weather, referee, h2h, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   return [
     `H.E.X.A. SOCCER CONTEXT — ${gameDate} (${league ?? 'unknown league'})`,
@@ -202,6 +257,8 @@ export function serializeSoccerContext({ context, marketOdds }) {
     describeTeamBlock('AWAY', away),
     '',
     describeWeatherBlock(weather, home),
+    '',
+    describeH2HBlock(h2h, referee, home, away),
     '',
     describeMarketOdds(marketOdds),
     ...(dataQualityLine ? ['', dataQualityLine] : []),
