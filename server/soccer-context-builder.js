@@ -123,6 +123,8 @@ function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
     formation: null,
     injuries: [],
     suspensions: [],
+    // Schedule congestion / rotation risk (API-Football recent fixtures).
+    congestion: null,
   };
 }
 
@@ -201,6 +203,9 @@ export async function buildSoccerGameContext({
   // Referee (free from the fixture) + recent head-to-head — auxiliary signals.
   const referee = availability?.referee ?? null;
   const h2h = availability?.h2h ?? null;
+  const congestion = availability?.congestion ?? null;
+  if (congestion?.home) home.congestion = congestion.home;
+  if (congestion?.away) away.congestion = congestion.away;
 
   const staleFlags = [];
   if (!homeStats) staleFlags.push('home_team_stats_missing');
@@ -220,6 +225,7 @@ export async function buildSoccerGameContext({
   // absent — a total availability miss is already covered above.
   if (availability && !referee) staleFlags.push('referee_unavailable');
   if (availability && !h2h) staleFlags.push('h2h_unavailable');
+  if (availability && !congestion) staleFlags.push('congestion_unavailable');
 
   const completeness = {
     teamStats:  fractionPresent(homeStats, awayStats),
@@ -277,6 +283,10 @@ export async function buildSoccerGameContext({
         ok: !!h2h,
         source: h2h ? 'api-football' : (availability ? 'no-history' : null),
         meetings: h2h?.meetings ?? 0,
+      },
+      congestion: {
+        ok: !!congestion,
+        source: congestion ? 'api-football' : (availability ? 'no-recent-fixtures' : null),
       },
     },
     completeness,

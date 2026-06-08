@@ -9,6 +9,7 @@ import {
   normalizeLineups,
   normalizeAvailability,
   normalizeH2H,
+  normalizeCongestion,
 } from '../soccer-lineups-api.js';
 
 test('apiFootballLeagueId maps the 6 supported leagues', () => {
@@ -114,6 +115,42 @@ test('normalizeH2H aggregates from the upcoming home/away perspective', () => {
   assert.equal(h.avgTotalGoals, Math.round(((3 + 0 + 4) / 3) * 100) / 100);
   assert.equal(h.bttsPct, Math.round((2 / 3) * 100)); // meetings 1 & 3 had both scoring
   assert.equal(h.last.length, 3);
+});
+
+test('normalizeCongestion flags short rest + midweek cup game', () => {
+  const ref = '2026-03-15T15:00:00Z';
+  // Domestic league id 39 (PL). A midweek cup game (id 45) 3 days ago + a league
+  // game 7 days ago — short rest and congestion.
+  const resp = { response: [
+    { fixture: { date: '2026-03-12T20:00:00Z' }, league: { id: 45, name: 'FA Cup' } },
+    { fixture: { date: '2026-03-08T15:00:00Z' }, league: { id: 39, name: 'Premier League' } },
+    { fixture: { date: '2026-01-01T15:00:00Z' }, league: { id: 39, name: 'Premier League' } }, // outside 14d window
+  ] };
+  const c = normalizeCongestion(resp, { domesticLeagueId: 39, referenceDate: ref });
+  assert.equal(c.matchesLast14d, 2);
+  assert.equal(c.otherCompMatches, 1);
+  assert.equal(c.lastCompetition, 'FA Cup');
+  assert.equal(c.daysSinceLast, 2.8); // 2d 19h before the 15:00 kickoff
+  assert.equal(c.shortRest, true);
+  assert.equal(c.midweekCongestion, true);
+});
+
+test('normalizeCongestion: well-rested single league game = no flags', () => {
+  const ref = '2026-03-15T15:00:00Z';
+  const resp = { response: [
+    { fixture: { date: '2026-03-08T15:00:00Z' }, league: { id: 39, name: 'Premier League' } },
+  ] };
+  const c = normalizeCongestion(resp, { domesticLeagueId: 39, referenceDate: ref });
+  assert.equal(c.matchesLast14d, 1);
+  assert.equal(c.otherCompMatches, 0);
+  assert.equal(c.shortRest, false);
+  assert.equal(c.midweekCongestion, false);
+  assert.equal(c.daysSinceLast, 7);
+});
+
+test('normalizeCongestion tolerates empty/missing input', () => {
+  assert.equal(normalizeCongestion(null, {}).matchesLast14d, 0);
+  assert.equal(normalizeCongestion({ response: [] }, { domesticLeagueId: 39, referenceDate: '2026-03-15' }).daysSinceLast, null);
 });
 
 test('normalizeH2H ignores unrelated fixtures and empty input', () => {

@@ -96,13 +96,28 @@ function describeAvailabilityLines(side) {
   return lines;
 }
 
+function describeCongestionLine(side) {
+  const c = side?.congestion;
+  if (!c || c.matchesLast14d == null) return null;
+  const parts = [`  Schedule: ${c.matchesLast14d} match(es) in last 14 days`];
+  if (c.daysSinceLast != null) parts.push(`${c.daysSinceLast}d rest`);
+  if (c.lastCompetition) parts.push(`last: ${c.lastCompetition}`);
+  const tags = [];
+  if (c.shortRest) tags.push('SHORT REST (≤3d)');
+  if (c.midweekCongestion) tags.push(`MIDWEEK CONGESTION (${c.otherCompMatches} cup/European)`);
+  const tagStr = tags.length ? ` [${tags.join(' · ')} — rotation/fatigue risk]` : '';
+  return `${parts.join(' | ')}${tagStr}`;
+}
+
 function describeTeamBlock(label, side) {
   if (!side) return `${label}: data unavailable.`;
+  const congestionLine = describeCongestionLine(side);
   return [
     `${label} — ${teamLabel(side)}`,
     describeStrengthLine(side),
     describeXgLine(side),
     describeRecentForm(side),
+    ...(congestionLine ? [congestionLine] : []),
     ...describeAvailabilityLines(side),
   ].join('\n');
 }
