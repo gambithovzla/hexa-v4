@@ -1698,3 +1698,8 @@ export async function runMundialMigrations() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_mundial_status ON mundial_predictions(status)`);
   console.log('[migrate] mundial_predictions ready');
 }
+
+export async function runSportAccessMigrations() {
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sport_access TEXT[] DEFAULT '{mlb}'`);
+  console.log('[migrate] sport_access column ready');
+}

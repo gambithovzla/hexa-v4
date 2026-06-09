@@ -12,7 +12,7 @@
 
 import { Router } from 'express';
 import pool from '../db.js';
-import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
+import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/auth-middleware.js';
 import { getNbaGamesForDate } from '../nba-api.js';
 import { buildNbaGameContext } from '../nba-context-builder.js';
 import { analyzeNbaGame, analyzeNbaChat } from '../services/oracleNba.js';
@@ -117,7 +117,7 @@ async function persistNbaPick({ userId, userEmail, matchup, analysisData, model,
 
 // ── POST /api/nba/analyze/game ─────────────────────────────────────────────────
 
-router.post('/analyze/game', nbaEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/game', nbaEnabled, verifyToken, requireSportAccess('nba'), async (req, res) => {
   const {
     gameId,
     lang        = 'en',
@@ -309,7 +309,7 @@ router.get('/board', async (req, res) => {
   }
 });
 
-router.post('/analyze/chat', nbaEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/chat', nbaEnabled, verifyToken, requireSportAccess('nba'), async (req, res) => {
   const {
     gameId,
     question,

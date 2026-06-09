@@ -15,7 +15,7 @@
 
 import { Router } from 'express';
 import pool from '../db.js';
-import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
+import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/auth-middleware.js';
 import { getNflGamesForWeek, getNflGamesForDate } from '../nfl-api.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { analyzeNflGame, analyzeNflChat } from '../services/oracleNfl.js';
@@ -153,7 +153,7 @@ async function persistNflPick({ userId, userEmail, matchup, analysisData, model,
 
 // ── POST /api/nfl/analyze/game ─────────────────────────────────────────────────
 
-router.post('/analyze/game', nflEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
   const {
     gameId,
     season      = null,
@@ -336,7 +336,7 @@ function nflGameToChatData(game, matchup) {
   };
 }
 
-router.post('/analyze/chat', nflEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/chat', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
   const {
     gameId,
     question,

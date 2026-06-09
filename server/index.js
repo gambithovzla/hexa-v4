@@ -91,7 +91,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations, runTennisScaffoldingMigrations, runTennisDatasetMigrations, runMundialMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations, runTennisScaffoldingMigrations, runTennisDatasetMigrations, runMundialMigrations, runSportAccessMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -2899,9 +2899,45 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
   }
 });
 
-// GET /api/auth/is-admin — check if the authenticated user is admin
-app.get('/api/auth/is-admin', verifyToken, (req, res) => {
-  res.json({ isAdmin: req.user.is_admin === true });
+// GET /api/auth/is-admin — check if the authenticated user is admin + return sport access
+app.get('/api/auth/is-admin', verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT is_admin, sport_access FROM users WHERE id=$1', [req.user.id]);
+    res.json({ isAdmin: rows[0]?.is_admin === true, sportAccess: rows[0]?.sport_access ?? ['mlb'] });
+  } catch {
+    res.json({ isAdmin: req.user.is_admin === true, sportAccess: req.user.sport_access ?? ['mlb'] });
+  }
+});
+
+// GET /api/admin/sport-access/users — list all users with their sport access (admin only)
+app.get('/api/admin/sport-access/users', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, email, display_name, sport_access, is_admin, created_at
+       FROM users ORDER BY created_at DESC LIMIT 200`
+    );
+    res.json({ success: true, users: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PATCH /api/admin/sport-access/:userId — update sport_access for a user (admin only)
+app.patch('/api/admin/sport-access/:userId', verifyToken, isAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { sports } = req.body;
+  if (!Array.isArray(sports)) return res.status(400).json({ success: false, error: 'sports must be an array' });
+  const merged = Array.from(new Set(['mlb', ...sports]));
+  try {
+    const { rows } = await pool.query(
+      'UPDATE users SET sport_access=$1 WHERE id=$2 RETURNING id, email, sport_access',
+      [merged, userId]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'User not found' });
+    res.json({ success: true, user: rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // GET /api/games/:gamePk/live — Live game feed (GUMBO) with normalized data
@@ -5134,6 +5170,7 @@ runMigrations()
   .then(() => runTennisScaffoldingMigrations())
   .then(() => runTennisDatasetMigrations())
   .then(() => runMundialMigrations())
+  .then(() => runSportAccessMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {

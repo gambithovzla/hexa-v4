@@ -12,7 +12,7 @@
 
 import { Router } from 'express';
 import pool from '../db.js';
-import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
+import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/auth-middleware.js';
 import { getNhlGamesForDate } from '../nhl-api.js';
 import { buildNhlGameContext } from '../nhl-context-builder.js';
 import { analyzeNhlGame, analyzeNhlChat } from '../services/oracleNhl.js';
@@ -118,7 +118,7 @@ async function persistNhlPick({ userId, userEmail, matchup, analysisData, model,
 
 // ── POST /api/nhl/analyze/game ─────────────────────────────────────────────────
 
-router.post('/analyze/game', nhlEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/game', nhlEnabled, verifyToken, requireSportAccess('nhl'), async (req, res) => {
   const {
     gameId,
     date        = null,
@@ -291,7 +291,7 @@ function nhlGameToChatData(game, matchup) {
   };
 }
 
-router.post('/analyze/chat', nhlEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/chat', nhlEnabled, verifyToken, requireSportAccess('nhl'), async (req, res) => {
   const {
     gameId,
     question,

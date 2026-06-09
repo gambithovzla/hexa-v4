@@ -48,6 +48,7 @@ import ImperdiblePage         from './pages/ImperdiblePage';
 import ImperdibleSoccerPage  from './pages/ImperdibleSoccerPage';
 import PostmortemDashboard    from './pages/PostmortemDashboard';
 import MundialPage            from './pages/MundialPage';
+import SportAccessAdminPage   from './pages/SportAccessAdminPage';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
 import NflLiveTracker      from './components/NflLiveTracker';
@@ -398,12 +399,15 @@ export default function App() {
   const [showOracleChat,    setShowOracleChat]    = useState(false);
   const [showPerformance,   setShowPerformance]   = useState(false);
   const [isAdmin,           setIsAdmin]           = useState(false);
+  const [sportAccess,       setSportAccess]       = useState(['mlb']);
   const [performancePublic, setPerformancePublic] = useState(false);
   const { isMobileExperience } = useShellMode();
   const adminOnlyTabs = ['tools', 'batch', 'synergy'];
-  const sportOptions = getActiveSportOptions();
+  const allSportOptions = getActiveSportOptions();
+  // Admins see all sports; regular users see only their granted sports
+  const sportOptions = isAdmin ? allSportOptions : allSportOptions.filter(o => sportAccess.includes(o.value));
 
-  // Check admin status on mount
+  // Check admin status + sport access on mount
   useEffect(() => {
     const token = localStorage.getItem('hexa_token');
     if (token) {
@@ -411,7 +415,10 @@ export default function App() {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.json())
-        .then(data => setIsAdmin(data.isAdmin || false))
+        .then(data => {
+          setIsAdmin(data.isAdmin || false);
+          setSportAccess(data.sportAccess ?? ['mlb']);
+        })
         .catch(() => setIsAdmin(false));
     }
   }, []);
@@ -433,6 +440,13 @@ export default function App() {
     setParlayGames([]);
     setBatchGames([]);
   }, [sport]);
+
+  // Reset to mlb if current sport is no longer accessible
+  useEffect(() => {
+    if (!isAdmin && sport !== 'mlb' && !sportAccess.includes(sport)) {
+      setSport('mlb');
+    }
+  }, [sportAccess, isAdmin]);
 
   useEffect(() => {
     if (!isAdmin && adminOnlyTabs.includes(activeTab)) {
@@ -529,6 +543,10 @@ export default function App() {
   if (window.location.pathname === '/admin/postmortem') {
     const token = localStorage.getItem('hexa_token');
     return <PostmortemDashboard token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/admin/sport-access') {
+    const token = localStorage.getItem('hexa_token');
+    return <SportAccessAdminPage token={token} onBack={() => { window.location.href = '/'; }} />;
   }
   if (window.location.pathname === '/mundial') {
     const token = localStorage.getItem('hexa_token');
