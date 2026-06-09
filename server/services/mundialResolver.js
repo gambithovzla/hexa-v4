@@ -46,7 +46,7 @@ export async function resolveMundialPredictions() {
         const predResult = result(pred.predicted_home, pred.predicted_away);
         const isCorrect = !isExact && predResult === actualResult;
 
-        const credits = isExact ? 5 : isCorrect ? 2 : 0;
+        const credits = isExact ? 5 : 0; // only exact score earns credits; correct result counts in leaderboard points only
         const status  = isExact ? 'exact' : isCorrect ? 'correct' : 'wrong';
 
         await pool.query(

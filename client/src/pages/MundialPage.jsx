@@ -1,7 +1,7 @@
 /**
  * MundialPage — FIFA World Cup 2026 prediction game.
  * Predict exact scores for all 104 matches. Earn Hexa credits.
- * Exact score = +5 credits · Correct result = +2 credits
+ * Exact score = +5 credits · Correct result (1X2) = leaderboard points only
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -167,8 +167,8 @@ function MatchCard({ match, token }) {
   // Status badge after resolution
   const STATUS = {
     exact:   { color: C.gold,  label: '★ Exacto · +5 créditos' },
-    correct: { color: C.green, label: '✓ Resultado correcto · +2 créditos' },
-    wrong:   { color: C.red,   label: '✗ Incorrecto · +0 créditos' },
+    correct: { color: C.green, label: '✓ Resultado correcto · suma en tabla' },
+    wrong:   { color: C.red,   label: '✗ Incorrecto' },
   };
 
   return (
@@ -289,9 +289,9 @@ function StatsBar({ matches, token }) {
       {summary && (
         <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
           {[
-            { label: 'Exactos',   val: summary.exact,         color: C.gold  },
-            { label: 'Resultado', val: summary.correct,       color: C.green },
-            { label: 'Créditos',  val: summary.total_credits, color: C.cyan  },
+            { label: 'Exactos',  val: summary.exact,         color: C.gold  },
+            { label: 'Aciertos', val: summary.correct,       color: C.green },
+            { label: 'Créditos', val: summary.total_credits, color: C.cyan  },
           ].map(({ label, val, color }) => (
             <Box key={label} sx={{ flex: 1, textAlign: 'center' }}>
               <Box sx={{ fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, color }}>{val ?? 0}</Box>
@@ -402,8 +402,8 @@ export default function MundialPage({ token }) {
             </Box>
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
-            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.gold }}>★ Exacto = +5</Box>
-            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.green }}>✓ Resultado = +2</Box>
+            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.gold }}>★ Exacto = +5 créditos</Box>
+            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.green }}>✓ Resultado = tabla</Box>
           </Box>
         </Box>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}
