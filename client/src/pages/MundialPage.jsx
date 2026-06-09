@@ -217,78 +217,90 @@ function MatchCard({ match, token }) {
         </Box>
       )}
 
-      {/* Teams + inputs */}
-      <Box sx={{ px: 2, py: '12px', display: 'flex', alignItems: 'center', gap: 1 }}>
+      {/* Teams row: flag + name inline, full width */}
+      <Box sx={{ px: 2, pt: '12px', pb: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
         {/* Home */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-          <Flag team={match.homeTeam} size={32} />
-          <Box sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 600, color: C.ink0,
-            textAlign: 'center', lineHeight: 1.3, maxWidth: 90 }}>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+          <Flag team={match.homeTeam} size={26} />
+          <Box sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 600, color: C.ink0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {match.homeTeam}
           </Box>
         </Box>
 
-        {/* Score inputs + button */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', px: '4px' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ScoreInput value={home} onChange={v => { setHome(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
-            <Box sx={{ fontFamily: MONO, fontWeight: 700, fontSize: '1.1rem', color: C.ink2 }}>:</Box>
-            <ScoreInput value={away} onChange={v => { setAway(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
-          </Box>
-
-          {/* Saved + not editing: show badge + edit button */}
-          {saved && !editing && canEdit && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <Box sx={{
-                px: '14px', py: '5px',
-                bgcolor: '#22c55e18', border: `1px solid ${C.green}55`,
-                borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-                color: C.green, letterSpacing: '0.08em',
-              }}>✓ Guardado</Box>
-              <Box component="button" onClick={enterEdit}
-                sx={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontFamily: MONO, fontSize: '0.58rem', color: C.ink2,
-                  letterSpacing: '0.06em', px: '4px', py: '2px', borderRadius: '4px',
-                  '&:hover': { color: C.cyan, bgcolor: C.card2 },
-                }}>
-                ✏ Editar predicción
-              </Box>
-            </Box>
-          )}
-
-          {/* First-time predict OR editing */}
-          {!isLocked && !isResolved && token && (!saved || editing) && (
-            <Box component="button" disabled={saving} onClick={() => save(home, away)}
-              sx={{
-                px: '18px', py: '6px',
-                bgcolor: editing ? '#00e5ff18' : C.goldDim,
-                border: `1px solid ${editing ? C.cyan + '88' : C.gold + '88'}`,
-                borderRadius: '6px', cursor: saving ? 'default' : 'pointer',
-                fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-                color: editing ? C.cyan : C.gold, letterSpacing: '0.08em',
-                transition: 'all 0.18s',
-                '&:hover:not(:disabled)': { bgcolor: editing ? '#00e5ff28' : '#f59e0b28' },
-              }}>
-              {saving ? '...' : editing ? 'Guardar cambios' : 'Predecir'}
-            </Box>
-          )}
-
-          {!token && (
-            <Box sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.ink2, textAlign: 'center' }}>
-              Inicia sesión
-            </Box>
-          )}
-        </Box>
+        <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.ink2, flexShrink: 0, px: '2px' }}>VS</Box>
 
         {/* Away */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-          <Flag team={match.awayTeam} size={32} />
-          <Box sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 600, color: C.ink0,
-            textAlign: 'center', lineHeight: 1.3, maxWidth: 90 }}>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', minWidth: 0 }}>
+          <Box sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 600, color: C.ink0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
             {match.awayTeam}
           </Box>
+          <Flag team={match.awayTeam} size={26} />
         </Box>
+      </Box>
+
+      {/* Score inputs + actions row */}
+      <Box sx={{ px: 2, pb: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ScoreInput value={home} onChange={v => { setHome(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
+          <Box sx={{ fontFamily: MONO, fontWeight: 700, fontSize: '1.1rem', color: C.ink2 }}>:</Box>
+          <ScoreInput value={away} onChange={v => { setAway(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
+        </Box>
+
+        {/* Saved + not editing */}
+        {saved && !editing && canEdit && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Box sx={{
+              px: '14px', py: '5px',
+              bgcolor: '#22c55e18', border: `1px solid ${C.green}55`,
+              borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
+              color: C.green, letterSpacing: '0.08em',
+            }}>✓ Guardado</Box>
+            <Box component="button" onClick={enterEdit}
+              sx={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: MONO, fontSize: '0.6rem', color: C.ink2,
+                letterSpacing: '0.06em', px: '6px', py: '4px', borderRadius: '4px',
+                '&:hover': { color: C.cyan, bgcolor: C.card2 },
+              }}>
+              ✏ Editar
+            </Box>
+          </Box>
+        )}
+
+        {/* Saved (resolved/locked) — no edit */}
+        {saved && !canEdit && !isResolved && (
+          <Box sx={{
+            px: '14px', py: '5px',
+            bgcolor: '#22c55e18', border: `1px solid ${C.green}55`,
+            borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
+            color: C.green, letterSpacing: '0.08em',
+          }}>✓ Guardado</Box>
+        )}
+
+        {/* First-time predict OR editing */}
+        {!isLocked && !isResolved && token && (!saved || editing) && (
+          <Box component="button" disabled={saving} onClick={() => save(home, away)}
+            sx={{
+              px: '28px', py: '7px',
+              bgcolor: editing ? '#00e5ff18' : C.goldDim,
+              border: `1px solid ${editing ? C.cyan + '88' : C.gold + '88'}`,
+              borderRadius: '6px', cursor: saving ? 'default' : 'pointer',
+              fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700,
+              color: editing ? C.cyan : C.gold, letterSpacing: '0.08em',
+              transition: 'all 0.18s',
+              '&:hover:not(:disabled)': { bgcolor: editing ? '#00e5ff28' : '#f59e0b28' },
+            }}>
+            {saving ? '...' : editing ? 'Guardar cambios' : 'Predecir'}
+          </Box>
+        )}
+
+        {!token && (
+          <Box sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.ink2, textAlign: 'center' }}>
+            Inicia sesión para predecir
+          </Box>
+        )}
       </Box>
 
       {/* Resolution badge */}
