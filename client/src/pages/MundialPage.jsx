@@ -451,7 +451,7 @@ export default function MundialPage({ token }) {
               🏆 MUNDIAL 2026
             </Box>
             <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.ink2, letterSpacing: '0.15em' }}>
-              {loading ? '...' : `${matches.length} PARTIDOS`}
+              {loading ? '...' : `FASE DE GRUPOS · ${matches.length} PARTIDOS`}
             </Box>
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>

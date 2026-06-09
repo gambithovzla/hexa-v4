@@ -30,7 +30,7 @@ function optionalAuth(req, res, next) {
 // ── WC 2026 schedule ───────────────────────────────────────────────────────
 function getWc2026Dates() {
   const dates = [];
-  const end = new Date('2026-07-23T00:00:00Z');
+  const end = new Date('2026-07-02T00:00:00Z'); // group stage only (knockout TBD)
   for (let d = new Date('2026-06-11T00:00:00Z'); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
     dates.push(d.toISOString().split('T')[0]);
   }
