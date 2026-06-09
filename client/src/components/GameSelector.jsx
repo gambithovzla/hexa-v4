@@ -48,6 +48,9 @@ const L = {
     homeSP:      'Home SP',
     vs:          'vs',
     error:       'Failed to load games',
+    lineupsConfirmed: '✓ LINEUPS',
+    lineupMissing:    '½ MISSING',
+    lineupsNone:      'NO LINEUPS',
   },
   es: {
     title:       'Seleccionar Juego',
@@ -69,6 +72,9 @@ const L = {
     homeSP:      'Lanzador L',
     vs:          'vs',
     error:       'Error al cargar los juegos',
+    lineupsConfirmed: '✓ LINEUPS',
+    lineupMissing:    '½ FALTA',
+    lineupsNone:      'SIN LINEUPS',
   },
 };
 
@@ -268,6 +274,20 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
 
   const leftBorderColor = isSelected ? C.accent : status === 'live' ? C.amber : 'transparent';
 
+  const lineupChip = (() => {
+    if (sportKey !== 'mlb' || status !== 'scheduled') return null;
+    const homeHas = (game.lineups?.home?.length ?? 0) > 0;
+    const awayHas = (game.lineups?.away?.length ?? 0) > 0;
+    if (game.lineupStatus === 'confirmed' || (homeHas && awayHas)) {
+      return { label: t.lineupsConfirmed, color: '#22c55e' };
+    }
+    if (homeHas || awayHas) {
+      const missingAbbr = homeHas ? away : home;
+      return { label: `${t.lineupMissing} ${missingAbbr}`, color: '#f59e0b' };
+    }
+    return { label: t.lineupsNone, color: C.textMuted };
+  })();
+
   return (
     <Box
       onClick={blocked ? undefined : onClick}
@@ -333,6 +353,26 @@ function GameCard({ game, isSelected, onClick, showCheckbox, checkboxDisabled, a
             }}
           >
             ✓ Analizado
+          </Box>
+        )}
+        {lineupChip && (
+          <Box
+            component="span"
+            sx={{
+              px: '5px',
+              py: '1px',
+              border: `1px solid ${lineupChip.color}55`,
+              bgcolor: `${lineupChip.color}14`,
+              color: lineupChip.color,
+              fontFamily: MONO,
+              fontSize: '0.52rem',
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              flexShrink: 0,
+            }}
+          >
+            {lineupChip.label}
           </Box>
         )}
         <Box sx={{ flex: 1 }} />
