@@ -177,7 +177,7 @@ Todos bajo `/api`. Protegidos con JWT (`🔒`); admin requieren rol admin (`👑
 ## Features destacadas
 
 ### Oracle multi-motor (MLB/NBA/NFL/NHL/Soccer)
-- **MLB**: [oracle.js](server/oracle.js) — dual Claude + Grok, contexto rico con Statcast/Savant (rolling wOBA, CSW%, bat speed, umpire, bullpen ERA/WHIP individual, schedule fatigue). FROZEN.
+- **MLB**: [oracle.js](server/oracle.js) — dual Claude + Grok, contexto rico con Statcast/Savant (rolling wOBA, CSW%, bat speed, umpire, bullpen ERA/WHIP individual, schedule fatigue, starts trend del pitcher, lessons learned de postmortems, line movement con steam/RLM, lineup proyectado cuando no hay confirmado). FROZEN.
 - **NBA**: [services/oracleNba.js](server/services/oracleNba.js) — Anthropic-only, net/off/def rating, pace, TS%, rest, injuries ESPN. Cap 68%.
 - **NFL**: [services/oracleNfl.js](server/services/oracleNfl.js) — Anthropic-only, EPA, success rate, PROE, **red zone TD%**, **3rd-down conv%**, **sack rate off/def**, QB status + backup QB, rest/short-week/off-bye + fatiga acumulativa, surface (turf/grass) + altitude (Denver 5,280ft), weather (no-dome), spread primario con key numbers 3/7, **8-signal coherence voting**. Cap 72%.
 - **NHL**: [services/oracleNhl.js](server/services/oracleNhl.js) — Anthropic-only, moneyline primario + puck line ±1.5, goal diff, special teams (PP%/PK%), goalie confirmado, rest/B2B. Cap 70%.
@@ -212,7 +212,7 @@ Modo admin-only "lock of the slate" (MLB): analiza N juegos y devuelve **un solo
 Motor combinatorial para parlays con 5 modos (safe → dreamer). Correlación entre patas, game-script coherence, hit distribution Poisson-binomial. Admin beta. Brief: [hexa-parlay-engine-brief.md](hexa-parlay-engine-brief.md).
 
 ### Admin ML Control Center (`/admin/ml-control`)
-Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, **models loaded X/Y**, estado ensemble LIVE/READY/OFF), panel de **inferencia en vivo** por mercado (artefacto en disco, modelo en RAM, runline skipped/early), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d legacy-vs-python, pesos del ensemble meta-learner, y audit log de retrains. El toast "ENSEMBLE OMITIDO" muestra desglose por mercado (`moneyline: N/50 · overunder: N/50 · …`) — el sidecar entrena por mercado individualmente, no sobre el total.
+Dashboard único admin-only para operar el pipeline ML. Muestra el estado del sidecar Python en vivo (circuit breaker, latencia, **models loaded X/Y**, estado ensemble LIVE/READY/OFF), panel de **inferencia en vivo** por mercado (artefacto en disco, modelo en RAM, runline skipped/early), Brier/ROI/n_train por mercado, reliability diagrams, rolling 30d legacy-vs-python, pesos del ensemble meta-learner, audit log de retrains, y panel **CLV — Closing Line Value** por mercado y bucket de confianza (CLV positivo sostenido = edge real; negativo sistemático = matar ese mercado). El toast "ENSEMBLE OMITIDO" muestra desglose por mercado (`moneyline: N/50 · overunder: N/50 · …`) — el sidecar entrena por mercado individualmente, no sobre el total.
 
 ### MLB Player Props (`/props`)
 Líneas Odds API + enriquecimiento Savant + edge vs implied. Picks Oracle guardados antes de que existan líneas en el mercado. Parser en español (`Bajo 4.5 Ponches`). ML scores gateados por `MLB_PROPS_ML_PUBLIC_ENABLED`.
@@ -225,7 +225,7 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 
 ---
 
-## Estado del proyecto (2026-06-07)
+## Estado del proyecto (2026-06-09)
 
 ### Pipeline ML y sprints completados
 
@@ -238,6 +238,7 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 - ✅ **Sprint 8d**: Oracle context enrichment MLB — Savant pitcher/batter rolling, umpire, bullpen ERA/WHIP individual + handedness, team form block, schedule fatigue.
 - ✅ **Sprint 8e**: Bullpen attribution guardrail — `[TeamName]` en línea crítica, mismatch detection server-side.
 - ✅ **Sprint 8f**: Railway hardening — Node 20, Sentry/email/Discord lazy import, tres servicios Online.
+- ✅ **Sprint 8g — MLB effectiveness layer** (2026-06-09): lineup `partial` status (un solo lineup publicado ya no marca "confirmado"; chip `½ FALTA <ABBR>` por juego) + **lineup proyectado fallback** (batting order del último juego cuando no hay lineup, etiquetado PROJECTED); **ORACLE LESSONS LEARNED** (postmortems agregados al contexto — feedback loop); **calibración de confianza** (`picks.calibrated_confidence`, shrinkage hacia win rate real por mercado+bucket); **reporte CLV** admin por mercado y bucket (`GET /api/admin/ml/clv-report` + panel); **conviction tier** (`picks.conviction_tier` — acuerdo Oracle+validador+sidecar, badge `⬢ 3/3` en historial); **line movement v2** (per-book, steam `sustained_move_pct`, reverse line movement); **starts trend** del pitcher (últimas 5 salidas). Fix latente: el bloque RAG `SIMILAR PAST ANALYSES` nunca llegaba al Oracle (`contextString` const + TypeError silencioso) — activado.
 - ✅ **Sprint 9 NFL completo** (PRs #373–#378, 2026-05-30):
   - **9a**: `nfl-api.js`, `nfl-team-map.js`, `nfl-context-builder.js`, `nfl-odds.js`, migraciones DB, endpoints `GET /api/nfl/games|teams|standings`.
   - **9b**: `oracleNfl.js` + `oracle-nfl-prompts.js` + `nflOutputGuard.js`. Cap 72%, key numbers 3/7, QB gate, guardrail anti-hallucination.
@@ -281,6 +282,7 @@ Drafts editoriales con Claude Haiku, cola editorial, publicación vía OAuth 1.0
 ### Pendiente operacional (no requiere sprint de código)
 
 - Props ML gate: ≥50 props resueltos → retrain `prop` model → `MLB_PROPS_ML_PUBLIC_ENABLED=1`.
+- Sprint 8g: lessons/calibración/CLV/conviction se activan solos al acumular datos (postmortems, ≥15 picks resueltos por bucket, CLV capturado, shadow runs).
 - NBA validación E2E en prod con tráfico real.
 - Parlay beta pública: `PARLAY_SYNERGY_ENABLED=true` cuando hit rate validado.
 - NFL sept 2026: `hexaNflBoardService` (pizarra del día), picks reales de la temporada → refinar modelos NFL (ya pre-entrenados con nflverse).
