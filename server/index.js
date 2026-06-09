@@ -101,6 +101,7 @@ import { generatePickCardSvg, generateSlateSvg } from './services/infographicsSe
 import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
 import { getCalibratedConfidence } from './services/confidenceCalibrationService.js';
+import { syncConvictionTiers } from './services/convictionService.js';
 import {
   getNbaGamesForDate,
   getNbaLeagueTeamStats,
@@ -5468,6 +5469,13 @@ runMigrations()
           .then(n => { if (n > 0) console.log(`[job-queue] purged ${n} old jobs`); })
           .catch(err => console.warn(`[job-queue] purge failed: ${err.message}`));
       }, 7 * 24 * 60 * 60 * 1000).unref();
+
+      // Conviction tier sweep — the shadow run lands async after the pick is
+      // saved, so picks.conviction_tier is backfilled from shadow_model_runs
+      setInterval(() => {
+        syncConvictionTiers({ days: 3 })
+          .catch(err => console.warn(`[conviction] sweep failed: ${err.message}`));
+      }, 30 * 60 * 1000).unref();
 
       if (process.env.TELEGRAM_ENABLED === '1') {
         const tgIntervalMinutes = Math.max(1, Number.parseInt(process.env.X_AUTO_PUBLISH_INTERVAL_MINUTES ?? '5', 10) || 5);

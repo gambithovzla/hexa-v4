@@ -471,6 +471,24 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
             </Typography>
             {entry.confidence > 0 && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                {entry.conviction_tier && (() => {
+                  const [score, total] = entry.conviction_tier.split('/').map(Number);
+                  const full = score === total;
+                  const color = full ? '#22c55e' : score >= total - 1 ? '#f59e0b' : '#94a3b8';
+                  const title = lang === 'es'
+                    ? `${score} de ${total} modelos de acuerdo (Oracle + validador + ML)`
+                    : `${score} of ${total} models agree (Oracle + validator + ML)`;
+                  return (
+                    <Box component="span" title={title} sx={{
+                      px: '5px', py: '1px',
+                      border: `1px solid ${color}55`, bgcolor: `${color}14`, color,
+                      fontFamily: MONO, fontSize: '0.55rem', fontWeight: 700,
+                      letterSpacing: '0.08em', flexShrink: 0,
+                    }}>
+                      ⬢ {entry.conviction_tier}
+                    </Box>
+                  );
+                })()}
                 <MiniConfBar value={entry.confidence} />
                 <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: entry.confidence >= 75 ? C.green : entry.confidence >= 50 ? C.amber : C.red, minWidth: '34px', textAlign: 'right' }}>
                   {entry.confidence}%

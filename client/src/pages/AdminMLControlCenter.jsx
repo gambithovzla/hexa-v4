@@ -1493,12 +1493,92 @@ export default function AdminMLControlCenter({ token, onBack, lang = 'es' }) {
         ))}
       </Box>
 
+      <SectionTitle>CLV — CLOSING LINE VALUE (MLB · 90d)</SectionTitle>
+      <ClvReportPanel headers={headers} />
+
       <Box sx={{ mt: 3, textAlign: 'center', fontFamily: MONO, fontSize: '9px', color: MUTED, letterSpacing: '2px' }}>
         HEXA.ML CONTROL CENTER · POLL INTERVAL 10s · LIVE
         <Box component="span" sx={{ display: 'block', mt: 0.5, color: CYAN, opacity: 0.85 }}>
           {T.help?.helpHint}
         </Box>
       </Box>
+    </Box>
+  );
+}
+
+function ClvReportPanel({ headers }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function load() {
+    if (data) { setOpen(o => !o); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API_URL}/api/admin/ml/clv-report`, { headers });
+      if (!r.ok) throw new Error(`http ${r.status}`);
+      const json = await r.json();
+      setData(json);
+      setOpen(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const clvColor = (v) => v == null ? MUTED : Number(v) > 0 ? GREEN : Number(v) < -1 ? RED : AMBER;
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Box
+        onClick={load}
+        sx={{
+          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 1,
+          p: '10px 14px', border: `1px solid ${BORDER}`, bgcolor: SURFACE,
+          '&:hover': { bgcolor: SURFACE2 },
+        }}
+      >
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: INK1, fontWeight: 700, letterSpacing: '1.5px' }}>
+          CLV POR MERCADO Y BUCKET DE CONFIANZA — ¿el edge es real?
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED }}>
+          {loading ? 'CARGANDO…' : open ? '▲' : '▼'}
+        </Typography>
+      </Box>
+      {error && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: RED, p: 1 }}>
+          Error: {error}
+        </Typography>
+      )}
+      {open && data && (
+        <Box sx={{ border: `1px solid ${BORDER}`, borderTop: 'none', p: 2, bgcolor: SURFACE }}>
+          {(data.summary ?? []).length === 0 && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: MUTED }}>
+              Sin datos aún — el CLV se captura cerca del primer pitch para cada pick.
+            </Typography>
+          )}
+          {(data.summary ?? []).map(row => (
+            <Box key={row.market} sx={{ mb: 2 }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: '11px', color: ACCENT, fontWeight: 700, mb: 0.5, letterSpacing: '1px' }}>
+                {String(row.market).toUpperCase()} — CLV prom: <Box component="span" sx={{ color: clvColor(row.avg_clv) }}>{row.avg_clv ?? '—'}</Box>
+                {' · '}win rate: {row.win_rate ?? '—'}% · {row.total_picks} picks ({row.picks_with_clv} con CLV)
+              </Typography>
+              {(data.breakdown ?? []).filter(b => b.market === row.market).map(b => (
+                <Typography key={b.confidence_bucket} sx={{ fontFamily: MONO, fontSize: '10px', color: clvColor(b.avg_clv), ml: 2 }}>
+                  {b.confidence_bucket}: CLV {b.avg_clv > 0 ? '+' : ''}{b.avg_clv ?? '—'} · {b.win_rate ?? '—'}% win · n={b.n} (CLV n={b.clv_count}, +CLV: {b.positive_clv_count})
+                </Typography>
+              ))}
+            </Box>
+          ))}
+          <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 1 }}>
+            CLV positivo sostenido = edge real contra el mercado. CLV negativo sistemático en un mercado = el edge es ilusorio ahí — degradar o pausar ese mercado.
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 }

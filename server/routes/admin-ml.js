@@ -759,4 +759,56 @@ router.post('/ml/equity/simulate', async (req, res) => {
   }
 });
 
+// ── GET /api/admin/ml/clv-report ──────────────────────────────────────────────
+// Closing Line Value by market + confidence bucket (last 90 days, MLB).
+// Positive avg CLV = the market moved toward our picks = real edge.
+router.get('/ml/clv-report', async (_req, res) => {
+  try {
+    const { rows: breakdown } = await pool.query(
+      `SELECT
+         COALESCE(pf.market_type, 'unknown') AS market,
+         CASE
+           WHEN p.oracle_confidence >= 65 THEN '65-70'
+           WHEN p.oracle_confidence >= 60 THEN '60-64'
+           WHEN p.oracle_confidence >= 55 THEN '55-59'
+           ELSE '50-54'
+         END AS confidence_bucket,
+         COUNT(*) AS n,
+         ROUND(AVG(p.clv)::numeric, 2) AS avg_clv,
+         ROUND(100.0 * SUM(CASE WHEN p.result = 'win' THEN 1 ELSE 0 END)
+               / NULLIF(SUM(CASE WHEN p.result IN ('win','loss') THEN 1 ELSE 0 END), 0), 1) AS win_rate,
+         SUM(CASE WHEN p.clv > 0 THEN 1 ELSE 0 END) AS positive_clv_count,
+         SUM(CASE WHEN p.clv IS NOT NULL THEN 1 ELSE 0 END) AS clv_count
+       FROM picks p
+       LEFT JOIN pick_features pf ON pf.pick_id = p.id
+       WHERE COALESCE(p.sport, 'mlb') = 'mlb'
+         AND p.oracle_confidence IS NOT NULL
+         AND p.created_at > NOW() - INTERVAL '90 days'
+       GROUP BY 1, 2
+       ORDER BY 1, 2`
+    );
+
+    const { rows: summary } = await pool.query(
+      `SELECT
+         COALESCE(pf.market_type, 'unknown') AS market,
+         COUNT(*) AS total_picks,
+         SUM(CASE WHEN p.clv IS NOT NULL THEN 1 ELSE 0 END) AS picks_with_clv,
+         ROUND(AVG(CASE WHEN p.clv IS NOT NULL THEN p.clv END)::numeric, 2) AS avg_clv,
+         ROUND(100.0 * SUM(CASE WHEN p.result = 'win' THEN 1 ELSE 0 END)
+               / NULLIF(SUM(CASE WHEN p.result IN ('win','loss') THEN 1 ELSE 0 END), 0), 1) AS win_rate
+       FROM picks p
+       LEFT JOIN pick_features pf ON pf.pick_id = p.id
+       WHERE COALESCE(p.sport, 'mlb') = 'mlb'
+         AND p.created_at > NOW() - INTERVAL '90 days'
+       GROUP BY 1
+       ORDER BY 1`
+    );
+
+    return res.json({ success: true, breakdown, summary });
+  } catch (err) {
+    console.error('[admin-ml] clv-report failed:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to load CLV report' });
+  }
+});
+
 export default router;
