@@ -109,8 +109,9 @@ function normalizeGame(game) {
   const awayLineup  = normalizeLineup(rawLineups?.awayPlayers ?? rawLineups?.away ?? []);
 
   let lineupStatus = 'unavailable';
-  if (homeLineup.length > 0 || awayLineup.length > 0) lineupStatus = 'confirmed';
-  else if (home.probablePitcher || away.probablePitcher)  lineupStatus = 'probable';
+  if (homeLineup.length > 0 && awayLineup.length > 0)      lineupStatus = 'confirmed';
+  else if (homeLineup.length > 0 || awayLineup.length > 0) lineupStatus = 'partial';
+  else if (home.probablePitcher || away.probablePitcher)   lineupStatus = 'probable';
 
   return {
     gamePk: game.gamePk,

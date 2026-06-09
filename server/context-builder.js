@@ -896,6 +896,20 @@ function lineupStatusBlock(gameData) {
     if (awayLineup.length > 0) {
       lines.push(`Away batting order: ${awayLineup.slice(0, 9).map((p, i) => `${i + 1}. ${p.fullName}`).join(', ')}`);
     }
+  } else if (status === 'partial') {
+    const homeName = gameData.teams?.home?.name ?? 'Home team';
+    const awayName = gameData.teams?.away?.name ?? 'Away team';
+    lines.push('⚠️ LINEUP STATUS: PARTIAL — only one team has posted its lineup.');
+    if (homeLineup.length > 0) {
+      lines.push(`Home batting order: ${homeLineup.slice(0, 9).map((p, i) => `${i + 1}. ${p.fullName}`).join(', ')}`);
+    } else {
+      lines.push(`⚠️ ${homeName} lineup NOT posted yet — individual batter Statcast unavailable for ${homeName}; only team-level splits in this brief.`);
+    }
+    if (awayLineup.length > 0) {
+      lines.push(`Away batting order: ${awayLineup.slice(0, 9).map((p, i) => `${i + 1}. ${p.fullName}`).join(', ')}`);
+    } else {
+      lines.push(`⚠️ ${awayName} lineup NOT posted yet — individual batter Statcast unavailable for ${awayName}; only team-level splits in this brief.`);
+    }
   } else if (status === 'probable') {
     lines.push('⚠️ LINEUP STATUS: PROBABLE — Analysis based on probable starters only. Confirmed lineups not yet available.');
   } else {
@@ -944,14 +958,11 @@ function calcDataQuality({
   if (awayPitcherSavant != null) { score += 10; available.push('away_pitcher_statcast'); }
   else missing.push('away_pitcher_statcast');
 
-  // Statcast batters (10 pts) — give full points if any batters returned, even if not all have every field
-  const hasBatterData = (savantBatters?.home?.length ?? 0) > 0 || (savantBatters?.away?.length ?? 0) > 0;
-  const battersWithData = [
-    ...(savantBatters?.home ?? []),
-    ...(savantBatters?.away ?? []),
-  ].filter(b => b.savant?.xwOBA != null).length;
-  if (hasBatterData) { score += 10; available.push('batter_statcast'); }
-  else missing.push(`batter_statcast (only ${battersWithData} with data)`);
+  // Statcast batters (10 pts) — 5 per side so a one-sided lineup doesn't mask the missing team
+  if ((savantBatters?.home?.length ?? 0) > 0) { score += 5; available.push('home_batter_statcast'); }
+  else missing.push('home_batter_statcast');
+  if ((savantBatters?.away?.length ?? 0) > 0) { score += 5; available.push('away_batter_statcast'); }
+  else missing.push('away_batter_statcast');
 
   // Rolling windows (10 pts) — accept any rolling data from pitchers or batters
   const hasRolling = (homePitcherSavant?.rolling_windows_against?.woba_against_7d != null)
@@ -965,8 +976,9 @@ function calcDataQuality({
   if (oddsData?.odds && oddsData.source !== 'estimated_spring_training') { score += 10; available.push('real_odds'); }
   else missing.push('real_odds (spring training estimates)');
 
-  // Lineup (10 pts)
+  // Lineup (10 pts; partial = one team posted = half credit)
   if (gameData?.lineupStatus === 'confirmed') { score += 10; available.push('confirmed_lineup'); }
+  else if (gameData?.lineupStatus === 'partial') { score += 5; available.push('partial_lineup'); missing.push('confirmed_lineup (one team not posted)'); }
   else missing.push('confirmed_lineup');
 
   // Weather (5 pts)

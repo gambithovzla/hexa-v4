@@ -79,6 +79,7 @@ const L = {
     },
     lineupBadge: {
       confirmed:   '✓ LINEUP',
+      partial:     '½ PARTIAL LINEUP',
       probable:    '~ PROBABLE',
       unavailable: '? NO LINEUP',
     },
@@ -138,6 +139,7 @@ const L = {
     },
     lineupBadge: {
       confirmed:   '✓ LINEUP',
+      partial:     '½ LINEUP PARCIAL',
       probable:    '~ PROBABLE',
       unavailable: '? SIN LINEUP',
     },
@@ -1543,7 +1545,7 @@ export default function AnalysisPanel({
             {selectedGames.map((g, i) => {
               const status = g.lineupStatus ?? 'unavailable';
               const badgeLabel = t.lineupBadge[status] ?? t.lineupBadge.unavailable;
-              const badgeColor = status === 'confirmed' ? C.green : status === 'probable' ? C.amber : C.textMuted;
+              const badgeColor = status === 'confirmed' ? C.green : (status === 'partial' || status === 'probable') ? C.amber : C.textMuted;
               const gameName = g.teams?.away?.abbreviation && g.teams?.home?.abbreviation
                 ? `${g.teams.away.abbreviation}@${g.teams.home.abbreviation}`
                 : `G${i + 1}`;
