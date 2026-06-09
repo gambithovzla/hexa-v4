@@ -1674,7 +1674,7 @@ export async function runTennisDatasetMigrations() {
   }
 }
 
-export async function runMundialMigrations(pool) {
+export async function runMundialMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mundial_predictions (
       id              BIGSERIAL PRIMARY KEY,
