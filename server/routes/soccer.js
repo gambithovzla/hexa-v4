@@ -19,7 +19,7 @@
 
 import { Router } from 'express';
 import pool from '../db.js';
-import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
+import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/auth-middleware.js';
 import { getSoccerGamesForDate } from '../soccer-api.js';
 import { isSupportedLeague, SOCCER_LEAGUE_SLUGS } from '../soccer-league-map.js';
 import { getSoccerPlayerPropOdds } from '../soccer-props-odds.js';
@@ -162,7 +162,7 @@ async function persistSoccerPick({ userId, userEmail, matchup, analysisData, mod
 
 // ── POST /api/soccer/analyze/game ─────────────────────────────────────────────
 
-router.post('/analyze/game', soccerEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/game', soccerEnabled, verifyToken, requireSportAccess('soccer'), async (req, res) => {
   const {
     gameId,
     date        = null,
@@ -353,7 +353,7 @@ function soccerGameToChatData(game, matchup) {
   };
 }
 
-router.post('/analyze/chat', soccerEnabled, verifyToken, requireAdmin, async (req, res) => {
+router.post('/analyze/chat', soccerEnabled, verifyToken, requireSportAccess('soccer'), async (req, res) => {
   const {
     gameId,
     question,
