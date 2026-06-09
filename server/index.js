@@ -30,6 +30,8 @@ import nflRouter from './routes/nfl.js';
 import nhlRouter from './routes/nhl.js';
 import soccerRouter from './routes/soccer.js';
 import tennisRouter from './routes/tennis.js';
+import mundialRouter from './routes/mundial.js';
+import { resolveMundialPredictions } from './services/mundialResolver.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
@@ -89,7 +91,7 @@ import {
   normalizeArchitectProvider,
   resolveArchitectModelSelection,
 } from './services/parlayEngine/index.js';
-import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations, runTennisScaffoldingMigrations, runTennisDatasetMigrations } from './migrate.js';
+import { runParlaySynergyMigrations, runSprint1Migrations, runPlayerPropsMlbMigrations, runSprint3Migrations, runAdminMLControlCenterMigrations, runNbaScaffoldingMigrations, runNbaDatasetMigrations, runNflScaffoldingMigrations, runNflDatasetMigrations, runNhlScaffoldingMigrations, runNhlDatasetMigrations, runPickAlignedShadowMigrations, runImperdibleMigrations, runOddsCacheMigrations, runEnsembleBackfillMigration, runNbaPlayerStatsMigrations, runNewsletterMigrations, runBeatReporterMigrations, runCsvBacktestMigrations, runPgvectorMigrations, runFeatureFlagsMigrations, runJobQueueMigrations, runSoccerScaffoldingMigrations, runSoccerDatasetMigrations, runTennisScaffoldingMigrations, runTennisDatasetMigrations, runMundialMigrations } from './migrate.js';
 import { runBeatReporterScan, getRecentInjurySignals } from './services/beatReporterService.js';
 import { importBacktestCsv, listCsvBacktestRuns } from './services/backtestCsvImporter.js';
 import { embedPendingPicks, getEmbeddingsStats } from './services/oracleEmbeddingsService.js';
@@ -679,6 +681,7 @@ app.use('/api/nhl',          nhlRouter);
 app.use('/api/soccer/imperdible', soccerImperdibleRouter);
 app.use('/api/soccer',       soccerRouter);
 app.use('/api/tennis',       tennisRouter);
+app.use('/api/mundial',     mundialRouter);
 app.use('/api/mlb',          mlbPropsRouter);
 app.use('/api/imperdible',   imperdibleRouter);
 app.use('/api/admin/content', contentAdminRouter);
@@ -5130,6 +5133,7 @@ runMigrations()
   .then(() => runSoccerDatasetMigrations())
   .then(() => runTennisScaffoldingMigrations())
   .then(() => runTennisDatasetMigrations())
+  .then(() => runMundialMigrations())
   .then(() => seedAdminUser())
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
@@ -5235,6 +5239,10 @@ runMigrations()
               console.error('[pick-resolver-tennis] Scheduled run failed:', err.message);
             });
           }
+
+          resolveMundialPredictions().catch(err => {
+            console.error(`[mundial-resolver] ${err.message}`);
+          });
         }
 
         // NFL resolver — game-time-aware: NFL plays Thu/Sun/Mon. Sunday early

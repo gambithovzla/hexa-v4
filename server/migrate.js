@@ -1673,3 +1673,28 @@ export async function runTennisDatasetMigrations() {
     client.release();
   }
 }
+
+export async function runMundialMigrations(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mundial_predictions (
+      id              BIGSERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      event_id        VARCHAR(64) NOT NULL,
+      home_team       VARCHAR(128) NOT NULL,
+      away_team       VARCHAR(128) NOT NULL,
+      game_date       DATE NOT NULL,
+      predicted_side  VARCHAR(1) NOT NULL CHECK (predicted_side IN ('H','D','A')),
+      actual_side     VARCHAR(1),
+      credits_earned  INTEGER DEFAULT 0,
+      status          VARCHAR(20) DEFAULT 'pending',
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      resolved_at     TIMESTAMPTZ,
+      CONSTRAINT uq_mundial_user_event UNIQUE (user_id, event_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_mundial_user   ON mundial_predictions(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_mundial_event  ON mundial_predictions(event_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_mundial_date   ON mundial_predictions(game_date)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_mundial_status ON mundial_predictions(status)`);
+  console.log('[migrate] mundial_predictions ready');
+}
