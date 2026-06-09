@@ -100,6 +100,7 @@ import { getJobQueueStats, purgeOldJobs } from './services/jobQueueService.js';
 import { generatePickCardSvg, generateSlateSvg } from './services/infographicsService.js';
 import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
+import { getCalibratedConfidence } from './services/confidenceCalibrationService.js';
 import {
   getNbaGamesForDate,
   getNbaLeagueTeamStats,
@@ -587,6 +588,24 @@ async function persistAnalysisPick({
       oddsData,
       sport: 'mlb',
     });
+  }
+
+  // Fire-and-forget: compute calibrated_confidence from historical data
+  if (savedPick?.id && oracleConfidence) {
+    const rawMarket = String(analysisData?.best_pick?.type ?? analysisData?.master_prediction?.bet_type ?? '').toLowerCase();
+    const market = /prop/.test(rawMarket) ? 'prop'
+      : /run\s*line|spread/.test(rawMarket) ? 'runline'
+      : /over|under|total/.test(rawMarket) ? 'overunder'
+      : /money|ml\b/.test(rawMarket) ? 'moneyline'
+      : null;
+    getCalibratedConfidence({ sport: 'mlb', marketType: market, rawConfidence: oracleConfidence })
+      .then(({ calibrated, sampleSize }) => {
+        if (sampleSize >= 15) {
+          pool.query(`UPDATE picks SET calibrated_confidence = $1 WHERE id = $2`, [calibrated, savedPick.id])
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
   }
 
   return savedPick;

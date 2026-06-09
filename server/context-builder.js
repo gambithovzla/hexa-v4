@@ -14,6 +14,7 @@ import { calculateImpliedProbability } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
 import { buildOracleMemory } from './oracle-memory.js';
 import { buildSimilarAnalysesBlock } from './services/oracleEmbeddingsService.js';
+import { buildLessonsBlock } from './services/postmortemLessonsService.js';
 
 // ---------------------------------------------------------------------------
 // In-memory context cache — avoids redundant API calls when the same game is
@@ -2092,7 +2093,7 @@ export async function buildContext(gameData, oddsData = null) {
     blocks.push(oracleMemory);
   }
 
-  const contextString = blocks.join('\n');
+  let contextString = blocks.join('\n');
   const result = {
     context: contextString,
     _features: {
@@ -2123,6 +2124,15 @@ export async function buildContext(gameData, oddsData = null) {
     const ragBlock = await buildSimilarAnalysesBlock(homeName, awayName, gameData.gamePk ?? null);
     if (ragBlock) contextString += ragBlock;
   } catch (_) {}
+
+  // Lessons learned from postmortem aggregation (non-blocking; this builder is MLB-only)
+  try {
+    const lessonsBlock = await buildLessonsBlock('mlb');
+    if (lessonsBlock) contextString += '\n\n' + lessonsBlock;
+  } catch (_) {}
+
+  // contextString was reassigned after result was built — sync before caching/returning
+  result.context = contextString;
 
   _contextCache.set(cacheKey, { context: contextString, _features: result._features, timestamp: Date.now() });
   console.log(`[context-builder] Cache SET for ${cacheKey} (total cached: ${_contextCache.size})`);
