@@ -1678,7 +1678,7 @@ export async function runMundialMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mundial_predictions (
       id              BIGSERIAL PRIMARY KEY,
-      user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       event_id        VARCHAR(64) NOT NULL,
       home_team       VARCHAR(128) NOT NULL,
       away_team       VARCHAR(128) NOT NULL,
