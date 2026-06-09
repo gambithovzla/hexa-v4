@@ -7,21 +7,31 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Box, CircularProgress, Tabs, Tab } from '@mui/material';
 
-const API  = import.meta.env.VITE_API_URL ?? '';
-const MONO = "'JetBrains Mono','Fira Mono',monospace";
+const API   = import.meta.env.VITE_API_URL ?? '';
+const MONO  = "'JetBrains Mono','Fira Mono',monospace";
+const DISP  = "'Oswald','Barlow Condensed',sans-serif";
+const COND  = "'Barlow Condensed','Oswald',sans-serif";
+
 const C = {
-  bg:      '#080e14',
-  card:    '#0d1822',
-  card2:   '#111e2a',
-  line:    '#1a2d3e',
-  gold:    '#f59e0b',
-  goldDim: '#f59e0b33',
+  bg:      '#061827',
+  card:    '#0B2540',
+  raised:  '#102E54',
+  inset:   '#0a1d35',
+  border:  'rgba(244,236,216,0.22)',
+  line:    'rgba(244,236,216,0.14)',
+  lineStr: 'rgba(244,236,216,0.30)',
+  bronze:  '#B8985A',
+  bronzeDim: '#B8985A33',
+  volt:    '#FFD60A',
+  voltDim: '#FFD60A22',
+  lava:    '#E63946',
+  lavaDim: '#E6394622',
   green:   '#22c55e',
-  red:     '#ef4444',
-  cyan:    '#00e5ff',
-  ink0:    '#e8f0f5',
-  ink1:    '#8faabf',
-  ink2:    '#4a6070',
+  greenDim:'#22c55e22',
+  cream:   '#F4ECD8',
+  ink1:    '#cfd6e0',
+  ink2:    '#7a8a9d',
+  ink3:    '#506378',
 };
 
 // ── ISO flag map (2-letter country codes) ────────────────────────────────────
@@ -113,12 +123,15 @@ function Flag({ team, size = 32 }) {
 // ── Score stepper ─────────────────────────────────────────────────────────────
 function ScoreInput({ value, onChange, disabled }) {
   const btnStyle = (active) => ({
-    width: 28, height: 28, border: `1px solid ${C.line}`, bgcolor: C.card2,
-    color: active ? C.ink1 : C.ink2, borderRadius: '6px',
+    width: 28, height: 28,
+    border: `1px solid ${active && !disabled ? C.lineStr : C.line}`,
+    bgcolor: C.inset,
+    color: active && !disabled ? C.ink1 : C.ink3,
+    borderRadius: '4px',
     cursor: disabled || !active ? 'default' : 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: '1rem', fontFamily: MONO, transition: 'all 0.12s',
-    '&:hover:not(:disabled)': { bgcolor: active ? C.line : C.card2, color: active ? C.ink0 : C.ink2 },
+    '&:hover:not(:disabled)': { bgcolor: active ? C.raised : C.inset, color: active ? C.cream : C.ink3 },
   });
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -126,9 +139,10 @@ function ScoreInput({ value, onChange, disabled }) {
         onClick={() => !disabled && onChange(Math.max(0, value - 1))}
         sx={btnStyle(value > 0)}>−</Box>
       <Box sx={{
-        width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: MONO, fontWeight: 700, fontSize: '1.3rem', color: C.ink0,
-        bgcolor: C.card, border: `1px solid ${C.line}`, borderRadius: '6px',
+        width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: DISP, fontWeight: 700, fontSize: '1.4rem', color: disabled ? C.ink2 : C.cream,
+        bgcolor: C.inset, border: `1px solid ${C.line}`, borderRadius: '4px',
+        letterSpacing: '-0.02em',
       }}>{value}</Box>
       <Box component="button" disabled={disabled || value >= 20}
         onClick={() => !disabled && onChange(Math.min(20, value + 1))}
@@ -145,10 +159,12 @@ function DateHeader({ dateStr }) {
   const d = new Date(dateStr + 'T12:00:00Z');
   const label = `${DAYS_ES[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS_ES[d.getUTCMonth()]}`.toUpperCase();
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 3, mb: '6px' }}>
-      <Box sx={{ px: '10px', py: '4px', bgcolor: C.card2, border: `1px solid ${C.line}`,
-        borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-        color: C.gold, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{label}</Box>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: '20px', mb: '8px' }}>
+      <Box sx={{ px: '10px', py: '4px',
+        bgcolor: C.raised, border: `1px solid ${C.lineStr}`,
+        borderLeft: `3px solid ${C.bronze}`,
+        borderRadius: '2px', fontFamily: COND, fontSize: '0.75rem', fontWeight: 700,
+        color: C.bronze, letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>{label}</Box>
       <Box sx={{ flex: 1, height: '1px', bgcolor: C.line }} />
     </Box>
   );
@@ -195,127 +211,133 @@ function MatchCard({ match, token }) {
 
   // Status badge after resolution
   const STATUS = {
-    exact:   { color: C.gold,  label: '★ Exacto · +5 créditos' },
+    exact:   { color: C.volt,  label: '★ Exacto · +5 créditos' },
     correct: { color: C.green, label: '✓ Resultado correcto · suma en tabla' },
-    wrong:   { color: C.red,   label: '✗ Incorrecto' },
+    wrong:   { color: C.lava,  label: '✗ Incorrecto' },
   };
 
   return (
-    <Box sx={{ bgcolor: C.card, border: `1px solid ${C.line}`, borderRadius: '10px', mb: '8px', overflow: 'hidden' }}>
+    <Box sx={{
+      bgcolor: C.card, border: `1px solid ${C.border}`,
+      borderTop: `3px solid ${C.line}`,
+      borderRadius: '4px', mb: '8px', overflow: 'hidden',
+    }}>
       {/* Top bar */}
-      <Box sx={{ px: 2, py: '5px', bgcolor: C.card2, borderBottom: `1px solid ${C.line}`,
+      <Box sx={{ px: 2, py: '5px', bgcolor: C.raised, borderBottom: `1px solid ${C.line}`,
         display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.ink2 }}>⏰ {kickoff ?? '--:-- ET'}</Box>
-        {match.status === 'live'  && <Box sx={{ ml: 'auto', fontFamily: MONO, fontSize: '0.55rem', fontWeight: 700, color: C.green, bgcolor: '#22c55e22', px: '6px', py: '1px', borderRadius: '4px', border: `1px solid ${C.green}44` }}>EN VIVO</Box>}
-        {match.status === 'final' && <Box sx={{ ml: 'auto', fontFamily: MONO, fontSize: '0.55rem', color: C.ink2 }}>FINALIZADO</Box>}
+        <Box sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.ink2, letterSpacing: '0.04em' }}>
+          {kickoff ?? '--:-- ET'}
+        </Box>
+        {match.status === 'live'  && (
+          <Box sx={{ ml: 'auto', fontFamily: COND, fontSize: '0.6rem', fontWeight: 700,
+            color: C.lava, letterSpacing: '0.12em' }}>● EN VIVO</Box>
+        )}
+        {match.status === 'final' && (
+          <Box sx={{ ml: 'auto', fontFamily: COND, fontSize: '0.6rem', color: C.ink3, letterSpacing: '0.1em' }}>FINALIZADO</Box>
+        )}
       </Box>
 
       {/* Actual score if final */}
       {match.status === 'final' && match.homeScore != null && (
-        <Box sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.ink1, textAlign: 'center', pt: '8px', pb: 0 }}>
-          Resultado oficial: <strong style={{ color: C.ink0 }}>{match.homeScore} – {match.awayScore}</strong>
+        <Box sx={{ fontFamily: DISP, fontSize: '0.85rem', color: C.ink2, textAlign: 'center', pt: '8px', pb: 0, letterSpacing: '0.06em' }}>
+          RESULTADO: <strong style={{ color: C.cream, fontWeight: 700 }}>{match.homeScore} – {match.awayScore}</strong>
         </Box>
       )}
 
-      {/* Teams row: flag + name inline, full width */}
+      {/* Teams row */}
       <Box sx={{ px: 2, pt: '12px', pb: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-        {/* Home */}
-        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
           <Flag team={match.homeTeam} size={26} />
-          <Box sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 600, color: C.ink0,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {match.homeTeam}
+          <Box sx={{ fontFamily: COND, fontSize: '0.88rem', fontWeight: 600, color: C.cream,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.04em' }}>
+            {match.homeTeam.toUpperCase()}
           </Box>
         </Box>
-
-        <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.ink2, flexShrink: 0, px: '2px' }}>VS</Box>
-
-        {/* Away */}
-        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', minWidth: 0 }}>
-          <Box sx={{ fontFamily: MONO, fontSize: '0.72rem', fontWeight: 600, color: C.ink0,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
-            {match.awayTeam}
+        <Box sx={{ fontFamily: COND, fontSize: '0.6rem', color: C.ink3, flexShrink: 0, px: '2px', letterSpacing: '0.1em' }}>VS</Box>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '7px', minWidth: 0 }}>
+          <Box sx={{ fontFamily: COND, fontSize: '0.88rem', fontWeight: 600, color: C.cream,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right', letterSpacing: '0.04em' }}>
+            {match.awayTeam.toUpperCase()}
           </Box>
           <Flag team={match.awayTeam} size={26} />
         </Box>
       </Box>
 
-      {/* Score inputs + actions row */}
-      <Box sx={{ px: 2, pb: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+      {/* Score inputs + actions */}
+      <Box sx={{ px: 2, pb: '14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ScoreInput value={home} onChange={v => { setHome(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
-          <Box sx={{ fontFamily: MONO, fontWeight: 700, fontSize: '1.1rem', color: C.ink2 }}>:</Box>
+          <Box sx={{ fontFamily: DISP, fontWeight: 700, fontSize: '1.3rem', color: C.ink3, px: '2px' }}>–</Box>
           <ScoreInput value={away} onChange={v => { setAway(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
         </Box>
 
         {/* Saved + not editing */}
         {saved && !editing && canEdit && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Box sx={{
               px: '14px', py: '5px',
-              bgcolor: '#22c55e18', border: `1px solid ${C.green}55`,
-              borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-              color: C.green, letterSpacing: '0.08em',
-            }}>✓ Guardado</Box>
-            <Box component="button" onClick={enterEdit}
-              sx={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: MONO, fontSize: '0.6rem', color: C.ink2,
-                letterSpacing: '0.06em', px: '6px', py: '4px', borderRadius: '4px',
-                '&:hover': { color: C.cyan, bgcolor: C.card2 },
-              }}>
-              ✏ Editar
-            </Box>
+              bgcolor: C.greenDim, border: `1px solid ${C.green}55`,
+              borderRadius: '3px', fontFamily: COND, fontSize: '0.72rem', fontWeight: 700,
+              color: C.green, letterSpacing: '0.12em',
+            }}>✓ GUARDADO</Box>
+            <Box component="button" onClick={enterEdit} sx={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: COND, fontSize: '0.7rem', color: C.ink2, letterSpacing: '0.08em',
+              px: '6px', py: '3px', borderRadius: '3px',
+              '&:hover': { color: C.bronze, bgcolor: C.raised },
+            }}>✏ EDITAR</Box>
           </Box>
         )}
 
-        {/* Saved (resolved/locked) — no edit */}
+        {/* Saved + locked (no edit) */}
         {saved && !canEdit && !isResolved && (
           <Box sx={{
-            px: '14px', py: '5px',
-            bgcolor: '#22c55e18', border: `1px solid ${C.green}55`,
-            borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-            color: C.green, letterSpacing: '0.08em',
-          }}>✓ Guardado</Box>
+            px: '14px', py: '5px', bgcolor: C.greenDim, border: `1px solid ${C.green}55`,
+            borderRadius: '3px', fontFamily: COND, fontSize: '0.72rem', fontWeight: 700,
+            color: C.green, letterSpacing: '0.12em',
+          }}>✓ GUARDADO</Box>
         )}
 
-        {/* First-time predict OR editing */}
+        {/* First predict or editing */}
         {!isLocked && !isResolved && token && (!saved || editing) && (
           <Box component="button" disabled={saving} onClick={() => save(home, away)}
             sx={{
-              px: '28px', py: '7px',
-              bgcolor: editing ? '#00e5ff18' : C.goldDim,
-              border: `1px solid ${editing ? C.cyan + '88' : C.gold + '88'}`,
-              borderRadius: '6px', cursor: saving ? 'default' : 'pointer',
-              fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700,
-              color: editing ? C.cyan : C.gold, letterSpacing: '0.08em',
-              transition: 'all 0.18s',
-              '&:hover:not(:disabled)': { bgcolor: editing ? '#00e5ff28' : '#f59e0b28' },
+              px: '32px', py: '8px',
+              bgcolor: editing ? C.bronzeDim : C.bronzeDim,
+              border: `1px solid ${editing ? C.volt + '99' : C.bronze + '99'}`,
+              borderRadius: '3px', cursor: saving ? 'default' : 'pointer',
+              fontFamily: DISP, fontSize: '0.85rem', fontWeight: 700,
+              color: editing ? C.volt : C.bronze, letterSpacing: '0.14em',
+              transition: 'all 0.15s',
+              '&:hover:not(:disabled)': { bgcolor: `${editing ? C.volt : C.bronze}22` },
             }}>
-            {saving ? '...' : editing ? 'Guardar cambios' : 'Predecir'}
+            {saving ? '...' : editing ? 'GUARDAR CAMBIOS' : 'PREDECIR'}
           </Box>
         )}
 
         {!token && (
-          <Box sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.ink2, textAlign: 'center' }}>
-            Inicia sesión para predecir
+          <Box sx={{ fontFamily: COND, fontSize: '0.65rem', color: C.ink3, letterSpacing: '0.08em' }}>
+            INICIA SESIÓN PARA PREDECIR
           </Box>
         )}
       </Box>
 
       {/* Resolution badge */}
       {isResolved && (
-        <Box sx={{ mx: 2, mb: '10px', px: '10px', py: '5px', borderRadius: '6px',
-          bgcolor: `${STATUS[pred.status].color}18`, border: `1px solid ${STATUS[pred.status].color}44`,
-          fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700, color: STATUS[pred.status].color,
-          letterSpacing: '0.06em', textAlign: 'center' }}>
-          {STATUS[pred.status].label}
-          {' · Tu predicción: '}<strong>{pred.predicted_home}–{pred.predicted_away}</strong>
+        <Box sx={{ mx: 2, mb: '10px', px: '12px', py: '6px', borderRadius: '3px',
+          bgcolor: `${STATUS[pred.status].color}18`, borderLeft: `3px solid ${STATUS[pred.status].color}`,
+          border: `1px solid ${STATUS[pred.status].color}33`,
+          fontFamily: COND, fontSize: '0.72rem', fontWeight: 700, color: STATUS[pred.status].color,
+          letterSpacing: '0.1em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{STATUS[pred.status].label}</span>
+          <span style={{ fontFamily: MONO, fontSize: '0.7rem', opacity: 0.8 }}>
+            {pred.predicted_home}–{pred.predicted_away}
+          </span>
         </Box>
       )}
 
       {err && (
-        <Box sx={{ mx: 2, mb: '8px', fontFamily: MONO, fontSize: '0.6rem', color: C.red, textAlign: 'center' }}>
+        <Box sx={{ mx: 2, mb: '8px', fontFamily: MONO, fontSize: '0.6rem', color: C.lava, textAlign: 'center' }}>
           {err}
         </Box>
       )}
@@ -340,27 +362,32 @@ function StatsBar({ matches, token }) {
   const pct       = total > 0 ? Math.round(predicted / total * 100) : 0;
 
   return (
-    <Box sx={{ bgcolor: C.card, border: `1px solid ${C.line}`, borderRadius: '10px', p: 2, mb: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-        <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.ink0, fontWeight: 600 }}>
-          {predicted} / {total} predicciones
+    <Box sx={{
+      bgcolor: C.card, border: `1px solid ${C.border}`,
+      borderTop: `3px solid ${C.bronze}`,
+      borderRadius: '4px', p: 2, mb: 2,
+    }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: '8px' }}>
+        <Box sx={{ fontFamily: COND, fontSize: '0.8rem', color: C.ink1, letterSpacing: '0.06em' }}>
+          {predicted} / {total} PREDICCIONES
         </Box>
-        <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.gold, fontWeight: 700 }}>{pct}%</Box>
+        <Box sx={{ fontFamily: DISP, fontSize: '1rem', color: C.bronze, fontWeight: 700, letterSpacing: '0.04em' }}>{pct}%</Box>
       </Box>
-      <Box sx={{ height: 4, bgcolor: C.line, borderRadius: 2, overflow: 'hidden', mb: summary ? 1.5 : 0 }}>
-        <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: C.gold,
-          background: `linear-gradient(90deg, ${C.gold}, #fbbf24)`, borderRadius: 2, transition: 'width 0.4s' }} />
+      <Box sx={{ height: 3, bgcolor: C.raised, borderRadius: 0, overflow: 'hidden', mb: summary ? 2 : 0 }}>
+        <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: C.bronze,
+          background: `linear-gradient(90deg, ${C.bronze}, ${C.volt})`, transition: 'width 0.4s' }} />
       </Box>
       {summary && (
-        <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
           {[
-            { label: 'Exactos',  val: summary.exact,         color: C.gold  },
-            { label: 'Aciertos', val: summary.correct,       color: C.green },
-            { label: 'Créditos', val: summary.total_credits, color: C.cyan  },
+            { label: 'Exactos',  val: summary.exact,         color: C.volt   },
+            { label: 'Aciertos', val: summary.correct,       color: C.green  },
+            { label: 'Créditos', val: summary.total_credits, color: C.bronze },
           ].map(({ label, val, color }) => (
-            <Box key={label} sx={{ flex: 1, textAlign: 'center' }}>
-              <Box sx={{ fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, color }}>{val ?? 0}</Box>
-              <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.ink2, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{label}</Box>
+            <Box key={label} sx={{ flex: 1, textAlign: 'center', py: '6px',
+              bgcolor: C.raised, borderRadius: '3px', border: `1px solid ${C.line}` }}>
+              <Box sx={{ fontFamily: DISP, fontSize: '1.3rem', fontWeight: 700, color, lineHeight: 1.1 }}>{val ?? 0}</Box>
+              <Box sx={{ fontFamily: COND, fontSize: '0.6rem', color: C.ink2, letterSpacing: '0.12em', mt: '2px' }}>{label.toUpperCase()}</Box>
             </Box>
           ))}
         </Box>
@@ -383,37 +410,56 @@ function Leaderboard() {
 
   const medals = ['🥇','🥈','🥉'];
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={28} sx={{ color: C.gold }} /></Box>;
-  if (!rows.length) return <Box sx={{ textAlign: 'center', py: 6, fontFamily: MONO, fontSize: '0.8rem', color: C.ink2 }}>Aún no hay resultados resueltos. ¡Vuelve pronto!</Box>;
+  if (loading) return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+      <CircularProgress size={28} sx={{ color: C.bronze }} />
+    </Box>
+  );
+  if (!rows.length) return (
+    <Box sx={{ textAlign: 'center', py: 8, fontFamily: COND, fontSize: '0.85rem',
+      color: C.ink2, letterSpacing: '0.08em' }}>
+      AÚN NO HAY RESULTADOS RESUELTOS · VUELVE PRONTO
+    </Box>
+  );
 
   return (
     <Box>
+      {/* Header row */}
+      <Box sx={{ display: 'flex', alignItems: 'center', px: 2, pb: '6px',
+        fontFamily: COND, fontSize: '0.6rem', color: C.ink3, letterSpacing: '0.12em' }}>
+        <Box sx={{ width: 32 }} />
+        <Box sx={{ flex: 1 }}>JUGADOR</Box>
+        <Box sx={{ display: 'flex', gap: '6px' }}>
+          <Box sx={{ width: 44, textAlign: 'center' }}>EXACTOS</Box>
+          <Box sx={{ width: 44, textAlign: 'center' }}>RESULT.</Box>
+          <Box sx={{ width: 48, textAlign: 'center' }}>CRÉDITOS</Box>
+        </Box>
+      </Box>
+
       {rows.map((row, i) => (
         <Box key={row.id} sx={{
-          display: 'flex', alignItems: 'center', gap: 2, px: 2, py: '10px', mb: '4px',
-          bgcolor: i < 3 ? C.card2 : C.card,
-          border: `1px solid ${i < 3 ? C.gold + '55' : C.line}`,
-          borderRadius: '8px',
+          display: 'flex', alignItems: 'center', gap: 0, px: 2, py: '10px', mb: '4px',
+          bgcolor: i === 0 ? C.raised : C.card,
+          border: `1px solid ${i < 3 ? C.lineStr : C.line}`,
+          borderLeft: i < 3 ? `3px solid ${i === 0 ? C.volt : i === 1 ? C.ink1 : C.bronze}` : `3px solid transparent`,
+          borderRadius: '3px',
         }}>
-          <Box sx={{ fontFamily: MONO, fontSize: '1rem', width: 28, textAlign: 'center' }}>
-            {medals[i] ?? <span style={{ color: C.ink2, fontSize: '0.7rem' }}>#{i + 1}</span>}
+          <Box sx={{ fontFamily: MONO, fontSize: '0.9rem', width: 28, textAlign: 'center', flexShrink: 0 }}>
+            {medals[i] ?? <span style={{ color: C.ink3, fontFamily: COND, fontSize: '0.65rem', letterSpacing: '0.06em' }}>#{i + 1}</span>}
           </Box>
-          <Box sx={{ flex: 1, fontFamily: MONO, fontSize: '0.8rem', color: C.ink0, fontWeight: 600,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Box sx={{ flex: 1, fontFamily: COND, fontSize: '0.85rem', color: C.cream, fontWeight: 600,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.04em', ml: 1 }}>
             {row.username}
           </Box>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.gold, fontWeight: 700 }}>{row.exact_count ?? 0}</Box>
-              <Box sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.ink2, letterSpacing: '0.08em' }}>EXACTOS</Box>
+          <Box sx={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+            <Box sx={{ width: 44, textAlign: 'center' }}>
+              <Box sx={{ fontFamily: DISP, fontSize: '0.9rem', color: C.volt, fontWeight: 700 }}>{row.exact_count ?? 0}</Box>
             </Box>
-            <Box sx={{ textAlign: 'center' }}>
-              <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.green, fontWeight: 700 }}>{row.correct_count ?? 0}</Box>
-              <Box sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.ink2, letterSpacing: '0.08em' }}>RESULT.</Box>
+            <Box sx={{ width: 44, textAlign: 'center' }}>
+              <Box sx={{ fontFamily: DISP, fontSize: '0.9rem', color: C.green, fontWeight: 700 }}>{row.correct_count ?? 0}</Box>
             </Box>
-            <Box sx={{ textAlign: 'center', minWidth: 42 }}>
-              <Box sx={{ fontFamily: MONO, fontSize: '0.95rem', color: C.cyan, fontWeight: 700 }}>{row.total_credits ?? 0}</Box>
-              <Box sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.ink2, letterSpacing: '0.08em' }}>CRÉDITOS</Box>
+            <Box sx={{ width: 48, textAlign: 'center' }}>
+              <Box sx={{ fontFamily: DISP, fontSize: '1rem', color: C.bronze, fontWeight: 700 }}>{row.total_credits ?? 0}</Box>
             </Box>
           </Box>
         </Box>
@@ -446,37 +492,42 @@ export default function MundialPage({ token }) {
   const sortedDates = Object.keys(byDate).sort();
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: C.bg, color: C.ink0, pb: 8 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: C.bg, color: C.cream, pb: 8 }}>
       {/* Header */}
       <Box sx={{ position: 'sticky', top: 0, zIndex: 10,
-        bgcolor: 'rgba(8,14,20,0.96)', backdropFilter: 'blur(12px)',
-        borderBottom: `1px solid ${C.line}` }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, pt: '12px', pb: 0 }}>
+        bgcolor: `rgba(6,24,39,0.97)`, backdropFilter: 'blur(12px)',
+        borderBottom: `1px solid ${C.lineStr}` }}>
+
+        {/* Bronze accent bar at top */}
+        <Box sx={{ height: '3px', background: `linear-gradient(90deg, ${C.bronze}, ${C.volt} 60%, ${C.bronze})` }} />
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, pt: '10px', pb: 0 }}>
           <Box component="button" onClick={() => { window.location.href = '/'; }}
-            sx={{ background: 'none', border: 'none', color: C.gold, cursor: 'pointer',
-              fontFamily: MONO, fontSize: '0.7rem', letterSpacing: '0.08em',
-              p: '4px 8px', borderRadius: '6px', '&:hover': { bgcolor: C.card } }}>
+            sx={{ background: 'none', border: 'none', color: C.bronze, cursor: 'pointer',
+              fontFamily: COND, fontSize: '0.75rem', letterSpacing: '0.1em',
+              p: '4px 8px', borderRadius: '3px', '&:hover': { bgcolor: C.raised } }}>
             ← HEXA
           </Box>
           <Box sx={{ flex: 1, textAlign: 'center' }}>
-            <Box sx={{ fontFamily: MONO, fontWeight: 700, fontSize: '0.9rem', color: C.gold, letterSpacing: '0.12em' }}>
+            <Box sx={{ fontFamily: DISP, fontWeight: 700, fontSize: '1.1rem', color: C.cream, letterSpacing: '0.16em' }}>
               🏆 MUNDIAL 2026
             </Box>
-            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.ink2, letterSpacing: '0.15em' }}>
-              {loading ? '...' : `FASE DE GRUPOS · ${matches.length} PARTIDOS`}
+            <Box sx={{ fontFamily: COND, fontSize: '0.62rem', color: C.bronze, letterSpacing: '0.18em', mt: '-2px' }}>
+              {loading ? '···' : `FASE DE GRUPOS · ${matches.length} PARTIDOS`}
             </Box>
           </Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
-            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.gold }}>★ Exacto = +5 créditos</Box>
-            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.green }}>✓ Resultado = tabla</Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+            <Box sx={{ fontFamily: COND, fontSize: '0.6rem', color: C.volt, letterSpacing: '0.06em' }}>★ Exacto = +5 cr</Box>
+            <Box sx={{ fontFamily: COND, fontSize: '0.6rem', color: C.ink2, letterSpacing: '0.06em' }}>✓ Resultado = tabla</Box>
           </Box>
         </Box>
+
         <Tabs value={tab} onChange={(_, v) => setTab(v)}
           sx={{ px: 2, minHeight: 40,
-            '& .MuiTabs-indicator': { bgcolor: C.gold },
-            '& .MuiTab-root': { fontFamily: MONO, fontSize: '0.7rem', letterSpacing: '0.1em',
-              color: C.ink2, minHeight: 40, textTransform: 'uppercase', fontWeight: 600,
-              '&.Mui-selected': { color: C.gold } } }}>
+            '& .MuiTabs-indicator': { bgcolor: C.bronze, height: '2px' },
+            '& .MuiTab-root': { fontFamily: COND, fontSize: '0.75rem', letterSpacing: '0.14em',
+              color: C.ink2, minHeight: 40, textTransform: 'uppercase', fontWeight: 700,
+              '&.Mui-selected': { color: C.cream } } }}>
           <Tab label="⚽ Predecir" />
           <Tab label="🏆 Ranking" />
         </Tabs>
@@ -486,10 +537,11 @@ export default function MundialPage({ token }) {
         {tab === 0 && (
           loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-              <CircularProgress size={32} sx={{ color: C.gold }} />
+              <CircularProgress size={32} sx={{ color: C.bronze }} />
             </Box>
           ) : fetchErr ? (
-            <Box sx={{ textAlign: 'center', py: 8, fontFamily: MONO, fontSize: '0.8rem', color: C.red }}>
+            <Box sx={{ textAlign: 'center', py: 8, fontFamily: COND, fontSize: '0.85rem',
+              color: C.lava, letterSpacing: '0.08em' }}>
               {fetchErr}
             </Box>
           ) : (
