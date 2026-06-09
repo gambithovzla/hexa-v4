@@ -33,3 +33,4 @@ client/.vite/
 
 # Backups
 scripts/backups/
+.claude/

@@ -34,7 +34,7 @@ export async function captureOddsSnapshot() {
   const captured = [];
 
   for (const game of realOdds) {
-    const { homeTeam, awayTeam, odds } = game;
+    const { homeTeam, awayTeam, odds, perBook } = game;
     const { moneyline: ml, runLine: rl, overUnder: ou } = odds;
 
     // Build a deterministic game_id from team names + date
@@ -46,8 +46,9 @@ export async function captureOddsSnapshot() {
           moneyline_home, moneyline_away,
           run_line_home, run_line_home_price,
           run_line_away, run_line_away_price,
-          total, over_price, under_price)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          total, over_price, under_price,
+          bookmaker_count, books_ml_home, books_ml_away, books_total)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         gameId,
         today,
@@ -62,6 +63,10 @@ export async function captureOddsSnapshot() {
         ou?.total      ?? null,
         ou?.overPrice  ?? null,
         ou?.underPrice ?? null,
+        perBook?.bookCount ?? null,
+        perBook?.mlHome?.length ? JSON.stringify(perBook.mlHome) : null,
+        perBook?.mlAway?.length ? JSON.stringify(perBook.mlAway) : null,
+        perBook?.totals?.length ? JSON.stringify(perBook.totals) : null,
       ]
     );
 
@@ -132,6 +137,33 @@ export async function getLineMovement(homeTeam, awayTeam, gameDate) {
   const lastTs  = new Date(current.captured_at);
   const hoursSpan = Math.round((lastTs - firstTs) / (1000 * 60 * 60) * 10) / 10;
 
+  // Sustained-move consensus: of all snapshot-to-snapshot moves (5+ cents),
+  // what fraction pointed the same way as the overall move? A steam move
+  // (many aligned steps) is a stronger sharp signal than one jump + drift back.
+  let alignedSteps = 0;
+  let totalSteps = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const step = diff(rows[i - 1].moneyline_home, rows[i].moneyline_home);
+    if (step == null || Math.abs(step) < 5) continue;
+    totalSteps++;
+    if (movement_ml_home != null && step * movement_ml_home > 0) alignedSteps++;
+  }
+  const sustained_move_pct = totalSteps > 0
+    ? Math.round((alignedSteps / totalSteps) * 100)
+    : null;
+
+  // Reverse line movement: public money piles onto favorites, which normally
+  // shortens their price. A favorite whose ML is DRIFTING LONGER (toward +)
+  // means the books are moving against the public side — classic sharp signal.
+  let reverse_line_movement = null;
+  if (opening.moneyline_home != null && opening.moneyline_home <= -130
+      && movement_ml_home != null && movement_ml_home >= 15) {
+    reverse_line_movement = 'against_home_favorite';
+  } else if (opening.moneyline_away != null && opening.moneyline_away <= -130
+      && movement_ml_away != null && movement_ml_away >= 15) {
+    reverse_line_movement = 'against_away_favorite';
+  }
+
   return {
     opening: {
       moneyline_home: opening.moneyline_home,
@@ -148,6 +180,9 @@ export async function getLineMovement(homeTeam, awayTeam, gameDate) {
     movement_total: movement_total != null ? Math.round(movement_total * 10) / 10 : null,
     sharp_signal,
     direction,
+    sustained_move_pct,
+    reverse_line_movement,
+    book_count: current.bookmaker_count ?? null,
     snapshots_count:  rows.length,
     first_captured:   opening.captured_at,
     last_captured:    current.captured_at,

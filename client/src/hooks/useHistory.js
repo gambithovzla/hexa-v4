@@ -184,6 +184,8 @@ function dbRowToEntry(row) {
     gameDate,
     sport:                normalizeSport(row.sport ?? 'mlb'),
     mlOpinion:            parseMlOpinion(row.ml_opinion),
+    conviction_tier:      row.conviction_tier ?? null,
+    calibrated_confidence: row.calibrated_confidence ?? null,
   };
 }
 

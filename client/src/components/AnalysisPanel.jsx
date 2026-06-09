@@ -80,6 +80,7 @@ const L = {
     lineupBadge: {
       confirmed:   '✓ LINEUP',
       partial:     '½ PARTIAL LINEUP',
+      partialMissing: (abbr) => `½ ${abbr} MISSING`,
       probable:    '~ PROBABLE',
       unavailable: '? NO LINEUP',
     },
@@ -140,6 +141,7 @@ const L = {
     lineupBadge: {
       confirmed:   '✓ LINEUP',
       partial:     '½ LINEUP PARCIAL',
+      partialMissing: (abbr) => `½ FALTA ${abbr}`,
       probable:    '~ PROBABLE',
       unavailable: '? SIN LINEUP',
     },
@@ -1544,7 +1546,12 @@ export default function AnalysisPanel({
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             {selectedGames.map((g, i) => {
               const status = g.lineupStatus ?? 'unavailable';
-              const badgeLabel = t.lineupBadge[status] ?? t.lineupBadge.unavailable;
+              let badgeLabel = t.lineupBadge[status] ?? t.lineupBadge.unavailable;
+              if (status === 'partial') {
+                const homeHas = (g.lineups?.home?.length ?? 0) > 0;
+                const missingAbbr = homeHas ? g.teams?.away?.abbreviation : g.teams?.home?.abbreviation;
+                if (missingAbbr) badgeLabel = t.lineupBadge.partialMissing(missingAbbr);
+              }
               const badgeColor = status === 'confirmed' ? C.green : (status === 'partial' || status === 'probable') ? C.amber : C.textMuted;
               const gameName = g.teams?.away?.abbreviation && g.teams?.home?.abbreviation
                 ? `${g.teams.away.abbreviation}@${g.teams.home.abbreviation}`
