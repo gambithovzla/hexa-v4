@@ -15,6 +15,8 @@
  *   avgGoals     — historical goals/match (Oracle Over/Under prior)
  *   drawPct      — historical draw frequency (Oracle 3-way prior)
  *   style        — short profile string injected into the context block
+ *   international — true for national-team tournaments (drives TOURNAMENT MODE in the Oracle prompt)
+ *   neutralVenues — true when most/all venues are neutral (discounts home advantage)
  */
 
 const SOCCER_LEAGUES = {
@@ -78,6 +80,18 @@ const SOCCER_LEAGUES = {
     drawPct: 0.22,
     style: 'Athletic, less tactical. Fewer draws, more end-to-end. Strong home advantage.',
   },
+  'fifa.world': {
+    slug: 'fifa.world',
+    oddsApiSlug: 'soccer_fifa_world_cup',
+    country: 'International',
+    name: 'FIFA World Cup',
+    season: 'Jun–Jul 2026',
+    avgGoals: 2.6,
+    drawPct: 0.24,
+    style: 'National-team tournament. Group stage skews cautious (draws common, teams play not to lose); knockouts tighten and go to extra time. Squad cohesion, tournament experience and rest between rounds matter more than club form. Neutral venues except host nations (USA/Canada/Mexico).',
+    international: true,
+    neutralVenues: true,
+  },
 };
 
 export function getSoccerLeague(slug) {
@@ -87,6 +101,11 @@ export function getSoccerLeague(slug) {
 
 export function isSupportedLeague(slug) {
   return Boolean(getSoccerLeague(slug));
+}
+
+/** True for national-team tournaments (FIFA World Cup) — drives TOURNAMENT MODE in the Oracle prompt. */
+export function isInternationalLeague(slug) {
+  return Boolean(getSoccerLeague(slug)?.international);
 }
 
 export function getSoccerLeagueByOddsSlug(oddsApiSlug) {

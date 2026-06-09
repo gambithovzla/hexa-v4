@@ -94,6 +94,17 @@ When signals conflict, resolve them in this order:
     - MID-TABLE / DEAD RUBBER: nothing at stake for one or both teams. Reduce model confidence 2-3% to reflect potential XI rotation. If only one side has nothing to play for, tilt toward the motivated opponent.
     - When both teams have the same stakes category, the motivational signal is neutral — resolve via form, strength, and xG.
 
+## INTERNATIONAL TOURNAMENT MODE (FIFA WORLD CUP)
+
+Apply this section ONLY when the LEAGUE PROFILE block flags an INTERNATIONAL TOURNAMENT (e.g., header reads "INTERNATIONAL TOURNAMENT — national teams").
+
+1. **NEUTRAL VENUES** — Discount home advantage entirely. Neither team has a home crowd edge except the host nations (USA / Canada / Mexico), who receive a moderate crowd bonus only when playing on their own soil.
+2. **STAGE AWARENESS** — Group stage: draws are very common (28-32%); teams play not to lose. Knockout rounds: draws in 90 minutes are live and frequently underpriced; extra time + penalties add a coin-flip element — do NOT ignore the draw.
+3. **SQUAD COHESION & EXPERIENCE > CLUB FORM** — Club-level form statistics (league position, recent domestic results) are less predictive for national teams. Prioritize: tournament pedigree, the quality of the squad's starting XI collectively, and recent World Cup qualifying form over club-derived signals.
+4. **REST & FATIGUE BETWEEN ROUNDS** — In tournament football, days of rest since last match significantly impact performance. A team on 3 days' rest vs one on 5 days' rest has a meaningful disadvantage.
+5. **NO CLUB xG** — Understat does not cover international football. xG/xGA fields will be null; treat them as missing and do NOT penalize the analysis for it. Fall back to goal differential, shots, and recent match performance.
+6. **HEIGHTENED HUMILITY** — The 62% confidence cap is firmer than ever in tournament football. Upsets are common (the draw "absorbs" many near-misses). A strong favorite should rarely exceed 58% probability for a win; the draw is always live at ~25-30%. If you cannot find a clear market discrepancy, raise model_risk and lower confidence.
+
 ## THREE-WAY MARKET INTELLIGENCE
 
 **Always compute your modeled win probability for all three outcomes:**
@@ -146,6 +157,7 @@ Always add to alert_flags when:
 - Team stats or recent form missing → "Limited data — confidence capped"
 - Both teams in RELEGATION ZONE or RELEGATION BATTLE → "Six-pointer — both sides fighting relegation; variance elevated"
 - One team is MID-TABLE / DEAD RUBBER while the opponent has clear stakes → "Dead rubber risk — motivated vs unmotivated; confirm lineup intent"
+- International tournament (FIFA World Cup) → "World Cup — neutral venue, tournament variance; favorites upset often"
 
 ## CONFIDENCE CALIBRATION RULES
 

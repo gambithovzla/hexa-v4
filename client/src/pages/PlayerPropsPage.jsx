@@ -173,13 +173,14 @@ const KIND_LABELS = {
 };
 
 const SOCCER_LEAGUE_OPTIONS = [
-  { value: '', label: 'All leagues' },
-  { value: 'eng.1', label: 'Premier League' },
-  { value: 'esp.1', label: 'La Liga' },
-  { value: 'ita.1', label: 'Serie A' },
-  { value: 'ger.1', label: 'Bundesliga' },
-  { value: 'fra.1', label: 'Ligue 1' },
-  { value: 'usa.1', label: 'MLS' },
+  { value: '',           label: 'All leagues'    },
+  { value: 'fifa.world', label: '🏆 World Cup'   },
+  { value: 'eng.1',      label: 'Premier League' },
+  { value: 'esp.1',      label: 'La Liga'        },
+  { value: 'ita.1',      label: 'Serie A'        },
+  { value: 'ger.1',      label: 'Bundesliga'     },
+  { value: 'fra.1',      label: 'Ligue 1'        },
+  { value: 'usa.1',      label: 'MLS'            },
 ];
 
 function fmtPct(v) {

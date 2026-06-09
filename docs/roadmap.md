@@ -701,6 +701,25 @@ Lock-of-the-slate soccer. Cero ediciones a frozen; desbloqueado por 11.2 (modelo
 
 ---
 
+#### Sprint 11.WC — FIFA World Cup 2026 — ✅ implementado (2026-06-09)
+
+**Objetivo**: soporte completo del Mundial como una "liga" más (`leagueSlug='fifa.world'`) para que fluya por todo el pipeline existente (board, live tracker, parlay, imperdible, analyze/chat) sin cambios estructurales. Opción elegida: fundación + contexto de torneo en el prompt Oracle (neutral venue, stage awareness, squad cohesion, no-xG, etc.).
+
+**Cambios**:
+- ✅ **[soccer-league-map.js](../server/soccer-league-map.js)** — entrada `'fifa.world'` (`oddsApiSlug: 'soccer_fifa_world_cup'`, `avgGoals: 2.6`, `drawPct: 0.24`, `international: true`, `neutralVenues: true`) + helper `isInternationalLeague(slug)`.
+- ✅ **[soccer-team-map.js](../server/soccer-team-map.js)** — 50 selecciones nacionales con código FIFA de 3 letras + aliases ESPN↔Odds API (`Korea Republic`→`South Korea`, `USMNT`→`United States`, `IR Iran`→`Iran`, `Türkiye`→`Turkey`, etc.).
+- ✅ **[soccer-context-builder.js](../server/soccer-context-builder.js)** — `gatherStandingsEntries()`: aplana tanto la estructura flat de ligas domésticas (`standings.entries`) como la estructura anidada de fase de grupos del Mundial (`children[].standings.entries`). `LEAGUE_SPOTS` omite `'fifa.world'` intencionalmente — las stakes del torneo las maneja el prompt, no la tabla de motivación.
+- ✅ **[oracle-soccer-prompts.js](../server/prompts/oracle-soccer-prompts.js)** — sección `## INTERNATIONAL TOURNAMENT MODE (FIFA WORLD CUP)` con 6 reglas: (1) neutral venues, (2) stage awareness (group draws ~28-32%; knockout draws en 90' underpriced), (3) squad cohesion > club form, (4) rest/fatigue entre rondas, (5) no xG (Understat no cubre internacionales), (6) humility cap 62%. Alert flag dedicado.
+- ✅ **[oracleSoccer.js](../server/services/oracleSoccer.js)** — `describeLeagueProfile` detecta `leagueMeta.international` e inyecta header `INTERNATIONAL TOURNAMENT` + bloque TOURNAMENT MODE en el contexto serializado.
+- ✅ **5 componentes cliente**: `GameSelector`, `OracleChat`, `PlayerPropsPage`, `SoccerLiveTracker`, `ImperdibleSoccerPage` — `🏆 World Cup` al tope del selector de ligas.
+- ✅ **Tests**: `server/__tests__/soccerWorldCup.test.js` (9: registry, flags, reverse lookup por Odds slug, `isInternationalLeague`, normalización de selecciones por nombre canónico, short FIFA, aliases, graceful fallback, scoping de liga).
+
+**Sin flag nuevo**: `SOCCER_ANALYSIS_ENABLED=true` es suficiente. `fifa.world` es otra liga soportada.
+
+**Pendiente operacional**: `modelProb` permanece `null` hasta picks resueltos (análogo a MLS en su primera temporada); `mode=safe` del Imperdible es el útil. xG permanece null (Understat no cubre internacionales).
+
+---
+
 ### 📋 Sprint 12 — Tennis
 
 **Spec maestra**: [tennis-architecture.md](tennis-architecture.md) · **Roadmap por sub-sprints (12a–12e)**: [tennis-roadmap.md](tennis-roadmap.md). El resumen de abajo se conserva; el detalle vive en esos dos documentos.

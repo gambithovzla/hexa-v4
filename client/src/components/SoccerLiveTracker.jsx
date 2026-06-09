@@ -19,12 +19,13 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const POLL_INTERVAL = 60_000;
 
 const SOCCER_LEAGUES = [
-  { slug: 'eng.1',  name: 'Premier League', abbr: 'EPL' },
-  { slug: 'esp.1',  name: 'La Liga',        abbr: 'LLG' },
-  { slug: 'ger.1',  name: 'Bundesliga',     abbr: 'BUN' },
-  { slug: 'ita.1',  name: 'Serie A',        abbr: 'SRA' },
-  { slug: 'fra.1',  name: 'Ligue 1',        abbr: 'L1'  },
-  { slug: 'usa.1',  name: 'MLS',            abbr: 'MLS' },
+  { slug: 'fifa.world', name: 'FIFA World Cup',  abbr: 'WC'  },
+  { slug: 'eng.1',      name: 'Premier League',  abbr: 'EPL' },
+  { slug: 'esp.1',      name: 'La Liga',         abbr: 'LLG' },
+  { slug: 'ger.1',      name: 'Bundesliga',      abbr: 'BUN' },
+  { slug: 'ita.1',      name: 'Serie A',         abbr: 'SRA' },
+  { slug: 'fra.1',      name: 'Ligue 1',         abbr: 'L1'  },
+  { slug: 'usa.1',      name: 'MLS',             abbr: 'MLS' },
 ];
 
 const GRASS = 'var(--brand-grass, #388e3c)';

@@ -22,6 +22,8 @@ import { getSoccerGameSetPieceStats } from './soccer-fbref-fetcher.js';
 // European/relegation spots per league — source of truth for motivation/stakes analysis.
 // playoffPos: Bundesliga/Ligue 1 have a 16th-place relegation playoff vs 3rd-tier.
 // mls: true skips European spots / relegation in favour of conference playoff logic.
+// fifa.world intentionally absent: tournament stakes (group qualification, knockout rounds)
+// are handled by the Oracle prompt's INTERNATIONAL TOURNAMENT MODE section, not by league-table logic.
 const LEAGUE_SPOTS = {
   'eng.1': { totalTeams: 20, ucl: 4, uel: 6, uecl: 7,    relegation: 3, playoffPos: null },
   'esp.1': { totalTeams: 20, ucl: 4, uel: 6, uecl: null,  relegation: 3, playoffPos: null },
@@ -79,11 +81,26 @@ function parseEspnFormString(formStr) {
   };
 }
 
+/**
+ * Flatten standings entries from both flat domestic format (`standings.entries`)
+ * and nested group-stage format used by ESPN for international tournaments like
+ * the FIFA World Cup (`children[].standings.entries`).
+ */
+function gatherStandingsEntries(standingsPayload) {
+  const top = standingsPayload?.standings?.entries ?? standingsPayload?.entries ?? [];
+  const flat = Array.isArray(top) ? [...top] : [];
+  const children = Array.isArray(standingsPayload?.children) ? standingsPayload.children : [];
+  for (const child of children) {
+    const childEntries = child?.standings?.entries ?? child?.entries ?? [];
+    if (Array.isArray(childEntries)) flat.push(...childEntries);
+  }
+  return flat;
+}
+
 function extractTeamFromStandings(standingsPayload, teamName, leagueSlug) {
   if (!standingsPayload) return null;
   try {
-    const groups = standingsPayload?.standings?.entries ?? standingsPayload?.entries ?? [];
-    const entries = Array.isArray(groups) ? groups : [];
+    const entries = gatherStandingsEntries(standingsPayload);
     for (let idx = 0; idx < entries.length; idx++) {
       const entry = entries[idx];
       const eName = entry?.team?.displayName ?? entry?.team?.name ?? '';
