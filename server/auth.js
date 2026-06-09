@@ -32,7 +32,7 @@ function signToken(user) {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET not configured');
   return jwt.sign(
-    { id: user.id, email: user.email, is_admin: user.is_admin || false },
+    { id: user.id, email: user.email, is_admin: user.is_admin || false, sport_access: user.sport_access ?? ['mlb'] },
     secret,
     { expiresIn: '7d' }
   );
@@ -47,6 +47,7 @@ function safeUser(row) {
     is_admin:       row.is_admin || false,
     email_verified: row.email_verified ?? false,
     createdAt:      row.created_at,
+    sportAccess:    row.sport_access ?? ['mlb'],
   };
 }
 
@@ -174,7 +175,7 @@ router.post('/register', async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO users (id, email, password_hash, credits)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, credits, is_admin, email_verified, created_at`,
+       RETURNING id, email, credits, is_admin, email_verified, created_at, sport_access`,
       [id, normalizedEmail, passwordHash, 0]
     );
 
@@ -190,7 +191,7 @@ router.post('/register', async (req, res) => {
       const pendingIds   = pending.rows.map(r => r.id);
 
       const updated = await pool.query(
-        'UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING id, email, credits, is_admin, email_verified, created_at',
+        'UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING id, email, credits, is_admin, email_verified, created_at, sport_access',
         [totalPending, newUser.id]
       );
       await pool.query(
@@ -228,7 +229,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, email, password_hash, credits, is_admin, email_verified, created_at FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, credits, is_admin, email_verified, created_at, sport_access FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
     const user = rows[0];
@@ -397,7 +398,7 @@ router.post('/reset-password', async (req, res) => {
 router.get('/me', verifyToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, email, credits, is_admin, email_verified, created_at FROM users WHERE id = $1',
+      'SELECT id, email, credits, is_admin, email_verified, created_at, sport_access FROM users WHERE id = $1',
       [req.user.id]
     );
     if (!rows[0]) {

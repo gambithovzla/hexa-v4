@@ -39,6 +39,25 @@ export function requireAdmin(req, res, next) {
 }
 
 /**
+ * requireSportAccess(sport) — middleware factory.
+ * Admins always pass. For regular users checks sport_access from JWT first,
+ * then falls back to a DB lookup in case the JWT pre-dates this feature.
+ */
+export function requireSportAccess(sport) {
+  return async (req, res, next) => {
+    if (req.user?.is_admin) return next();
+    const access = Array.isArray(req.user?.sport_access) ? req.user.sport_access : ['mlb'];
+    if (access.includes(sport)) return next();
+    try {
+      const { rows } = await pool.query('SELECT sport_access FROM users WHERE id=$1', [req.user?.id]);
+      const dbAccess = rows[0]?.sport_access ?? ['mlb'];
+      if (dbAccess.includes(sport)) return next();
+    } catch {}
+    return res.status(403).json({ success: false, error: 'No tienes acceso a este deporte' });
+  };
+}
+
+/**
  * requireVerifiedEmail — must follow verifyToken.
  * Looks up the current user and rejects if email_verified is not true.
  * Admins are always allowed through so ops work isn't blocked.
