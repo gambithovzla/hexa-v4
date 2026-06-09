@@ -743,12 +743,13 @@ function normalizeNhlGame(g) {
 }
 
 const SOCCER_LEAGUES = [
-  { slug: 'eng.1', label: 'Premier League' },
-  { slug: 'esp.1', label: 'La Liga'        },
-  { slug: 'ita.1', label: 'Serie A'        },
-  { slug: 'ger.1', label: 'Bundesliga'     },
-  { slug: 'fra.1', label: 'Ligue 1'        },
-  { slug: 'usa.1', label: 'MLS'            },
+  { slug: 'fifa.world', label: '🏆 World Cup' },
+  { slug: 'eng.1',      label: 'Premier League' },
+  { slug: 'esp.1',      label: 'La Liga'        },
+  { slug: 'ita.1',      label: 'Serie A'        },
+  { slug: 'ger.1',      label: 'Bundesliga'     },
+  { slug: 'fra.1',      label: 'Ligue 1'        },
+  { slug: 'usa.1',      label: 'MLS'            },
 ];
 
 function normalizeSoccerGame(g, leagueSlug) {

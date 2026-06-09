@@ -244,12 +244,19 @@ function describeTeamBlock(label, side) {
 
 function describeLeagueProfile(leagueMeta) {
   if (!leagueMeta) return 'LEAGUE PROFILE: data unavailable.';
-  return [
-    `LEAGUE PROFILE — ${leagueMeta.name} (${leagueMeta.country})`,
+  const header = leagueMeta.international
+    ? `LEAGUE PROFILE — ${leagueMeta.name} (INTERNATIONAL TOURNAMENT — national teams)`
+    : `LEAGUE PROFILE — ${leagueMeta.name} (${leagueMeta.country})`;
+  const lines = [
+    header,
     `  Avg goals/game: ${fmt(leagueMeta.avgGoals, 2)} | Draw rate: ${fmt((leagueMeta.drawPct ?? 0) * 100, 1)}%`,
     `  Style: ${leagueMeta.style ?? 'n/a'}`,
     `  Season: ${leagueMeta.season ?? 'n/a'}`,
-  ].join('\n');
+  ];
+  if (leagueMeta.international) {
+    lines.push('  TOURNAMENT MODE: apply the INTERNATIONAL TOURNAMENT rules — neutral venue discount, squad cohesion > club form, no xG, draw always live.');
+  }
+  return lines.join('\n');
 }
 
 function describeStrengthDelta(home, away) {

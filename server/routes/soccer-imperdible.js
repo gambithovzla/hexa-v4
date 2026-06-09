@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
-import { isSupportedLeague } from '../soccer-league-map.js';
+import { isSupportedLeague, SOCCER_LEAGUE_SLUGS } from '../soccer-league-map.js';
 import { getSoccerGamesForDate } from '../soccer-api.js';
 import {
   analyzeSoccerImperdible,
@@ -40,7 +40,7 @@ function safeErr(err) {
 function validateLeague(req, res) {
   const leagueSlug = req.body?.leagueSlug ?? req.query?.league ?? null;
   if (!leagueSlug || !isSupportedLeague(leagueSlug)) {
-    res.status(400).json({ success: false, error: 'leagueSlug is required and must be a supported soccer league (eng.1, esp.1, ita.1, ger.1, fra.1, usa.1)' });
+    res.status(400).json({ success: false, error: `leagueSlug is required and must be a supported soccer league (${SOCCER_LEAGUE_SLUGS.join(', ')})` });
     return null;
   }
   return leagueSlug;

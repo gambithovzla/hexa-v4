@@ -31,12 +31,13 @@ const AMBER  = 'var(--warning)';
 const MUTED  = 'var(--ink-2)';
 
 const LEAGUES = [
-  { value: 'eng.1', label: 'Premier League' },
-  { value: 'esp.1', label: 'La Liga' },
-  { value: 'ita.1', label: 'Serie A' },
-  { value: 'ger.1', label: 'Bundesliga' },
-  { value: 'fra.1', label: 'Ligue 1' },
-  { value: 'usa.1', label: 'MLS' },
+  { value: 'fifa.world', label: '🏆 World Cup'   },
+  { value: 'eng.1',      label: 'Premier League' },
+  { value: 'esp.1',      label: 'La Liga'        },
+  { value: 'ita.1',      label: 'Serie A'        },
+  { value: 'ger.1',      label: 'Bundesliga'     },
+  { value: 'fra.1',      label: 'Ligue 1'        },
+  { value: 'usa.1',      label: 'MLS'            },
 ];
 
 const T = (lang, es, en) => (lang === 'es' ? es : en);
