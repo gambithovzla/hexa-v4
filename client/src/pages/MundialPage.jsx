@@ -1,503 +1,448 @@
 /**
- * MundialPage.jsx — FIFA World Cup 2026 prediction game.
- *
- * Route: /mundial  (public browse, auth to predict)
- *
- * UX: All matches visible at once grouped by date. Per match, tap
- * [Local] [Empate] [Visitante]. Click saves immediately.
- *
- * Scoring: correct H/A = +2 créditos, correct Draw = +3 créditos.
+ * MundialPage — FIFA World Cup 2026 prediction game.
+ * Predict exact scores for all 104 matches. Earn Hexa credits.
+ * Exact score = +5 credits · Correct result (1X2) = leaderboard points only
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Box, CircularProgress, Tabs, Tab } from '@mui/material';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-const GOLD  = '#f59e0b';
-const GREEN = '#22c55e';
-const RED   = '#ef4444';
-const BLUE  = '#60a5fa';
-const MUTED = '#475569';
-const MONO  = "'JetBrains Mono','Share Tech Mono','Courier New',monospace";
-const DISP  = "'Space Grotesk','Orbitron',system-ui,sans-serif";
-
-// ── Flags ─────────────────────────────────────────────────────────────────
-const ISO = {
-  Argentina:'ar', Brazil:'br', Brasil:'br', France:'fr', England:'gb-eng',
-  Spain:'es', Portugal:'pt', Germany:'de', Netherlands:'nl', Holland:'nl',
-  Belgium:'be', Italy:'it', 'United States':'us', USMNT:'us', USA:'us',
-  Mexico:'mx', México:'mx', Canada:'ca', Uruguay:'uy', Colombia:'co',
-  Ecuador:'ec', Chile:'cl', Venezuela:'ve', Paraguay:'py', Peru:'pe',
-  Bolivia:'bo', Morocco:'ma', Senegal:'sn', Nigeria:'ng', Cameroon:'cm',
-  'Ivory Coast':'ci', "Côte d'Ivoire":'ci', "Cote d'Ivoire":'ci',
-  Egypt:'eg', Ghana:'gh', 'South Africa':'za', Japan:'jp',
-  'South Korea':'kr', 'Korea Republic':'kr', Australia:'au',
-  Iran:'ir', 'IR Iran':'ir', 'Saudi Arabia':'sa', Qatar:'qa',
-  China:'cn', 'China PR':'cn', Indonesia:'id', Turkey:'tr', Türkiye:'tr',
-  Croatia:'hr', Denmark:'dk', Switzerland:'ch', Poland:'pl', Austria:'at',
-  Serbia:'rs', 'Czech Republic':'cz', Czechia:'cz', Hungary:'hu',
-  Slovakia:'sk', Scotland:'gb-sct', Wales:'gb-wls', 'New Zealand':'nz',
+const API  = import.meta.env.VITE_API_URL ?? '';
+const MONO = "'JetBrains Mono','Fira Mono',monospace";
+const C = {
+  bg:      '#080e14',
+  card:    '#0d1822',
+  card2:   '#111e2a',
+  line:    '#1a2d3e',
+  gold:    '#f59e0b',
+  goldDim: '#f59e0b33',
+  green:   '#22c55e',
+  red:     '#ef4444',
+  cyan:    '#00e5ff',
+  ink0:    '#e8f0f5',
+  ink1:    '#8faabf',
+  ink2:    '#4a6070',
 };
 
-function Flag({ name, size = 32 }) {
-  const iso = ISO[name];
-  if (!iso) return (
-    <span style={{ fontSize: size * 0.7, display: 'inline-flex', alignItems: 'center' }}>⚽</span>
-  );
+// ── ISO flag map ─────────────────────────────────────────────────────────────
+const ISO = {
+  'Mexico': 'mx', 'United States': 'us', 'USA': 'us', 'USMNT': 'us',
+  'Canada': 'ca', 'Brazil': 'br', 'Brasil': 'br', 'Argentina': 'ar',
+  'Colombia': 'co', 'Uruguay': 'uy', 'Chile': 'cl', 'Peru': 'pe',
+  'Ecuador': 'ec', 'Bolivia': 'bo', 'Paraguay': 'py', 'Venezuela': 've',
+  'Honduras': 'hn', 'Costa Rica': 'cr', 'Panama': 'pa', 'Jamaica': 'jm',
+  'Haiti': 'ht', 'Trinidad and Tobago': 'tt', 'Cuba': 'cu',
+  'El Salvador': 'sv', 'Guatemala': 'gt', 'Nicaragua': 'ni',
+  'France': 'fr', 'Germany': 'de', 'Spain': 'es', 'Portugal': 'pt',
+  'Netherlands': 'nl', 'Belgium': 'be', 'Italy': 'it', 'England': 'gb',
+  'Croatia': 'hr', 'Switzerland': 'ch', 'Denmark': 'dk', 'Sweden': 'se',
+  'Norway': 'no', 'Poland': 'pl', 'Ukraine': 'ua', 'Turkey': 'tr',
+  'Türkiye': 'tr', 'Czech Republic': 'cz', 'Czechia': 'cz', 'Slovakia': 'sk',
+  'Serbia': 'rs', 'Romania': 'ro', 'Hungary': 'hu', 'Scotland': 'gb',
+  'Wales': 'gb', 'Austria': 'at', 'Greece': 'gr', 'Bulgaria': 'bg',
+  'Albania': 'al', 'Slovenia': 'si', 'Bosnia-Herzegovina': 'ba',
+  'Bosnia and Herzegovina': 'ba', 'Bosnia & Herzegovina': 'ba',
+  'North Macedonia': 'mk', 'Iceland': 'is', 'Finland': 'fi',
+  'Russia': 'ru', 'Kosovo': 'xk', 'Georgia': 'ge', 'Armenia': 'am',
+  'Azerbaijan': 'az', 'Moldova': 'md', 'Belarus': 'by',
+  'South Africa': 'za', 'Morocco': 'ma', 'Senegal': 'sn', 'Nigeria': 'ng',
+  'Ghana': 'gh', 'Cameroon': 'cm', 'Ivory Coast': 'ci', "Côte d'Ivoire": 'ci',
+  'Tunisia': 'tn', 'Egypt': 'eg', 'Algeria': 'dz', 'Mali': 'ml',
+  'Cape Verde': 'cv', 'Guinea': 'gn', 'Mauritania': 'mr', 'Tanzania': 'tz',
+  'Uganda': 'ug', 'Rwanda': 'rw', 'Kenya': 'ke', 'Ethiopia': 'et',
+  'Zimbabwe': 'zw', 'Zambia': 'zm', 'Mozambique': 'mz', 'Namibia': 'na',
+  'DR Congo': 'cd', 'Congo': 'cg', 'Angola': 'ao', 'Libya': 'ly',
+  'Sudan': 'sd', 'Comoros': 'km', 'Gabon': 'ga',
+  'Japan': 'jp', 'South Korea': 'kr', 'Korea Republic': 'kr', 'Korea Rep': 'kr',
+  'China': 'cn', 'China PR': 'cn', 'Australia': 'au', 'Saudi Arabia': 'sa',
+  'Iran': 'ir', 'IR Iran': 'ir', 'Iraq': 'iq', 'Qatar': 'qa',
+  'Uzbekistan': 'uz', 'Indonesia': 'id', 'Thailand': 'th', 'Vietnam': 'vn',
+  'India': 'in', 'Jordan': 'jo', 'Lebanon': 'lb', 'Palestine': 'ps',
+  'Bahrain': 'bh', 'Kuwait': 'kw', 'Oman': 'om',
+  'UAE': 'ae', 'United Arab Emirates': 'ae', 'Israel': 'il',
+  'Philippines': 'ph', 'Malaysia': 'my', 'New Zealand': 'nz', 'Fiji': 'fj',
+};
+
+function getIso(name) {
+  if (!name) return null;
+  if (ISO[name]) return ISO[name];
+  const lower = name.toLowerCase();
+  for (const [k, v] of Object.entries(ISO)) {
+    if (lower.includes(k.toLowerCase()) || k.toLowerCase().includes(lower)) return v;
+  }
+  return null;
+}
+
+function Flag({ team, size = 32 }) {
+  const iso = getIso(team);
+  if (!iso) return <Box sx={{ width: size, height: Math.round(size * 0.67), bgcolor: C.line, borderRadius: '2px', border: `1px solid ${C.line}` }} />;
   return (
-    <img
-      src={`https://flagcdn.com/w${size * 2}/${iso}.png`}
-      alt={name} width={size} height={Math.round(size * 0.68)}
-      style={{ objectFit: 'cover', borderRadius: 3, display: 'block',
-               boxShadow: '0 1px 4px rgba(0,0,0,0.5)', flexShrink: 0 }}
-      onError={e => { e.currentTarget.style.display = 'none'; }}
+    <Box component="img" src={`https://flagcdn.com/w${size * 2}/${iso}.png`} alt={team}
+      sx={{ width: size, height: Math.round(size * 0.67), objectFit: 'cover',
+        borderRadius: '2px', border: `1px solid ${C.line}44`, display: 'block' }}
+      onError={e => { e.target.style.display = 'none'; }}
     />
   );
 }
 
-// ── Date section header ───────────────────────────────────────────────────
-const MONTHS_ES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
-const DAYS_ES   = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
-
-function DateHeader({ dateStr }) {
-  const d     = new Date(dateStr + 'T12:00:00Z');
-  const today = new Date().toISOString().split('T')[0];
-  const tom   = (() => { const t = new Date(); t.setDate(t.getDate()+1); return t.toISOString().split('T')[0]; })();
-  const label = dateStr === today ? 'HOY' : dateStr === tom ? 'MAÑANA' : null;
+// ── Score stepper ─────────────────────────────────────────────────────────────
+function ScoreInput({ value, onChange, disabled }) {
+  const btnStyle = (active) => ({
+    width: 28, height: 28, border: `1px solid ${C.line}`, bgcolor: C.card2,
+    color: active ? C.ink1 : C.ink2, borderRadius: '6px',
+    cursor: disabled || !active ? 'default' : 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: '1rem', fontFamily: MONO, transition: 'all 0.12s',
+    '&:hover:not(:disabled)': { bgcolor: active ? C.line : C.card2, color: active ? C.ink0 : C.ink2 },
+  });
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '24px 0 10px' }}>
-      <div style={{
-        background: label ? GOLD : '#1e2a44',
-        borderRadius: 8, padding: '4px 12px',
-        fontFamily: MONO, fontSize: '0.7rem', fontWeight: 700,
-        color: label ? '#000' : '#94a3b8', letterSpacing: '0.08em', whiteSpace: 'nowrap',
-      }}>
-        {label ?? `${DAYS_ES[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS_ES[d.getUTCMonth()]}`}
-      </div>
-      <div style={{ flex: 1, height: 1, background: '#1e2a44' }} />
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <Box component="button" disabled={disabled || value <= 0}
+        onClick={() => !disabled && onChange(Math.max(0, value - 1))}
+        sx={btnStyle(value > 0)}>−</Box>
+      <Box sx={{
+        width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: MONO, fontWeight: 700, fontSize: '1.3rem', color: C.ink0,
+        bgcolor: C.card, border: `1px solid ${C.line}`, borderRadius: '6px',
+      }}>{value}</Box>
+      <Box component="button" disabled={disabled || value >= 20}
+        onClick={() => !disabled && onChange(Math.min(20, value + 1))}
+        sx={btnStyle(true)}>+</Box>
+    </Box>
   );
 }
 
-// ── Per-match prediction card ─────────────────────────────────────────────
-function MatchCard({ match, token, onSaved }) {
-  const { eventId, homeTeam, awayTeam, gameDate, gameTime, status, homeScore, awayScore, prediction } = match;
+// ── Date header ───────────────────────────────────────────────────────────────
+const DAYS_ES   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-  const [selected, setSelected] = useState(prediction?.predicted_side ?? null);
-  const [saving, setSaving]     = useState(false);
-  const [err, setErr]           = useState(null);
-  const [flash, setFlash]       = useState(null); // 'ok' | 'err'
+function DateHeader({ dateStr }) {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  const label = `${DAYS_ES[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS_ES[d.getUTCMonth()]}`.toUpperCase();
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 3, mb: '6px' }}>
+      <Box sx={{ px: '10px', py: '4px', bgcolor: C.card2, border: `1px solid ${C.line}`,
+        borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
+        color: C.gold, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{label}</Box>
+      <Box sx={{ flex: 1, height: '1px', bgcolor: C.line }} />
+    </Box>
+  );
+}
 
-  const locked    = status === 'live' || status === 'final';
-  const resolved  = prediction && (prediction.status === 'correct' || prediction.status === 'wrong');
+// ── Match card ────────────────────────────────────────────────────────────────
+function MatchCard({ match, token }) {
+  const pred      = match.prediction;
+  const isResolved = pred && ['exact','correct','wrong'].includes(pred.status);
+  const isLocked   = match.status === 'live' || match.status === 'final';
 
-  const kickoff = gameTime ? (() => {
-    try {
-      return new Date(gameTime).toLocaleTimeString('es', {
-        hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York'
-      }) + ' ET';
-    } catch { return ''; }
-  })() : '';
+  const [home,   setHome]   = useState(pred?.predicted_home ?? 0);
+  const [away,   setAway]   = useState(pred?.predicted_away ?? 0);
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(!!pred);
+  const [err,    setErr]    = useState(null);
 
-  async function pick(side) {
-    if (locked || resolved) return;
-    if (!token) { setErr('Inicia sesión para predecir.'); return; }
-    if (selected === side) return; // already this choice
-    setSelected(side);
+  const save = useCallback(async (h, a) => {
+    if (!token || isLocked || isResolved) return;
     setSaving(true); setErr(null);
     try {
-      const r = await fetch(`${API_URL}/api/mundial/predict`, {
+      const r = await fetch(`${API}/api/mundial/predict`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ eventId, homeTeam, awayTeam, gameDate, predictedSide: side }),
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: match.eventId, homeTeam: match.homeTeam, awayTeam: match.awayTeam,
+          gameDate: match.gameDate, predictedHome: h, predictedAway: a,
+        }),
       });
       const d = await r.json();
-      if (!d.success) throw new Error(d.error);
-      setFlash('ok'); setTimeout(() => setFlash(null), 1200);
-      onSaved?.();
-    } catch (e) { setErr(e.message); setSelected(prediction?.predicted_side ?? null); setFlash('err'); }
+      if (d.success) setSaved(true);
+      else setErr(d.error ?? 'Error al guardar');
+    } catch { setErr('Error de red'); }
     finally { setSaving(false); }
-  }
+  }, [token, match, isLocked, isResolved]);
 
-  // Status badge (shown when match is locked/resolved)
-  const statusDisplay = (() => {
-    if (resolved) {
-      if (prediction.status === 'correct') return { label: `✓ +${prediction.credits_earned} créditos`, color: GREEN };
-      return { label: '✗ Fallaste', color: RED };
-    }
-    if (locked)   return { label: status === 'live' ? '🔴 En Vivo' : `Final ${homeScore}–${awayScore}`, color: status === 'live' ? RED : MUTED };
-    if (selected) return { label: '✓ Guardado', color: '#64748b' };
-    return null;
-  })();
+  const kickoff = match.gameTime
+    ? new Date(match.gameTime).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET'
+    : null;
 
-  // Button config
-  const btnStyle = (side) => {
-    const isSel = selected === side;
-    const isCorrect = resolved && prediction?.actual_side === side;
-    const isWrong   = resolved && isSel && prediction?.actual_side !== side;
-    let bg = '#0e1525', border = '#1e2a44', color = '#94a3b8';
-    if (isCorrect && isSel) { bg = GREEN + '22'; border = GREEN; color = GREEN; }
-    else if (isCorrect)     { bg = GREEN + '11'; border = GREEN + '44'; color = GREEN + 'cc'; }
-    else if (isWrong)       { bg = RED + '18'; border = RED + '55'; color = RED; }
-    else if (isSel && flash === 'ok') { bg = GOLD + '22'; border = GOLD; color = GOLD; }
-    else if (isSel)         { bg = '#131c35'; border = GOLD + '77'; color = '#f1f5f9'; }
-    return {
-      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: 6,
-      padding: '10px 6px',
-      background: bg, border: `1.5px solid ${border}`,
-      borderRadius: side === 'H' ? '10px 0 0 10px' : side === 'A' ? '0 10px 10px 0' : '0',
-      cursor: locked || resolved ? 'default' : 'pointer',
-      transition: 'all 0.15s',
-      opacity: saving && selected !== side ? 0.6 : 1,
-      minWidth: 0,
-    };
+  // Status badge after resolution
+  const STATUS = {
+    exact:   { color: C.gold,  label: '★ Exacto · +5 créditos' },
+    correct: { color: C.green, label: '✓ Resultado correcto · suma en tabla' },
+    wrong:   { color: C.red,   label: '✗ Incorrecto' },
   };
 
   return (
-    <div style={{
-      background: resolved && prediction.status === 'correct'
-        ? 'linear-gradient(135deg, #0e1525 0%, #0f1f0f 100%)'
-        : '#0e1525',
-      border: `1px solid ${resolved && prediction.status === 'correct' ? GREEN + '33' : '#1e2a44'}`,
-      borderRadius: 12, marginBottom: 8, overflow: 'hidden',
-      boxShadow: resolved && prediction.status === 'correct' ? `0 0 14px ${GREEN}18` : undefined,
-    }}>
-      {/* top bar: time + status */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '8px 14px 0', minHeight: 24 }}>
-        <span style={{ fontFamily: MONO, fontSize: '0.65rem', color: '#475569' }}>
-          {status === 'live' ? '🔴' : status === 'final' ? '✅' : '🕐'} {kickoff}
-        </span>
-        {statusDisplay && (
-          <span style={{ fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-                         color: statusDisplay.color, letterSpacing: '0.05em' }}>
-            {statusDisplay.label}
-          </span>
-        )}
-      </div>
+    <Box sx={{ bgcolor: C.card, border: `1px solid ${C.line}`, borderRadius: '10px', mb: '8px', overflow: 'hidden' }}>
+      {/* Top bar */}
+      <Box sx={{ px: 2, py: '5px', bgcolor: C.card2, borderBottom: `1px solid ${C.line}`,
+        display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ fontFamily: MONO, fontSize: '0.6rem', color: C.ink2 }}>⏰ {kickoff ?? '--:-- ET'}</Box>
+        {match.status === 'live'  && <Box sx={{ ml: 'auto', fontFamily: MONO, fontSize: '0.55rem', fontWeight: 700, color: C.green, bgcolor: '#22c55e22', px: '6px', py: '1px', borderRadius: '4px', border: `1px solid ${C.green}44` }}>EN VIVO</Box>}
+        {match.status === 'final' && <Box sx={{ ml: 'auto', fontFamily: MONO, fontSize: '0.55rem', color: C.ink2 }}>FINALIZADO</Box>}
+      </Box>
 
-      {/* 3-button selector */}
-      <div style={{ display: 'flex', margin: '8px 10px 10px', gap: 0 }}>
-        {/* HOME */}
-        <button style={btnStyle('H')} onClick={() => pick('H')} disabled={locked || resolved}>
-          <Flag name={homeTeam} size={28} />
-          <span style={{ fontFamily: DISP, fontSize: '0.7rem', fontWeight: 600,
-                         color: 'inherit', textAlign: 'center', lineHeight: 1.2,
-                         maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {homeTeam}
-          </span>
-        </button>
+      {/* Actual score if final */}
+      {match.status === 'final' && match.homeScore != null && (
+        <Box sx={{ fontFamily: MONO, fontSize: '0.7rem', color: C.ink1, textAlign: 'center', pt: '8px', pb: 0 }}>
+          Resultado oficial: <strong style={{ color: C.ink0 }}>{match.homeScore} – {match.awayScore}</strong>
+        </Box>
+      )}
 
-        {/* DRAW */}
-        <button style={{ ...btnStyle('D'), minWidth: 56, flex: '0 0 56px' }}
-                onClick={() => pick('D')} disabled={locked || resolved}>
-          <span style={{ fontFamily: MONO, fontSize: '1rem', color: 'inherit' }}>═</span>
-          <span style={{ fontFamily: MONO, fontSize: '0.6rem', letterSpacing: '0.05em', color: 'inherit' }}>
-            EMPATE
-          </span>
-        </button>
+      {/* Teams + inputs */}
+      <Box sx={{ px: 2, py: '12px', display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* Home */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+          <Flag team={match.homeTeam} size={32} />
+          <Box sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 600, color: C.ink0,
+            textAlign: 'center', lineHeight: 1.3, maxWidth: 90 }}>
+            {match.homeTeam}
+          </Box>
+        </Box>
 
-        {/* AWAY */}
-        <button style={btnStyle('A')} onClick={() => pick('A')} disabled={locked || resolved}>
-          <Flag name={awayTeam} size={28} />
-          <span style={{ fontFamily: DISP, fontSize: '0.7rem', fontWeight: 600,
-                         color: 'inherit', textAlign: 'center', lineHeight: 1.2,
-                         maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {awayTeam}
-          </span>
-        </button>
-      </div>
+        {/* Score inputs + button */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', px: '4px' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ScoreInput value={home} onChange={v => { setHome(v); setSaved(false); }} disabled={isLocked || isResolved || !token} />
+            <Box sx={{ fontFamily: MONO, fontWeight: 700, fontSize: '1.1rem', color: C.ink2 }}>:</Box>
+            <ScoreInput value={away} onChange={v => { setAway(v); setSaved(false); }} disabled={isLocked || isResolved || !token} />
+          </Box>
+          {!isLocked && !isResolved && token && (
+            <Box component="button" disabled={saving} onClick={() => save(home, away)}
+              sx={{
+                px: '18px', py: '6px',
+                bgcolor: saved ? '#22c55e18' : C.goldDim,
+                border: `1px solid ${saved ? C.green + '88' : C.gold + '88'}`,
+                borderRadius: '6px', cursor: saving ? 'default' : 'pointer',
+                fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
+                color: saved ? C.green : C.gold, letterSpacing: '0.08em',
+                transition: 'all 0.18s',
+                '&:hover:not(:disabled)': { bgcolor: saved ? '#22c55e28' : '#f59e0b28' },
+              }}>
+              {saving ? '...' : saved ? '✓ Guardado' : 'Predecir'}
+            </Box>
+          )}
+          {!token && (
+            <Box sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.ink2, textAlign: 'center' }}>
+              Inicia sesión
+            </Box>
+          )}
+        </Box>
+
+        {/* Away */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+          <Flag team={match.awayTeam} size={32} />
+          <Box sx={{ fontFamily: MONO, fontSize: '0.7rem', fontWeight: 600, color: C.ink0,
+            textAlign: 'center', lineHeight: 1.3, maxWidth: 90 }}>
+            {match.awayTeam}
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Resolution badge */}
+      {isResolved && (
+        <Box sx={{ mx: 2, mb: '10px', px: '10px', py: '5px', borderRadius: '6px',
+          bgcolor: `${STATUS[pred.status].color}18`, border: `1px solid ${STATUS[pred.status].color}44`,
+          fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700, color: STATUS[pred.status].color,
+          letterSpacing: '0.06em', textAlign: 'center' }}>
+          {STATUS[pred.status].label}
+          {' · Tu predicción: '}<strong>{pred.predicted_home}–{pred.predicted_away}</strong>
+        </Box>
+      )}
 
       {err && (
-        <div style={{ padding: '0 14px 8px', fontFamily: MONO, fontSize: '0.65rem', color: RED }}>
+        <Box sx={{ mx: 2, mb: '8px', fontFamily: MONO, fontSize: '0.6rem', color: C.red, textAlign: 'center' }}>
           {err}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
-// ── Stats bar ─────────────────────────────────────────────────────────────
+// ── Stats bar ─────────────────────────────────────────────────────────────────
 function StatsBar({ matches, token }) {
-  if (!token) return null;
-  const total   = matches.length;
-  const filled  = matches.filter(m => m.prediction).length;
-  const correct = matches.filter(m => m.prediction?.status === 'correct').length;
-  const wrong   = matches.filter(m => m.prediction?.status === 'wrong').length;
-  const credits = matches.reduce((s, m) => s + (m.prediction?.credits_earned ?? 0), 0);
-  const pct     = total ? Math.round((filled / total) * 100) : 0;
-
-  return (
-    <div style={{
-      background: '#0e1525', border: '1px solid #1e2a44', borderRadius: 12,
-      padding: '14px 16px', marginBottom: 20,
-    }}>
-      {/* progress bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontFamily: DISP, fontSize: '0.75rem', color: '#94a3b8' }}>
-          {filled} / {total} predicciones
-        </span>
-        <span style={{ fontFamily: MONO, fontSize: '0.75rem', color: GOLD, fontWeight: 700 }}>
-          {credits > 0 ? `+${credits} créditos` : `${pct}%`}
-        </span>
-      </div>
-      <div style={{ height: 4, background: '#1e2a44', borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{
-          height: '100%', width: `${pct}%`,
-          background: `linear-gradient(90deg, ${GOLD} 0%, ${GREEN} 100%)`,
-          borderRadius: 2, transition: 'width 0.4s ease',
-        }} />
-      </div>
-      {/* mini stats */}
-      {(correct > 0 || wrong > 0) && (
-        <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-          {[
-            { v: correct, label: 'correctas', c: GREEN },
-            { v: wrong,   label: 'falladas',  c: RED   },
-          ].map(s => (
-            <span key={s.label} style={{ fontFamily: MONO, fontSize: '0.68rem', color: s.c }}>
-              {s.v} {s.label}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Leaderboard ────────────────────────────────────────────────────────────
-function Leaderboard() {
-  const [rows, setRows]     = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState(null);
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`${API_URL}/api/mundial/leaderboard`)
-      .then(r => r.json()).then(d => { if (d.success) setRows(d.leaderboard ?? []); })
-      .catch(() => {}).finally(() => setLoading(false));
+    if (!token) return;
+    fetch(`${API}/api/mundial/my-predictions`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.success) setSummary(d.summary); })
+      .catch(() => {});
+  }, [token, matches]);
+
+  const total     = matches.length;
+  const predicted = matches.filter(m => m.prediction).length;
+  const pct       = total > 0 ? Math.round(predicted / total * 100) : 0;
+
+  return (
+    <Box sx={{ bgcolor: C.card, border: `1px solid ${C.line}`, borderRadius: '10px', p: 2, mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.ink0, fontWeight: 600 }}>
+          {predicted} / {total} predicciones
+        </Box>
+        <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.gold, fontWeight: 700 }}>{pct}%</Box>
+      </Box>
+      <Box sx={{ height: 4, bgcolor: C.line, borderRadius: 2, overflow: 'hidden', mb: summary ? 1.5 : 0 }}>
+        <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: C.gold,
+          background: `linear-gradient(90deg, ${C.gold}, #fbbf24)`, borderRadius: 2, transition: 'width 0.4s' }} />
+      </Box>
+      {summary && (
+        <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+          {[
+            { label: 'Exactos',  val: summary.exact,         color: C.gold  },
+            { label: 'Aciertos', val: summary.correct,       color: C.green },
+            { label: 'Créditos', val: summary.total_credits, color: C.cyan  },
+          ].map(({ label, val, color }) => (
+            <Box key={label} sx={{ flex: 1, textAlign: 'center' }}>
+              <Box sx={{ fontFamily: MONO, fontSize: '1.1rem', fontWeight: 700, color }}>{val ?? 0}</Box>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.ink2, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{label}</Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+function Leaderboard() {
+  const [rows,    setRows]    = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/api/mundial/leaderboard`)
+      .then(r => r.json())
+      .then(d => { setRows(d.leaderboard ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: MUTED, fontFamily: MONO, fontSize: '0.8rem' }}>Cargando ranking...</div>;
-  if (!rows.length) return (
-    <div style={{ padding: 56, textAlign: 'center', color: MUTED, fontFamily: DISP }}>
-      <div style={{ fontSize: '2rem', marginBottom: 8 }}>🏆</div>
-      El ranking se completará con las primeras predicciones.
-    </div>
-  );
-
   const medals = ['🥇','🥈','🥉'];
+
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={28} sx={{ color: C.gold }} /></Box>;
+  if (!rows.length) return <Box sx={{ textAlign: 'center', py: 6, fontFamily: MONO, fontSize: '0.8rem', color: C.ink2 }}>Aún no hay resultados resueltos. ¡Vuelve pronto!</Box>;
+
   return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 60px 80px', gap: 8,
-                    padding: '6px 10px', fontFamily: MONO, fontSize: '0.62rem',
-                    color: '#334155', letterSpacing: '0.07em', marginBottom: 4 }}>
-        <span>#</span><span>USUARIO</span>
-        <span style={{ textAlign: 'center' }}>✓ OK</span>
-        <span style={{ textAlign: 'right' }}>CRÉDITOS</span>
-      </div>
-      {rows.map((r, i) => (
-        <div key={r.id} style={{
-          display: 'grid', gridTemplateColumns: '28px 1fr 60px 80px', gap: 8,
-          alignItems: 'center', padding: '11px 10px', borderRadius: 10, marginBottom: 4,
-          background: i < 3
-            ? `linear-gradient(90deg, ${[GOLD+'12',`#9ca3af0e`,`#b4530910`][i]} 0%, transparent 100%)`
-            : 'transparent',
-          border: `1px solid ${i < 3 ? [GOLD+'33','#9ca3af18','#b4530918'][i] : '#1e2a4418'}`,
+    <Box>
+      {rows.map((row, i) => (
+        <Box key={row.id} sx={{
+          display: 'flex', alignItems: 'center', gap: 2, px: 2, py: '10px', mb: '4px',
+          bgcolor: i < 3 ? C.card2 : C.card,
+          border: `1px solid ${i < 3 ? C.gold + '55' : C.line}`,
+          borderRadius: '8px',
         }}>
-          <span style={{ fontFamily: MONO, fontSize: i < 3 ? '1rem' : '0.75rem', textAlign: 'center' }}>
-            {medals[i] ?? i + 1}
-          </span>
-          <div>
-            <div style={{ fontFamily: DISP, fontSize: '0.82rem', fontWeight: 600, color: '#e2e8f0' }}>
-              {r.username}
-            </div>
-            <div style={{ fontFamily: MONO, fontSize: '0.6rem', color: '#475569' }}>
-              {r.resolved_count ?? 0} resueltos
-            </div>
-          </div>
-          <span style={{ fontFamily: MONO, fontSize: '0.85rem', color: GREEN, textAlign: 'center' }}>
-            {r.correct_count ?? 0}
-          </span>
-          <span style={{ fontFamily: MONO, fontSize: '0.85rem', fontWeight: 700, color: GOLD, textAlign: 'right' }}>
-            {r.total_credits ?? 0}
-          </span>
-        </div>
+          <Box sx={{ fontFamily: MONO, fontSize: '1rem', width: 28, textAlign: 'center' }}>
+            {medals[i] ?? <span style={{ color: C.ink2, fontSize: '0.7rem' }}>#{i + 1}</span>}
+          </Box>
+          <Box sx={{ flex: 1, fontFamily: MONO, fontSize: '0.8rem', color: C.ink0, fontWeight: 600,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {row.username}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.gold, fontWeight: 700 }}>{row.exact_count ?? 0}</Box>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.ink2, letterSpacing: '0.08em' }}>EXACTOS</Box>
+            </Box>
+            <Box sx={{ textAlign: 'center' }}>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.8rem', color: C.green, fontWeight: 700 }}>{row.correct_count ?? 0}</Box>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.ink2, letterSpacing: '0.08em' }}>RESULT.</Box>
+            </Box>
+            <Box sx={{ textAlign: 'center', minWidth: 42 }}>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.95rem', color: C.cyan, fontWeight: 700 }}>{row.total_credits ?? 0}</Box>
+              <Box sx={{ fontFamily: MONO, fontSize: '0.5rem', color: C.ink2, letterSpacing: '0.08em' }}>CRÉDITOS</Box>
+            </Box>
+          </Box>
+        </Box>
       ))}
-    </div>
+    </Box>
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'partidos', label: '⚽ PREDECIR' },
-  { id: 'ranking',  label: '🏆 RANKING'  },
-];
-
-export default function MundialPage({ token, lang = 'es' }) {
-  const [tab, setTab]         = useState('partidos');
+// ── Main ──────────────────────────────────────────────────────────────────────
+export default function MundialPage({ token }) {
+  const [tab,     setTab]     = useState(0);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr]         = useState(null);
-  const [refreshKey, setRefresh] = useState(0);
+  const [fetchErr, setFetchErr] = useState(null);
 
   useEffect(() => {
-    setLoading(true); setErr(null);
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    fetch(`${API_URL}/api/mundial/all-matches`, { headers })
+    fetch(`${API}/api/mundial/all-matches`, { headers })
       .then(r => r.json())
-      .then(d => {
-        if (d.success) setMatches(d.matches ?? []);
-        else setErr(d.error ?? 'Error cargando partidos');
-      })
-      .catch(e => setErr(e.message))
-      .finally(() => setLoading(false));
-  }, [token, refreshKey]);
+      .then(d => { setMatches(d.matches ?? []); setLoading(false); })
+      .catch(e => { setFetchErr(e.message); setLoading(false); });
+  }, [token]);
 
-  // Group matches by date
-  const byDate = {};
-  for (const m of matches) {
-    const k = m.gameDate ?? 'unknown';
-    if (!byDate[k]) byDate[k] = [];
-    byDate[k].push(m);
-  }
+  const byDate = matches.reduce((acc, m) => {
+    const k = m.gameDate || 'TBD';
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(m);
+    return acc;
+  }, {});
   const sortedDates = Object.keys(byDate).sort();
 
-  const totalPreds = matches.filter(m => m.prediction).length;
-
   return (
-    <div style={{ minHeight: '100dvh', background: 'linear-gradient(180deg,#06080f 0%,#0a0e1a 100%)', color: '#f1f5f9' }}>
-      <style>{`
-        @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
-        button:active { transform: scale(0.97); }
-        ::-webkit-scrollbar { width:4px; background:transparent }
-        ::-webkit-scrollbar-thumb { background:#1e2a44; border-radius:2px }
-      `}</style>
+    <Box sx={{ minHeight: '100vh', bgcolor: C.bg, color: C.ink0, pb: 8 }}>
+      {/* Header */}
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 10,
+        bgcolor: 'rgba(8,14,20,0.96)', backdropFilter: 'blur(12px)',
+        borderBottom: `1px solid ${C.line}` }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, pt: '12px', pb: 0 }}>
+          <Box component="button" onClick={() => { window.location.href = '/'; }}
+            sx={{ background: 'none', border: 'none', color: C.gold, cursor: 'pointer',
+              fontFamily: MONO, fontSize: '0.7rem', letterSpacing: '0.08em',
+              p: '4px 8px', borderRadius: '6px', '&:hover': { bgcolor: C.card } }}>
+            ← HEXA
+          </Box>
+          <Box sx={{ flex: 1, textAlign: 'center' }}>
+            <Box sx={{ fontFamily: MONO, fontWeight: 700, fontSize: '0.9rem', color: C.gold, letterSpacing: '0.12em' }}>
+              🏆 MUNDIAL 2026
+            </Box>
+            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.ink2, letterSpacing: '0.15em' }}>
+              {loading ? '...' : `${matches.length} PARTIDOS`}
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
+            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.gold }}>★ Exacto = +5 créditos</Box>
+            <Box sx={{ fontFamily: MONO, fontSize: '0.55rem', color: C.green }}>✓ Resultado = tabla</Box>
+          </Box>
+        </Box>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)}
+          sx={{ px: 2, minHeight: 40,
+            '& .MuiTabs-indicator': { bgcolor: C.gold },
+            '& .MuiTab-root': { fontFamily: MONO, fontSize: '0.7rem', letterSpacing: '0.1em',
+              color: C.ink2, minHeight: 40, textTransform: 'uppercase', fontWeight: 600,
+              '&.Mui-selected': { color: C.gold } } }}>
+          <Tab label="⚽ Predecir" />
+          <Tab label="🏆 Ranking" />
+        </Tabs>
+      </Box>
 
-      {/* ── Hero ── */}
-      <div style={{
-        background: 'linear-gradient(135deg,#0f172a 0%,#1a1f35 60%,#0f172a 100%)',
-        borderBottom: `1px solid ${GOLD}33`,
-        padding: '22px 20px 18px', textAlign: 'center', position: 'relative', overflow: 'hidden',
-      }}>
-        {/* glow */}
-        <div style={{ position: 'absolute', top: -50, left: '50%', transform: 'translateX(-50%)',
-                      width: 280, height: 180, borderRadius: '50%', pointerEvents: 'none',
-                      background: `radial-gradient(ellipse, ${GOLD}15 0%, transparent 70%)` }} />
-        <div style={{ position: 'relative' }}>
-          <div style={{ fontSize: '2rem', lineHeight: 1, marginBottom: 4 }}>🏆</div>
-          <h1 style={{
-            fontFamily: DISP, fontSize: 'clamp(1.4rem,5vw,2rem)', fontWeight: 900,
-            letterSpacing: '0.05em', margin: 0,
-            background: `linear-gradient(135deg,${GOLD} 0%,#fde68a 50%,#b45309 100%)`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>MUNDIAL 2026</h1>
-          <p style={{ fontFamily: DISP, fontSize: '0.78rem', color: '#64748b', margin: '5px 0 0' }}>
-            Predice cada partido · Gana créditos Hexa
-          </p>
-          {/* scoring legend */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-            {[
-              { t: '✓ Resultado correcto H/V = +2 créditos' },
-              { t: '✓ Empate correcto = +3 créditos' },
-            ].map(x => (
-              <span key={x.t} style={{
-                fontFamily: MONO, fontSize: '0.64rem', color: '#94a3b8',
-                background: '#0e1525', border: '1px solid #1e2a44',
-                borderRadius: 100, padding: '3px 10px',
-              }}>{x.t}</span>
-            ))}
-          </div>
-          {/* prediction counter (only if logged in) */}
-          {token && matches.length > 0 && (
-            <div style={{ marginTop: 10, fontFamily: MONO, fontSize: '0.72rem', color: totalPreds > 0 ? GREEN : '#475569' }}>
-              {totalPreds} / {matches.length} predicciones completadas
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* back link */}
-      <div style={{ padding: '8px 20px 0' }}>
-        <button onClick={() => { window.location.href = '/'; }}
-          style={{ fontFamily: MONO, fontSize: '0.68rem', color: '#475569',
-                   background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
-          ← HEXA
-        </button>
-      </div>
-
-      {/* ── Tabs ── */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #1e2a44', margin: '8px 20px 0' }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, fontFamily: MONO, fontSize: '0.68rem', fontWeight: 700,
-            letterSpacing: '0.07em', padding: '11px 4px',
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: tab === t.id ? GOLD : '#475569',
-            borderBottom: `2px solid ${tab === t.id ? GOLD : 'transparent'}`,
-            transition: 'all 0.15s',
-          }}>{t.label}</button>
-        ))}
-      </div>
-
-      {/* ── Content ── */}
-      <div style={{ padding: '16px 14px 60px', maxWidth: 640, margin: '0 auto', animation: 'fadeUp 0.3s ease' }}>
-        {tab === 'partidos' && (
-          <>
-            {loading ? (
-              <div style={{ padding: 60, textAlign: 'center', color: '#475569', fontFamily: DISP }}>
-                <div style={{ fontSize: '2rem', marginBottom: 10 }}>⏳</div>
-                Cargando el calendario del Mundial...
-              </div>
-            ) : err ? (
-              <div style={{ padding: 40, textAlign: 'center' }}>
-                <div style={{ color: RED, fontFamily: MONO, fontSize: '0.8rem', marginBottom: 16 }}>{err}</div>
-                <button onClick={() => setRefresh(k => k+1)} style={{
-                  fontFamily: MONO, fontSize: '0.72rem', color: GOLD, background: 'transparent',
-                  border: `1px solid ${GOLD}55`, borderRadius: 8, padding: '8px 20px', cursor: 'pointer',
-                }}>Reintentar</button>
-              </div>
-            ) : matches.length === 0 ? (
-              <div style={{ padding: 60, textAlign: 'center', color: '#475569', fontFamily: DISP }}>
-                <div style={{ fontSize: '2rem', marginBottom: 8 }}>📅</div>
-                El calendario del Mundial aún no está disponible.
-              </div>
-            ) : (
-              <>
-                {!token && (
-                  <div style={{
-                    background: `${GOLD}15`, border: `1px solid ${GOLD}44`,
-                    borderRadius: 10, padding: '12px 16px', marginBottom: 16,
-                    fontFamily: DISP, fontSize: '0.82rem', color: '#fde68a', textAlign: 'center',
-                  }}>
-                    🔐 Inicia sesión para guardar tus predicciones y ganar créditos
-                  </div>
-                )}
-
-                {/* Stats bar */}
-                <StatsBar matches={matches} token={token} />
-
-                {/* All matches grouped by date */}
-                {sortedDates.map(dateStr => (
-                  <div key={dateStr}>
-                    <DateHeader dateStr={dateStr} />
-                    {byDate[dateStr].map(m => (
-                      <MatchCard
-                        key={m.eventId}
-                        match={m}
-                        token={token}
-                        onSaved={() => setRefresh(k => k + 1)}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </>
-            )}
-          </>
+      <Box sx={{ maxWidth: 560, mx: 'auto', px: 2, pt: 2 }}>
+        {tab === 0 && (
+          loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+              <CircularProgress size={32} sx={{ color: C.gold }} />
+            </Box>
+          ) : fetchErr ? (
+            <Box sx={{ textAlign: 'center', py: 8, fontFamily: MONO, fontSize: '0.8rem', color: C.red }}>
+              {fetchErr}
+            </Box>
+          ) : (
+            <>
+              <StatsBar matches={matches} token={token} />
+              {sortedDates.map(date => (
+                <Box key={date}>
+                  <DateHeader dateStr={date} />
+                  {byDate[date].map(m => (
+                    <MatchCard key={m.eventId} match={m} token={token} />
+                  ))}
+                </Box>
+              ))}
+            </>
+          )
         )}
-
-        {tab === 'ranking' && <Leaderboard />}
-      </div>
-    </div>
+        {tab === 1 && <Leaderboard />}
+      </Box>
+    </Box>
   );
 }

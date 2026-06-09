@@ -2,11 +2,11 @@
  * server/routes/mundial.js — Mundial 2026 prediction game.
  *
  * GET  /api/mundial/all-matches    public; full WC schedule (cached 10min) + user predictions
- * POST /api/mundial/predict        auth; submit/update 1X2 prediction for a match
+ * POST /api/mundial/predict        auth; submit/update exact score for a match
  * GET  /api/mundial/my-predictions auth; user's full history + summary
  * GET  /api/mundial/leaderboard    public; top 50 predictors
  *
- * Scoring: correct H or A = +2 credits, correct Draw = +3 credits, wrong = 0.
+ * Scoring: exact score = +5 credits, correct result (1X2) = +2 credits, wrong = 0.
  * Predictions lock the moment a match goes live.
  */
 
@@ -28,7 +28,6 @@ function optionalAuth(req, res, next) {
 }
 
 // ── WC 2026 schedule ───────────────────────────────────────────────────────
-// Group stage Jun 11 → ~Jul 2; knockouts Jul 4 → Jul 23
 function getWc2026Dates() {
   const dates = [];
   const end = new Date('2026-07-23T00:00:00Z');
@@ -78,12 +77,12 @@ router.get('/all-matches', optionalAuth, async (req, res) => {
     const games = await fetchAllWcMatches();
 
     let preds = {};
-    if (req.user?.userId && games.length) {
+    if (req.user?.id && games.length) {
       const eventIds = games.map(g => g.eventId).filter(Boolean);
       const { rows } = await pool.query(
-        `SELECT event_id, predicted_side, credits_earned, status
+        `SELECT event_id, predicted_home, predicted_away, credits_earned, status
          FROM mundial_predictions WHERE user_id = $1 AND event_id = ANY($2)`,
-        [req.user.userId, eventIds]
+        [req.user.id, eventIds]
       );
       for (const r of rows) preds[r.event_id] = r;
     }
@@ -98,12 +97,17 @@ router.get('/all-matches', optionalAuth, async (req, res) => {
 
 // POST /api/mundial/predict
 router.post('/predict', verifyToken, async (req, res) => {
-  const { eventId, homeTeam, awayTeam, gameDate, predictedSide } = req.body;
-  if (!eventId || !['H', 'D', 'A'].includes(predictedSide)) {
-    return res.status(400).json({ success: false, error: 'eventId y predictedSide (H|D|A) son requeridos' });
+  const { eventId, homeTeam, awayTeam, gameDate, predictedHome, predictedAway } = req.body;
+  if (!eventId || predictedHome == null || predictedAway == null) {
+    return res.status(400).json({ success: false, error: 'eventId, predictedHome y predictedAway son requeridos' });
+  }
+  const pH = Math.max(0, Math.min(20, Number(predictedHome)));
+  const pA = Math.max(0, Math.min(20, Number(predictedAway)));
+  if (isNaN(pH) || isNaN(pA)) {
+    return res.status(400).json({ success: false, error: 'Marcadores deben ser números' });
   }
 
-  // Guard: check match hasn't started
+  // Guard: match not started
   if (gameDate) {
     try {
       const games = await getSoccerGamesForDate('fifa.world', gameDate);
@@ -117,14 +121,15 @@ router.post('/predict', verifyToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO mundial_predictions
-         (user_id, event_id, home_team, away_team, game_date, predicted_side)
-       VALUES ($1,$2,$3,$4,$5,$6)
+         (user_id, event_id, home_team, away_team, game_date, predicted_home, predicted_away)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (user_id, event_id) DO UPDATE SET
-         predicted_side = EXCLUDED.predicted_side,
-         status         = CASE WHEN mundial_predictions.status IN ('correct','wrong') THEN mundial_predictions.status ELSE 'pending' END,
-         credits_earned = CASE WHEN mundial_predictions.status IN ('correct','wrong') THEN mundial_predictions.credits_earned ELSE 0 END
-       RETURNING event_id, predicted_side, status, credits_earned`,
-      [req.user.userId, eventId, homeTeam ?? '', awayTeam ?? '', gameDate ?? '2026-06-11', predictedSide]
+         predicted_home = EXCLUDED.predicted_home,
+         predicted_away = EXCLUDED.predicted_away,
+         status = CASE WHEN mundial_predictions.status IN ('exact','correct','wrong') THEN mundial_predictions.status ELSE 'pending' END,
+         credits_earned = CASE WHEN mundial_predictions.status IN ('exact','correct','wrong') THEN mundial_predictions.credits_earned ELSE 0 END
+       RETURNING event_id, predicted_home, predicted_away, status, credits_earned`,
+      [req.user.id, eventId, homeTeam ?? '', awayTeam ?? '', gameDate ?? '2026-06-11', pH, pA]
     );
     res.json({ success: true, prediction: rows[0] });
   } catch (err) {
@@ -138,7 +143,7 @@ router.get('/my-predictions', verifyToken, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT * FROM mundial_predictions WHERE user_id=$1 ORDER BY game_date DESC, created_at DESC`,
-      [req.user.userId]
+      [req.user.id]
     );
     const sum = rows.reduce((s, r) => s + (r.credits_earned ?? 0), 0);
     res.json({
@@ -146,6 +151,7 @@ router.get('/my-predictions', verifyToken, async (req, res) => {
       predictions: rows,
       summary: {
         total_credits: sum,
+        exact:   rows.filter(r => r.status === 'exact').length,
         correct: rows.filter(r => r.status === 'correct').length,
         wrong:   rows.filter(r => r.status === 'wrong').length,
         pending: rows.filter(r => r.status === 'pending').length,
@@ -164,12 +170,13 @@ router.get('/leaderboard', async (_req, res) => {
         u.id,
         COALESCE(u.display_name, split_part(u.email,'@',1)) AS username,
         SUM(mp.credits_earned)                               AS total_credits,
+        COUNT(*) FILTER (WHERE mp.status='exact')            AS exact_count,
         COUNT(*) FILTER (WHERE mp.status='correct')          AS correct_count,
-        COUNT(*) FILTER (WHERE mp.status IN ('correct','wrong')) AS resolved_count
+        COUNT(*) FILTER (WHERE mp.status IN ('exact','correct','wrong')) AS resolved_count
       FROM mundial_predictions mp
       JOIN users u ON u.id = mp.user_id
       GROUP BY u.id, u.email, u.display_name
-      ORDER BY total_credits DESC, correct_count DESC
+      ORDER BY total_credits DESC, exact_count DESC, correct_count DESC
       LIMIT 50
     `);
     res.json({ success: true, leaderboard: rows });

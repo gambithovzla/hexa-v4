@@ -1675,6 +1675,15 @@ export async function runTennisDatasetMigrations() {
 }
 
 export async function runMundialMigrations() {
+  // Drop old schema if it still has predicted_side (breaking change to exact-score)
+  await pool.query(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name='mundial_predictions' AND column_name='predicted_side') THEN
+        DROP TABLE mundial_predictions CASCADE;
+      END IF;
+    END $$
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS mundial_predictions (
       id              BIGSERIAL PRIMARY KEY,
@@ -1683,8 +1692,10 @@ export async function runMundialMigrations() {
       home_team       VARCHAR(128) NOT NULL,
       away_team       VARCHAR(128) NOT NULL,
       game_date       DATE NOT NULL,
-      predicted_side  VARCHAR(1) NOT NULL CHECK (predicted_side IN ('H','D','A')),
-      actual_side     VARCHAR(1),
+      predicted_home  SMALLINT NOT NULL DEFAULT 0,
+      predicted_away  SMALLINT NOT NULL DEFAULT 0,
+      actual_home     SMALLINT,
+      actual_away     SMALLINT,
       credits_earned  INTEGER DEFAULT 0,
       status          VARCHAR(20) DEFAULT 'pending',
       created_at      TIMESTAMPTZ DEFAULT NOW(),
