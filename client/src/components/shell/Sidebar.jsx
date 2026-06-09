@@ -35,6 +35,7 @@ const Icon = ({ d, size = 18 }) => (
 );
 
 const ICONS = {
+  mundial:    <Icon d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z M2 12h20 M12 2a15 15 0 0 1 0 20 M12 2a15 15 0 0 0 0 20" />,
   board:      <Icon d="M3 3h18v18H3z M3 9h18 M9 21V9" />,
   standings:  <Icon d="M3 17l6-6 4 4 8-8 M14 7h7v7" />,
   picks:      <Icon d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" />,
@@ -278,6 +279,8 @@ export default function Sidebar({
 
   const groups = useMemo(() => {
     const principal = [
+      { key: 'mundial', action: () => { window.location.href = '/mundial'; },
+        icon: ICONS.mundial, label: '⚽ Mundial 2026', badge: L('NEW', 'NUEVO', lang) },
       { key: 'pizarra',   tab: 'pizarra',   icon: ICONS.board,     label: L('Daily Board', 'Pizarra del día', lang) },
       { key: 'standings', tab: 'standings', icon: ICONS.standings, label: L('Standings', 'Posiciones', lang) },
       { key: 'semana',    tab: 'semana',    icon: ICONS.picks,     label: L('Picks of the week', 'Picks de la semana', lang) },
