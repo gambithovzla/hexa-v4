@@ -156,15 +156,19 @@ function DateHeader({ dateStr }) {
 
 // ── Match card ────────────────────────────────────────────────────────────────
 function MatchCard({ match, token }) {
-  const pred      = match.prediction;
+  const pred       = match.prediction;
   const isResolved = pred && ['exact','correct','wrong'].includes(pred.status);
   const isLocked   = match.status === 'live' || match.status === 'final';
+  const canEdit    = !!pred && !isLocked && !isResolved;
 
-  const [home,   setHome]   = useState(pred?.predicted_home ?? 0);
-  const [away,   setAway]   = useState(pred?.predicted_away ?? 0);
-  const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(!!pred);
-  const [err,    setErr]    = useState(null);
+  const [home,    setHome]    = useState(pred?.predicted_home ?? 0);
+  const [away,    setAway]    = useState(pred?.predicted_away ?? 0);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(!!pred);
+  const [editing, setEditing] = useState(false);
+  const [err,     setErr]     = useState(null);
+
+  const enterEdit = () => { setEditing(true); setSaved(false); };
 
   const save = useCallback(async (h, a) => {
     if (!token || isLocked || isResolved) return;
@@ -179,7 +183,7 @@ function MatchCard({ match, token }) {
         }),
       });
       const d = await r.json();
-      if (d.success) setSaved(true);
+      if (d.success) { setSaved(true); setEditing(false); }
       else setErr(d.error ?? 'Error al guardar');
     } catch { setErr('Error de red'); }
     finally { setSaving(false); }
@@ -227,25 +231,49 @@ function MatchCard({ match, token }) {
         {/* Score inputs + button */}
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', px: '4px' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ScoreInput value={home} onChange={v => { setHome(v); setSaved(false); }} disabled={isLocked || isResolved || !token} />
+            <ScoreInput value={home} onChange={v => { setHome(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
             <Box sx={{ fontFamily: MONO, fontWeight: 700, fontSize: '1.1rem', color: C.ink2 }}>:</Box>
-            <ScoreInput value={away} onChange={v => { setAway(v); setSaved(false); }} disabled={isLocked || isResolved || !token} />
+            <ScoreInput value={away} onChange={v => { setAway(v); setSaved(false); }} disabled={isLocked || isResolved || (saved && !editing) || !token} />
           </Box>
-          {!isLocked && !isResolved && token && (
+
+          {/* Saved + not editing: show badge + edit button */}
+          {saved && !editing && canEdit && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <Box sx={{
+                px: '14px', py: '5px',
+                bgcolor: '#22c55e18', border: `1px solid ${C.green}55`,
+                borderRadius: '6px', fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
+                color: C.green, letterSpacing: '0.08em',
+              }}>✓ Guardado</Box>
+              <Box component="button" onClick={enterEdit}
+                sx={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontFamily: MONO, fontSize: '0.58rem', color: C.ink2,
+                  letterSpacing: '0.06em', px: '4px', py: '2px', borderRadius: '4px',
+                  '&:hover': { color: C.cyan, bgcolor: C.card2 },
+                }}>
+                ✏ Editar predicción
+              </Box>
+            </Box>
+          )}
+
+          {/* First-time predict OR editing */}
+          {!isLocked && !isResolved && token && (!saved || editing) && (
             <Box component="button" disabled={saving} onClick={() => save(home, away)}
               sx={{
                 px: '18px', py: '6px',
-                bgcolor: saved ? '#22c55e18' : C.goldDim,
-                border: `1px solid ${saved ? C.green + '88' : C.gold + '88'}`,
+                bgcolor: editing ? '#00e5ff18' : C.goldDim,
+                border: `1px solid ${editing ? C.cyan + '88' : C.gold + '88'}`,
                 borderRadius: '6px', cursor: saving ? 'default' : 'pointer',
                 fontFamily: MONO, fontSize: '0.65rem', fontWeight: 700,
-                color: saved ? C.green : C.gold, letterSpacing: '0.08em',
+                color: editing ? C.cyan : C.gold, letterSpacing: '0.08em',
                 transition: 'all 0.18s',
-                '&:hover:not(:disabled)': { bgcolor: saved ? '#22c55e28' : '#f59e0b28' },
+                '&:hover:not(:disabled)': { bgcolor: editing ? '#00e5ff28' : '#f59e0b28' },
               }}>
-              {saving ? '...' : saved ? '✓ Guardado' : 'Predecir'}
+              {saving ? '...' : editing ? 'Guardar cambios' : 'Predecir'}
             </Box>
           )}
+
           {!token && (
             <Box sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.ink2, textAlign: 'center' }}>
               Inicia sesión
