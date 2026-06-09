@@ -24,64 +24,89 @@ const C = {
   ink2:    '#4a6070',
 };
 
-// ── ISO flag map ─────────────────────────────────────────────────────────────
+// ── ISO flag map (2-letter country codes) ────────────────────────────────────
 const ISO = {
-  'Mexico': 'mx', 'United States': 'us', 'USA': 'us', 'USMNT': 'us',
+  'Mexico': 'mx', 'United States': 'us', 'USA': 'us', 'USMNT': 'us', 'United States of America': 'us',
   'Canada': 'ca', 'Brazil': 'br', 'Brasil': 'br', 'Argentina': 'ar',
   'Colombia': 'co', 'Uruguay': 'uy', 'Chile': 'cl', 'Peru': 'pe',
   'Ecuador': 'ec', 'Bolivia': 'bo', 'Paraguay': 'py', 'Venezuela': 've',
   'Honduras': 'hn', 'Costa Rica': 'cr', 'Panama': 'pa', 'Jamaica': 'jm',
-  'Haiti': 'ht', 'Trinidad and Tobago': 'tt', 'Cuba': 'cu',
-  'El Salvador': 'sv', 'Guatemala': 'gt', 'Nicaragua': 'ni',
-  'France': 'fr', 'Germany': 'de', 'Spain': 'es', 'Portugal': 'pt',
-  'Netherlands': 'nl', 'Belgium': 'be', 'Italy': 'it', 'England': 'gb',
-  'Croatia': 'hr', 'Switzerland': 'ch', 'Denmark': 'dk', 'Sweden': 'se',
-  'Norway': 'no', 'Poland': 'pl', 'Ukraine': 'ua', 'Turkey': 'tr',
-  'Türkiye': 'tr', 'Czech Republic': 'cz', 'Czechia': 'cz', 'Slovakia': 'sk',
-  'Serbia': 'rs', 'Romania': 'ro', 'Hungary': 'hu', 'Scotland': 'gb',
-  'Wales': 'gb', 'Austria': 'at', 'Greece': 'gr', 'Bulgaria': 'bg',
-  'Albania': 'al', 'Slovenia': 'si', 'Bosnia-Herzegovina': 'ba',
-  'Bosnia and Herzegovina': 'ba', 'Bosnia & Herzegovina': 'ba',
-  'North Macedonia': 'mk', 'Iceland': 'is', 'Finland': 'fi',
-  'Russia': 'ru', 'Kosovo': 'xk', 'Georgia': 'ge', 'Armenia': 'am',
-  'Azerbaijan': 'az', 'Moldova': 'md', 'Belarus': 'by',
-  'South Africa': 'za', 'Morocco': 'ma', 'Senegal': 'sn', 'Nigeria': 'ng',
-  'Ghana': 'gh', 'Cameroon': 'cm', 'Ivory Coast': 'ci', "Côte d'Ivoire": 'ci',
+  'Haiti': 'ht', 'Trinidad and Tobago': 'tt', 'Trinidad & Tobago': 'tt', 'Cuba': 'cu',
+  'El Salvador': 'sv', 'Guatemala': 'gt', 'Nicaragua': 'ni', 'Belize': 'bz',
+  'France': 'fr', 'Germany': 'de', 'Deutschland': 'de',
+  'Spain': 'es', 'Portugal': 'pt', 'Netherlands': 'nl', 'Holland': 'nl',
+  'Belgium': 'be', 'Italy': 'it', 'England': 'gb-eng', 'Scotland': 'gb-sct',
+  'Wales': 'gb-wls', 'Northern Ireland': 'gb-nir',
+  'Croatia': 'hr', 'Hrvatska': 'hr', 'Switzerland': 'ch', 'Denmark': 'dk',
+  'Sweden': 'se', 'Norway': 'no', 'Poland': 'pl', 'Ukraine': 'ua',
+  'Turkey': 'tr', 'Türkiye': 'tr', 'Turkiye': 'tr',
+  'Czech Republic': 'cz', 'Czechia': 'cz', 'Slovakia': 'sk',
+  'Serbia': 'rs', 'Romania': 'ro', 'Hungary': 'hu',
+  'Austria': 'at', 'Greece': 'gr', 'Bulgaria': 'bg', 'Albania': 'al',
+  'Slovenia': 'si', 'Bosnia-Herzegovina': 'ba', 'Bosnia and Herzegovina': 'ba',
+  'Bosnia & Herzegovina': 'ba', 'Bosnia-Hercegovina': 'ba', 'Bosnia': 'ba',
+  'North Macedonia': 'mk', 'Iceland': 'is', 'Finland': 'fi', 'Ireland': 'ie',
+  'Republic of Ireland': 'ie', 'Russia': 'ru', 'Kosovo': 'xk',
+  'Georgia': 'ge', 'Armenia': 'am', 'Azerbaijan': 'az', 'Moldova': 'md',
+  'Belarus': 'by', 'Luxembourg': 'lu', 'Montenegro': 'me', 'Cyprus': 'cy',
+  'South Africa': 'za', 'Morocco': 'ma', 'Maroc': 'ma',
+  'Senegal': 'sn', 'Nigeria': 'ng', 'Ghana': 'gh', 'Cameroon': 'cm',
+  'Ivory Coast': 'ci', "Côte d'Ivoire": 'ci', "Cote d'Ivoire": 'ci',
   'Tunisia': 'tn', 'Egypt': 'eg', 'Algeria': 'dz', 'Mali': 'ml',
   'Cape Verde': 'cv', 'Guinea': 'gn', 'Mauritania': 'mr', 'Tanzania': 'tz',
   'Uganda': 'ug', 'Rwanda': 'rw', 'Kenya': 'ke', 'Ethiopia': 'et',
   'Zimbabwe': 'zw', 'Zambia': 'zm', 'Mozambique': 'mz', 'Namibia': 'na',
   'DR Congo': 'cd', 'Congo': 'cg', 'Angola': 'ao', 'Libya': 'ly',
-  'Sudan': 'sd', 'Comoros': 'km', 'Gabon': 'ga',
+  'Sudan': 'sd', 'Comoros': 'km', 'Gabon': 'ga', 'Equatorial Guinea': 'gq',
   'Japan': 'jp', 'South Korea': 'kr', 'Korea Republic': 'kr', 'Korea Rep': 'kr',
-  'China': 'cn', 'China PR': 'cn', 'Australia': 'au', 'Saudi Arabia': 'sa',
-  'Iran': 'ir', 'IR Iran': 'ir', 'Iraq': 'iq', 'Qatar': 'qa',
-  'Uzbekistan': 'uz', 'Indonesia': 'id', 'Thailand': 'th', 'Vietnam': 'vn',
-  'India': 'in', 'Jordan': 'jo', 'Lebanon': 'lb', 'Palestine': 'ps',
-  'Bahrain': 'bh', 'Kuwait': 'kw', 'Oman': 'om',
-  'UAE': 'ae', 'United Arab Emirates': 'ae', 'Israel': 'il',
+  'Republic of Korea': 'kr', 'Korea': 'kr',
+  'China': 'cn', 'China PR': 'cn', 'PR China': 'cn',
+  'Australia': 'au', 'Saudi Arabia': 'sa', 'Iran': 'ir', 'IR Iran': 'ir',
+  'Iraq': 'iq', 'Qatar': 'qa', 'Uzbekistan': 'uz', 'Indonesia': 'id',
+  'Thailand': 'th', 'Vietnam': 'vn', 'India': 'in', 'Jordan': 'jo',
+  'Lebanon': 'lb', 'Palestine': 'ps', 'Bahrain': 'bh', 'Kuwait': 'kw',
+  'Oman': 'om', 'UAE': 'ae', 'United Arab Emirates': 'ae', 'Israel': 'il',
   'Philippines': 'ph', 'Malaysia': 'my', 'New Zealand': 'nz', 'Fiji': 'fj',
+  'Papua New Guinea': 'pg', 'Vanuatu': 'vu', 'Solomon Islands': 'sb',
+  'Tahiti': 'pf',
 };
 
 function getIso(name) {
   if (!name) return null;
   if (ISO[name]) return ISO[name];
-  const lower = name.toLowerCase();
+  const lower = name.toLowerCase().trim();
+  for (const [k, v] of Object.entries(ISO)) {
+    if (lower === k.toLowerCase()) return v;
+  }
   for (const [k, v] of Object.entries(ISO)) {
     if (lower.includes(k.toLowerCase()) || k.toLowerCase().includes(lower)) return v;
   }
   return null;
 }
 
+// Convert 2-letter ISO code to Unicode emoji flag (regional indicator symbols)
+function isoToEmoji(iso) {
+  if (!iso || iso.length < 2) return '🌐';
+  const letters = iso.slice(0, 2).toUpperCase();
+  try {
+    return String.fromCodePoint(
+      0x1F1E6 + letters.charCodeAt(0) - 65,
+      0x1F1E6 + letters.charCodeAt(1) - 65,
+    );
+  } catch { return '🌐'; }
+}
+
 function Flag({ team, size = 32 }) {
   const iso = getIso(team);
-  if (!iso) return <Box sx={{ width: size, height: Math.round(size * 0.67), bgcolor: C.line, borderRadius: '2px', border: `1px solid ${C.line}` }} />;
+  const emoji = iso ? isoToEmoji(iso) : '🌐';
   return (
-    <Box component="img" src={`https://flagcdn.com/w${size * 2}/${iso}.png`} alt={team}
-      sx={{ width: size, height: Math.round(size * 0.67), objectFit: 'cover',
-        borderRadius: '2px', border: `1px solid ${C.line}44`, display: 'block' }}
-      onError={e => { e.target.style.display = 'none'; }}
-    />
+    <Box sx={{
+      width: size, height: size,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: `${Math.round(size * 0.82)}px`, lineHeight: 1, userSelect: 'none',
+    }}>
+      {emoji}
+    </Box>
   );
 }
 
