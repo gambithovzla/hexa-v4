@@ -47,6 +47,7 @@ import EquityDashboard        from './pages/EquityDashboard';
 import ImperdiblePage         from './pages/ImperdiblePage';
 import ImperdibleSoccerPage  from './pages/ImperdibleSoccerPage';
 import PostmortemDashboard    from './pages/PostmortemDashboard';
+import MundialPage            from './pages/MundialPage';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
 import NflLiveTracker      from './components/NflLiveTracker';
@@ -528,6 +529,10 @@ export default function App() {
   if (window.location.pathname === '/admin/postmortem') {
     const token = localStorage.getItem('hexa_token');
     return <PostmortemDashboard token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/mundial') {
+    const token = localStorage.getItem('hexa_token');
+    return <MundialPage token={token} lang={lang} />;
   }
   if (window.location.pathname === '/props') {
     const token = localStorage.getItem('hexa_token');
