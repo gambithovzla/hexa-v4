@@ -2,15 +2,13 @@
  * server/services/mundialResolver.js — resolves Mundial predictions after matches finish.
  *
  * Called from index.js every 30 min.
- * Scoring: correct H/A = +2 credits, correct Draw = +3 credits (harder to call), wrong = 0.
+ * Scoring: exact score = +5 credits, correct result (1X2) = +2 credits, wrong = 0.
  */
 
 import pool from '../db.js';
 import { getSoccerGamesForDate } from '../soccer-api.js';
 
-const CREDITS = { H: 2, A: 2, D: 3 };
-
-function side(home, away) {
+function result(home, away) {
   if (home > away) return 'H';
   if (home < away) return 'A';
   return 'D';
@@ -35,21 +33,27 @@ export async function resolveMundialPredictions() {
       const ah = Number(game.teams?.home?.score);
       const aa = Number(game.teams?.away?.score);
       if (isNaN(ah) || isNaN(aa)) continue;
-      const actualSide = side(ah, aa);
+      const actualResult = result(ah, aa);
       const eventId = game.gameId ?? String(game.gamePk);
 
       const { rows: preds } = await pool.query(
-        `SELECT id, user_id, predicted_side FROM mundial_predictions
+        `SELECT id, user_id, predicted_home, predicted_away FROM mundial_predictions
          WHERE event_id=$1 AND status='pending'`,
         [eventId]
       );
       for (const pred of preds) {
-        const correct = pred.predicted_side === actualSide;
-        const credits  = correct ? CREDITS[actualSide] : 0;
-        const status   = correct ? 'correct' : 'wrong';
+        const isExact   = pred.predicted_home === ah && pred.predicted_away === aa;
+        const predResult = result(pred.predicted_home, pred.predicted_away);
+        const isCorrect = !isExact && predResult === actualResult;
+
+        const credits = isExact ? 5 : isCorrect ? 2 : 0;
+        const status  = isExact ? 'exact' : isCorrect ? 'correct' : 'wrong';
+
         await pool.query(
-          `UPDATE mundial_predictions SET status=$1, actual_side=$2, credits_earned=$3, resolved_at=NOW() WHERE id=$4`,
-          [status, actualSide, credits, pred.id]
+          `UPDATE mundial_predictions
+           SET status=$1, actual_home=$2, actual_away=$3, credits_earned=$4, resolved_at=NOW()
+           WHERE id=$5`,
+          [status, ah, aa, credits, pred.id]
         );
         if (credits > 0) {
           await pool.query(`UPDATE users SET credits=credits+$1 WHERE id=$2`, [credits, pred.user_id]);
