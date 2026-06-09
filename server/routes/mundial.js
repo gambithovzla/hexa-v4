@@ -42,6 +42,12 @@ let _allGames = null;
 let _allGamesAt = 0;
 const ALL_GAMES_TTL = 10 * 60 * 1000;
 
+// Matches with TBD team slots (knockout placeholders like "Group A Winner")
+const TBD_RE = /\b(group|winner|place|runner|tbd)\b/i;
+function isGroupStageGame(homeTeam, awayTeam) {
+  return !TBD_RE.test(homeTeam) && !TBD_RE.test(awayTeam);
+}
+
 async function fetchAllWcMatches() {
   if (_allGames && Date.now() - _allGamesAt < ALL_GAMES_TTL) return _allGames;
   const results = await Promise.allSettled(
@@ -51,10 +57,13 @@ async function fetchAllWcMatches() {
   for (const r of results) {
     if (r.status === 'fulfilled') {
       for (const g of (r.value ?? [])) {
+        const homeTeam = g.teams?.home?.name ?? 'TBD';
+        const awayTeam = g.teams?.away?.name ?? 'TBD';
+        if (!isGroupStageGame(homeTeam, awayTeam)) continue;
         all.push({
           eventId:   g.gameId ?? String(g.gamePk),
-          homeTeam:  g.teams?.home?.name ?? 'TBD',
-          awayTeam:  g.teams?.away?.name ?? 'TBD',
+          homeTeam,
+          awayTeam,
           gameDate:  (g.gameDate ?? '').split('T')[0],
           gameTime:  g.gameDate ?? null,
           status:    g.status,
