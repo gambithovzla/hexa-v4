@@ -1522,3 +1522,93 @@ export async function getBatterVsPitcherStats(batterId, pitcherId) {
     return null;
   }
 }
+
+/**
+ * Returns the batting order from the team's most recent completed game as a projected lineup.
+ * Used when today's lineup has not been posted yet.
+ * @returns {Promise<Array>} normalized player array (same shape as normalizeLineup output) or []
+ */
+export async function getTeamProjectedLineup(teamId) {
+  if (!teamId) return [];
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const startStr = twoWeeksAgo.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+    const schedUrl = `${MLB_BASE}/schedule?teamId=${teamId}&startDate=${startStr}&endDate=${today}&sportId=1&gameType=R&hydrate=game(content(summary)),linescore`;
+    const schedData = await fetchJSON(schedUrl);
+
+    let lastGamePk = null;
+    for (const d of [...(schedData.dates ?? [])].reverse()) {
+      for (const g of (d.games ?? [])) {
+        if (g.status?.abstractGameState === 'Final') {
+          lastGamePk = g.gamePk;
+          break;
+        }
+      }
+      if (lastGamePk) break;
+    }
+    if (!lastGamePk) return [];
+
+    const boxUrl = `${MLB_BASE}/game/${lastGamePk}/boxscore`;
+    const box = await fetchJSON(boxUrl);
+
+    const homeId = box.teams?.home?.team?.id;
+    const side = Number(homeId) === Number(teamId) ? 'home' : 'away';
+    const teamBox = box.teams?.[side];
+
+    const batters = [];
+    const battingOrder = teamBox?.battingOrder ?? [];
+    const players = teamBox?.players ?? {};
+
+    for (const playerId of battingOrder) {
+      const pKey = `ID${playerId}`;
+      const p = players[pKey];
+      if (!p) continue;
+      batters.push({
+        id:           p.person?.id ?? playerId,
+        fullName:     p.person?.fullName ?? null,
+        position:     p.position?.abbreviation ?? null,
+        battingOrder: p.battingOrder ?? null,
+        projected:    true,
+      });
+    }
+    return batters;
+  } catch (err) {
+    console.warn(`[MLB API] getTeamProjectedLineup(${teamId}) failed: ${err.message}`);
+    return [];
+  }
+}
+
+/**
+ * Returns the pitcher's last N pitching starts from the game log.
+ * Each entry: { date, ip, er, k, bb, h, hr, result }
+ */
+export async function getPitcherStartsTrend(pitcherId, lastN = 5) {
+  if (!pitcherId) return [];
+  for (const season of SEASON_FALLBACK) {
+    try {
+      const url = `${MLB_BASE}/people/${pitcherId}/stats?stats=gameLog&group=pitching&season=${season}`;
+      const data = await fetchJSON(url);
+      const logBlock = (data.stats ?? []).find(s => s.type?.displayName === 'gameLog');
+      const entries = logBlock?.splits ?? [];
+      if (entries.length === 0) continue;
+      const starts = entries
+        .filter(e => e.stat?.gamesStarted === 1 || Number(e.stat?.gamesStarted ?? 0) > 0)
+        .map(e => ({
+          date:   e.date ?? e.gameDate ?? null,
+          ip:     e.stat?.inningsPitched ?? null,
+          er:     Number(e.stat?.earnedRuns ?? 0),
+          k:      Number(e.stat?.strikeOuts ?? 0),
+          bb:     Number(e.stat?.baseOnBalls ?? 0),
+          h:      Number(e.stat?.hits ?? 0),
+          hr:     Number(e.stat?.homeRuns ?? 0),
+          result: e.stat?.wins > 0 ? 'W' : e.stat?.losses > 0 ? 'L' : 'ND',
+        }))
+        .slice(-lastN);
+      if (starts.length > 0) return starts;
+    } catch { }
+  }
+  return [];
+}

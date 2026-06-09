@@ -7,7 +7,7 @@
  *   para inyectar en el prompt del Oracle.
  */
 
-import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats, getUmpireForGame, getTeamScheduleFatigue } from './mlb-api.js';
+import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats, getUmpireForGame, getTeamScheduleFatigue, getTeamProjectedLineup, getPitcherStartsTrend } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory, getUmpireStats } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
 import { calculateImpliedProbability } from './odds-api.js';
@@ -1272,6 +1272,16 @@ export async function buildContext(gameData, oddsData = null) {
   if (homePitcherRest) console.log(`[context-builder] Home pitcher rest: ${homePitcherRest.daysRest} days`);
   if (awayPitcherRest) console.log(`[context-builder] Away pitcher rest: ${awayPitcherRest.daysRest} days`);
 
+  // ── Pitcher last-5-starts trend (parallel, non-blocking) ───────────────────
+  let homeStartsTrend = [];
+  let awayStartsTrend = [];
+  try {
+    [homeStartsTrend, awayStartsTrend] = await Promise.all([
+      homePitcher?.id ? getPitcherStartsTrend(homePitcher.id, 5) : Promise.resolve([]),
+      awayPitcher?.id ? getPitcherStartsTrend(awayPitcher.id, 5) : Promise.resolve([]),
+    ]);
+  } catch (_) {}
+
   // ── Platoon splits (parallel, non-blocking) ─────────────────────────────────
   let homeSplits = null;
   let awaySplits = null;
@@ -1372,10 +1382,32 @@ export async function buildContext(gameData, oddsData = null) {
   let parkFactorData    = null;
   let catcherFraming    = { home: null, away: null };
   let oaaOutfielders    = []; // [{ player, side:'Home'|'Away', oaa }]
+  let homeLineupProjected = false;
+  let awayLineupProjected = false;
 
   try {
-    const homeLineup = gameData.teams?.home?.lineup ?? gameData.lineups?.home ?? null;
-    const awayLineup = gameData.teams?.away?.lineup ?? gameData.lineups?.away ?? null;
+    let homeLineup = gameData.teams?.home?.lineup ?? gameData.lineups?.home ?? null;
+    let awayLineup = gameData.teams?.away?.lineup ?? gameData.lineups?.away ?? null;
+
+    // Projected lineup fallback — when a team hasn't posted today's lineup,
+    // reuse its last completed game's batting order so individual batter
+    // Statcast/splits/H2H still flow (clearly labeled PROJECTED downstream).
+    if (!Array.isArray(homeLineup) || homeLineup.length === 0) {
+      const projected = await getTeamProjectedLineup(gameData.teams?.home?.id).catch(() => []);
+      if (projected.length > 0) {
+        homeLineup = projected;
+        homeLineupProjected = true;
+        console.log(`[context-builder] HOME lineup not posted — using projected order from last game (${projected.length} batters)`);
+      }
+    }
+    if (!Array.isArray(awayLineup) || awayLineup.length === 0) {
+      const projected = await getTeamProjectedLineup(gameData.teams?.away?.id).catch(() => []);
+      if (projected.length > 0) {
+        awayLineup = projected;
+        awayLineupProjected = true;
+        console.log(`[context-builder] AWAY lineup not posted — using projected order from last game (${projected.length} batters)`);
+      }
+    }
 
     function findByPos(lineup, pos) {
       if (!Array.isArray(lineup)) return null;
@@ -1684,6 +1716,38 @@ export async function buildContext(gameData, oddsData = null) {
     blocks.push('');
   }
 
+  // ── Pitcher Last Starts Trend ─────────────────────────────────────────────
+  if (homeStartsTrend.length > 0 || awayStartsTrend.length > 0) {
+    const formatStartsTrend = (label, pitcherName, starts) => {
+      if (!starts || starts.length === 0) return null;
+      const lines = [`[${label}] ${pitcherName ?? 'Pitcher'} — last ${starts.length} starts:`];
+      let totalEr = 0, totalIpDecimal = 0;
+      for (const s of starts) {
+        const ipNum = parseFloat(s.ip ?? '0') || 0;
+        // MLB IP notation: .1 = 1 out, .2 = 2 outs
+        const ipWhole = Math.floor(ipNum);
+        const ipOuts = Math.round((ipNum - ipWhole) * 10);
+        totalIpDecimal += ipWhole + ipOuts / 3;
+        totalEr += s.er;
+        const erTag = s.er >= 4 ? ' ⚠' : s.er === 0 ? ' ✓' : '';
+        lines.push(`  ${s.date ?? '??'}: ${s.ip ?? '?'} IP, ${s.k}K, ${s.bb}BB, ${s.er}ER${erTag} (${s.result})`);
+      }
+      if (totalIpDecimal > 0) {
+        const recentEra = ((totalEr * 9) / totalIpDecimal).toFixed(2);
+        lines.push(`  → ERA over these ${starts.length} starts: ${recentEra}`);
+      }
+      return lines.join('\n');
+    };
+
+    blocks.push(section('PITCHER RECENT STARTS TREND'));
+    const homeTrendBlock = formatStartsTrend('HOME', homePitcher?.fullName, homeStartsTrend);
+    const awayTrendBlock = formatStartsTrend('AWAY', awayPitcher?.fullName, awayStartsTrend);
+    if (homeTrendBlock) blocks.push(homeTrendBlock);
+    if (awayTrendBlock) blocks.push(awayTrendBlock);
+    blocks.push('ORACLE INSTRUCTION: Recent-starts trajectory beats season ERA when they diverge. A 4.50 season ERA with three straight quality starts is trending UP; a 3.20 season ERA with 5+ ER in 2 of the last 3 starts is trending DOWN. Cross-check against rolling wOBA-against windows.');
+    blocks.push('');
+  }
+
   // ── Pitcher Rest Days ─────────────────────────────────────────────────────
   if (homePitcherRest || awayPitcherRest) {
     blocks.push(section('PITCHER REST DAYS'));
@@ -1753,12 +1817,16 @@ export async function buildContext(gameData, oddsData = null) {
   // Batter Savant — only rendered when lineup data was available
   if (savantBatters.home.length > 0 || savantBatters.away.length > 0) {
     blocks.push(section(`BATTER STATCAST — Full Lineup (Savant ${new Date().getFullYear()})`));
+    if (homeLineupProjected || awayLineupProjected) {
+      const sides = [homeLineupProjected ? homeName : null, awayLineupProjected ? awayName : null].filter(Boolean).join(' and ');
+      blocks.push(`⚠️ PROJECTED LINEUP for ${sides}: today's lineup not posted yet — batting order below is from the team's LAST completed game. Treat individual batter data as approximate; the actual lineup may differ by 1-3 names.`);
+    }
     if (savantBatters.home.length > 0) {
-      blocks.push(`${homeName} (Home) — FACING: ${awayPitcher?.fullName ?? 'TBD'} (${awayPitcher?.throwingHand === 'L' ? 'LHP' : awayPitcher?.throwingHand === 'R' ? 'RHP' : '?'}):`);
+      blocks.push(`${homeName} (Home)${homeLineupProjected ? ' [PROJECTED]' : ''} — FACING: ${awayPitcher?.fullName ?? 'TBD'} (${awayPitcher?.throwingHand === 'L' ? 'LHP' : awayPitcher?.throwingHand === 'R' ? 'RHP' : '?'}):`);
       savantBatters.home.forEach(({ name, savant }) => blocks.push(batterSavantLine(name, savant)));
     }
     if (savantBatters.away.length > 0) {
-      blocks.push(`${awayName} (Away) — FACING: ${homePitcher?.fullName ?? 'TBD'} (${homePitcher?.throwingHand === 'L' ? 'LHP' : homePitcher?.throwingHand === 'R' ? 'RHP' : '?'}):`);
+      blocks.push(`${awayName} (Away)${awayLineupProjected ? ' [PROJECTED]' : ''} — FACING: ${homePitcher?.fullName ?? 'TBD'} (${homePitcher?.throwingHand === 'L' ? 'LHP' : homePitcher?.throwingHand === 'R' ? 'RHP' : '?'}):`);
       savantBatters.away.forEach(({ name, savant }) => blocks.push(batterSavantLine(name, savant)));
     }
     blocks.push('');
