@@ -661,6 +661,12 @@ function normalizeEvent(event) {
     commenceTime: event.commence_time ?? null,
     homeTeam: event.home_team,
     awayTeam: event.away_team,
+    perBook: {
+      bookCount: books.length,
+      mlHome,
+      mlAway,
+      totals: ouTotal,
+    },
     odds: {
       moneyline: {
         home: mlHomeConsensus,

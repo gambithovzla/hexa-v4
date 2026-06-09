@@ -2055,11 +2055,11 @@ export async function buildContext(gameData, oddsData = null) {
   if (lineMovement && lineMovement.snapshots_count >= 2) {
     const am = (n) => (n == null ? 'N/A' : n > 0 ? `+${n}` : String(n));
     const mv = (n) => (n == null ? 'N/A' : n > 0 ? `+${n}` : String(n));
-    const { opening: op, current: cu, movement_ml_home, movement_ml_away, movement_total, sharp_signal, direction, snapshots_count, hours_tracked } = lineMovement;
+    const { opening: op, current: cu, movement_ml_home, movement_ml_away, movement_total, sharp_signal, direction, snapshots_count, hours_tracked, sustained_move_pct, reverse_line_movement, book_count } = lineMovement;
 
     blocks.push('');
     blocks.push('=== LINE MOVEMENT ===');
-    blocks.push(`Snapshots: ${snapshots_count} captures over ${hours_tracked} hours`);
+    blocks.push(`Snapshots: ${snapshots_count} captures over ${hours_tracked} hours${book_count ? ` | Books in consensus: ${book_count}` : ''}`);
     blocks.push(`Opening Line: HOME ${am(op.moneyline_home)} / AWAY ${am(op.moneyline_away)} | Total ${op.total ?? 'N/A'}`);
     blocks.push(`Current Line: HOME ${am(cu.moneyline_home)} / AWAY ${am(cu.moneyline_away)} | Total ${cu.total ?? 'N/A'}`);
 
@@ -2074,6 +2074,15 @@ export async function buildContext(gameData, oddsData = null) {
     if (sharp_signal && direction) {
       const side = direction === 'sharp on home' ? 'HOME' : 'AWAY';
       blocks.push(`⚠️ SHARP SIGNAL: Significant line movement on ${side} — indicates professional money.`);
+    }
+    if (sustained_move_pct != null && sustained_move_pct >= 70 && snapshots_count >= 4) {
+      blocks.push(`📊 SUSTAINED MOVE: ${sustained_move_pct}% of intermediate moves aligned with the overall direction — steam move, not a one-book adjustment. Treat the sharp signal as HIGH confidence.`);
+    } else if (sustained_move_pct != null && sustained_move_pct < 50 && snapshots_count >= 4) {
+      blocks.push(`Movement is choppy (${sustained_move_pct}% aligned) — likely book-to-book noise, NOT a sharp signal.`);
+    }
+    if (reverse_line_movement) {
+      const favSide = reverse_line_movement === 'against_home_favorite' ? 'HOME favorite' : 'AWAY favorite';
+      blocks.push(`⚠️ REVERSE LINE MOVEMENT: the ${favSide} is drifting LONGER despite presumably attracting public money — books are moving against the public side. Strong contrarian/sharp signal toward the other side.`);
     }
     blocks.push('=== END LINE MOVEMENT ===');
   }

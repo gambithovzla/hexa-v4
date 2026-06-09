@@ -130,6 +130,12 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_snapshots_game_date ON odds_snapshots(game_id, game_date)
     `);
 
+    // ── odds_snapshots v2 — per-book data for consensus / RLM detection ───────
+    await client.query(`ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS bookmaker_count INTEGER`);
+    await client.query(`ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS books_ml_home   JSONB`);
+    await client.query(`ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS books_ml_away   JSONB`);
+    await client.query(`ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS books_total      JSONB`);
+
     // ── pending_credits (BMC webhook — credits for users not yet registered) ───
     await client.query(`
       CREATE TABLE IF NOT EXISTS pending_credits (
