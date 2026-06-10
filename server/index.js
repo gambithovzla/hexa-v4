@@ -100,6 +100,7 @@ import { getJobQueueStats, purgeOldJobs } from './services/jobQueueService.js';
 import { generatePickCardSvg, generateSlateSvg } from './services/infographicsService.js';
 import { getMlbFutures, getMlbTransactions } from './services/hexaScoutService.js';
 import { buildPickAlignedMlOpinion } from './services/pickAlignedMl.js';
+import { buildF5Suggestion } from './services/f5SuggestionService.js';
 import { getCalibratedConfidence } from './services/confidenceCalibrationService.js';
 import { syncConvictionTiers } from './services/convictionService.js';
 import {
@@ -1448,6 +1449,21 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       }
     }
 
+    let f5Suggestion = null;
+    if (process.env.F5_SUGGESTION_ENABLED !== 'false' && req.user.is_admin && analysis?.data && gameData) {
+      try {
+        f5Suggestion = await buildF5Suggestion({
+          analysisData: analysis.data,
+          gameData,
+          features: shadowFeatures,
+          eventId: matchedOdds?.eventId ?? null,
+          lang: resolvedLang,
+        });
+      } catch (f5Err) {
+        console.warn('[analyze/game] f5Suggestion failed:', f5Err.message);
+      }
+    }
+
     let savedPick = null;
     if (responseData && !analysis.parseError) {
       try {
@@ -1505,6 +1521,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       engine: resolvedEngine,
       engineMeta: analysis.engineMeta ?? null,
       mlOpinion: mlOpinion ?? undefined,
+      f5Suggestion: f5Suggestion ?? undefined,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
