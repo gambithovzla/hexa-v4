@@ -2194,6 +2194,8 @@ export async function buildContext(gameData, oddsData = null) {
       umpireStats: umpireStats ?? null,
       homeFatigue: homeFatigue ?? null,
       awayFatigue: awayFatigue ?? null,
+      homeBullpenUsage: homeBullpenUsage ?? null,
+      awayBullpenUsage: awayBullpenUsage ?? null,
     },
   };
   // A3: RAG — append similar past oracle analyses as calibration signal

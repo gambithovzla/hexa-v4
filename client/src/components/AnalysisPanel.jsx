@@ -15,6 +15,7 @@ import ResultCard from './ResultCard';
 import AuthModal from './AuthModal';
 import NbaContextMetaBadge from './NbaContextMetaBadge';
 import AdminMlOpinionCard from './AdminMlOpinionCard';
+import F5SuggestionCard from './F5SuggestionCard';
 import { useAuth } from '../store/authStore';
 import { BARLOW, MONO, SANS } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
@@ -1670,6 +1671,9 @@ export default function AnalysisPanel({
           )}
           {isAdmin && sport === 'mlb' && result?.mlOpinion && (
             <AdminMlOpinionCard mlOpinion={result.mlOpinion} lang={lang} />
+          )}
+          {isAdmin && sport === 'mlb' && result?.f5Suggestion?.suggested && (
+            <F5SuggestionCard suggestion={result.f5Suggestion} lang={lang} />
           )}
           <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} />
         </>
