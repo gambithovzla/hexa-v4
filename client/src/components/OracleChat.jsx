@@ -397,6 +397,22 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
     return `${away} @ ${home}`;
   }
 
+  function getLineupChip(game) {
+    if (sport !== 'mlb') return null;
+    const homeHas = (game.lineups?.home?.length ?? 0) > 0;
+    const awayHas = (game.lineups?.away?.length ?? 0) > 0;
+    if (game.lineupStatus === 'confirmed' || (homeHas && awayHas)) {
+      return { label: '✓ LINEUPS', color: '#22c55e' };
+    }
+    if (homeHas || awayHas) {
+      const missingAbbr = homeHas
+        ? (game.teams?.away?.team?.abbreviation ?? game.teams?.away?.abbreviation ?? 'AWAY')
+        : (game.teams?.home?.team?.abbreviation ?? game.teams?.home?.abbreviation ?? 'HOME');
+      return { label: `${lang === 'es' ? '½ FALTA' : '½ MISSING'} ${missingAbbr}`, color: '#f59e0b' };
+    }
+    return { label: lang === 'es' ? 'SIN LINEUPS' : 'NO LINEUPS', color: '#6b7280' };
+  }
+
   function buildHistory() {
     return conversation.reduce((acc, msg, i, arr) => {
       if (msg.role === 'user' && arr[i + 1]?.role === 'assistant') {
@@ -709,20 +725,35 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {games.map((game, i) => (
-                <div key={i} onClick={() => setSelectedGame(game)} style={{
-                  padding: '12px 16px', background: C.surface, border: `1px solid ${C.border}`,
-                  borderRadius: '3px', cursor: 'pointer', display: 'flex',
-                  justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                  <span style={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '15px', color: C.textPrimary }}>
-                    {getMatchup(game)}
-                  </span>
-                  <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
-                    {getGameDisplayTime(game)}
-                  </span>
-                </div>
-              ))}
+              {games.map((game, i) => {
+                const chip = getLineupChip(game);
+                return (
+                  <div key={i} onClick={() => setSelectedGame(game)} style={{
+                    padding: '12px 16px', background: C.surface, border: `1px solid ${C.border}`,
+                    borderRadius: '3px', cursor: 'pointer', display: 'flex',
+                    justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <span style={{ fontFamily: BARLOW, fontWeight: 700, fontSize: '15px', color: C.textPrimary }}>
+                      {getMatchup(game)}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                      {chip && (
+                        <span style={{
+                          fontFamily: MONO, fontSize: '9px', color: chip.color,
+                          border: `1px solid ${chip.color}55`,
+                          background: `${chip.color}18`,
+                          padding: '2px 6px', borderRadius: '2px', letterSpacing: '1px',
+                        }}>
+                          {chip.label}
+                        </span>
+                      )}
+                      <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
+                        {getGameDisplayTime(game)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
               {games.length === 0 && (
                 <div style={{ fontFamily: MONO, fontSize: '12px', color: C.textDim, padding: '20px', textAlign: 'center' }}>
                   {lang === 'es' ? 'No hay partidos hoy' : 'No games today'}
@@ -756,6 +787,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
               {games.map((game, i) => {
                 const id = game.gamePk || game.id;
                 const checked = selectedIds.has(id);
+                const chip = getLineupChip(game);
                 return (
                   <div
                     key={i}
@@ -785,9 +817,21 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                         {getMatchup(game)}
                       </span>
                     </div>
-                    <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
-                      {getGameDisplayTime(game)}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                      {chip && (
+                        <span style={{
+                          fontFamily: MONO, fontSize: '9px', color: chip.color,
+                          border: `1px solid ${chip.color}55`,
+                          background: `${chip.color}18`,
+                          padding: '2px 6px', borderRadius: '2px', letterSpacing: '1px',
+                        }}>
+                          {chip.label}
+                        </span>
+                      )}
+                      <span style={{ fontFamily: MONO, fontSize: '10px', color: C.textDim }}>
+                        {getGameDisplayTime(game)}
+                      </span>
+                    </div>
                   </div>
                 );
               })}
