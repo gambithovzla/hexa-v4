@@ -104,6 +104,12 @@ hexa-v4/
 - [client/src/pages/ImperdiblePage.jsx](client/src/pages/ImperdiblePage.jsx) — ruta `/admin/imperdible` + link en sidebar.
 - **Variante NFL** (Sprint 9.5, flag `IMPERDIBLE_NFL_ENABLED`): mismo patrón pero NFL-native, gate **QB confirmado** en vez de lineup. Convicción = modelo sidecar + mercado + shadow validator (no reusa el pipeline MLB — usa el suyo NFL). Archivos `nflImperdible*` + `nfl-imperdible-prompts.js` + `routes/nfl-imperdible.js`. Sin UI dedicada aún (endpoints API listos).
 
+### Bet Card (admin-only, todos los deportes)
+Capa de selectividad diaria (2026-06-11): convierte señales que ya se computaban pero no decidían nada (probs pick-aligned de `shadow_model_runs`, `conviction_tier`, `calibrated_confidence`, CLV histórico) en un veredicto apuesta/no-apuesta por pick pendiente del día. Filosofía Imperdible generalizada a la cartera: todos los gates en verde o NO BET; cero apuestas en un slate es output correcto. Spec/racional: [docs/edge-roadmap.md](docs/edge-roadmap.md).
+- [server/services/betCardService.js](server/services/betCardService.js) — helpers puros (unit-tested: implied prob, ¼-Kelly, tiers, gates) + `buildBetCard({date, sport})`. Gates: modelo certificado (python > legacy, normaliza escala 0-1/0-100), edge ≥ 3% vs implied del `odds_at_pick` (con vig — conservador a propósito), conviction `3/3`/`2/2`, CLV del mercado ≥ 0 (rolling 200, muestra <30 = neutral con flag), `calibrated_confidence` ≥ 52 (null = neutral). Pasa todo → `stakeUnits` ¼-Kelly (1u = 1% bankroll, cap 2u). Read-only; excluye picks `type='imperdible'`.
+- [server/routes/bet-card.js](server/routes/bet-card.js) — `GET /api/bet-card?date=&sport=` (admin + flag `BET_CARD_ENABLED`, default `false`).
+- Tests: `server/services/__tests__/betCardService.test.js` (13).
+
 ### Admin
 - [server/admin-db-explorer.js](server/admin-db-explorer.js) — read-only DB browser con whitelist por tabla/columna.
 - Endpoints admin viven en [server/index.js](server/index.js) y en rutas específicas (content-admin, admin-ml).
@@ -486,6 +492,7 @@ npm run preview      # preview del build
 - `MLB_PROPS_SAVANT_ENRICH_ENABLED` / `MLB_PROPS_ML_PUBLIC_ENABLED` / `MLB_PROPS_ML_MIN_RESOLVED` — tablero `/props`
 - `IMPERDIBLE_ENABLED` — habilita Pick Imperdible (admin-only, MLB; default `false`). Opcionales: `IMPERDIBLE_ARBITER_MODEL` (default Opus), `IMPERDIBLE_TOP_K` (default `5`)
 - `IMPERDIBLE_NFL_ENABLED` — habilita NFL Pick Imperdible (admin-only; default `false`). Gate "QB confirmado", convicción modelo+mercado+shadow validator, arbiter Opus. Comparte `IMPERDIBLE_ARBITER_MODEL`/`IMPERDIBLE_TOP_K`. Requiere `ML_SIDECAR_ENABLED`+`HEXA_ML_API_URL` (sin modelo → no hay lock).
+- `BET_CARD_ENABLED` — habilita el Daily Bet Card (`GET /api/bet-card`, admin-only; default `false`). Gates duros sobre los picks pendientes del día + sizing ¼-Kelly. Read-only.
 
 Lista completa en [.env.example](.env.example).
 
