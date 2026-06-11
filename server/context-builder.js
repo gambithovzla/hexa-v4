@@ -15,6 +15,7 @@ import { getLineMovement } from './line-movement.js';
 import { buildOracleMemory } from './oracle-memory.js';
 import { buildSimilarAnalysesBlock } from './services/oracleEmbeddingsService.js';
 import { buildLessonsBlock } from './services/postmortemLessonsService.js';
+import { buildCalibrationBlock } from './services/calibrationBlockService.js';
 
 // ---------------------------------------------------------------------------
 // In-memory context cache — avoids redundant API calls when the same game is
@@ -2208,6 +2209,12 @@ export async function buildContext(gameData, oddsData = null) {
   try {
     const lessonsBlock = await buildLessonsBlock('mlb');
     if (lessonsBlock) contextString += '\n\n' + lessonsBlock;
+  } catch (_) {}
+
+  // Calibration record: stated confidence vs observed win rate (non-blocking)
+  try {
+    const calibrationBlock = await buildCalibrationBlock('mlb');
+    if (calibrationBlock) contextString += '\n\n' + calibrationBlock;
   } catch (_) {}
 
   // contextString was reassigned after result was built — sync before caching/returning

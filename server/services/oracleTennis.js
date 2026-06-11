@@ -26,6 +26,7 @@ import dotenv from 'dotenv';
 
 import { TENNIS_CHAT_PROMPT, TENNIS_SYSTEM_PROMPT } from '../prompts/oracle-tennis-prompts.js';
 import { serializeTennisContext } from './tennisContextSerializer.js';
+import { buildCalibrationBlock } from './calibrationBlockService.js';
 
 dotenv.config();
 
@@ -149,7 +150,9 @@ export async function analyzeTennisMatch({
   model,
   timeoutMs = 120_000,
 }) {
-  const contextText = serializeTennisContext({ context, marketOdds });
+  let contextText = serializeTennisContext({ context, marketOdds });
+  const calibrationBlock = await buildCalibrationBlock('tennis');
+  if (calibrationBlock) contextText += '\n\n' + calibrationBlock;
   const userMessage = buildAnalysisUserMessage({
     matchDescription,
     lang,

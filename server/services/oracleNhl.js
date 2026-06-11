@@ -19,6 +19,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
 import { NHL_CHAT_PROMPT, NHL_SYSTEM_PROMPT } from '../prompts/oracle-nhl-prompts.js';
+import { buildCalibrationBlock } from './calibrationBlockService.js';
 
 dotenv.config();
 
@@ -286,7 +287,9 @@ export async function analyzeNhlGame({
   model,
   timeoutMs = 120_000,
 }) {
-  const contextText = serializeNhlContext({ context, marketOdds });
+  let contextText = serializeNhlContext({ context, marketOdds });
+  const calibrationBlock = await buildCalibrationBlock('nhl');
+  if (calibrationBlock) contextText += '\n\n' + calibrationBlock;
   const userMessage = buildAnalysisUserMessage({
     gameDescription,
     lang,

@@ -26,6 +26,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
 import { SOCCER_CHAT_PROMPT, SOCCER_SYSTEM_PROMPT } from '../prompts/oracle-soccer-prompts.js';
+import { buildCalibrationBlock } from './calibrationBlockService.js';
 
 dotenv.config();
 
@@ -496,7 +497,9 @@ export async function analyzeSoccerGame({
   model,
   timeoutMs = 120_000,
 }) {
-  const contextText = serializeSoccerContext({ context, marketOdds });
+  let contextText = serializeSoccerContext({ context, marketOdds });
+  const calibrationBlock = await buildCalibrationBlock('soccer');
+  if (calibrationBlock) contextText += '\n\n' + calibrationBlock;
   const userMessage = buildAnalysisUserMessage({
     gameDescription,
     lang,

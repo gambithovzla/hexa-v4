@@ -19,6 +19,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
 import { NFL_CHAT_PROMPT, NFL_SYSTEM_PROMPT } from '../prompts/oracle-nfl-prompts.js';
+import { buildCalibrationBlock } from './calibrationBlockService.js';
 
 dotenv.config();
 
@@ -355,7 +356,9 @@ export async function analyzeNflGame({
   model,
   timeoutMs = 120_000,
 }) {
-  const contextText = serializeNflContext({ context, marketOdds });
+  let contextText = serializeNflContext({ context, marketOdds });
+  const calibrationBlock = await buildCalibrationBlock('nfl');
+  if (calibrationBlock) contextText += '\n\n' + calibrationBlock;
   const userMessage = buildAnalysisUserMessage({
     gameDescription,
     lang,
