@@ -212,6 +212,20 @@ POST /api/admin/parlay-synergy/auto-resolve-all   # resolver pendientes
 GET  /api/admin/parlay-synergy/performance        # métricas (al integrar resolver)
 ```
 
+### Daily Bet Card (flag `BET_CARD_ENABLED`)
+```
+GET /api/bet-card?date=YYYY-MM-DD&sport=mlb   # admin-only; sport opcional
+```
+Capa de selectividad sobre los picks pendientes del día (todos los deportes):
+cada pick se evalúa contra gates duros — probabilidad pick-aligned del modelo
+(python > legacy), edge ≥ 3% vs implied del precio guardado (con vig, edge
+conservador), conviction tier de acuerdo total (`3/3`/`2/2`), CLV promedio del
+mercado ≥ 0 (rolling 200 picks; muestra <30 = neutral), y piso de
+`calibrated_confidence` (52). Los que pasan todo salen en `bets` con
+`stakeUnits` (¼-Kelly, 1u = 1% bankroll, cap 2u); el resto en `rejected` con
+el detalle por gate. Cero apuestas en un slate completo es output válido por
+diseño. Read-only: no escribe picks ni toca frozen.
+
 ### Content queue admin
 ```
 GET    /api/admin/content/queue
