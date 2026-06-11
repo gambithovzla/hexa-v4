@@ -201,6 +201,22 @@ class FeaturePayload(BaseModel):
     oracle_confidence: float | None = None
     data_quality_score: float | None = None
     signal_coherence_score: float | None = None
+    # NHL features (Sprint 10e)
+    home_gf_per_game: float | None = None
+    away_gf_per_game: float | None = None
+    home_ga_per_game: float | None = None
+    away_ga_per_game: float | None = None
+    home_points_pct: float | None = None
+    away_points_pct: float | None = None
+    home_pp_pct: float | None = None
+    away_pp_pct: float | None = None
+    home_pk_pct: float | None = None
+    away_pk_pct: float | None = None
+    home_is_b2b: float | None = None
+    away_is_b2b: float | None = None
+    goalie_home_confirmed: float | None = None
+    goalie_away_confirmed: float | None = None
+    puck_line_close: float | None = None
     # Soccer features (Sprint 11)
     home_goals_for: float | None = None
     away_goals_for: float | None = None
@@ -270,7 +286,7 @@ class HealthResponse(BaseModel):
 class RetrainRequest(BaseModel):
     market: str = Field(
         default="all",
-        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|nfl_moneyline|nfl_spread|nfl_total|nfl_prop|soccer_moneyline|soccer_total|soccer_btts|tennis_moneyline|tennis_set_handicap|tennis_total_games|all)$",
+        pattern="^(moneyline|overunder|runline|prop_hits|prop_strikeouts|prop_total_bases|prop_home_runs|prop_rbis|nfl_moneyline|nfl_spread|nfl_total|nfl_prop|nhl_moneyline|nhl_puckline|nhl_total|soccer_moneyline|soccer_total|soccer_btts|tennis_moneyline|tennis_set_handicap|tennis_total_games|all)$",
     )
     csv: str | None = None
     # Optional admin override — bypasses the per-market `min_train_size` floor.
@@ -426,6 +442,33 @@ def predict_nfl_total(payload: FeaturePayload) -> PredictionOut:
 )
 def predict_nfl_prop(payload: FeaturePayload) -> PredictionOut:
     return _predict_one("nfl_prop", payload)
+
+
+@app.post(
+    "/predict/nhl_moneyline",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_nhl_moneyline(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("nhl_moneyline", payload)
+
+
+@app.post(
+    "/predict/nhl_puckline",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_nhl_puckline(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("nhl_puckline", payload)
+
+
+@app.post(
+    "/predict/nhl_total",
+    response_model=PredictionOut,
+    dependencies=[Depends(require_internal_token)],
+)
+def predict_nhl_total(payload: FeaturePayload) -> PredictionOut:
+    return _predict_one("nhl_total", payload)
 
 
 @app.post(
@@ -607,10 +650,10 @@ async def retrain(payload: RetrainRequest) -> RetrainResponse:
 
     Wrapped in a thread because XGBoost holds the GIL during fit().
     """
-    from .train import MARKETS, NFL_MARKETS, NFL_PROP_MARKETS, SOCCER_MARKETS, TENNIS_MARKETS, train_all
+    from .train import MARKETS, NFL_MARKETS, NFL_PROP_MARKETS, NHL_MARKETS, SOCCER_MARKETS, TENNIS_MARKETS, train_all
 
     markets = (
-        (*MARKETS, *NFL_MARKETS, *NFL_PROP_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS)
+        (*MARKETS, *NFL_MARKETS, *NFL_PROP_MARKETS, *NHL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS)
         if payload.market == "all" else (payload.market,)
     )
 

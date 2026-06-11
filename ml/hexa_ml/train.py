@@ -43,6 +43,10 @@ NFL_MARKETS    = ("nfl_moneyline", "nfl_spread", "nfl_total")
 # pre-train from nflverse (no historical prop lines exist there) — it trains
 # only from resolved live picks (sport='nfl', market_type='prop').
 NFL_PROP_MARKETS = ("nfl_prop",)
+# nhl_total is live-only (variable goals line; the NHL history source carries
+# no market lines) — only moneyline/puckline pre-train from api-web.nhle.com.
+NHL_MARKETS = ("nhl_moneyline", "nhl_puckline", "nhl_total")
+NHL_PRETRAIN_MARKETS = ("nhl_moneyline", "nhl_puckline")
 SOCCER_MARKETS = ("soccer_moneyline", "soccer_total", "soccer_btts")
 TENNIS_MARKETS = ("tennis_moneyline", "tennis_set_handicap", "tennis_total_games")
 
@@ -50,6 +54,7 @@ TENNIS_MARKETS = ("tennis_moneyline", "tennis_set_handicap", "tennis_total_games
 MARKET_SPORT = {
     **{m: "nfl"    for m in NFL_MARKETS},
     **{m: "nfl"    for m in NFL_PROP_MARKETS},
+    **{m: "nhl"    for m in NHL_MARKETS},
     **{m: "soccer" for m in SOCCER_MARKETS},
     **{m: "tennis" for m in TENNIS_MARKETS},
 }
@@ -191,11 +196,13 @@ def train_all(
     # Separate markets by sport — each loads its own isolated dataset.
     nfl_markets      = [m for m in markets if m in NFL_MARKETS]
     nfl_prop_markets = [m for m in markets if m in NFL_PROP_MARKETS]
+    nhl_markets      = [m for m in markets if m in NHL_MARKETS]
     soccer_markets   = [m for m in markets if m in SOCCER_MARKETS]
     tennis_markets   = [m for m in markets if m in TENNIS_MARKETS]
     std_markets      = [
         m for m in markets
         if m not in NFL_MARKETS and m not in NFL_PROP_MARKETS
+        and m not in NHL_MARKETS
         and m not in SOCCER_MARKETS and m not in TENNIS_MARKETS
     ]
 
@@ -230,6 +237,29 @@ def train_all(
             except Exception as exc:
                 logger.warning("NFL pre-training setup failed (%s)", exc)
                 nfl_pretrain_years = None
+
+    # Load NHL dataset separately. Live picks come from pick_features;
+    # official NHL API history (scores → moneyline/puckline labels) is
+    # concatenated per-market so those models train before any live pick
+    # resolves — the NHL analog of the nflverse pre-training above.
+    nhl_df = None
+    nhl_pretrain_years: list[int] | None = None
+    if nhl_markets and not csv_path:
+        logger.info("Loading NHL live dataset…")
+        try:
+            nhl_df = load_dataset(sport="nhl")
+            logger.info("NHL: Loaded %d live rows; %d resolved", len(nhl_df), int(nhl_df["result"].notna().sum()))
+        except Exception as exc:
+            logger.warning("NHL live dataset load failed (%s) — relying on NHL API history", exc)
+            nhl_df = None
+        if settings.nhl_pretrain_enabled:
+            try:
+                from . import nhl_history_loader
+                nhl_pretrain_years = nhl_history_loader.parse_seasons(settings.nhl_pretrain_seasons)
+                logger.info("NHL pre-training enabled — seasons %s", nhl_pretrain_years)
+            except Exception as exc:
+                logger.warning("NHL pre-training setup failed (%s)", exc)
+                nhl_pretrain_years = None
 
     # Load Soccer dataset separately. Live picks come from pick_features (often
     # empty out of season); football-data.co.uk historical results + closing
@@ -327,6 +357,27 @@ def train_all(
                 continue
             _train_market(nfl_df, market)
 
+    if nhl_markets:
+        from . import nhl_history_loader
+        for market in nhl_markets:
+            parts = []
+            if nhl_df is not None and not nhl_df.empty:
+                parts.append(nhl_df)
+            if nhl_pretrain_years and market in NHL_PRETRAIN_MARKETS:
+                try:
+                    hist = nhl_history_loader.build_nhl_training_frame(market, nhl_pretrain_years)
+                    if not hist.empty:
+                        logger.info("NHL %s: +%d historical rows", market, len(hist))
+                        parts.append(hist)
+                except Exception as exc:
+                    logger.warning("NHL historical frame for %s failed (%s)", market, exc)
+            if not parts:
+                logger.warning("NHL %s: no data (no live picks, no history) — skipping", market)
+                summary[market] = {"skipped": True, "reason": "no_data"}
+                continue
+            combined = parts[0] if len(parts) == 1 else pd.concat(parts, ignore_index=True)
+            _train_market(combined, market)
+
     if soccer_markets:
         from . import soccer_history_loader
         for market in soccer_markets:
@@ -382,7 +433,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train H.E.X.A. ML models")
     parser.add_argument(
         "--market",
-        choices=[*MARKETS, *NFL_MARKETS, *NFL_PROP_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS, "all"],
+        choices=[*MARKETS, *NFL_MARKETS, *NFL_PROP_MARKETS, *NHL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS, "all"],
         default="all",
         help="Which market(s) to train",
     )
@@ -408,7 +459,7 @@ def main() -> None:
         level=args.log_level.upper(),
         format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
     )
-    markets = (*MARKETS, *NFL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS) if args.market == "all" else (args.market,)
+    markets = (*MARKETS, *NFL_MARKETS, *NHL_MARKETS, *SOCCER_MARKETS, *TENNIS_MARKETS) if args.market == "all" else (args.market,)
     train_all(
         csv_path=args.csv,
         out_dir=args.out_dir,

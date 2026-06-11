@@ -17,6 +17,7 @@ from .props import (
     PropRbisModel,
 )
 from .nfl import NflMoneylineModel, NflSpreadModel, NflTotalModel, NflPropModel
+from .nhl import NhlMoneylineModel, NhlPucklineModel, NhlTotalModel
 from .soccer import SoccerMoneylineModel, SoccerTotalModel, SoccerBttsModel
 from .tennis import TennisMoneylineModel, TennisSetHandicapModel, TennisTotalGamesModel
 
@@ -33,6 +34,9 @@ MARKET_MODELS = {
     "nfl_spread": NflSpreadModel,
     "nfl_total": NflTotalModel,
     "nfl_prop": NflPropModel,
+    "nhl_moneyline": NhlMoneylineModel,
+    "nhl_puckline": NhlPucklineModel,
+    "nhl_total": NhlTotalModel,
     "soccer_moneyline": SoccerMoneylineModel,
     "soccer_total": SoccerTotalModel,
     "soccer_btts": SoccerBttsModel,
@@ -54,6 +58,9 @@ __all__ = [
     "NflSpreadModel",
     "NflTotalModel",
     "NflPropModel",
+    "NhlMoneylineModel",
+    "NhlPucklineModel",
+    "NhlTotalModel",
     "SoccerMoneylineModel",
     "SoccerTotalModel",
     "SoccerBttsModel",

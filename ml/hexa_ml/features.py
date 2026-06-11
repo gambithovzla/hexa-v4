@@ -80,6 +80,40 @@ NFL_DERIVED_FEATURES = [
     "injury_diff",
 ]
 
+# ── NHL features (Sprint 10e ML sidecar) ─────────────────────────────────────
+
+NHL_BASE_NUMERIC = [
+    "home_goal_diff", "away_goal_diff",
+    "home_gf_per_game", "away_gf_per_game",
+    "home_ga_per_game", "away_ga_per_game",
+    "home_points_pct", "away_points_pct",
+    # Special teams (null until a richer live source; NaN in history)
+    "home_pp_pct", "away_pp_pct",
+    "home_pk_pct", "away_pk_pct",
+    "home_last10_wins", "away_last10_wins",
+    "home_rest_days", "away_rest_days",
+    "injuries_home_severe", "injuries_away_severe",
+    "odds_ml_home", "odds_ml_away", "odds_ou_total",
+    "context_completeness",
+    "oracle_confidence",
+]
+
+NHL_BOOL_FEATURES = [
+    "home_is_b2b", "away_is_b2b",
+    "goalie_home_confirmed", "goalie_away_confirmed",
+]
+
+NHL_DERIVED_FEATURES = [
+    "nhl_goal_diff_delta",     # home_goal_diff - away_goal_diff
+    "gf_per_game_diff",        # home offense edge
+    "ga_per_game_diff",        # away_ga - home_ga (positive = home defense better)
+    "points_pct_diff",
+    "special_teams_edge",      # (home PP% + PK%) - (away PP% + PK%)
+    "nhl_rest_diff",
+    "implied_prob_home",       # 2-way de-vig
+    "implied_prob_away",
+]
+
 # ── Soccer features (Sprint 11 ML sidecar) ───────────────────────────────────
 
 SOCCER_BASE_NUMERIC = [
@@ -262,6 +296,12 @@ def feature_columns(market: str) -> list[str]:
             cols.append("total_close")
         return cols
 
+    if market.startswith("nhl_"):
+        cols = list(NHL_BASE_NUMERIC) + list(NHL_BOOL_FEATURES) + list(NHL_DERIVED_FEATURES)
+        if market == "nhl_total":
+            cols.append("line")
+        return cols
+
     if market.startswith("soccer_"):
         return soccer_feature_columns(market)
 
@@ -336,6 +376,49 @@ def add_nfl_prop_derived(df: pd.DataFrame) -> pd.DataFrame:
     kind = out.get("prop_kind", pd.Series([None] * len(out), index=out.index)).astype(str).str.lower()
     for k in NFL_PROP_KINDS:
         out[f"propkind_{k}"] = (kind == k).astype(float)
+
+    return out
+
+
+def add_nhl_derived(df: pd.DataFrame) -> pd.DataFrame:
+    """Append NHL-specific computed features."""
+    out = df.copy()
+
+    h_gd = _col_or_nan(out, "home_goal_diff")
+    a_gd = _col_or_nan(out, "away_goal_diff")
+    out["nhl_goal_diff_delta"] = h_gd - a_gd
+
+    h_gf = _col_or_nan(out, "home_gf_per_game")
+    a_gf = _col_or_nan(out, "away_gf_per_game")
+    out["gf_per_game_diff"] = h_gf - a_gf
+
+    h_ga = _col_or_nan(out, "home_ga_per_game")
+    a_ga = _col_or_nan(out, "away_ga_per_game")
+    out["ga_per_game_diff"] = a_ga - h_ga  # lower own GA = better defense
+
+    h_pts = _col_or_nan(out, "home_points_pct")
+    a_pts = _col_or_nan(out, "away_points_pct")
+    out["points_pct_diff"] = h_pts - a_pts
+
+    st_home = _col_or_nan(out, "home_pp_pct") + _col_or_nan(out, "home_pk_pct")
+    st_away = _col_or_nan(out, "away_pp_pct") + _col_or_nan(out, "away_pk_pct")
+    out["special_teams_edge"] = st_home - st_away
+
+    h_rest = _col_or_nan(out, "home_rest_days")
+    a_rest = _col_or_nan(out, "away_rest_days")
+    out["nhl_rest_diff"] = h_rest - a_rest
+
+    # 2-way de-vig (no draws in NHL — OT/SO decide)
+    raw_h = _american_to_implied_prob(_col_or_nan(out, "odds_ml_home"))
+    raw_a = _american_to_implied_prob(_col_or_nan(out, "odds_ml_away"))
+    total = raw_h + raw_a
+    total = total.replace(0, float("nan"))
+    out["implied_prob_home"] = raw_h / total
+    out["implied_prob_away"] = raw_a / total
+
+    for col in NHL_BOOL_FEATURES:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
 
     return out
 
@@ -422,6 +505,8 @@ def build_X(df: pd.DataFrame, market: str) -> pd.DataFrame:
         enriched = add_nfl_prop_derived(df)
     elif market.startswith("nfl_"):
         enriched = add_nfl_derived(df)
+    elif market.startswith("nhl_"):
+        enriched = add_nhl_derived(df)
     elif market.startswith("soccer_"):
         enriched = add_soccer_derived(df)
     elif market.startswith("tennis_"):

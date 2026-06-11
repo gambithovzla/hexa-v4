@@ -73,6 +73,15 @@ OPTIONAL_FEATURE_COLUMNS = [
     # NFL player-prop columns (Fase 2 — pooled nfl_prop market)
     "nfl_prop_fair_prob",
     "nfl_prop_player_season_avg", "nfl_prop_player_recent_avg", "nfl_prop_player_games",
+    # NHL-specific columns (Sprint 10e — nhl_* markets)
+    "home_gf_per_game", "away_gf_per_game",
+    "home_ga_per_game", "away_ga_per_game",
+    "home_points_pct", "away_points_pct",
+    "home_pp_pct", "away_pp_pct",
+    "home_pk_pct", "away_pk_pct",
+    "home_is_b2b", "away_is_b2b",
+    "goalie_home_confirmed", "goalie_away_confirmed",
+    "puck_line_close",
     # Soccer-specific columns (Sprint 11 — soccer_* markets)
     "home_goals_for", "away_goals_for",
     "home_goals_against", "away_goals_against",
@@ -115,8 +124,8 @@ def load_from_postgres(database_url: str | None = None, sport: str = "mlb") -> p
         )
 
     sport_norm = (sport or "mlb").lower()
-    if sport_norm not in {"mlb", "nba", "nfl", "soccer", "tennis"}:
-        raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb', 'nba', 'nfl', 'soccer', or 'tennis'.")
+    if sport_norm not in {"mlb", "nba", "nfl", "nhl", "soccer", "tennis"}:
+        raise ValueError(f"Unsupported sport: {sport!r}. Expected 'mlb', 'nba', 'nfl', 'nhl', 'soccer', or 'tennis'.")
 
     cols = ", ".join(f"pf.{c}" for c in SELECT_COLUMNS)
     sql = f"""
@@ -218,6 +227,12 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         out = df[df["market_type"].isin(["overunder", "totals"])].copy()
     elif market == "nfl_prop":
         out = df[df["market_type"] == "prop"].copy()
+    elif market == "nhl_moneyline":
+        out = df[df["market_type"] == "moneyline"].copy()
+    elif market == "nhl_puckline":
+        out = df[df["market_type"].isin(["puckline", "puck_line", "runline", "spread"])].copy()
+    elif market == "nhl_total":
+        out = df[df["market_type"].isin(["overunder", "total", "totals"])].copy()
     elif market == "soccer_moneyline":
         out = df[df["market_type"] == "moneyline"].copy()
     elif market == "soccer_total":
@@ -252,6 +267,10 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
     elif market == "nfl_prop":
         out = out[out["line"].notna()]
         out = out[out["result"].astype(str).str.lower().isin(["win", "won", "loss", "lost"])]
+    elif market in {"nhl_moneyline", "nhl_puckline"}:
+        out = out[out["home_score"].notna() & out["away_score"].notna()]
+    elif market == "nhl_total":
+        out = out[out["total_runs"].notna() & out["line"].notna()]
     elif market == "soccer_moneyline":
         out = out[out["home_score"].notna() & out["away_score"].notna()]
     elif market == "soccer_total":
@@ -280,9 +299,9 @@ def make_target(df: pd.DataFrame, market: str) -> pd.Series:
     nfl_spread    → 1 if home covers the closing spread
     nfl_total     → 1 if total_runs > total_close (OVER hits)
     """
-    if market in {"moneyline", "nfl_moneyline", "soccer_moneyline"}:
+    if market in {"moneyline", "nfl_moneyline", "nhl_moneyline", "soccer_moneyline"}:
         return (df["home_score"] > df["away_score"]).astype(int)
-    if market == "overunder":
+    if market in {"overunder", "nhl_total"}:
         return (df["total_runs"] > df["line"]).astype(int)
     if market in {"nfl_total", "soccer_total"}:
         # soccer_total: P(OVER goals line) — home_score+away_score vs odds_ou_total
@@ -290,7 +309,8 @@ def make_target(df: pd.DataFrame, market: str) -> pd.Series:
         total = df["home_score"].astype(float) + df["away_score"].astype(float)
         line  = pd.to_numeric(df.get(line_col, pd.Series([float("nan")] * len(df))), errors="coerce")
         return (total > line).astype(int)
-    if market == "runline":
+    if market in {"runline", "nhl_puckline"}:
+        # NHL puck line is fixed at ±1.5 (same convention as the MLB runline)
         diff = df["home_score"].astype(float) - df["away_score"].astype(float)
         return (diff > 1.5).astype(int)
     if market == "nfl_spread":

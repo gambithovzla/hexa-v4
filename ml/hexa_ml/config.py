@@ -65,6 +65,20 @@ class Settings(BaseSettings):
         default="", validation_alias="NFL_PRETRAIN_SEASONS"
     )
 
+    # ── NHL pre-training (official NHL API history) ───────────────────────
+    # When enabled, nhl_moneyline / nhl_puckline train on leakage-free
+    # historical results from api-web.nhle.com instead of waiting for resolved
+    # live picks. nhl_total is live-only (the goals line varies and the source
+    # has no market lines). Live picks are concatenated on top automatically.
+    nhl_pretrain_enabled: bool = Field(
+        default=True, validation_alias="NHL_PRETRAIN_ENABLED"
+    )
+    # Empty → last 8 completed seasons. Accepts "2016-2023" or "2018,2019"
+    # (season start years: 2023 = the 2023-24 campaign).
+    nhl_pretrain_seasons: str = Field(
+        default="", validation_alias="NHL_PRETRAIN_SEASONS"
+    )
+
     # ── Soccer pre-training (football-data.co.uk history) ─────────────────
     # When enabled, soccer market models train on leakage-free historical
     # results + closing odds from football-data.co.uk (5 big European leagues)
