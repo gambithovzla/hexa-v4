@@ -3707,8 +3707,8 @@ app.post('/api/picks/:id/postmortem', verifyToken, async (req, res) => {
          pf.away_def_rating,
          pf.home_pace,
          pf.away_pace,
-         pf.home_days_rest,
-         pf.away_days_rest,
+         pf.home_rest_days,
+         pf.away_rest_days,
          pf.context_completeness
        FROM picks p
        LEFT JOIN LATERAL (
