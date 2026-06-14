@@ -73,7 +73,7 @@ import imperdibleRouter from './routes/imperdible.js';
 import nflImperdibleRouter from './routes/nfl-imperdible.js';
 import soccerImperdibleRouter from './routes/soccer-imperdible.js';
 import betCardRouter from './routes/bet-card.js';
-import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames, f5ChatAwareness } from './services/chatPickExtractor.js';
+import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames, f5ChatAwareness, varietyChatSteer, looksLikeLockRequest } from './services/chatPickExtractor.js';
 import { processScheduledContentQueue, processScheduledTelegramQueue, processScheduledThreadsQueue } from './services/contentQueueService.js';
 import { subscribeNewsletter, unsubscribeNewsletter, sendWeeklyNewsletter, getSubscribers } from './services/newsletterService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
@@ -2718,9 +2718,13 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
     // skip-extract exploration chat, a "safest pick" question should still get
     // the F5-vs-full-game steer when the thesis is starter-driven.
     const f5Steer = f5ChatAwareness(question.trim(), lang);
+    // Market-variety steer: on a "safest pick" request, force the Oracle to
+    // weigh the full menu (run line / totals / team totals / props) instead of
+    // defaulting to a moneyline favorite. Additive, independent of extraction.
+    const varietySteer = varietyChatSteer(question.trim(), lang);
     const augmentedQuestion = (skipExtract
       ? question.trim()
-      : augmentChatQuestion(question.trim(), lang)) + f5Steer;
+      : augmentChatQuestion(question.trim(), lang)) + varietySteer + f5Steer;
 
     const rawAnswer = await analyzeChat({
       contextString,
@@ -2831,6 +2835,13 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
     let allOdds = [];
     try { allOdds = await getGameOdds({ date: resolvedDate }); } catch { /* odds optional */ }
 
+    // On a "safest pick of the day" request, enrich each per-game brief with
+    // the deterministic extended menu (alt run lines / alt totals / team
+    // totals). The Haiku brief only carries ML + O/U line, so without this the
+    // cross-game lock decision can never see a non-moneyline option. Gated on a
+    // lock request so normal jornada questions don't pay the extra fetch cost.
+    const isLockJornada = looksLikeLockRequest(question);
+
     // MAP phase: build context + summarize with Haiku — all in parallel
     const gameBriefs = await Promise.all(
       resolvedGames.map(async (gameData) => {
@@ -2847,7 +2858,41 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
         const contextString = contextResult.context ?? contextResult;
 
         const brief = await summarizeGameBrief({ contextString, matchup, lang });
-        return brief;
+        if (!isLockJornada) return brief;
+
+        try {
+          const features = contextResult._features ?? {};
+          const xgbResult = (() => {
+            try { return calculateParallelScore(buildShadowStatcastData(features), gameData); }
+            catch { return null; }
+          })();
+          const safePayload = buildDeterministicSafePayload({
+            gameData,
+            features,
+            oddsData: matchedOdds ?? features?.oddsData ?? null,
+            xgboostResult: xgbResult,
+            lang,
+            llmData: null,
+            marketFocus: 'all',
+          });
+          let altMenu = null;
+          if (matchedOdds?.eventId) {
+            try { altMenu = await getEventAlternates(matchedOdds.eventId); }
+            catch { /* optional */ }
+          }
+          const extended = buildExtendedCandidates({
+            gameData,
+            features,
+            mainCandidates: safePayload?.safe_candidates ?? [],
+            alternates: altMenu,
+            lang,
+          });
+          const menu = formatExtendedMenuForLLM(extended, lang, 8);
+          return menu ? `MATCHUP: ${matchup}${menu}\n${brief}` : brief;
+        } catch (err) {
+          console.warn(`[Oracle Jornada Chat] extended menu prep failed for ${matchup}: ${err.message}`);
+          return brief;
+        }
       })
     );
 
@@ -2870,7 +2915,7 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
           mode: 'jornada',
           multi: true,
           games: extractorGames,
-        })) + f5ChatAwareness(userQuestion, lang);
+        })) + varietyChatSteer(userQuestion, lang) + f5ChatAwareness(userQuestion, lang);
 
     // REDUCE phase: single Opus 4.7 call across all briefs
     const rawAnswer = await analyzeChatJornada({
