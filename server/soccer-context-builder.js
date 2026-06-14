@@ -12,12 +12,17 @@
  */
 
 import { getSoccerGamesForDate, getSoccerStandings, getSoccerTeams } from './soccer-api.js';
-import { getSoccerLeague, isSupportedLeague } from './soccer-league-map.js';
+import { getSoccerLeague, isSupportedLeague, isInternationalLeague } from './soccer-league-map.js';
 import { findSoccerTeam } from './soccer-team-map.js';
 import { getSoccerGameXg } from './soccer-xg-fetcher.js';
 import { getSoccerMatchAvailability, isSoccerLineupsEnabled } from './soccer-lineups-api.js';
 import { getSoccerWeather } from './soccer-weather-api.js';
 import { getSoccerGameSetPieceStats } from './soccer-fbref-fetcher.js';
+import {
+  buildNationalStrengthComparison,
+  getNationalTeamStrength,
+  getNationalTeamRecentForm,
+} from './soccer-national-strength.js';
 
 // European/relegation spots per league — source of truth for motivation/stakes analysis.
 // playoffPos: Bundesliga/Ligue 1 have a 16th-place relegation playoff vs 3rd-tier.
@@ -277,6 +282,10 @@ function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
     suspensions:  [],
     congestion:   null,
     venueSplits:  null,
+    // FIFA ranking strength + recent international form — populated for
+    // international tournaments (fifa.world), where club stats don't exist.
+    fifaRanking:  null,
+    nationalForm: null,
     // Stakes / motivation — populated below once the full standings table is extracted.
     motivation:   null,
   };
@@ -335,6 +344,25 @@ export async function buildSoccerGameContext({
   home.motivation = buildMotivationBlock(home.points, homeStats?.position ?? null, fullStandings, leagueSlug);
   away.motivation = buildMotivationBlock(away.points, awayStats?.position ?? null, fullStandings, leagueSlug);
 
+  // National-team strength prior (FIFA ranking + best-effort recent form). For
+  // international tournaments this is THE strength signal — club-level xG /
+  // availability / set pieces are all null, and group-stage standings are a tiny
+  // sample where every team looks identical. Without it the Oracle has nothing
+  // to separate the sides and defaults to the Draw. Domestic leagues skip this.
+  const isInternational = isInternationalLeague(leagueSlug);
+  let nationalStrength = null;
+  if (isInternational) {
+    home.fifaRanking = getNationalTeamStrength(homeTeamName);
+    away.fifaRanking = getNationalTeamStrength(awayTeamName);
+    nationalStrength = buildNationalStrengthComparison(homeTeamName, awayTeamName);
+    const [homeForm, awayForm] = await Promise.all([
+      getNationalTeamRecentForm({ teamId: homeTeamId, leagueSlug }).catch(() => null),
+      getNationalTeamRecentForm({ teamId: awayTeamId, leagueSlug }).catch(() => null),
+    ]);
+    home.nationalForm = homeForm;
+    away.nationalForm = awayForm;
+  }
+
   // Enrich xG, rolling xG, and PPDA from Understat (null if MLS or fetch failed)
   if (xgData?.home) {
     home.xG          = xgData.home.xG          ?? null;
@@ -390,6 +418,8 @@ export async function buildSoccerGameContext({
   if (venueSplits?.away) away.venueSplits = venueSplits.away;
 
   const staleFlags = [];
+  const fifaRankingAvailable = !!(home.fifaRanking && away.fifaRanking);
+  if (isInternational && !fifaRankingAvailable) staleFlags.push('fifa_ranking_missing');
   if (!homeStats) staleFlags.push('home_team_stats_missing');
   if (!awayStats) staleFlags.push('away_team_stats_missing');
   if (!home.recentForm) staleFlags.push('home_recent_form_missing');
@@ -415,22 +445,43 @@ export async function buildSoccerGameContext({
   if (availability && !congestion) staleFlags.push('congestion_unavailable');
   if (availability && !venueSplits) staleFlags.push('venue_splits_unavailable');
 
+  // For international tournaments the FIFA ranking IS the team-strength signal
+  // (club xG / availability don't exist and group standings are a tiny sample),
+  // and recent form folds in the FIFA prior + best-effort ESPN results. Scoring
+  // these as the strength dimensions keeps a well-priced WC match from being
+  // wrongly flagged low-quality (which would cap confidence and feed the draw).
+  const intlRecentForm = isInternational
+    ? fractionPresent(home.nationalForm ?? home.fifaRanking, away.nationalForm ?? away.fifaRanking)
+    : 0;
   const completeness = {
-    teamStats:  fractionPresent(homeStats, awayStats),
-    recentForm: fractionPresent(home.recentForm, away.recentForm),
+    teamStats:  isInternational
+      ? (fifaRankingAvailable ? 1 : fractionPresent(homeStats, awayStats))
+      : fractionPresent(homeStats, awayStats),
+    recentForm: isInternational
+      ? Math.max(intlRecentForm, fractionPresent(home.recentForm, away.recentForm))
+      : fractionPresent(home.recentForm, away.recentForm),
     marketOdds: marketOdds?.threeWay ? 1 : 0,
     xG: xgAvailable ? 1 : 0,
     lineups: lineupsConfirmed ? 1 : 0,
     weather: weatherAvailable ? 1 : 0,
   };
-  const overall = +(
-    (completeness.teamStats  * 0.30 +
-     completeness.recentForm * 0.20 +
-     completeness.marketOdds * 0.20 +
-     completeness.xG         * 0.10 +
-     completeness.lineups    * 0.15 +
-     completeness.weather    * 0.05).toFixed(2)
-  );
+  // International matches have no xG/lineups by nature — redistribute their tiny
+  // weights onto the strength signals that DO exist so completeness reflects the
+  // genuinely available evidence rather than penalising the sport's structure.
+  const overall = isInternational
+    ? +(
+        (completeness.teamStats  * 0.45 +
+         completeness.recentForm * 0.25 +
+         completeness.marketOdds * 0.30).toFixed(2)
+      )
+    : +(
+        (completeness.teamStats  * 0.30 +
+         completeness.recentForm * 0.20 +
+         completeness.marketOdds * 0.20 +
+         completeness.xG         * 0.10 +
+         completeness.lineups    * 0.15 +
+         completeness.weather    * 0.05).toFixed(2)
+      );
 
   const context_meta = {
     generatedAt: new Date().toISOString(),
@@ -490,6 +541,13 @@ export async function buildSoccerGameContext({
         ok: motivationAvailable,
         source: motivationAvailable ? 'espn-standings' : (standingsPayload ? 'position-missing' : 'standings-unavailable'),
       },
+      nationalStrength: {
+        ok: fifaRankingAvailable,
+        source: isInternational
+          ? (fifaRankingAvailable ? 'fifa-ranking-seed' : 'unseeded-nation')
+          : 'n/a — domestic league',
+        band: nationalStrength?.band ?? null,
+      },
     },
     completeness,
     overallCompleteness: overall,
@@ -506,6 +564,7 @@ export async function buildSoccerGameContext({
     referee: referee ?? null,
     refereeStats: refereeStats ?? null,
     h2h: h2h ?? null,
+    nationalStrength: nationalStrength ?? null,
     context_meta,
   };
 }

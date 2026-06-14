@@ -254,7 +254,7 @@ function describeLeagueProfile(leagueMeta) {
     `  Season: ${leagueMeta.season ?? 'n/a'}`,
   ];
   if (leagueMeta.international) {
-    lines.push('  TOURNAMENT MODE: apply the INTERNATIONAL TOURNAMENT rules — neutral venue discount, squad cohesion > club form, no xG, draw always live.');
+    lines.push('  TOURNAMENT MODE: apply the INTERNATIONAL TOURNAMENT rules — neutral venue discount, FIFA ranking + market odds are the strength anchors, no xG. Absence of club stats is NOT evidence of evenness; reserve the draw for genuinely close matchups.');
   }
   return lines.join('\n');
 }
@@ -265,6 +265,59 @@ function describeStrengthDelta(home, away) {
   const gap = hd - ad;
   const fav = teamLabel(gap > 0 ? home : away);
   return `Team-strength gap: ${fav} +${Math.abs(gap)} season goal differential (home ${hd} vs away ${ad}).`;
+}
+
+const BAND_TEXT = {
+  large:    'CLEAR FAVORITE on strength — the draw is NOT the default here',
+  moderate: 'real strength edge to the favored side',
+  slight:   'mild strength lean — the draw stays live',
+  even:     'genuinely matched on strength — the draw is live',
+};
+
+function describeNationalFormLine(label, side) {
+  const f = side?.nationalForm;
+  if (!f || !f.played) return null;
+  const gf = f.avgGoalsFor != null ? ` | ${fmt(f.avgGoalsFor, 2)} GF` : '';
+  const ga = f.avgGoalsAgainst != null ? ` / ${fmt(f.avgGoalsAgainst, 2)} GA per game` : '';
+  return `  ${label} recent international form: ${f.record} [${f.recent}]${gf}${ga} (last ${f.played})`;
+}
+
+/**
+ * FIFA-ranking strength block for international tournaments. This is the PRIMARY
+ * strength signal when club-level data (xG, availability, set pieces) is absent
+ * and group-stage standings are a tiny sample. Rendered only when present.
+ */
+function describeNationalStrengthBlock(context) {
+  const ns = context?.nationalStrength;
+  const home = context?.home;
+  const away = context?.away;
+  if (!ns || !ns.home || !ns.away) {
+    // Unseeded nation(s): say so explicitly so the Oracle leans on market odds,
+    // NOT so it reads the absence as "evenly matched".
+    if (isInternationalContext(context)) {
+      return 'NATIONAL STRENGTH (FIFA RANKING): unavailable for one or both teams — lean on market 1X2 odds for the strength read. Do NOT treat missing ranking data as evidence the teams are evenly matched.';
+    }
+    return null;
+  }
+  const h = ns.home, a = ns.away;
+  const favoredLabel = ns.favored === 'even'
+    ? 'No clear favorite on ranking'
+    : `Favored: ${ns.favoredName} (by ${Math.abs(ns.pointsGap)} pts)`;
+  const lines = [
+    'NATIONAL STRENGTH (FIFA RANKING — Elo-style, encodes recent form):',
+    `  HOME ${teamLabel(home)}: #${h.rank} world, ${h.points} pts (${h.tier}, ${h.confederation})`,
+    `  AWAY ${teamLabel(away)}: #${a.rank} world, ${a.points} pts (${a.tier}, ${a.confederation})`,
+    `  Gap: ${Math.abs(ns.pointsGap)} pts / ${Math.abs(ns.rankGap)} ranking spots — ${BAND_TEXT[ns.band] ?? ns.band}. ${favoredLabel}.`,
+  ];
+  const homeFormLine = describeNationalFormLine('HOME', home);
+  const awayFormLine = describeNationalFormLine('AWAY', away);
+  if (homeFormLine) lines.push(homeFormLine);
+  if (awayFormLine) lines.push(awayFormLine);
+  return lines.join('\n');
+}
+
+function isInternationalContext(context) {
+  return !!context?.leagueMeta?.international;
 }
 
 function describeMarketOdds(marketOdds) {
@@ -368,11 +421,13 @@ export function serializeSoccerContext({ context, marketOdds }) {
   if (!context) return 'No soccer context provided.';
   const { league, leagueMeta, gameDate, home, away, weather, referee, refereeStats, h2h, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
+  const nationalStrengthBlock = describeNationalStrengthBlock(context);
   return [
     `H.E.X.A. SOCCER CONTEXT — ${gameDate} (${league ?? 'unknown league'})`,
     '',
     describeLeagueProfile(leagueMeta),
     '',
+    ...(nationalStrengthBlock ? [nationalStrengthBlock, ''] : []),
     describeStrengthDelta(home, away),
     '',
     describeTeamBlock('HOME', home),
