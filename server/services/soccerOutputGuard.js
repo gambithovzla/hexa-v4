@@ -12,9 +12,10 @@
 import { SOCCER_OUTPUT_SCHEMA_VERSION } from '../prompts/oracle-soccer-prompts.js';
 
 const ALLOWED_BET_TYPES = new Set([
-  '1x2', 'threeway', 'moneyline',   // 1X2 variants
-  'total', 'overunder', 'ou',        // Over/Under
-  'btts', 'bothteamstoscore',        // BTTS
+  '1x2', 'threeway', 'moneyline',          // 1X2 variants
+  'total', 'overunder', 'ou',               // Over/Under (main + alternate lines)
+  'btts', 'bothteamstoscore',               // BTTS
+  'handicap', 'spread', 'asianhandicap', 'ah', // Asian/European handicap
 ]);
 const BLOCKED_BET_TYPES = new Set(['playerprop', 'playerprops', 'prop', 'props']);
 

@@ -82,7 +82,7 @@ async function fetchOdds(apiKey, sportKey, requestedDate) {
   const params = new URLSearchParams({
     apiKey,
     regions: 'us,uk,eu',
-    markets: 'h2h,totals,btts',
+    markets: 'h2h,spreads,totals,btts',
     oddsFormat: 'american',
     dateFormat: 'iso',
   });
@@ -224,6 +224,10 @@ function normalizeEvent(event) {
   const h2hHome = [], h2hAway = [], h2hDraw = [];
   const totals = [], overs = [], unders = [];
   const bttsYes = [], bttsNo = [];
+  // Handicap (Asian/European spread). Each book quotes a home point + away point
+  // (mirror signs) and a price per side. We keep the modal point (the real line)
+  // and the consensus price.
+  const spreadHomePts = [], spreadAwayPts = [], spreadHome = [], spreadAway = [];
 
   for (const book of books) {
     for (const market of book.markets ?? []) {
@@ -234,6 +238,17 @@ function normalizeEvent(event) {
             if (o.name === event.home_team) h2hHome.push(o.price);
             else if (o.name === event.away_team) h2hAway.push(o.price);
             else if (name === 'draw') h2hDraw.push(o.price);
+          }
+          break;
+        case 'spreads':
+          for (const o of market.outcomes ?? []) {
+            if (o.name === event.home_team) {
+              if (o.point != null) spreadHomePts.push(o.point);
+              spreadHome.push(o.price);
+            } else if (o.name === event.away_team) {
+              if (o.point != null) spreadAwayPts.push(o.point);
+              spreadAway.push(o.price);
+            }
           }
           break;
         case 'totals':
@@ -258,7 +273,9 @@ function normalizeEvent(event) {
   const h2hA = consensusAmerican(h2hAway);
   const h2hD = consensusAmerican(h2hDraw);
   const totLine = totals.length ? mode(totals) : null;
-  if (h2hH == null && h2hA == null && h2hD == null && totLine == null) return null;
+  const spreadHomePt = spreadHomePts.length ? mode(spreadHomePts) : null;
+  const spreadAwayPt = spreadAwayPts.length ? mode(spreadAwayPts) : (spreadHomePt != null ? -spreadHomePt : null);
+  if (h2hH == null && h2hA == null && h2hD == null && totLine == null && spreadHomePt == null) return null;
 
   return {
     eventId:      event.id ?? null,
@@ -266,6 +283,12 @@ function normalizeEvent(event) {
     homeTeam:     event.home_team,
     awayTeam:     event.away_team,
     threeWay: { home: h2hH, draw: h2hD, away: h2hA },
+    handicap: {
+      homePoint:  spreadHomePt,
+      awayPoint:  spreadAwayPt,
+      homePrice:  consensusAmerican(spreadHome),
+      awayPrice:  consensusAmerican(spreadAway),
+    },
     total: {
       line:       totLine,
       overPrice:  consensusAmerican(overs),
@@ -338,6 +361,12 @@ export function buildMarketOddsForGame(event) {
       drawImplied: round1(drawImplied),
       awayImplied: round1(awayImplied),
     },
+    handicap: event.handicap ? {
+      homePoint:  event.handicap.homePoint,
+      awayPoint:  event.handicap.awayPoint,
+      homePrice:  event.handicap.homePrice,
+      awayPrice:  event.handicap.awayPrice,
+    } : null,
     total: {
       line:       event.total.line,
       overPrice:  event.total.overPrice,

@@ -28,6 +28,7 @@ import { parseSoccerProp } from '../soccer-props-resolver.js';
 import { buildSoccerGameContext } from '../soccer-context-builder.js';
 import { analyzeSoccerGame, analyzeSoccerChat } from '../services/oracleSoccer.js';
 import { getSoccerGameOdds, matchSoccerOddsToGame, buildMarketOddsForGame } from '../soccer-odds.js';
+import { getSoccerAltMarkets } from '../soccer-alt-markets.js';
 import { validateSoccerAnalysisOutput } from '../services/soccerOutputGuard.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
 import { upsertOracleSession } from './oracle-history.js';
@@ -211,6 +212,20 @@ router.post('/analyze/game', soccerEnabled, verifyToken, requireSportAccess('soc
       gameTime: game.gameDate ?? null,
       marketOdds: resolvedOdds,
     });
+
+    // Best-effort: attach the alternate goal-total + handicap ladders (real
+    // prices for non-main lines) so the Oracle can pick e.g. Over 3.5 or -2.5.
+    if (resolvedOdds?.eventId) {
+      try {
+        const alt = await getSoccerAltMarkets({ leagueSlug, eventId: resolvedOdds.eventId });
+        if (alt) {
+          resolvedOdds.altTotals = alt.altTotals;
+          resolvedOdds.altSpreads = alt.altSpreads;
+        }
+      } catch (err) {
+        console.warn(`[soccer-route] alt markets fetch failed: ${err.message}`);
+      }
+    }
 
     const result = await analyzeSoccerGame({
       context,
