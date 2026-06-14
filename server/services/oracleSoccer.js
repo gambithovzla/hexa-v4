@@ -313,6 +313,11 @@ function describeNationalStrengthBlock(context) {
   const awayFormLine = describeNationalFormLine('AWAY', away);
   if (homeFormLine) lines.push(homeFormLine);
   if (awayFormLine) lines.push(awayFormLine);
+  const div = ns.marketDivergence;
+  if (div && div.level && div.level !== 'aligned' && div.note) {
+    const tag = div.level === 'strong' ? '⚠ RANKING vs MARKET (STRONG)' : 'RANKING vs MARKET (mild)';
+    lines.push(`  ${tag}: ${div.note}`);
+  }
   return lines.join('\n');
 }
 

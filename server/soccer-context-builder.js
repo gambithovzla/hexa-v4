@@ -22,6 +22,7 @@ import {
   buildNationalStrengthComparison,
   getNationalTeamStrength,
   getNationalTeamRecentForm,
+  assessRankingMarketDivergence,
 } from './soccer-national-strength.js';
 
 // European/relegation spots per league — source of truth for motivation/stakes analysis.
@@ -355,6 +356,11 @@ export async function buildSoccerGameContext({
     home.fifaRanking = getNationalTeamStrength(homeTeamName);
     away.fifaRanking = getNationalTeamStrength(awayTeamName);
     nationalStrength = buildNationalStrengthComparison(homeTeamName, awayTeamName);
+    // Ranking-vs-market divergence: the guard against a stale FIFA ranking
+    // (e.g. an overrated declining team). The market prices current squad form.
+    if (nationalStrength && marketOdds?.threeWay) {
+      nationalStrength.marketDivergence = assessRankingMarketDivergence(nationalStrength, marketOdds.threeWay);
+    }
     const [homeForm, awayForm] = await Promise.all([
       getNationalTeamRecentForm({ teamId: homeTeamId, leagueSlug }).catch(() => null),
       getNationalTeamRecentForm({ teamId: awayTeamId, leagueSlug }).catch(() => null),

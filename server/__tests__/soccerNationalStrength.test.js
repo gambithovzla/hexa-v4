@@ -6,6 +6,7 @@ import {
   buildNationalStrengthComparison,
   strengthTier,
   strengthGapBand,
+  assessRankingMarketDivergence,
   parseNationalTeamForm,
 } from '../soccer-national-strength.js';
 
@@ -83,6 +84,47 @@ test('buildNationalStrengthComparison marks evenly-ranked sides as even (draw li
 
 test('buildNationalStrengthComparison returns null when a side is unseeded', () => {
   assert.equal(buildNationalStrengthComparison('Brazil', 'Ruritania'), null);
+});
+
+test('divergence: ranking favorite but market favors the OTHER side → strong, market wins', () => {
+  // Brazil overrated by ranking: ranking favors Brazil (home) but the market
+  // makes the opponent the favorite (away implied >> home implied).
+  const cmp = buildNationalStrengthComparison('Brazil', 'France');
+  // cmp favors away (France) actually — flip to make ranking favor home:
+  const cmpHomeFav = buildNationalStrengthComparison('Brazil', 'South Korea'); // home (Brazil) favored
+  const div = assessRankingMarketDivergence(cmpHomeFav, { homeImplied: 30, awayImplied: 52 });
+  assert.equal(div.level, 'strong');
+  assert.equal(div.marketFavored, 'away');
+  assert.match(div.note, /TRUST THE MARKET/);
+  assert.ok(cmp); // sanity
+});
+
+test('divergence: ranking shouts favorite but market is near a coin flip → strong', () => {
+  const cmp = buildNationalStrengthComparison('Brazil', 'South Korea'); // large gap, home favored
+  const div = assessRankingMarketDivergence(cmp, { homeImplied: 40, awayImplied: 38 });
+  assert.equal(div.level, 'strong');
+  assert.match(div.note, /overstates current form/);
+});
+
+test('divergence: ranking and market agree → aligned', () => {
+  const cmp = buildNationalStrengthComparison('Brazil', 'South Korea');
+  const div = assessRankingMarketDivergence(cmp, { homeImplied: 64, awayImplied: 18 });
+  assert.equal(div.level, 'aligned');
+  assert.equal(div.note, null);
+});
+
+test('divergence: ranking even but market has a clear favorite → mild lean to market', () => {
+  const cmp = buildNationalStrengthComparison('Italy', 'Germany'); // even
+  const div = assessRankingMarketDivergence(cmp, { homeImplied: 55, awayImplied: 25 });
+  assert.equal(div.level, 'mild');
+  assert.equal(div.marketFavored, 'home');
+});
+
+test('divergence: null when odds or comparison missing', () => {
+  assert.equal(assessRankingMarketDivergence(null, { homeImplied: 50, awayImplied: 30 }), null);
+  const cmp = buildNationalStrengthComparison('Italy', 'Germany');
+  assert.equal(assessRankingMarketDivergence(cmp, null), null);
+  assert.equal(assessRankingMarketDivergence(cmp, { homeImplied: null, awayImplied: 30 }), null);
 });
 
 test('parseNationalTeamForm computes W-D-L from completed ESPN fixtures', () => {

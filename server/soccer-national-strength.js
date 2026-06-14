@@ -160,6 +160,79 @@ export function buildNationalStrengthComparison(homeName, awayName) {
   return { home, away, pointsGap, rankGap, favored, favoredName, band };
 }
 
+function _num(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Compare the FIFA-ranking favorite against the MARKET favorite and detect when
+ * they diverge. The FIFA ranking lags and does not capture squad quality / a
+ * team in a bad moment (e.g. a declining Brazil whose ranking still says
+ * "favorite" while bookmakers price it as a coin flip). The market DOES price
+ * current player form — so on a real divergence the market wins and the ranking
+ * must be downweighted. This is the guard against over-trusting a stale ranking.
+ *
+ * @param {object} comparison  output of buildNationalStrengthComparison
+ * @param {object} threeWay    marketOdds.threeWay ({ homeImplied, awayImplied })
+ * @returns {{ level, note, marketFavored, rankFavored, band } | null}
+ *   level: 'aligned' | 'mild' | 'strong'
+ */
+export function assessRankingMarketDivergence(comparison, threeWay) {
+  if (!comparison || !threeWay) return null;
+  const hi = _num(threeWay.homeImplied);
+  const ai = _num(threeWay.awayImplied);
+  if (hi == null || ai == null) return null;
+
+  const marketGap = hi - ai;                       // + = home favored by market
+  const mAbs = Math.abs(marketGap);
+  const marketFavored = mAbs < 8 ? 'even' : (marketGap > 0 ? 'home' : 'away');
+  const marketStrength = mAbs >= 30 ? 3 : mAbs >= 15 ? 2 : mAbs >= 8 ? 1 : 0;
+
+  const rankFavored = comparison.favored;          // 'home' | 'away' | 'even'
+  const bandStrength = { large: 3, moderate: 2, slight: 1, even: 0 }[comparison.band] ?? 0;
+
+  const rankFavName = rankFavored === 'home' ? comparison.home.name
+    : rankFavored === 'away' ? comparison.away.name : null;
+  const marketFavName = marketFavored === 'home' ? comparison.home.name
+    : marketFavored === 'away' ? comparison.away.name : null;
+
+  // Opposite favorites: the strongest possible divergence.
+  if (rankFavored !== 'even' && marketFavored !== 'even' && rankFavored !== marketFavored) {
+    return {
+      level: 'strong',
+      marketFavored, rankFavored, band: comparison.band,
+      note: `FIFA ranking favors ${rankFavName} but the MARKET favors ${marketFavName}. The ranking is stale / overstates current strength — TRUST THE MARKET, not the ranking.`,
+    };
+  }
+  // Ranking shouts favorite; market whispers it (or sees a coin flip).
+  if (rankFavored !== 'even' && bandStrength - marketStrength >= 2) {
+    return {
+      level: 'strong',
+      marketFavored, rankFavored, band: comparison.band,
+      note: `FIFA ranking implies a ${comparison.band} favorite (${rankFavName}) but the market prices the match much closer — the ranking overstates current form (declining squad / bad moment). Downweight the ranking and trust the market.`,
+    };
+  }
+  // Ranking even, market has picked a side.
+  if (rankFavored === 'even' && marketStrength >= 2) {
+    return {
+      level: 'mild',
+      marketFavored, rankFavored, band: comparison.band,
+      note: `FIFA ranking sees the teams as even but the market favors ${marketFavName} — lean to the market favorite.`,
+    };
+  }
+  // Mild over/understatement.
+  if (bandStrength - marketStrength === 1 && rankFavored !== 'even') {
+    return {
+      level: 'mild',
+      marketFavored, rankFavored, band: comparison.band,
+      note: `FIFA ranking slightly overstates ${rankFavName} vs the market — temper confidence toward the market read.`,
+    };
+  }
+  return { level: 'aligned', marketFavored, rankFavored, band: comparison.band, note: null };
+}
+
 // ── Optional best-effort recent form from ESPN ───────────────────────────────
 // During the tournament (and for any reachable national-team schedule) ESPN
 // exposes completed fixtures we can fold into recent form. This is layered on
@@ -249,6 +322,7 @@ export default {
   buildNationalStrengthComparison,
   strengthTier,
   strengthGapBand,
+  assessRankingMarketDivergence,
   parseNationalTeamForm,
   getNationalTeamRecentForm,
 };
