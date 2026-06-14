@@ -13,7 +13,49 @@ import {
   extractJsonTail,
   normalizePickJsonList,
   normalizeExtracted,
+  looksLikeLockRequest,
+  f5ChatAwareness,
 } from '../chatPickExtractor.js';
+
+// ── looksLikeLockRequest / f5ChatAwareness ───────────────────────────────────
+
+describe('looksLikeLockRequest', () => {
+  test('detects Spanish lock intent', () => {
+    assert.ok(looksLikeLockRequest('¿Cuál es el pick imperdible de hoy?'));
+    assert.ok(looksLikeLockRequest('dame el más seguro'));
+    assert.ok(looksLikeLockRequest('cual es la apuesta infalible'));
+  });
+  test('detects English lock intent', () => {
+    assert.ok(looksLikeLockRequest("what's the lock today"));
+    assert.ok(looksLikeLockRequest('give me the safest pick'));
+    assert.ok(looksLikeLockRequest('which is the banker'));
+  });
+  test('returns false for ordinary questions', () => {
+    assert.equal(looksLikeLockRequest('who has the better bullpen?'), false);
+    assert.equal(looksLikeLockRequest(''), false);
+    assert.equal(looksLikeLockRequest(null), false);
+  });
+});
+
+describe('f5ChatAwareness', () => {
+  test('returns the F5 steer for a lock request (es)', () => {
+    const out = f5ChatAwareness('dame el imperdible', 'es');
+    assert.ok(out.includes('F5'), 'mentions F5');
+    assert.ok(out.includes('abridor'), 'mentions starter in Spanish');
+    assert.ok(out.includes('push'), 'notes the push rule');
+    assert.ok(out.includes('NO MENCIONES'), 'hidden instruction marker');
+  });
+  test('returns the F5 steer for a lock request (en)', () => {
+    const out = f5ChatAwareness('what is the safest pick', 'en');
+    assert.ok(out.includes('F5'));
+    assert.ok(/starting pitcher|starter/i.test(out));
+    assert.ok(out.includes('DO NOT MENTION'));
+  });
+  test('returns empty string for a non-lock question', () => {
+    assert.equal(f5ChatAwareness('compare the two offenses', 'en'), '');
+    assert.equal(f5ChatAwareness('', 'es'), '');
+  });
+});
 
 // ── augmentChatQuestion ──────────────────────────────────────────────────────
 

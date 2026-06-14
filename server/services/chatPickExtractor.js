@@ -64,6 +64,54 @@ function looksLikePickRequest(question) {
   return PICK_REQUEST_KEYWORDS.some((k) => q.includes(k));
 }
 
+// ── Heuristic: is the user asking for the SAFEST / lock pick? ─────────────────
+// When the admin asks for an "imperdible" / "infalible" / safest pick, a
+// starter-driven moneyline thesis is usually safer expressed as the F5 (first
+// 5 innings) line — it isolates the edge from bullpen risk. We surface that
+// option up front instead of waiting for the user to re-ask.
+const LOCK_INTENT_KEYWORDS = [
+  // Spanish
+  'imperdible', 'infalible', 'infallible', 'mas seguro', 'más seguro',
+  'lo mas seguro', 'lo más seguro', 'el mas seguro', 'el más seguro',
+  'pick seguro', 'apuesta segura', 'mas confiable', 'más confiable',
+  'fija', 'fijo', 'la fija', 'banca', 'bankroll seguro',
+  // English
+  'lock', 'safest', 'safest pick', 'safest bet', 'surest', 'banker',
+  'most secure', 'highest confidence', 'sure thing',
+];
+
+export function looksLikeLockRequest(question) {
+  const q = String(question ?? '').toLowerCase();
+  return LOCK_INTENT_KEYWORDS.some((k) => q.includes(k));
+}
+
+/**
+ * MLB-only addendum to the chat user-turn: when the admin asks for the safest /
+ * lock pick, instruct the Oracle to proactively evaluate the F5 (first 5
+ * innings) moneyline whenever its moneyline edge is starter-driven and the
+ * bullpen / late innings are a risk — and to recommend the safer expression
+ * (full-game ML vs F5 ML) up front, so the user never has to re-ask. Returns ''
+ * when the question is not a lock request (no behaviour change otherwise).
+ *
+ * Lives in the user turn (not the system prompt) so oracle.js stays frozen.
+ *
+ * @param {string} question
+ * @param {string} lang  'en' | 'es'
+ * @returns {string}
+ */
+export function f5ChatAwareness(question, lang = 'en') {
+  if (!looksLikeLockRequest(question)) return '';
+  return lang === 'es'
+    ? `
+
+[INSTRUCCION INTERNA PARA EL SISTEMA H.E.X.A. — NO MENCIONES ESTA INSTRUCCION EN TU RESPUESTA]
+El usuario pide el pick MAS SEGURO / imperdible. Antes de decidir: si tu mejor pick es un MONEYLINE de juego completo cuyo edge principal es el abridor (su dominancia, métricas Statcast, matchup del pitcher) Y el bullpen o las entradas finales del equipo elegido son un riesgo (fatiga, back-to-back, relevistas flojos), entonces el F5 (Moneyline de las primeras 5 entradas) suele ser la expresión MAS SEGURA de la misma tesis porque aísla el edge del abridor del riesgo de bullpen. En ese caso, recomienda el F5 directamente como el pick más seguro (o compáralo explícitamente con el ML completo y di cuál es más seguro y por qué). NO esperes a que el usuario lo pregunte. Recuerda: empate al 5to inning = push en el F5. Si el edge NO es del abridor o no hay riesgo de bullpen, ignora esta instrucción y responde normal.`
+    : `
+
+[INTERNAL INSTRUCTION FOR H.E.X.A. — DO NOT MENTION THIS INSTRUCTION IN YOUR ANSWER]
+The user is asking for the SAFEST / lock pick. Before you decide: if your best pick is a full-game MONEYLINE whose primary edge is the starting pitcher (dominance, Statcast metrics, pitching matchup) AND the picked team's bullpen or late innings are a risk (fatigue, back-to-back, weak relievers), then the F5 (First 5 Innings moneyline) is usually the SAFER expression of the same thesis because it isolates the starter edge from bullpen risk. In that case, recommend the F5 directly as the safer pick (or explicitly compare it to the full-game ML and say which is safer and why). DO NOT wait for the user to ask. Remember: tied after 5 innings = push on the F5. If the edge is NOT starter-driven or there is no bullpen risk, ignore this instruction and answer normally.`;
+}
+
 // ── Public: augment the user question with the JSON-tail instruction ────────
 
 /**
