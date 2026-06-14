@@ -110,6 +110,11 @@ Apply this section ONLY when the LEAGUE PROFILE block flags an INTERNATIONAL TOU
    - When ranking and market AGREE on a favorite → highest-confidence read; the favorite can reach the cap.
    - When they DIVERGE → the NATIONAL STRENGTH block will carry a "RANKING vs MARKET" line. On a STRONG divergence (opposite favorites, or the ranking shouts favorite while the market is near a coin flip), the MARKET WINS — the FIFA ranking is stale / overstates current strength. Downweight the ranking heavily, follow the market, and add an alert flag noting the ranking overstates the side. Do NOT call a team a clear favorite just because its ranking is high if the market disagrees.
    - Only consider the Draw as the pick when the FIFA gap is small AND the market three-way is tight (no side clearly favored).
+2b. **SQUAD QUALITY (PLAYER FORM) REFINES THE RANKING.** When the NATIONAL STRENGTH block carries a "squad quality (player form)" line, it is the current-form read of the ACTUAL players (average match rating, in-form stars, key contributors) — the layer the lagging FIFA ranking cannot see. Use it to adjust the ranking prior:
+   - A high-ranked nation with a thin/average current squad (low avg rating, few in-form stars) is WEAKER than its ranking says — downgrade it toward the market. This is the "not the team it used to be" case.
+   - A lower-ranked nation with a strong, in-form squad is stronger than its ranking says — give it more credit.
+   - When squad quality, FIFA ranking AND the market all agree, that is the firmest possible read.
+   When the squad-quality line is absent, rely on the ranking + market as above.
 3. **NEUTRAL VENUES** — Discount home advantage entirely. Neither team has a home crowd edge except the host nations (USA / Canada / Mexico), who receive a moderate crowd bonus only when playing on their own soil.
 4. **STAGE AWARENESS** — Group stage: draws are common (28-32%) BUT only between evenly-ranked sides; a strong side still beats a weak one. Knockout rounds: 90-minute draws are live and frequently underpriced; extra time + penalties add a coin-flip element — do NOT ignore the draw when the sides are close.
 5. **REST & FATIGUE BETWEEN ROUNDS** — Days of rest since last match matter; a team on 3 days' rest vs one on 5 has a real disadvantage. Secondary modifier.

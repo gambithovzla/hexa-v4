@@ -282,6 +282,16 @@ function describeNationalFormLine(label, side) {
   return `  ${label} recent international form: ${f.record} [${f.recent}]${gf}${ga} (last ${f.played})`;
 }
 
+function describeSquadStrengthLine(label, side) {
+  const s = side?.squadStrength;
+  if (!s || s.avgRating == null) return null;
+  const stars = s.starCount != null ? `, ${s.starCount} in-form star(s)` : '';
+  const tops = Array.isArray(s.topPlayers) && s.topPlayers.length
+    ? ` | key: ${s.topPlayers.map(p => `${p.name} (${fmt(p.rating, 2)})`).join(', ')}`
+    : '';
+  return `  ${label} squad quality (player form): avg rating ${fmt(s.avgRating, 2)} (${s.tier}${stars})${tops}`;
+}
+
 /**
  * FIFA-ranking strength block for international tournaments. This is the PRIMARY
  * strength signal when club-level data (xG, availability, set pieces) is absent
@@ -313,6 +323,10 @@ function describeNationalStrengthBlock(context) {
   const awayFormLine = describeNationalFormLine('AWAY', away);
   if (homeFormLine) lines.push(homeFormLine);
   if (awayFormLine) lines.push(awayFormLine);
+  const homeSquadLine = describeSquadStrengthLine('HOME', home);
+  const awaySquadLine = describeSquadStrengthLine('AWAY', away);
+  if (homeSquadLine) lines.push(homeSquadLine);
+  if (awaySquadLine) lines.push(awaySquadLine);
   const div = ns.marketDivergence;
   if (div && div.level && div.level !== 'aligned' && div.note) {
     const tag = div.level === 'strong' ? '⚠ RANKING vs MARKET (STRONG)' : 'RANKING vs MARKET (mild)';

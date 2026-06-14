@@ -24,6 +24,7 @@ import {
   getNationalTeamRecentForm,
   assessRankingMarketDivergence,
 } from './soccer-national-strength.js';
+import { getNationalSquadStrength } from './soccer-squad-strength.js';
 
 // European/relegation spots per league — source of truth for motivation/stakes analysis.
 // playoffPos: Bundesliga/Ligue 1 have a 16th-place relegation playoff vs 3rd-tier.
@@ -287,6 +288,9 @@ function buildTeamBlock(teamName, teamId, statsFromStandings, leagueSlug) {
     // international tournaments (fifa.world), where club stats don't exist.
     fifaRanking:  null,
     nationalForm: null,
+    // Player-level squad quality (API-Football) — current form of the actual
+    // players, the layer the lagging FIFA ranking can't see.
+    squadStrength: null,
     // Stakes / motivation — populated below once the full standings table is extracted.
     motivation:   null,
   };
@@ -361,12 +365,19 @@ export async function buildSoccerGameContext({
     if (nationalStrength && marketOdds?.threeWay) {
       nationalStrength.marketDivergence = assessRankingMarketDivergence(nationalStrength, marketOdds.threeWay);
     }
-    const [homeForm, awayForm] = await Promise.all([
+    const [homeForm, awayForm, homeSquad, awaySquad] = await Promise.all([
       getNationalTeamRecentForm({ teamId: homeTeamId, leagueSlug }).catch(() => null),
       getNationalTeamRecentForm({ teamId: awayTeamId, leagueSlug }).catch(() => null),
+      getNationalSquadStrength({ teamName: homeTeamName, dateStr: gameDate }).catch(() => null),
+      getNationalSquadStrength({ teamName: awayTeamName, dateStr: gameDate }).catch(() => null),
     ]);
     home.nationalForm = homeForm;
     away.nationalForm = awayForm;
+    home.squadStrength = homeSquad;
+    away.squadStrength = awaySquad;
+    if (nationalStrength) {
+      nationalStrength.squadAvailable = !!(homeSquad && awaySquad);
+    }
   }
 
   // Enrich xG, rolling xG, and PPDA from Understat (null if MLS or fetch failed)
@@ -426,6 +437,8 @@ export async function buildSoccerGameContext({
   const staleFlags = [];
   const fifaRankingAvailable = !!(home.fifaRanking && away.fifaRanking);
   if (isInternational && !fifaRankingAvailable) staleFlags.push('fifa_ranking_missing');
+  const squadStrengthAvailable = !!(home.squadStrength && away.squadStrength);
+  if (isInternational && !squadStrengthAvailable) staleFlags.push('squad_strength_unavailable');
   if (!homeStats) staleFlags.push('home_team_stats_missing');
   if (!awayStats) staleFlags.push('away_team_stats_missing');
   if (!home.recentForm) staleFlags.push('home_recent_form_missing');
@@ -553,6 +566,12 @@ export async function buildSoccerGameContext({
           ? (fifaRankingAvailable ? 'fifa-ranking-seed' : 'unseeded-nation')
           : 'n/a — domestic league',
         band: nationalStrength?.band ?? null,
+      },
+      squadStrength: {
+        ok: squadStrengthAvailable,
+        source: isInternational
+          ? (squadStrengthAvailable ? 'api-football-players' : 'unavailable — no key / sparse season')
+          : 'n/a — domestic league',
       },
     },
     completeness,
