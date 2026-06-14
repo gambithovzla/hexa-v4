@@ -73,7 +73,7 @@ import imperdibleRouter from './routes/imperdible.js';
 import nflImperdibleRouter from './routes/nfl-imperdible.js';
 import soccerImperdibleRouter from './routes/soccer-imperdible.js';
 import betCardRouter from './routes/bet-card.js';
-import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames } from './services/chatPickExtractor.js';
+import { augmentChatQuestion, processChatAnswer, processChatAnswerForGames, f5ChatAwareness } from './services/chatPickExtractor.js';
 import { processScheduledContentQueue, processScheduledTelegramQueue, processScheduledThreadsQueue } from './services/contentQueueService.js';
 import { subscribeNewsletter, unsubscribeNewsletter, sendWeeklyNewsletter, getSubscribers } from './services/newsletterService.js';
 import { getGameHighlightsAvailability } from './live-feed.js';
@@ -2714,9 +2714,13 @@ app.post('/api/analyze/chat', analysisLimiter, verifyToken, isAdmin, async (req,
     // The instruction is opt-out via X-HEXA-Skip-Pick-Extract=1 header for
     // pure-exploration chats where saving could mislead training.
     const skipExtract = String(req.headers['x-hexa-skip-pick-extract'] ?? '') === '1';
-    const augmentedQuestion = skipExtract
+    // F5 awareness is additive and independent of pick extraction: even in a
+    // skip-extract exploration chat, a "safest pick" question should still get
+    // the F5-vs-full-game steer when the thesis is starter-driven.
+    const f5Steer = f5ChatAwareness(question.trim(), lang);
+    const augmentedQuestion = (skipExtract
       ? question.trim()
-      : augmentChatQuestion(question.trim(), lang);
+      : augmentChatQuestion(question.trim(), lang)) + f5Steer;
 
     const rawAnswer = await analyzeChat({
       contextString,
@@ -2860,13 +2864,13 @@ app.post('/api/analyze/chat-jornada', analysisLimiter, verifyToken, isAdmin, asy
 
     const skipExtract = String(req.headers['x-hexa-skip-pick-extract'] ?? '') === '1';
     const userQuestion = question.trim();
-    const augmentedQuestion = skipExtract
+    const augmentedQuestion = (skipExtract
       ? userQuestion
       : augmentChatQuestion(userQuestion, lang, 'mlb', {
           mode: 'jornada',
           multi: true,
           games: extractorGames,
-        });
+        })) + f5ChatAwareness(userQuestion, lang);
 
     // REDUCE phase: single Opus 4.7 call across all briefs
     const rawAnswer = await analyzeChatJornada({
