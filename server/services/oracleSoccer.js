@@ -351,11 +351,30 @@ function describeMarketOdds(marketOdds) {
     parts.push(`  1X2 Draw ${tw.draw ?? 'n/a'}${drawImp}`);
     parts.push(`  1X2 Away ${tw.away ?? 'n/a'}${awayImp}`);
   }
+  if (marketOdds.handicap && (marketOdds.handicap.homePoint != null || marketOdds.handicap.awayPoint != null)) {
+    const h = marketOdds.handicap;
+    const fmtPt = p => (p != null ? (p > 0 ? `+${p}` : `${p}`) : 'n/a');
+    const hp = h.homePrice != null ? ` (${h.homePrice})` : '';
+    const ap = h.awayPrice != null ? ` (${h.awayPrice})` : '';
+    parts.push(`  Handicap (main): Home ${fmtPt(h.homePoint)}${hp} / Away ${fmtPt(h.awayPoint)}${ap}`);
+  }
   if (marketOdds.total) {
     const t = marketOdds.total;
     const over  = t.overPrice  != null ? ` (Over ${t.overPrice})`  : '';
     const under = t.underPrice != null ? ` / Under ${t.underPrice}` : '';
-    parts.push(`  Total ${t.line ?? 'n/a'}${over}${under}`);
+    parts.push(`  Total (main) ${t.line ?? 'n/a'}${over}${under}`);
+  }
+  if (Array.isArray(marketOdds.altTotals) && marketOdds.altTotals.length) {
+    const ladder = marketOdds.altTotals
+      .map(t => `${t.line}: O ${t.over ?? 'n/a'} / U ${t.under ?? 'n/a'}`)
+      .join('  |  ');
+    parts.push(`  Alt totals: ${ladder}`);
+  }
+  if (Array.isArray(marketOdds.altSpreads) && marketOdds.altSpreads.length) {
+    const ladder = marketOdds.altSpreads
+      .map(s => `${s.homePoint > 0 ? '+' : ''}${s.homePoint}: H ${s.homePrice ?? 'n/a'} / A ${s.awayPrice ?? 'n/a'}`)
+      .join('  |  ');
+    parts.push(`  Alt handicaps (by home line): ${ladder}`);
   }
   if (marketOdds.btts) {
     const b = marketOdds.btts;

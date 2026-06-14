@@ -71,6 +71,10 @@ export function resolveSoccerPick(pickText, game) {
   if (bttsYes) return (homeScore > 0 && awayScore > 0) ? 'win' : 'loss';
   if (bttsNo)  return (homeScore === 0 || awayScore === 0) ? 'win' : 'loss';
 
+  // ── Handicap (Asian/European spread) — "Brazil -1.5", "Japan +1.5" ──────────
+  const hc = resolveSoccerHandicap(pickText, game);
+  if (hc) return hc;
+
   // ── Home Win ───────────────────────────────────────────────────────────────
   const isHomeWinPick = /home\s+win|local\s+win/i.test(s) ||
     (s.endsWith('home') && !s.includes('away'));
@@ -115,6 +119,47 @@ export function resolveSoccerPick(pickText, game) {
   }
 
   return null;
+}
+
+/**
+ * Resolve a soccer handicap (Asian/European spread) pick against a final score.
+ * Pick text is "<Team> <signed line>" e.g. "Brazil -1.5", "Japan +1.5"
+ * (optionally tagged "(Handicap)" / "(AH)" and/or a trailing price). Supports
+ * half lines (.5, never a push) and whole lines (.0, a push when the adjusted
+ * margin is exactly zero). Quarter lines are intentionally not supported.
+ *
+ * Returns 'win' | 'loss' | 'push' | null (null = not a handicap / team not found).
+ */
+export function resolveSoccerHandicap(pickText, game) {
+  let s = String(pickText ?? '').trim()
+    .replace(/\s*\([+-]?\d+\)\s*$/i, '')                                   // strip trailing "(-110)"
+    .replace(/\s*\((?:handicap|h[aá]ndicap|ah|asian\s*handicap)\)\s*$/i, '')
+    .replace(/\b(asian\s*handicap|handicap|h[aá]ndicap|ah)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return null;
+
+  // Must end in a signed decimal (the discriminator vs O/U which is unsigned).
+  const m = s.match(/^(.+?)\s*([+-]\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const teamToken = m[1].trim();
+  const handicap = parseFloat(m[2]);
+  if (!teamToken || !Number.isFinite(handicap)) return null;
+
+  const homeScore = Number(game?.teams?.home?.score ?? 0);
+  const awayScore = Number(game?.teams?.away?.score ?? 0);
+  const homeName  = String(game?.teams?.home?.name ?? '');
+  const homeAbbr  = String(game?.teams?.home?.abbreviation ?? '');
+  const awayName  = String(game?.teams?.away?.name ?? '');
+  const awayAbbr  = String(game?.teams?.away?.abbreviation ?? '');
+
+  let teamScore, oppScore;
+  if (tokenMatchesTeam(teamToken, homeName, homeAbbr)) { teamScore = homeScore; oppScore = awayScore; }
+  else if (tokenMatchesTeam(teamToken, awayName, awayAbbr)) { teamScore = awayScore; oppScore = homeScore; }
+  else return null;
+
+  const adjusted = (teamScore + handicap) - oppScore;
+  return adjusted > 0 ? 'win' : adjusted < 0 ? 'loss' : 'push';
 }
 
 function soccerGameToShape(game) {
