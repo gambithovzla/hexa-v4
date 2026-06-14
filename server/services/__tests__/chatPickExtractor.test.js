@@ -15,6 +15,7 @@ import {
   normalizeExtracted,
   looksLikeLockRequest,
   f5ChatAwareness,
+  varietyChatSteer,
 } from '../chatPickExtractor.js';
 
 // ── looksLikeLockRequest / f5ChatAwareness ───────────────────────────────────
@@ -54,6 +55,28 @@ describe('f5ChatAwareness', () => {
   test('returns empty string for a non-lock question', () => {
     assert.equal(f5ChatAwareness('compare the two offenses', 'en'), '');
     assert.equal(f5ChatAwareness('', 'es'), '');
+  });
+});
+
+describe('varietyChatSteer', () => {
+  test('returns the variety steer for a lock request (es)', () => {
+    const out = varietyChatSteer('dame el más seguro de la jornada', 'es');
+    assert.ok(out.includes('RESÍSTELO'), 'tells the model to resist the ML reflex');
+    assert.ok(/Team total/i.test(out), 'lists team totals');
+    assert.ok(/Ponches/i.test(out), 'lists pitcher strikeout props');
+    assert.ok(out.includes('NO MENCIONES'), 'hidden instruction marker');
+  });
+  test('returns the variety steer for a lock request (en)', () => {
+    const out = varietyChatSteer('what is the safest pick today', 'en');
+    assert.ok(/RESIST IT/i.test(out));
+    assert.ok(/team total/i.test(out));
+    assert.ok(/strikeout/i.test(out));
+    assert.ok(out.includes('DO NOT MENTION'));
+  });
+  test('returns empty string for a non-lock question', () => {
+    assert.equal(varietyChatSteer('compare the two starters', 'en'), '');
+    assert.equal(varietyChatSteer('', 'es'), '');
+    assert.equal(varietyChatSteer(null, 'en'), '');
   });
 });
 

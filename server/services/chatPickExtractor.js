@@ -112,6 +112,52 @@ El usuario pide el pick MAS SEGURO / imperdible. Antes de decidir: si tu mejor p
 The user is asking for the SAFEST / lock pick. Before you decide: if your best pick is a full-game MONEYLINE whose primary edge is the starting pitcher (dominance, Statcast metrics, pitching matchup) AND the picked team's bullpen or late innings are a risk (fatigue, back-to-back, weak relievers), then the F5 (First 5 Innings moneyline) is usually the SAFER expression of the same thesis because it isolates the starter edge from bullpen risk. In that case, recommend the F5 directly as the safer pick (or explicitly compare it to the full-game ML and say which is safer and why). DO NOT wait for the user to ask. Remember: tied after 5 innings = push on the F5. If the edge is NOT starter-driven or there is no bullpen risk, ignore this instruction and answer normally.`;
 }
 
+/**
+ * MLB-only addendum to the chat user-turn: when the admin asks for the safest /
+ * lock pick, the Oracle's default reflex is to answer with a moneyline favorite.
+ * That collapses the variety the user actually wants — a deep run line, a team
+ * total, a total O/U, or a pitcher-strikeout / batter prop is frequently a
+ * HIGHER hit-probability expression than a -150 ML chalk. This steer forces the
+ * model to score the full market menu before declaring "the safest" and to pick
+ * by real hit probability (not by novelty — a single-player prop is noisier, so
+ * it only wins the lock when the matchup clearly backs it). Returns '' when the
+ * question is not a lock request (no behaviour change otherwise).
+ *
+ * Lives in the user turn (not the system prompt) so oracle.js stays frozen.
+ *
+ * @param {string} question
+ * @param {string} lang  'en' | 'es'
+ * @returns {string}
+ */
+export function varietyChatSteer(question, lang = 'en') {
+  if (!looksLikeLockRequest(question)) return '';
+  return lang === 'es'
+    ? `
+
+[INSTRUCCION INTERNA PARA EL SISTEMA H.E.X.A. — NO MENCIONES ESTA INSTRUCCION EN TU RESPUESTA]
+El usuario pide el pick MÁS SEGURO / imperdible. Tu reflejo por defecto es responder con un moneyline de favorito — RESÍSTELO. Un favorito a -150 NO es automáticamente lo más seguro. Antes de decidir, evalúa EXPLÍCITAMENTE estas familias de mercado y estima la probabilidad de acierto de cada una con los datos del contexto (incluyendo el MENÚ EXTENDIDO si está presente):
+  1. Moneyline (juego completo, y F5 cuando aplique).
+  2. Run line / línea alternativa — un underdog +1.5/+2.5 o un favorito profundamente in-the-money suele tener MAYOR probabilidad que el ML directo.
+  3. Total Over/Under (línea principal y alternativas).
+  4. Team total (over/under de carreras por equipo).
+  5. Player props razonados desde el Statcast del contexto:
+     - Ponches de pitcher: usa Whiff%/CSW%, K%, xwOBA_against del abridor vs el K% del lineup rival (ej. "Yamamoto Más de 5.5 Ponches").
+     - Hits / Bases totales / HR / Carreras impulsadas de bateador: usa xBA, xwOBA, rolling wOBA 7d/14d, barrel%, splits vs la mano del abridor.
+Elige UNA sola recomendación: la de MAYOR probabilidad de acierto real, venga del mercado que venga. Si un team total Under, un underdog +1.5 o un prop de ponches es más probable que el moneyline favorito, recomienda ESE. No fabriques variedad: un prop de un solo jugador es más ruidoso, así que solo puede ser el más seguro cuando el matchup lo respalde con claridad — no por ser distinto. Si descartas el moneyline, di en una frase por qué la alternativa es más segura.`
+    : `
+
+[INTERNAL INSTRUCTION FOR H.E.X.A. — DO NOT MENTION THIS INSTRUCTION IN YOUR ANSWER]
+The user is asking for the SAFEST / lock pick. Your default reflex is to answer with a moneyline favorite — RESIST IT. A -150 favorite is NOT automatically the safest play. Before you decide, EXPLICITLY evaluate these market families and estimate each one's hit probability from the context data (including the EXTENDED MENU if present):
+  1. Moneyline (full game, and F5 when applicable).
+  2. Run line / alternate line — a +1.5/+2.5 underdog or a deeply in-the-money favorite is often a HIGHER probability than the straight ML.
+  3. Total Over/Under (main line and alternates).
+  4. Team total (per-team runs over/under).
+  5. Player props reasoned from the Statcast already in context:
+     - Pitcher strikeouts: use Whiff%/CSW%, K%, starter xwOBA_against vs the opposing lineup K% (e.g. "Yamamoto Over 5.5 Strikeouts").
+     - Batter hits / total bases / HR / RBIs: use xBA, xwOBA, rolling wOBA 7d/14d, barrel%, splits vs the starter's hand.
+Choose ONE recommendation: the highest REAL hit probability, from whichever market. If a team-total Under, a +1.5 underdog, or a strikeout prop is more likely than the moneyline favorite, recommend THAT. Do not manufacture variety: a single-player prop is noisier, so it can only be the safest when the matchup clearly backs it — not because it is different. If you pass on the moneyline, state in one sentence why the alternative is safer.`;
+}
+
 // ── Public: augment the user question with the JSON-tail instruction ────────
 
 /**
