@@ -392,6 +392,70 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
 }
 
 /**
+ * Build the scored candidate slate for a set of games WITHOUT the conviction
+ * gate or the LLM arbiter. This is the reusable candidate-generation half of
+ * analyzeImperdible, exposed so other selectors (e.g. Pick del Día) can apply
+ * their own ranking/gate on the same scored candidates. ML stage-2 is run only
+ * on the top `stage2Cap` stage-1 candidates to bound sidecar calls.
+ *
+ * @returns {Promise<{date, slate: object[], confirmedGames: number, totalGames: number, excluded: object[]}>}
+ */
+export async function buildScoredSlate({ gameIds = null, date, lang = 'en', sport = 'mlb', stage2Cap = 15 }) {
+  const resolvedDate = date || new Date().toISOString().split('T')[0];
+
+  let games = await getTodayGames(resolvedDate);
+  if (!games.length) {
+    const today = new Date().toISOString().split('T')[0];
+    if (today !== resolvedDate) games = await getTodayGames(today);
+  }
+
+  const wanted = Array.isArray(gameIds) && gameIds.length
+    ? games.filter((g) => gameIds.map(String).includes(String(g.gamePk)))
+    : games;
+
+  const confirmed = wanted.filter((g) => g.lineupStatus === 'confirmed');
+  const excluded = wanted
+    .filter((g) => g.lineupStatus !== 'confirmed')
+    .map((g) => ({
+      gamePk: g.gamePk,
+      matchup: `${g.teams?.away?.abbreviation ?? '?'} @ ${g.teams?.home?.abbreviation ?? '?'}`,
+      lineupStatus: g.lineupStatus ?? 'unavailable',
+    }));
+
+  if (confirmed.length === 0) {
+    return { date: resolvedDate, slate: [], confirmedGames: 0, totalGames: wanted.length, excluded };
+  }
+
+  let allOdds = [];
+  try { allOdds = await getGameOdds({ date: resolvedDate }); } catch { /* optional */ }
+
+  const settled = await Promise.allSettled(
+    confirmed.map((gameData) => buildGameCandidates({ gameData, date: resolvedDate, allOdds, lang })),
+  );
+  const gameBundles = settled.filter((s) => s.status === 'fulfilled').map((s) => s.value);
+  const bundleByGamePk = new Map(gameBundles.map((b) => [String(b.gamePk), b]));
+
+  // Only auto-resolvable candidates can be a real bet; rank by stage-1 conviction
+  // and run the (costly) ML alignment on the strongest survivors only.
+  const resolvable = gameBundles.flatMap((b) => b.candidates).filter((c) => c.autoResolvable !== false);
+  const stage1 = rankCandidates(resolvable.map(scoreStage1));
+  const topK = stage1.slice(0, Math.max(stage2Cap, TOP_K));
+
+  const slate = [];
+  for (const candidate of topK) {
+    let mlProb = null;
+    let mlOpinion = null;
+    if (candidate.marketSource !== 'extended') {
+      const bundle = bundleByGamePk.get(String(candidate.gamePk));
+      ({ mlProb, mlOpinion } = await attachMlSignal(candidate, bundle));
+    }
+    slate.push({ ...scoreStage2(candidate, mlProb), mlOpinion, sport });
+  }
+
+  return { date: resolvedDate, slate, confirmedGames: confirmed.length, totalGames: wanted.length, excluded };
+}
+
+/**
  * Persist a confirmed lock: one row in `picks` (source='imperdible') + one row
  * in `imperdible_runs` capturing the whole analyzed slate, plus pick_features
  * for the selected pick (isolated by source so it never pollutes MLB training).
