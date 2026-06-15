@@ -95,8 +95,10 @@ async function _fetchSeasonStats(season) {
  * getNflAdvancedTeamStats(season, { maxLookback }) → { season, requestedSeason,
  * isFallback, fetchedAt, byAbbr } or null.
  *
- * byAbbr is keyed by canonical ESPN abbr; each value is
- * { epa_off, epa_def, success_rate_off, success_rate_def, proe, plays_per_game, games_played }.
+ * byAbbr is keyed by canonical ESPN abbr; each value carries the sidecar's full
+ * per-team stat object, including raw + opponent-adjusted (SOS) EPA:
+ * { epa_off, epa_def, epa_off_adj, epa_def_adj, sos_off, sos_def,
+ *   success_rate_off, success_rate_def, proe, plays_per_game, games_played, … }.
  *
  * Off-season / early-season fallback: nflverse has no play-by-play for the
  * requested season until ~Week 2, so a request for an empty season walks back

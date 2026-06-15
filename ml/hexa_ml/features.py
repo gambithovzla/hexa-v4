@@ -55,6 +55,10 @@ DERIVED_FEATURES = [
 NFL_BASE_NUMERIC = [
     "home_epa_off", "away_epa_off",
     "home_epa_def", "away_epa_def",
+    # opponent-adjusted (SOS) EPA — DVOA-style; alongside raw so live serving that
+    # only supplies raw EPA still feeds the model.
+    "home_epa_off_adj", "away_epa_off_adj",
+    "home_epa_def_adj", "away_epa_def_adj",
     "home_success_rate", "away_success_rate",
     "home_proe", "away_proe",
     "home_rest_days", "away_rest_days",
@@ -76,6 +80,9 @@ NFL_DERIVED_FEATURES = [
     "epa_off_diff",
     "epa_def_diff",
     "epa_composite_diff",
+    "epa_off_adj_diff",
+    "epa_def_adj_diff",
+    "epa_composite_adj_diff",
     "rest_diff",
     "injury_diff",
 ]
@@ -295,6 +302,15 @@ def add_nfl_derived(df: pd.DataFrame) -> pd.DataFrame:
     # Lower epa_def = better defense; positive diff = home defense advantage
     out["epa_def_diff"] = a_epa_def - h_epa_def
     out["epa_composite_diff"] = out["epa_off_diff"] + out["epa_def_diff"]
+
+    # Opponent-adjusted (SOS) EPA diffs — same orientation as the raw diffs above.
+    h_epa_off_adj = _col_or_nan(out, "home_epa_off_adj")
+    a_epa_off_adj = _col_or_nan(out, "away_epa_off_adj")
+    h_epa_def_adj = _col_or_nan(out, "home_epa_def_adj")
+    a_epa_def_adj = _col_or_nan(out, "away_epa_def_adj")
+    out["epa_off_adj_diff"] = h_epa_off_adj - a_epa_off_adj
+    out["epa_def_adj_diff"] = a_epa_def_adj - h_epa_def_adj
+    out["epa_composite_adj_diff"] = out["epa_off_adj_diff"] + out["epa_def_adj_diff"]
 
     h_rest = _col_or_nan(out, "home_rest_days")
     a_rest = _col_or_nan(out, "away_rest_days")

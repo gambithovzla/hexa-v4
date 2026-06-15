@@ -225,6 +225,11 @@ function buildTeamBlock(stats, recentGames, injuries, teamId, teamAbbr, gameDate
     // nflverse-sourced advanced metrics (overlaid from the ML sidecar):
     epaOff,
     epaDef,
+    // opponent-adjusted (strength-of-schedule) EPA — DVOA-style; null pre-Week 2
+    epaOffAdj: advanced?.epa_off_adj ?? null,
+    epaDefAdj: advanced?.epa_def_adj ?? null,
+    sosOff: advanced?.sos_off ?? null,   // mean opposing defensive EPA faced (lower = tougher)
+    sosDef: advanced?.sos_def ?? null,   // mean opposing offensive EPA faced (higher = tougher)
     successRateOff,
     successRateDef,
     successRate: successRateOff,

@@ -72,6 +72,29 @@ def test_build_team_stats_keys_by_abbr():
     assert aaa["proe"] is not None
 
 
+def test_opponent_adjusted_epa_season():
+    payload = nv.build_team_stats(2023)
+    aaa = payload["teams"]["AAA"]
+    # AAA offense (raw 0.05) faced only BBB's defense (raw allowed 0.05), which is
+    # better than the league mean (0.0625) → adjusted EPA gets a small boost.
+    # adj = raw_epa − (opp_def − league_mean) = 0.05 − (0.05 − 0.0625) = 0.0625.
+    assert aaa["epa_off_adj"] == pytest.approx(0.0625, abs=1e-6)
+    # SOS = mean opposing defensive EPA faced (lower = tougher slate).
+    assert aaa["sos_off"] == pytest.approx(0.05, abs=1e-6)
+    assert aaa["epa_def_adj"] is not None
+
+
+def test_training_frame_has_adjusted_epa_columns_leakage_free():
+    df = nv.build_nfl_training_frame("nfl_moneyline", [2023])
+    for col in ("home_epa_off_adj", "away_epa_off_adj", "home_epa_def_adj", "away_epa_def_adj"):
+        assert col in df.columns
+    wk1 = df[df["week"] == 1].iloc[0]
+    # No prior weeks → adjusted EPA must be NaN for week 1 (no future leakage).
+    assert pd.isna(wk1["home_epa_off_adj"])
+    wk3 = df[df["week"] == 3].iloc[0]
+    assert not pd.isna(wk3["home_epa_off_adj"])
+
+
 def test_training_frame_is_leakage_free_week1():
     df = nv.build_nfl_training_frame("nfl_moneyline", [2023])
     assert len(df) == 3

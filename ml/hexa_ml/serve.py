@@ -181,6 +181,11 @@ class FeaturePayload(BaseModel):
     away_epa_off: float | None = None
     home_epa_def: float | None = None
     away_epa_def: float | None = None
+    # opponent-adjusted (SOS) EPA — DVOA-style
+    home_epa_off_adj: float | None = None
+    away_epa_off_adj: float | None = None
+    home_epa_def_adj: float | None = None
+    away_epa_def_adj: float | None = None
     home_success_rate: float | None = None
     away_success_rate: float | None = None
     home_proe: float | None = None

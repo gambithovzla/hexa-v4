@@ -70,9 +70,16 @@ function describeInjuriesBlock(side) {
 function describeTeamStrengthLine(side) {
   // EPA when present; otherwise point-differential / PF-PA per game as the proxy.
   if (side?.epaOff != null || side?.epaDef != null) {
-    return `  EPA/play: off ${fmt(side.epaOff, 3)} | def ${fmt(side.epaDef, 3)}` +
+    let line = `  EPA/play: off ${fmt(side.epaOff, 3)} | def ${fmt(side.epaDef, 3)}` +
       (side.successRateOff != null ? ` | success off ${fmt(side.successRateOff * 100)}%` : '') +
       (side.proe != null ? ` | PROE ${fmt(side.proe, 1)}` : '');
+    // Opponent-adjusted (strength-of-schedule) EPA — separates real quality from
+    // numbers inflated/suppressed by an easy/hard slate. Prefer this read.
+    if (side.epaOffAdj != null || side.epaDefAdj != null) {
+      line += `\n  EPA/play (opp-adjusted, SOS): off ${fmt(side.epaOffAdj, 3)} | def ${fmt(side.epaDefAdj, 3)}` +
+        (side.sosOff != null ? ` | SOS faced (def EPA, lower=tougher) ${fmt(side.sosOff, 3)}` : '');
+    }
+    return line;
   }
   return `  Team strength (proxy — EPA unavailable): PF/g ${fmt(side?.pointsForPerGame)} | PA/g ${fmt(side?.pointsAgainstPerGame)} | point diff ${side?.pointDiff ?? 'n/a'}`;
 }
