@@ -24,6 +24,11 @@ class TrainMetrics:
     brier_test: float = 0.0
     logloss_test: float = 0.0
     roi_kelly25_test: float = 0.0
+    # Honest directional hit rate at the model's >50% pick on the held-out set:
+    # ATS for spread, over/under for total, straight-up for moneyline. Beats the
+    # -110 vig only above 52.4% — the real test a training Brier can't show.
+    pick_accuracy_test: float = 0.0
+    pick_accuracy_n: int = 0
     feature_columns: list[str] = field(default_factory=list)
     trained_at: str = ""
 

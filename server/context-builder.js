@@ -15,6 +15,8 @@ import { getLineMovement } from './line-movement.js';
 import { buildOracleMemory } from './oracle-memory.js';
 import { buildSimilarAnalysesBlock } from './services/oracleEmbeddingsService.js';
 import { buildLessonsBlock } from './services/postmortemLessonsService.js';
+import { statcastRegressionSignal, strikeoutRateSignal } from './services/statcastRegression.js';
+import { getMarketHealth, buildMarketHealthBlock } from './services/marketHealthService.js';
 
 // ---------------------------------------------------------------------------
 // In-memory context cache — avoids redundant API calls when the same game is
@@ -589,6 +591,14 @@ function pitcherSavantBlock(label, savant) {
     lines.push(`CSW%: ${csw != null ? fp(csw) : 'N/A'} | Chase%: ${chase != null ? fp(chase) : 'N/A'}`);
   }
 
+  // Regression watch — realized vs expected wOBA against (lucky/unlucky pitching)
+  const pReg = statcastRegressionSignal(savant.wOBA_against, savant.xwOBA_against, 'pitcher');
+  if (pReg) lines.push(`⚠ REGRESSION: ${pReg.text}`);
+
+  // K-rate signal — whiff% vs realized K% divergence (K-prop edge)
+  const kSig = strikeoutRateSignal(savant.whiff_percent, savant.k_percent);
+  if (kSig) lines.push(`◆ K-RATE: ${kSig.text}`);
+
   // Rolling wOBA against — short-term form (prompt has HOT/STRUGGLING thresholds on 7d/14d)
   const rw = savant.rolling_windows_against;
   if (rw?.woba_against_7d != null || rw?.woba_against_14d != null) {
@@ -646,6 +656,10 @@ function batterSavantLine(name, savant) {
     ` | EV ${f1(savant.avg_exit_velocity)} Barrel% ${fp(savant.barrel_batted_rate)} HH% ${fp(savant.hard_hit_percent)}` +
     pctStr + evPct,
   ];
+
+  // Regression watch — realized wOBA vs contact quality (xwOBA)
+  const bReg = statcastRegressionSignal(savant.wOBA, savant.xwOBA, 'batter');
+  if (bReg) parts.push(`    ⚠ REGRESSION: ${bReg.text}`);
 
   // Rolling wOBA windows — short-term hot/cold streak detection (prompt has ±10% confidence rules)
   const rw = savant.rolling_windows;
@@ -2208,6 +2222,13 @@ export async function buildContext(gameData, oddsData = null) {
   try {
     const lessonsBlock = await buildLessonsBlock('mlb');
     if (lessonsBlock) contextString += '\n\n' + lessonsBlock;
+  } catch (_) {}
+
+  // Market health feedback loop — degrade/caution markets by recent CLV + win rate
+  try {
+    const health = await getMarketHealth('mlb');
+    const healthBlock = buildMarketHealthBlock(health);
+    if (healthBlock) contextString += '\n\n' + healthBlock;
   } catch (_) {}
 
   // contextString was reassigned after result was built — sync before caching/returning

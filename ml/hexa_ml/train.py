@@ -16,6 +16,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .config import get_settings
@@ -24,6 +25,7 @@ from .features import build_X
 from .models import MARKET_MODELS
 from .models.base import TrainMetrics
 from .calibration import brier, kelly_roi, logloss
+from .metrics import pick_accuracy
 
 logger = logging.getLogger("hexa_ml.train")
 
@@ -128,6 +130,7 @@ def train_one_market(
     brier_train = brier(y_train, p_train)
     brier_test = brier(y_test, p_test)
     ll_test = logloss(y_test, p_test)
+    pick_acc, pick_acc_n = pick_accuracy(y_test, p_test)
 
     if market.startswith("prop_") or market == "nfl_prop":
         odds_col = "prop_odds_american"
@@ -153,6 +156,8 @@ def train_one_market(
         brier_test=brier_test,
         logloss_test=ll_test,
         roi_kelly25_test=roi,
+        pick_accuracy_test=pick_acc,
+        pick_accuracy_n=pick_acc_n,
         feature_columns=list(X_train.columns),
         trained_at=_now_iso(),
     )
@@ -160,8 +165,8 @@ def train_one_market(
 
     saved = model.save(out_dir)
     logger.info(
-        "[%s] saved → %s | brier_test=%.4f logloss=%.4f roi_kelly25=%.4f",
-        market, saved, brier_test, ll_test, roi,
+        "[%s] saved → %s | brier_test=%.4f logloss=%.4f roi_kelly25=%.4f pick_acc=%.3f (n=%d, vs 0.524 break-even)",
+        market, saved, brier_test, ll_test, roi, pick_acc, pick_acc_n,
     )
     return metrics
 
@@ -284,6 +289,8 @@ def train_all(
                     "brier_test": metrics.brier_test,
                     "logloss_test": metrics.logloss_test,
                     "roi_kelly25_test": metrics.roi_kelly25_test,
+                    "pick_accuracy_test": metrics.pick_accuracy_test,
+                    "pick_accuracy_n": metrics.pick_accuracy_n,
                     "trained_at": metrics.trained_at,
                     "min_train_size_used": effective_min,
                 }

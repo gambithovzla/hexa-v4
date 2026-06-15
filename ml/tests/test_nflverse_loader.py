@@ -72,6 +72,83 @@ def test_build_team_stats_keys_by_abbr():
     assert aaa["proe"] is not None
 
 
+def test_opponent_adjusted_epa_season():
+    payload = nv.build_team_stats(2023)
+    aaa = payload["teams"]["AAA"]
+    # AAA offense (raw 0.05) faced only BBB's defense (raw allowed 0.05), which is
+    # better than the league mean (0.0625) → adjusted EPA gets a small boost.
+    # adj = raw_epa − (opp_def − league_mean) = 0.05 − (0.05 − 0.0625) = 0.0625.
+    assert aaa["epa_off_adj"] == pytest.approx(0.0625, abs=1e-6)
+    # SOS = mean opposing defensive EPA faced (lower = tougher slate).
+    assert aaa["sos_off"] == pytest.approx(0.05, abs=1e-6)
+    assert aaa["epa_def_adj"] is not None
+
+
+def test_training_frame_has_adjusted_epa_columns_leakage_free():
+    df = nv.build_nfl_training_frame("nfl_moneyline", [2023])
+    for col in ("home_epa_off_adj", "away_epa_off_adj", "home_epa_def_adj", "away_epa_def_adj"):
+        assert col in df.columns
+    wk1 = df[df["week"] == 1].iloc[0]
+    # No prior weeks → adjusted EPA must be NaN for week 1 (no future leakage).
+    assert pd.isna(wk1["home_epa_off_adj"])
+    wk3 = df[df["week"] == 3].iloc[0]
+    assert not pd.isna(wk3["home_epa_off_adj"])
+
+
+def test_training_frame_recent_form_leakage_free():
+    df = nv.build_nfl_training_frame("nfl_moneyline", [2023])
+    for col in ("home_form_ppg_for", "away_form_ppg_for", "home_form_point_diff"):
+        assert col in df.columns
+    wk1 = df[df["week"] == 1].iloc[0]
+    assert pd.isna(wk1["home_form_ppg_for"])  # no prior games
+    # Week 3 game is AAA (home) vs BBB. AAA scored 24 (wk1) + 21 (wk2) → 22.5 PPG,
+    # allowed 17 (wk1) + 20 (wk2) → 18.5 → point diff +4.0, all from prior weeks.
+    wk3 = df[df["week"] == 3].iloc[0]
+    assert wk3["home_team"] == "AAA"
+    assert wk3["home_form_ppg_for"] == pytest.approx(22.5, abs=1e-6)
+    assert wk3["home_form_point_diff"] == pytest.approx(4.0, abs=1e-6)
+
+
+def test_training_frame_situational_sack_rate(monkeypatch):
+    """Augment the synthetic frame with sack/down columns to exercise as-of-week
+    situational rates (the rest of the suite's frame lacks them → columns NaN)."""
+    base = _synthetic_pbp()
+    base["pass_attempt"] = 1
+    base["sack"] = 0
+    # Give AAA's offense one sack in week 1 (2 pass plays → 0.5 prior sack rate by wk>1).
+    mask = (base["week"] == 1) & (base["posteam"] == "AAA")
+    idx = base[mask].index[0]
+    base.loc[idx, "sack"] = 1
+    monkeypatch.setattr(nv, "_fetch_pbp_year", lambda year: base.copy())
+    nv.refresh_team_stats()
+
+    df = nv.build_nfl_training_frame("nfl_spread", [2023])
+    assert "home_sack_rate_off" in df.columns
+    wk1 = df[df["week"] == 1].iloc[0]
+    assert pd.isna(wk1["home_sack_rate_off"])  # no prior weeks
+    wk3 = df[df["week"] == 3].iloc[0]  # AAA home; prior weeks 1-2
+    assert not pd.isna(wk3["home_sack_rate_off"])
+
+
+def test_pick_accuracy_helper():
+    from hexa_ml.metrics import pick_accuracy
+    # picks: p>0.5 bets side wins(y=1). 3 of 4 correct; one coin-flip excluded.
+    y = np.array([1, 0, 1, 1])
+    p = np.array([0.7, 0.4, 0.6, 0.5])
+    acc, n = pick_accuracy(y, p)
+    assert n == 3
+    assert acc == pytest.approx(1.0)  # 0.7→1✓, 0.4→0✓, 0.6→1✓
+
+
+def test_pick_accuracy_below_break_even():
+    from hexa_ml.metrics import pick_accuracy
+    y = np.array([0, 1, 0, 1])  # model wrong on all
+    p = np.array([0.8, 0.2, 0.7, 0.3])
+    acc, n = pick_accuracy(y, p)
+    assert n == 4
+    assert acc == pytest.approx(0.0)
+
+
 def test_training_frame_is_leakage_free_week1():
     df = nv.build_nfl_training_frame("nfl_moneyline", [2023])
     assert len(df) == 3

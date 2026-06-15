@@ -214,12 +214,50 @@ def _trench_stats(pbp: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return sack_rate_off, sack_rate_def
 
 
+def _opponent_adjust_season(
+    plays: pd.DataFrame, raw_off: pd.Series, raw_def: pd.Series
+) -> pd.DataFrame:
+    """One-iteration opponent adjustment of offensive/defensive EPA.
+
+    Raw EPA conflates a team's skill with the quality of the defenses/offenses it
+    faced — a unit that piled up EPA against weak opponents looks identical to one
+    that did it against elite ones. This adjusts each play by how much stronger or
+    weaker the *opponent* was vs the league mean (DVOA's core idea, one pass):
+
+      adj_off_play = epa − (raw_def[opponent] − league_mean)
+
+    A strong defense (low raw_def, allows negative EPA) inflates the offense's
+    adjusted credit; a weak defense deflates it. The defensive side mirrors with
+    raw_off. Returns DataFrame keyed by team with epa_off_adj/epa_def_adj plus the
+    strength-of-schedule means faced (sos_off = mean opposing defensive EPA, lower =
+    tougher slate of defenses; sos_def = mean opposing offensive EPA, higher = tougher).
+    """
+    league_mean = float(plays["epa"].mean()) if len(plays) else 0.0
+
+    p = plays[["posteam", "defteam", "epa"]].copy()
+    p["opp_def"] = p["defteam"].map(raw_def)
+    p["opp_off"] = p["posteam"].map(raw_off)
+    p["adj_off"] = p["epa"] - (p["opp_def"].fillna(league_mean) - league_mean)
+    p["adj_def"] = p["epa"] - (p["opp_off"].fillna(league_mean) - league_mean)
+
+    out = pd.DataFrame({
+        "epa_off_adj": p.groupby("posteam")["adj_off"].mean(),
+        "sos_off": p.groupby("posteam")["opp_def"].mean(),
+    })
+    out_def = pd.DataFrame({
+        "epa_def_adj": p.groupby("defteam")["adj_def"].mean(),
+        "sos_def": p.groupby("defteam")["opp_off"].mean(),
+    })
+    return out.join(out_def, how="outer")
+
+
 def _season_team_stats(pbp: pd.DataFrame) -> pd.DataFrame:
     """Season-to-date per-team aggregates (one row per team).
 
     epa_def/success_def are computed from plays where the team is on defense
     (lower epa_def = better defense). proe is offense-only.
-    Adds: red_zone_td_pct_off/def, third_down_conv_off/def, sack_rate_off/def.
+    Adds: red_zone_td_pct_off/def, third_down_conv_off/def, sack_rate_off/def,
+    opponent-adjusted epa_off_adj/epa_def_adj + sos_off/sos_def.
     """
     plays = _relevant_plays(pbp)
 
@@ -244,6 +282,7 @@ def _season_team_stats(pbp: pd.DataFrame) -> pd.DataFrame:
     rz_off, rz_def = _red_zone_stats(pbp)
     td3_off, td3_def = _third_down_stats(pbp)
     sack_off, sack_def = _trench_stats(pbp)
+    adj = _opponent_adjust_season(plays, off["epa_off"], deff["epa_def"])
 
     stats = (
         off.join(deff, how="outer")
@@ -254,6 +293,7 @@ def _season_team_stats(pbp: pd.DataFrame) -> pd.DataFrame:
            .join(td3_def, how="left")
            .join(sack_off, how="left")
            .join(sack_def, how="left")
+           .join(adj, how="left")
     )
     stats = stats.reset_index(names="team")
     games_safe = stats["games_played"].replace(0, np.nan)
@@ -301,6 +341,10 @@ def build_team_stats(season: int) -> dict:
             "third_down_conv_def": _num(row.get("third_down_conv_def")),
             "sack_rate_off": _num(row.get("sack_rate_off")),
             "sack_rate_def": _num(row.get("sack_rate_def")),
+            "epa_off_adj": _num(row.get("epa_off_adj")),
+            "epa_def_adj": _num(row.get("epa_def_adj")),
+            "sos_off": _num(row.get("sos_off")),
+            "sos_def": _num(row.get("sos_def")),
         }
 
     payload = {
@@ -526,6 +570,167 @@ def _as_of_week_aggs(plays: pd.DataFrame, side: str) -> pd.DataFrame:
     return g[["season", "week", "team", "epa", "success", "proe"]]
 
 
+def _league_prior_mean_epa(plays: pd.DataFrame) -> pd.DataFrame:
+    """League-wide mean EPA over weeks strictly prior to each (season, week)."""
+    wk = (
+        plays.groupby(["season", "week"])
+        .agg(s=("epa", "sum"), c=("epa", "count"))
+        .reset_index()
+        .sort_values(["season", "week"])
+    )
+    grp = wk.groupby("season")
+    wk["prior_s"] = grp["s"].cumsum() - wk["s"]
+    wk["prior_c"] = grp["c"].cumsum() - wk["c"]
+    wk["league_prior"] = wk["prior_s"] / wk["prior_c"].replace(0, np.nan)
+    return wk[["season", "week", "league_prior"]]
+
+
+def _as_of_week_adjusted(plays: pd.DataFrame) -> pd.DataFrame:
+    """Leakage-free opponent-adjusted as-of-week EPA per (season, week, team).
+
+    Each play's EPA is adjusted by the *opponent's prior-week* strength (and the
+    league prior baseline) so a team that ran up EPA against weak units isn't
+    overrated. Opponent strength, the league baseline, and the output cumulative
+    means all use only weeks strictly before each play → no future leakage.
+    Returns DataFrame[season, week, team, epa_off_adj, epa_def_adj]. Week 1 (no
+    prior history) falls back to raw EPA (adjustment 0) and the cumulative is NaN.
+    """
+    off_prior = _as_of_week_aggs(plays, "posteam")[["season", "week", "team", "epa"]]
+    def_prior = _as_of_week_aggs(plays, "defteam")[["season", "week", "team", "epa"]]
+    league = _league_prior_mean_epa(plays)
+
+    p = plays[["season", "week", "posteam", "defteam", "epa"]].copy()
+    # opponent defense's prior strength (for the offense) and opponent offense's
+    # prior strength (for the defense)
+    p = p.merge(
+        def_prior.rename(columns={"team": "defteam", "epa": "opp_def_prior"}),
+        on=["season", "week", "defteam"], how="left",
+    )
+    p = p.merge(
+        off_prior.rename(columns={"team": "posteam", "epa": "opp_off_prior"}),
+        on=["season", "week", "posteam"], how="left",
+    )
+    p = p.merge(league, on=["season", "week"], how="left")
+
+    lp = p["league_prior"]
+    p["adj_off_epa"] = p["epa"] - (p["opp_def_prior"] - lp).fillna(0.0)
+    p["adj_def_epa"] = p["epa"] - (p["opp_off_prior"] - lp).fillna(0.0)
+
+    def _cum(side_col: str, val_col: str, out_name: str) -> pd.DataFrame:
+        g = (
+            p.groupby(["season", "week", side_col])
+            .agg(s=(val_col, "sum"), c=(val_col, "count"))
+            .reset_index()
+            .rename(columns={side_col: "team"})
+            .sort_values(["season", "team", "week"])
+        )
+        grp = g.groupby(["season", "team"])
+        g["prior_s"] = grp["s"].cumsum() - g["s"]
+        g["prior_c"] = grp["c"].cumsum() - g["c"]
+        g[out_name] = g["prior_s"] / g["prior_c"].replace(0, np.nan)
+        return g[["season", "week", "team", out_name]]
+
+    adj_off = _cum("posteam", "adj_off_epa", "epa_off_adj")
+    adj_def = _cum("defteam", "adj_def_epa", "epa_def_adj")
+    return adj_off.merge(adj_def, on=["season", "week", "team"], how="outer")
+
+
+def _as_of_week_rate(
+    plays: pd.DataFrame, side: str, indicator: str, out_name: str
+) -> pd.DataFrame:
+    """As-of-week prior mean of a 0/1 `indicator` per (season, week, team).
+
+    Same leakage-free cumsum-minus-current trick as _as_of_week_aggs: the value for
+    week W is the mean over weeks strictly before W. `plays` should already be the
+    relevant subset (e.g. red-zone plays, 3rd downs, pass attempts).
+    """
+    if plays.empty or indicator not in plays.columns:
+        return pd.DataFrame(columns=["season", "week", "team", out_name])
+    sub = plays[["season", "week", side]].copy()
+    sub["_ind"] = pd.to_numeric(plays[indicator], errors="coerce").fillna(0.0)
+    g = (
+        sub.groupby(["season", "week", side])
+        .agg(s=("_ind", "sum"), c=("_ind", "count"))
+        .reset_index()
+        .rename(columns={side: "team"})
+        .sort_values(["season", "team", "week"])
+    )
+    grp = g.groupby(["season", "team"])
+    g["prior_s"] = grp["s"].cumsum() - g["s"]
+    g["prior_c"] = grp["c"].cumsum() - g["c"]
+    g[out_name] = g["prior_s"] / g["prior_c"].replace(0, np.nan)
+    return g[["season", "week", "team", out_name]]
+
+
+def _as_of_week_situational(plays: pd.DataFrame) -> pd.DataFrame:
+    """Leakage-free as-of-week situational rates per (season, week, team).
+
+    Red-zone TD%, 3rd-down conversion%, and sack rate — offense and defense — that
+    the season-level build_team_stats already computes but the model never received.
+    Columns absent from a (synthetic) frame produce NaN, never an error.
+    Returns DataFrame[season, week, team, rz_td_pct_off/def, third_down_conv_off/def,
+    sack_rate_off/def].
+    """
+    rel = plays
+    frames: list[pd.DataFrame] = []
+
+    if "yardline_100" in rel.columns and "touchdown" in rel.columns:
+        rz = rel[pd.to_numeric(rel["yardline_100"], errors="coerce") <= 20].copy()
+        rz["_td"] = pd.to_numeric(rz["touchdown"], errors="coerce").fillna(0.0)
+        frames.append(_as_of_week_rate(rz, "posteam", "_td", "rz_td_pct_off"))
+        frames.append(_as_of_week_rate(rz, "defteam", "_td", "rz_td_pct_def"))
+
+    if "down" in rel.columns and "first_down" in rel.columns:
+        td3 = rel[pd.to_numeric(rel["down"], errors="coerce") == 3].copy()
+        td3["_conv"] = (
+            pd.to_numeric(td3.get("first_down"), errors="coerce").fillna(0.0)
+            + pd.to_numeric(td3.get("touchdown"), errors="coerce").fillna(0.0)
+        ).clip(upper=1.0)
+        frames.append(_as_of_week_rate(td3, "posteam", "_conv", "third_down_conv_off"))
+        frames.append(_as_of_week_rate(td3, "defteam", "_conv", "third_down_conv_def"))
+
+    if "pass_attempt" in rel.columns and "sack" in rel.columns:
+        passes = rel[pd.to_numeric(rel["pass_attempt"], errors="coerce") == 1].copy()
+        passes["_sack"] = pd.to_numeric(passes["sack"], errors="coerce").fillna(0.0)
+        frames.append(_as_of_week_rate(passes, "posteam", "_sack", "sack_rate_off"))
+        frames.append(_as_of_week_rate(passes, "defteam", "_sack", "sack_rate_def"))
+
+    if not frames:
+        return pd.DataFrame(columns=["season", "week", "team"])
+    out = frames[0]
+    for f in frames[1:]:
+        out = out.merge(f, on=["season", "week", "team"], how="outer")
+    return out
+
+
+def _as_of_week_form(games: pd.DataFrame) -> pd.DataFrame:
+    """Leakage-free as-of-week scoring form per (season, week, team).
+
+    Prior-week mean points scored / allowed and their differential, from final
+    scores — the recent-form signal the live context has (PPG) but the model lacked.
+    """
+    long = pd.concat([
+        games[["season", "week", "home_team", "home_score", "away_score"]].rename(
+            columns={"home_team": "team", "home_score": "pf", "away_score": "pa"}
+        ),
+        games[["season", "week", "away_team", "away_score", "home_score"]].rename(
+            columns={"away_team": "team", "away_score": "pf", "home_score": "pa"}
+        ),
+    ], ignore_index=True)
+    long["pf"] = pd.to_numeric(long["pf"], errors="coerce")
+    long["pa"] = pd.to_numeric(long["pa"], errors="coerce")
+    long = long.sort_values(["season", "team", "week"])
+    grp = long.groupby(["season", "team"])
+    for col in ("pf", "pa"):
+        long[f"_s_{col}"] = grp[col].cumsum() - long[col]
+    long["_n"] = grp.cumcount()
+    n = long["_n"].replace(0, np.nan)
+    long["form_ppg_for"] = long["_s_pf"] / n
+    long["form_ppg_against"] = long["_s_pa"] / n
+    long["form_point_diff"] = long["form_ppg_for"] - long["form_ppg_against"]
+    return long[["season", "week", "team", "form_ppg_for", "form_ppg_against", "form_point_diff"]]
+
+
 def _game_labels(pbp: pd.DataFrame) -> pd.DataFrame:
     """One row per game with final score + closing spread/total + game_date."""
     agg_cols = {
@@ -585,10 +790,20 @@ def build_nfl_training_frame(market: str, years: list[int]) -> pd.DataFrame:
 
     off = _as_of_week_aggs(plays, "posteam")
     deff = _as_of_week_aggs(plays, "defteam")[["season", "week", "team", "epa"]]
+    adj = _as_of_week_adjusted(plays)
+    situ = _as_of_week_situational(plays)
 
     games = _game_labels(pbp)
     games = games[games["season_type"] == "REG"].copy()
     games = games.dropna(subset=["home_score", "away_score"])
+    form = _as_of_week_form(games)
+
+    def _prefix_merge(g: pd.DataFrame, df: pd.DataFrame, team_col: str, prefix: str) -> pd.DataFrame:
+        if df is None or df.empty:
+            return g
+        value_cols = [c for c in df.columns if c not in ("season", "week", "team")]
+        renamed = df.rename(columns={"team": team_col, **{c: f"{prefix}_{c}" for c in value_cols}})
+        return g.merge(renamed, on=["season", "week", team_col], how="left")
 
     def _merge_side(g: pd.DataFrame, team_col: str, prefix: str) -> pd.DataFrame:
         o = off.rename(
@@ -600,8 +815,18 @@ def build_nfl_training_frame(market: str, years: list[int]) -> pd.DataFrame:
             }
         )
         d = deff.rename(columns={"team": team_col, "epa": f"{prefix}_epa_def"})
+        a = adj.rename(
+            columns={
+                "team": team_col,
+                "epa_off_adj": f"{prefix}_epa_off_adj",
+                "epa_def_adj": f"{prefix}_epa_def_adj",
+            }
+        )
         g = g.merge(o, on=["season", "week", team_col], how="left")
         g = g.merge(d, on=["season", "week", team_col], how="left")
+        g = g.merge(a, on=["season", "week", team_col], how="left")
+        g = _prefix_merge(g, situ, team_col, prefix)
+        g = _prefix_merge(g, form, team_col, prefix)
         return g
 
     games = _merge_side(games, "home_team", "home")

@@ -181,10 +181,34 @@ class FeaturePayload(BaseModel):
     away_epa_off: float | None = None
     home_epa_def: float | None = None
     away_epa_def: float | None = None
+    # opponent-adjusted (SOS) EPA — DVOA-style
+    home_epa_off_adj: float | None = None
+    away_epa_off_adj: float | None = None
+    home_epa_def_adj: float | None = None
+    away_epa_def_adj: float | None = None
     home_success_rate: float | None = None
     away_success_rate: float | None = None
     home_proe: float | None = None
     away_proe: float | None = None
+    # situational efficiency + recent form (Sprint NFL-B)
+    home_rz_td_pct_off: float | None = None
+    away_rz_td_pct_off: float | None = None
+    home_rz_td_pct_def: float | None = None
+    away_rz_td_pct_def: float | None = None
+    home_third_down_conv_off: float | None = None
+    away_third_down_conv_off: float | None = None
+    home_third_down_conv_def: float | None = None
+    away_third_down_conv_def: float | None = None
+    home_sack_rate_off: float | None = None
+    away_sack_rate_off: float | None = None
+    home_sack_rate_def: float | None = None
+    away_sack_rate_def: float | None = None
+    home_form_ppg_for: float | None = None
+    away_form_ppg_for: float | None = None
+    home_form_ppg_against: float | None = None
+    away_form_ppg_against: float | None = None
+    home_form_point_diff: float | None = None
+    away_form_point_diff: float | None = None
     home_rest_days: float | None = None
     away_rest_days: float | None = None
     home_is_short_week: float | None = None
