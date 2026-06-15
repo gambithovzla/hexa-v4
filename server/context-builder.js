@@ -16,6 +16,7 @@ import { buildOracleMemory } from './oracle-memory.js';
 import { buildSimilarAnalysesBlock } from './services/oracleEmbeddingsService.js';
 import { buildLessonsBlock } from './services/postmortemLessonsService.js';
 import { statcastRegressionSignal, strikeoutRateSignal } from './services/statcastRegression.js';
+import { getMarketHealth, buildMarketHealthBlock } from './services/marketHealthService.js';
 
 // ---------------------------------------------------------------------------
 // In-memory context cache — avoids redundant API calls when the same game is
@@ -2221,6 +2222,13 @@ export async function buildContext(gameData, oddsData = null) {
   try {
     const lessonsBlock = await buildLessonsBlock('mlb');
     if (lessonsBlock) contextString += '\n\n' + lessonsBlock;
+  } catch (_) {}
+
+  // Market health feedback loop — degrade/caution markets by recent CLV + win rate
+  try {
+    const health = await getMarketHealth('mlb');
+    const healthBlock = buildMarketHealthBlock(health);
+    if (healthBlock) contextString += '\n\n' + healthBlock;
   } catch (_) {}
 
   // contextString was reassigned after result was built — sync before caching/returning

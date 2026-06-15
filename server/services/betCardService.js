@@ -17,6 +17,7 @@
  */
 
 import pool from '../db.js';
+import { getMarketHealth } from './marketHealthService.js';
 
 export const DEFAULT_THRESHOLDS = {
   minEdge: 0.03,
@@ -213,9 +214,10 @@ async function loadCandidates({ date, sport }) {
  */
 export async function buildBetCard({ date, sport = null, thresholds = DEFAULT_THRESHOLDS } = {}) {
   const targetDate = date || new Date().toISOString().split('T')[0];
-  const [clvTable, rows] = await Promise.all([
+  const [clvTable, rows, marketHealth] = await Promise.all([
     loadMarketClvTable(thresholds),
     loadCandidates({ date: targetDate, sport }),
+    getMarketHealth(sport ?? 'mlb'),
   ]);
 
   const bets = [];
@@ -273,5 +275,8 @@ export async function buildBetCard({ date, sport = null, thresholds = DEFAULT_TH
     bets,
     rejected,
     clvTable,
+    // Graduated per-market verdict (healthy/caution/degrade) — the same feedback
+    // the Oracle now reads, surfaced here for the admin alongside the binary gate.
+    marketHealth,
   };
 }
