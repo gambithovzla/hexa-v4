@@ -301,6 +301,8 @@ export default function Sidebar({
         icon: ICONS.architect, label: L('ML Control', 'ML Control', lang) },
       isAdmin && { key: 'imperdible', action: () => { window.location.href = '/admin/imperdible'; },
         icon: ICONS.architect, label: L('Imperdible', 'Imperdible', lang) },
+      isAdmin && { key: 'pick-of-the-day', action: () => { window.location.href = '/admin/pick-of-the-day'; },
+        icon: ICONS.architect, label: L('Pick of the Day', 'Pick del Día', lang) },
       isAdmin && { key: 'sport-access', action: () => { window.location.href = '/admin/sport-access'; },
         icon: ICONS.architect, label: L('Sport Access', 'Acceso Deportes', lang) },
       { key: 'props-board', action: () => { window.location.href = '/props'; },
