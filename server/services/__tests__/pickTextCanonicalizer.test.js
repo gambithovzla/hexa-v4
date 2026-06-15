@@ -28,6 +28,39 @@ test('canonicalizePickTextForResolver is idempotent for English picks', () => {
   assert.equal(canonicalizePickTextForResolver(english), english);
 });
 
+test('canonicalizePickTextForResolver backfills bare Over with market total', () => {
+  const out = canonicalizePickTextForResolver('Over', { marketTotal: 8.5 });
+  assert.equal(out, 'Over 8.5');
+  assert.ok(parseResolverPick(out));
+});
+
+test('canonicalizePickTextForResolver backfills bare Spanish Under with market total', () => {
+  const out = canonicalizePickTextForResolver('Bajo', { marketTotal: 9 });
+  assert.equal(out, 'Under 9');
+  assert.ok(parseResolverPick(out));
+});
+
+test('canonicalizePickTextForResolver prefers explicit line over market total', () => {
+  const out = canonicalizePickTextForResolver('Over 7.5', { marketTotal: 8.5 });
+  assert.equal(out, 'Over 7.5');
+});
+
+test('bare Over without a market total is left untouched', () => {
+  const out = canonicalizePickTextForResolver('Over');
+  assert.equal(out, 'Over');
+  assert.equal(parseResolverPick(out), null);
+});
+
+test('canonicalizeAnalysisDataPicks backfills bare Over/Under from extraCtx total', () => {
+  const data = {
+    master_prediction: { pick: 'Over', oracle_confidence: 56 },
+    best_pick: { type: 'Over-Under', detail: 'Over' },
+  };
+  const out = canonicalizeAnalysisDataPicks(data, null, { marketTotal: 8.5 });
+  assert.equal(out.master_prediction.pick, 'Over 8.5');
+  assert.equal(out.best_pick.detail, 'Over 8.5');
+});
+
 test('canonicalizeAnalysisDataPicks updates master_prediction and best_pick', () => {
   const data = {
     master_prediction: { pick: 'Bajo 7.5', oracle_confidence: 58 },

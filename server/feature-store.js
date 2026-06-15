@@ -110,7 +110,14 @@ export async function savePickFeatures({
     const parsedStructured = parseStructuredPick(pick ?? '');
     const resolvedMarketType = normalizeMarketType(marketType ?? parsedStructured.market_type);
     const resolvedSide = side ?? parsedStructured.side ?? null;
-    const resolvedLine = line ?? parsedStructured.line ?? null;
+    let resolvedLine = line ?? parsedStructured.line ?? null;
+    // A bare "Over"/"Under" pick (no number) leaves the line null, which drops
+    // the row from over/under training. The line is the market total at pick
+    // time — already on hand as odds_ou_total — so backfill it.
+    if (resolvedLine == null && resolvedMarketType === 'overunder') {
+      const marketTotal = oddsData?.odds?.overUnder?.total ?? features.odds_ou_total ?? null;
+      if (marketTotal != null) resolvedLine = Number(marketTotal);
+    }
     const resolvedPropKind = propKind ?? parsedStructured.prop_kind ?? null;
     const resolvedPropPlayerName = propPlayerName ?? parsedStructured.prop_player_name ?? null;
 
