@@ -444,6 +444,97 @@ export async function getMlbStandings(season = SEASON) {
   return payload;
 }
 
+// ── Team-strength form (for the ML team-strength features) ───────────────────
+// These are the only MLB signals available both live (here, from standings) and
+// in free history (the Python mlb_history_loader, from schedule scores). They
+// feed the runline/moneyline models alongside Statcast.
+let teamFormCache = null;
+
+function splitWinPct(teamRecord, type) {
+  const split = (teamRecord?.records?.splitRecords ?? []).find((e) => (
+    String(e?.type ?? '').toLowerCase() === type
+  ));
+  if (!split) return null;
+  const w = Number(split.wins ?? 0);
+  const l = Number(split.losses ?? 0);
+  return (w + l) > 0 ? w / (w + l) : null;
+}
+
+function splitWins(teamRecord, type) {
+  const split = (teamRecord?.records?.splitRecords ?? []).find((e) => (
+    String(e?.type ?? '').toLowerCase().replace(/\s+/g, '') === type
+  ));
+  return split ? Number(split.wins ?? 0) : null;
+}
+
+/**
+ * Per-team season-to-date strength, keyed by teamId. Mirrors exactly what the
+ * Python mlb_history_loader computes from schedule history, so live picks and
+ * the pre-training frame share one feature schema.
+ * @returns {Promise<Map<number, object>>}
+ */
+export async function getTeamSeasonForm(season = SEASON) {
+  if (teamFormCache && teamFormCache.season === season && Date.now() < teamFormCache.expiresAt) {
+    return teamFormCache.data;
+  }
+
+  const standingsData = await fetchJSON(
+    `${MLB_BASE}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason&hydrate=team`
+  );
+
+  const map = new Map();
+  for (const record of standingsData.records ?? []) {
+    for (const tr of record.teamRecords ?? []) {
+      const teamId = tr?.team?.id;
+      if (teamId == null) continue;
+      const wins = Number(tr?.wins ?? 0);
+      const losses = Number(tr?.losses ?? 0);
+      const games = wins + losses;
+      const rs = tr?.runsScored != null ? Number(tr.runsScored) : null;
+      const ra = tr?.runsAllowed != null ? Number(tr.runsAllowed) : null;
+      map.set(teamId, {
+        games,
+        winPct: games > 0 ? wins / games : null,
+        runsForAvg: rs != null && games > 0 ? rs / games : null,
+        runsAgainstAvg: ra != null && games > 0 ? ra / games : null,
+        runDiffAvg: rs != null && ra != null && games > 0 ? (rs - ra) / games : null,
+        homeWinPct: splitWinPct(tr, 'home'),
+        awayWinPct: splitWinPct(tr, 'away'),
+        last10Wins: splitWins(tr, 'lastten'),
+      });
+    }
+  }
+
+  teamFormCache = { season, data: map, expiresAt: Date.now() + STANDINGS_CACHE_TTL_MS };
+  return map;
+}
+
+/**
+ * Resolve a game's two teams and return their season-to-date strength.
+ * Never throws — returns {home:null, away:null} when anything is unavailable,
+ * so feature persistence is never blocked.
+ * @returns {Promise<{home: object|null, away: object|null}>}
+ */
+export async function getTeamFormForGame(gamePk) {
+  try {
+    if (!gamePk) return { home: null, away: null };
+    const sched = await fetchJSON(`${MLB_BASE}/schedule?gamePk=${gamePk}&hydrate=team`);
+    const game = sched?.dates?.[0]?.games?.[0] ?? null;
+    if (!game) return { home: null, away: null };
+    const homeId = game?.teams?.home?.team?.id ?? null;
+    const awayId = game?.teams?.away?.team?.id ?? null;
+    const season = Number(String(game?.gameDate ?? '').slice(0, 4)) || SEASON;
+    const formMap = await getTeamSeasonForm(season);
+    return {
+      home: homeId != null ? (formMap.get(homeId) ?? null) : null,
+      away: awayId != null ? (formMap.get(awayId) ?? null) : null,
+    };
+  } catch (err) {
+    console.warn(`[mlb-api] getTeamFormForGame(${gamePk}) failed: ${err.message}`);
+    return { home: null, away: null };
+  }
+}
+
 // ── Playoff bracket (derived from standings) ─────────────────────────────────
 
 function pctNumber(value) {

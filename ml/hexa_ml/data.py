@@ -44,6 +44,13 @@ OPTIONAL_FEATURE_COLUMNS = [
     "is_day_game", "is_dome",
     "game_number_in_series", "umpire_id",
     "odds_ml_home", "odds_ml_away", "odds_ou_total",
+    # Team-strength features (live: standings; history: schedule scores)
+    "home_runs_for_avg", "away_runs_for_avg",
+    "home_runs_against_avg", "away_runs_against_avg",
+    "home_run_diff_avg", "away_run_diff_avg",
+    "home_win_pct", "away_win_pct",
+    "home_venue_win_pct", "away_venue_win_pct",
+    "home_last10_wins", "away_last10_wins",
     "data_quality_score", "signal_coherence_score",
     "oracle_confidence", "kelly_fraction",
     "prop_kind", "prop_player_id",

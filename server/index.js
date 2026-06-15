@@ -425,12 +425,15 @@ function annotateAnalysisData(data, features = {}, gameData = null) {
     }
   }
 
+  const marketTotal = features?.oddsData?.odds?.overUnder?.total
+    ?? gameData?.odds?.overUnder?.total
+    ?? null;
   const canonicalized = canonicalizeAnalysisDataPicks({
     ...data,
     alert_flags: alertFlags,
     analysis_meta: analysisMeta,
     value_breakdown: valueBreakdown ?? data.value_breakdown ?? null,
-  }, gameData);
+  }, gameData, { marketTotal });
 
   return canonicalized;
 }
@@ -510,6 +513,9 @@ async function persistAnalysisPick({
   const pickCtx = {
     homeAbbr: featureStore?.features?.homeAbbr ?? null,
     awayAbbr: featureStore?.features?.awayAbbr ?? null,
+    marketTotal: oddsData?.odds?.overUnder?.total
+      ?? featureStore?.features?.oddsData?.odds?.overUnder?.total
+      ?? null,
   };
   const rawPickText = mp.pick ?? bp.detail ?? null;
   const pickText = rawPickText

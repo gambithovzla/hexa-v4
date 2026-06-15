@@ -27,7 +27,7 @@ function formatSideLabel(side) {
   return side === 'under' ? 'Under' : 'Over';
 }
 
-function formatFromParsed(parsed, originalCore) {
+function formatFromParsed(parsed, originalCore, ctx = {}) {
   if (!parsed?.market_type) return null;
 
   if (parsed.market_type === 'prop') {
@@ -38,8 +38,13 @@ function formatFromParsed(parsed, originalCore) {
   }
 
   if (parsed.market_type === 'overunder') {
-    if (parsed.line == null || !parsed.side) return null;
-    return `${formatSideLabel(parsed.side)} ${parsed.line}`;
+    // The Oracle sometimes emits a bare "Over"/"Under" with no number. The line
+    // is the market total at pick time, supplied via ctx.marketTotal — backfill
+    // it so the pick is shown in full, auto-resolves, and is kept in over/under
+    // training (the loader drops rows with a null line).
+    const line = parsed.line ?? ctx.marketTotal ?? null;
+    if (line == null || !parsed.side) return null;
+    return `${formatSideLabel(parsed.side)} ${line}`;
   }
 
   if (parsed.market_type === 'moneyline' || parsed.market_type === 'runline') {
@@ -74,7 +79,7 @@ export function canonicalizePickTextForResolver(text, ctx = {}) {
   }
 
   const parsed = parseTrainingPick(core, ctx);
-  const formatted = formatFromParsed(parsed, core);
+  const formatted = formatFromParsed(parsed, core, ctx);
   if (formatted) {
     return suffix ? `${formatted}${suffix}` : formatted;
   }
@@ -87,12 +92,13 @@ export function canonicalizePickTextForResolver(text, ctx = {}) {
   return trimmed;
 }
 
-export function canonicalizeAnalysisDataPicks(data, gameData = null) {
+export function canonicalizeAnalysisDataPicks(data, gameData = null, extraCtx = {}) {
   if (!data || typeof data !== 'object') return data;
 
   const ctx = {
     homeAbbr: gameData?.teams?.home?.abbreviation ?? gameData?.teams?.home?.team?.abbreviation ?? null,
     awayAbbr: gameData?.teams?.away?.abbreviation ?? gameData?.teams?.away?.team?.abbreviation ?? null,
+    marketTotal: extraCtx.marketTotal ?? null,
   };
 
   const masterPrediction = data.master_prediction && typeof data.master_prediction === 'object'

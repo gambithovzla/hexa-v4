@@ -6,6 +6,7 @@ import pool from './db.js';
 import { parsePick as parseStructuredPick } from './parsers/pickParser.js';
 import { enrichPropFeatures } from './services/propFeatureEnricher.js';
 import { scorePropPickFeatures } from './services/mlbPropShadow.js';
+import { getTeamFormForGame } from './mlb-api.js';
 
 const PROPS_SAVANT_ENRICH_ENABLED = (process.env.MLB_PROPS_SAVANT_ENRICH_ENABLED ?? '1') !== '0';
 
@@ -110,7 +111,14 @@ export async function savePickFeatures({
     const parsedStructured = parseStructuredPick(pick ?? '');
     const resolvedMarketType = normalizeMarketType(marketType ?? parsedStructured.market_type);
     const resolvedSide = side ?? parsedStructured.side ?? null;
-    const resolvedLine = line ?? parsedStructured.line ?? null;
+    let resolvedLine = line ?? parsedStructured.line ?? null;
+    // A bare "Over"/"Under" pick (no number) leaves the line null, which drops
+    // the row from over/under training. The line is the market total at pick
+    // time — already on hand as odds_ou_total — so backfill it.
+    if (resolvedLine == null && resolvedMarketType === 'overunder') {
+      const marketTotal = oddsData?.odds?.overUnder?.total ?? features.odds_ou_total ?? null;
+      if (marketTotal != null) resolvedLine = Number(marketTotal);
+    }
     const resolvedPropKind = propKind ?? parsedStructured.prop_kind ?? null;
     const resolvedPropPlayerName = propPlayerName ?? parsedStructured.prop_player_name ?? null;
 
@@ -148,6 +156,14 @@ export async function savePickFeatures({
     const propOddsAmericanVal = propEnriched.prop_odds_american ?? propOddsAmerican ?? null;
     const propImpliedProb = propEnriched.prop_implied_prob ?? null;
 
+    // Team-strength features — live from standings; the Python history loader
+    // computes the same fields from schedule scores so the schemas line up.
+    // Keyed by gamePk; getTeamFormForGame never throws, so persistence is safe.
+    let teamForm = { home: null, away: null };
+    if (String(sport ?? 'mlb').toLowerCase() === 'mlb' && gamePk != null) {
+      teamForm = await getTeamFormForGame(Number(gamePk));
+    }
+
     const normalizedResult = normalizeResult(result);
     const values = [
       pickId, backtestId, gamePk, gameDate,
@@ -178,6 +194,14 @@ export async function savePickFeatures({
       homeBullpenPitchesLast3d, awayBullpenPitchesLast3d,
       isDayGame, isDome, gameNumberInSeries, umpireId,
       promptVersion, oracleModel, oracleConfidence, kellyFraction, source, sport,
+      // Team-strength features ($71–$82) — home team uses its home split, away
+      // team uses its road split (matches the history loader's as-of venue logic).
+      teamForm.home?.runsForAvg ?? null, teamForm.away?.runsForAvg ?? null,
+      teamForm.home?.runsAgainstAvg ?? null, teamForm.away?.runsAgainstAvg ?? null,
+      teamForm.home?.runDiffAvg ?? null, teamForm.away?.runDiffAvg ?? null,
+      teamForm.home?.winPct ?? null, teamForm.away?.winPct ?? null,
+      teamForm.home?.homeWinPct ?? null, teamForm.away?.awayWinPct ?? null,
+      teamForm.home?.last10Wins ?? null, teamForm.away?.last10Wins ?? null,
     ];
 
     const existing = pickId != null
@@ -217,8 +241,14 @@ export async function savePickFeatures({
           is_day_game = $61, is_dome = $62, game_number_in_series = $63, umpire_id = $64,
           prompt_version = $65, oracle_model = $66, oracle_confidence = $67,
           kelly_fraction = $68, source = $69, sport = $70,
+          home_runs_for_avg = $71, away_runs_for_avg = $72,
+          home_runs_against_avg = $73, away_runs_against_avg = $74,
+          home_run_diff_avg = $75, away_run_diff_avg = $76,
+          home_win_pct = $77, away_win_pct = $78,
+          home_venue_win_pct = $79, away_venue_win_pct = $80,
+          home_last10_wins = $81, away_last10_wins = $82,
           pick_time_lima = COALESCE(pick_time_lima, (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP)
-        WHERE id = $71
+        WHERE id = $83
       `, [...values, existing.rows[0].id]);
     } else {
       await pool.query(`
@@ -243,11 +273,18 @@ export async function savePickFeatures({
           home_bullpen_pitches_last_3d, away_bullpen_pitches_last_3d,
           is_day_game, is_dome, game_number_in_series, umpire_id,
           prompt_version, oracle_model, oracle_confidence, kelly_fraction, source, sport,
+          home_runs_for_avg, away_runs_for_avg,
+          home_runs_against_avg, away_runs_against_avg,
+          home_run_diff_avg, away_run_diff_avg,
+          home_win_pct, away_win_pct,
+          home_venue_win_pct, away_venue_win_pct,
+          home_last10_wins, away_last10_wins,
           pick_time_lima)
         VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
           $21,$22,$23,$24,$25,$26,$27,$28,
           $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,
+          $71,$72,$73,$74,$75,$76,$77,$78,$79,$80,$81,$82,
           (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP
         )
       `, values);
