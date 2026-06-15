@@ -635,6 +635,102 @@ def _as_of_week_adjusted(plays: pd.DataFrame) -> pd.DataFrame:
     return adj_off.merge(adj_def, on=["season", "week", "team"], how="outer")
 
 
+def _as_of_week_rate(
+    plays: pd.DataFrame, side: str, indicator: str, out_name: str
+) -> pd.DataFrame:
+    """As-of-week prior mean of a 0/1 `indicator` per (season, week, team).
+
+    Same leakage-free cumsum-minus-current trick as _as_of_week_aggs: the value for
+    week W is the mean over weeks strictly before W. `plays` should already be the
+    relevant subset (e.g. red-zone plays, 3rd downs, pass attempts).
+    """
+    if plays.empty or indicator not in plays.columns:
+        return pd.DataFrame(columns=["season", "week", "team", out_name])
+    sub = plays[["season", "week", side]].copy()
+    sub["_ind"] = pd.to_numeric(plays[indicator], errors="coerce").fillna(0.0)
+    g = (
+        sub.groupby(["season", "week", side])
+        .agg(s=("_ind", "sum"), c=("_ind", "count"))
+        .reset_index()
+        .rename(columns={side: "team"})
+        .sort_values(["season", "team", "week"])
+    )
+    grp = g.groupby(["season", "team"])
+    g["prior_s"] = grp["s"].cumsum() - g["s"]
+    g["prior_c"] = grp["c"].cumsum() - g["c"]
+    g[out_name] = g["prior_s"] / g["prior_c"].replace(0, np.nan)
+    return g[["season", "week", "team", out_name]]
+
+
+def _as_of_week_situational(plays: pd.DataFrame) -> pd.DataFrame:
+    """Leakage-free as-of-week situational rates per (season, week, team).
+
+    Red-zone TD%, 3rd-down conversion%, and sack rate — offense and defense — that
+    the season-level build_team_stats already computes but the model never received.
+    Columns absent from a (synthetic) frame produce NaN, never an error.
+    Returns DataFrame[season, week, team, rz_td_pct_off/def, third_down_conv_off/def,
+    sack_rate_off/def].
+    """
+    rel = plays
+    frames: list[pd.DataFrame] = []
+
+    if "yardline_100" in rel.columns and "touchdown" in rel.columns:
+        rz = rel[pd.to_numeric(rel["yardline_100"], errors="coerce") <= 20].copy()
+        rz["_td"] = pd.to_numeric(rz["touchdown"], errors="coerce").fillna(0.0)
+        frames.append(_as_of_week_rate(rz, "posteam", "_td", "rz_td_pct_off"))
+        frames.append(_as_of_week_rate(rz, "defteam", "_td", "rz_td_pct_def"))
+
+    if "down" in rel.columns and "first_down" in rel.columns:
+        td3 = rel[pd.to_numeric(rel["down"], errors="coerce") == 3].copy()
+        td3["_conv"] = (
+            pd.to_numeric(td3.get("first_down"), errors="coerce").fillna(0.0)
+            + pd.to_numeric(td3.get("touchdown"), errors="coerce").fillna(0.0)
+        ).clip(upper=1.0)
+        frames.append(_as_of_week_rate(td3, "posteam", "_conv", "third_down_conv_off"))
+        frames.append(_as_of_week_rate(td3, "defteam", "_conv", "third_down_conv_def"))
+
+    if "pass_attempt" in rel.columns and "sack" in rel.columns:
+        passes = rel[pd.to_numeric(rel["pass_attempt"], errors="coerce") == 1].copy()
+        passes["_sack"] = pd.to_numeric(passes["sack"], errors="coerce").fillna(0.0)
+        frames.append(_as_of_week_rate(passes, "posteam", "_sack", "sack_rate_off"))
+        frames.append(_as_of_week_rate(passes, "defteam", "_sack", "sack_rate_def"))
+
+    if not frames:
+        return pd.DataFrame(columns=["season", "week", "team"])
+    out = frames[0]
+    for f in frames[1:]:
+        out = out.merge(f, on=["season", "week", "team"], how="outer")
+    return out
+
+
+def _as_of_week_form(games: pd.DataFrame) -> pd.DataFrame:
+    """Leakage-free as-of-week scoring form per (season, week, team).
+
+    Prior-week mean points scored / allowed and their differential, from final
+    scores — the recent-form signal the live context has (PPG) but the model lacked.
+    """
+    long = pd.concat([
+        games[["season", "week", "home_team", "home_score", "away_score"]].rename(
+            columns={"home_team": "team", "home_score": "pf", "away_score": "pa"}
+        ),
+        games[["season", "week", "away_team", "away_score", "home_score"]].rename(
+            columns={"away_team": "team", "away_score": "pf", "home_score": "pa"}
+        ),
+    ], ignore_index=True)
+    long["pf"] = pd.to_numeric(long["pf"], errors="coerce")
+    long["pa"] = pd.to_numeric(long["pa"], errors="coerce")
+    long = long.sort_values(["season", "team", "week"])
+    grp = long.groupby(["season", "team"])
+    for col in ("pf", "pa"):
+        long[f"_s_{col}"] = grp[col].cumsum() - long[col]
+    long["_n"] = grp.cumcount()
+    n = long["_n"].replace(0, np.nan)
+    long["form_ppg_for"] = long["_s_pf"] / n
+    long["form_ppg_against"] = long["_s_pa"] / n
+    long["form_point_diff"] = long["form_ppg_for"] - long["form_ppg_against"]
+    return long[["season", "week", "team", "form_ppg_for", "form_ppg_against", "form_point_diff"]]
+
+
 def _game_labels(pbp: pd.DataFrame) -> pd.DataFrame:
     """One row per game with final score + closing spread/total + game_date."""
     agg_cols = {
@@ -695,10 +791,19 @@ def build_nfl_training_frame(market: str, years: list[int]) -> pd.DataFrame:
     off = _as_of_week_aggs(plays, "posteam")
     deff = _as_of_week_aggs(plays, "defteam")[["season", "week", "team", "epa"]]
     adj = _as_of_week_adjusted(plays)
+    situ = _as_of_week_situational(plays)
 
     games = _game_labels(pbp)
     games = games[games["season_type"] == "REG"].copy()
     games = games.dropna(subset=["home_score", "away_score"])
+    form = _as_of_week_form(games)
+
+    def _prefix_merge(g: pd.DataFrame, df: pd.DataFrame, team_col: str, prefix: str) -> pd.DataFrame:
+        if df is None or df.empty:
+            return g
+        value_cols = [c for c in df.columns if c not in ("season", "week", "team")]
+        renamed = df.rename(columns={"team": team_col, **{c: f"{prefix}_{c}" for c in value_cols}})
+        return g.merge(renamed, on=["season", "week", team_col], how="left")
 
     def _merge_side(g: pd.DataFrame, team_col: str, prefix: str) -> pd.DataFrame:
         o = off.rename(
@@ -720,6 +825,8 @@ def build_nfl_training_frame(market: str, years: list[int]) -> pd.DataFrame:
         g = g.merge(o, on=["season", "week", team_col], how="left")
         g = g.merge(d, on=["season", "week", team_col], how="left")
         g = g.merge(a, on=["season", "week", team_col], how="left")
+        g = _prefix_merge(g, situ, team_col, prefix)
+        g = _prefix_merge(g, form, team_col, prefix)
         return g
 
     games = _merge_side(games, "home_team", "home")

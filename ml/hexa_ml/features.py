@@ -61,6 +61,18 @@ NFL_BASE_NUMERIC = [
     "home_epa_def_adj", "away_epa_def_adj",
     "home_success_rate", "away_success_rate",
     "home_proe", "away_proe",
+    # situational efficiency — computed by build_team_stats / as-of-week situational,
+    # previously surfaced to the Oracle but never fed to the model:
+    "home_rz_td_pct_off", "away_rz_td_pct_off",
+    "home_rz_td_pct_def", "away_rz_td_pct_def",
+    "home_third_down_conv_off", "away_third_down_conv_off",
+    "home_third_down_conv_def", "away_third_down_conv_def",
+    "home_sack_rate_off", "away_sack_rate_off",
+    "home_sack_rate_def", "away_sack_rate_def",
+    # recent scoring form (prior-week PPG / point diff):
+    "home_form_ppg_for", "away_form_ppg_for",
+    "home_form_ppg_against", "away_form_ppg_against",
+    "home_form_point_diff", "away_form_point_diff",
     "home_rest_days", "away_rest_days",
     "injuries_home_severe", "injuries_away_severe",
     "wind_mph",
@@ -83,6 +95,11 @@ NFL_DERIVED_FEATURES = [
     "epa_off_adj_diff",
     "epa_def_adj_diff",
     "epa_composite_adj_diff",
+    "rz_off_diff",
+    "third_down_off_diff",
+    "sack_protection_diff",
+    "sack_pressure_diff",
+    "form_diff",
     "rest_diff",
     "injury_diff",
 ]
@@ -311,6 +328,15 @@ def add_nfl_derived(df: pd.DataFrame) -> pd.DataFrame:
     out["epa_off_adj_diff"] = h_epa_off_adj - a_epa_off_adj
     out["epa_def_adj_diff"] = a_epa_def_adj - h_epa_def_adj
     out["epa_composite_adj_diff"] = out["epa_off_adj_diff"] + out["epa_def_adj_diff"]
+
+    # Situational efficiency diffs (home-positive orientation).
+    out["rz_off_diff"] = _col_or_nan(out, "home_rz_td_pct_off") - _col_or_nan(out, "away_rz_td_pct_off")
+    out["third_down_off_diff"] = _col_or_nan(out, "home_third_down_conv_off") - _col_or_nan(out, "away_third_down_conv_off")
+    # Lower sack_rate_off = better protection → home edge = away allowed − home allowed.
+    out["sack_protection_diff"] = _col_or_nan(out, "away_sack_rate_off") - _col_or_nan(out, "home_sack_rate_off")
+    # Higher sack_rate_def = better pass rush → home edge = home forced − away forced.
+    out["sack_pressure_diff"] = _col_or_nan(out, "home_sack_rate_def") - _col_or_nan(out, "away_sack_rate_def")
+    out["form_diff"] = _col_or_nan(out, "home_form_point_diff") - _col_or_nan(out, "away_form_point_diff")
 
     h_rest = _col_or_nan(out, "home_rest_days")
     a_rest = _col_or_nan(out, "away_rest_days")

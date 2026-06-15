@@ -131,6 +131,28 @@ export function buildNflFeaturePayload(context = {}, gameMeta = {}, marketOdds =
     away_success_rate:    away.successRate ?? null,
     home_proe:            home.proe ?? null,
     away_proe:            away.proe ?? null,
+    // situational efficiency + recent form (NFL-B) — live uses season-to-date
+    // values (the as-of-week analog), same convention as raw EPA.
+    home_rz_td_pct_off:        home.redZoneTdPctOff ?? null,
+    away_rz_td_pct_off:        away.redZoneTdPctOff ?? null,
+    home_rz_td_pct_def:        home.redZoneTdPctDef ?? null,
+    away_rz_td_pct_def:        away.redZoneTdPctDef ?? null,
+    home_third_down_conv_off:  home.thirdDownConvOff ?? null,
+    away_third_down_conv_off:  away.thirdDownConvOff ?? null,
+    home_third_down_conv_def:  home.thirdDownConvDef ?? null,
+    away_third_down_conv_def:  away.thirdDownConvDef ?? null,
+    home_sack_rate_off:        home.sackRateOff ?? null,
+    away_sack_rate_off:        away.sackRateOff ?? null,
+    home_sack_rate_def:        home.sackRateDef ?? null,
+    away_sack_rate_def:        away.sackRateDef ?? null,
+    home_form_ppg_for:         home.pointsForPerGame ?? null,
+    away_form_ppg_for:         away.pointsForPerGame ?? null,
+    home_form_ppg_against:     home.pointsAgainstPerGame ?? null,
+    away_form_ppg_against:     away.pointsAgainstPerGame ?? null,
+    home_form_point_diff:      (home.pointsForPerGame != null && home.pointsAgainstPerGame != null)
+                                 ? home.pointsForPerGame - home.pointsAgainstPerGame : null,
+    away_form_point_diff:      (away.pointsForPerGame != null && away.pointsAgainstPerGame != null)
+                                 ? away.pointsForPerGame - away.pointsAgainstPerGame : null,
     home_rest_days:       gameMeta.homeRestDays ?? null,
     away_rest_days:       gameMeta.awayRestDays ?? null,
     home_is_short_week:   gameMeta.homeIsShortWeek ? 1 : gameMeta.homeIsShortWeek === false ? 0 : null,
