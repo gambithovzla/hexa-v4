@@ -547,6 +547,22 @@ export async function runSprint1Migrations() {
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS winner_team_id INTEGER`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS game_status VARCHAR(32)`);
 
+    // Team-strength features — the only MLB signals available both live
+    // (standings) and in free history (schedule scores). They carry the
+    // runline/moneyline pre-training frame, where Statcast columns are NaN.
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_runs_for_avg DECIMAL(5,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_runs_for_avg DECIMAL(5,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_runs_against_avg DECIMAL(5,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_runs_against_avg DECIMAL(5,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_run_diff_avg DECIMAL(5,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_run_diff_avg DECIMAL(5,3)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_win_pct DECIMAL(5,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_win_pct DECIMAL(5,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_venue_win_pct DECIMAL(5,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_venue_win_pct DECIMAL(5,4)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS home_last10_wins DECIMAL(4,1)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS away_last10_wins DECIMAL(4,1)`);
+
     // Structured pick fields — replaces unstructured text for training
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS market_type VARCHAR(16)`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS side VARCHAR(16)`);

@@ -33,6 +33,16 @@ BASE_NUMERIC_FEATURES = [
     "game_number_in_series",
     # Odds (market signal)
     "odds_ml_home", "odds_ml_away", "odds_ou_total",
+    # Team strength — the only MLB signals available BOTH live (standings) and in
+    # free history (schedule scores). They carry the pre-training frame, where all
+    # the Statcast columns above are NaN. Cumulative season-to-date, computed
+    # as-of each game (no leakage).
+    "home_runs_for_avg", "away_runs_for_avg",
+    "home_runs_against_avg", "away_runs_against_avg",
+    "home_run_diff_avg", "away_run_diff_avg",
+    "home_win_pct", "away_win_pct",
+    "home_venue_win_pct", "away_venue_win_pct",
+    "home_last10_wins", "away_last10_wins",
 ]
 
 # Boolean features encoded as int (0/1/NaN)
@@ -48,6 +58,11 @@ DERIVED_FEATURES = [
     "bullpen_fatigue_diff",    # higher = home pen more rested
     "implied_prob_home",       # from odds_ml_home
     "implied_prob_away",
+    # Team-strength edges (home − away) — the dominant signals in pre-training
+    "run_diff_edge",           # season run differential per game
+    "win_pct_edge",
+    "venue_win_pct_edge",      # home team at home vs away team on road
+    "last10_form_edge",
 ]
 
 # ── NFL features ──────────────────────────────────────────────────────────────
@@ -246,6 +261,12 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
 
     out["implied_prob_home"] = _american_to_implied_prob(_col_or_nan(out, "odds_ml_home"))
     out["implied_prob_away"] = _american_to_implied_prob(_col_or_nan(out, "odds_ml_away"))
+
+    out["run_diff_edge"] = _col_or_nan(out, "home_run_diff_avg") - _col_or_nan(out, "away_run_diff_avg")
+    out["win_pct_edge"] = _col_or_nan(out, "home_win_pct") - _col_or_nan(out, "away_win_pct")
+    out["venue_win_pct_edge"] = _col_or_nan(out, "home_venue_win_pct") - _col_or_nan(out, "away_venue_win_pct")
+    out["last10_form_edge"] = _col_or_nan(out, "home_last10_wins") - _col_or_nan(out, "away_last10_wins")
+
     out["prop_side_over"] = (
         out.get("side", pd.Series([None] * len(out), index=out.index))
         .astype(str)

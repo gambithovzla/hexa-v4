@@ -40,6 +40,10 @@ MARKETS = (
     "prop_rbis",
 )
 
+# MLB markets that can be pre-trained from free schedule history (final scores).
+# over/under is excluded — its target needs a total line the free schedule lacks.
+MLB_PRETRAIN_MARKETS = ("moneyline", "runline")
+
 NFL_MARKETS    = ("nfl_moneyline", "nfl_spread", "nfl_total")
 # Pooled player-prop market. Separate from NFL_MARKETS because it does NOT
 # pre-train from nflverse (no historical prop lines exist there) — it trains
@@ -206,10 +210,24 @@ def train_all(
 
     # Load standard dataset once for all non-NFL/soccer markets
     df = None
+    mlb_pretrain_years: list[int] | None = None
     if std_markets:
         logger.info("Loading MLB dataset…")
         df = load_dataset(csv_path=csv_path)
         logger.info("Loaded %d rows; %d resolved", len(df), int(df["result"].notna().sum()))
+        # MLB pre-training: team-strength history (final scores) for the score-
+        # derivable markets, concatenated on top of live picks — the MLB analog
+        # of the nflverse / football-data pre-training below.
+        if not csv_path and settings.mlb_pretrain_enabled and any(
+            m in MLB_PRETRAIN_MARKETS for m in std_markets
+        ):
+            try:
+                from . import mlb_history_loader
+                mlb_pretrain_years = mlb_history_loader.parse_seasons(settings.mlb_pretrain_seasons)
+                logger.info("MLB pre-training enabled — seasons %s", mlb_pretrain_years)
+            except Exception as exc:
+                logger.warning("MLB pre-training setup failed (%s)", exc)
+                mlb_pretrain_years = None
 
     # Load NFL dataset separately if any NFL market requested. Live picks come
     # from pick_features (empty in the offseason); nflverse historical EPA is
@@ -303,7 +321,22 @@ def train_all(
 
     if df is not None:
         for market in std_markets:
-            _train_market(df, market)
+            if market in MLB_PRETRAIN_MARKETS and mlb_pretrain_years:
+                from . import mlb_history_loader
+                parts = []
+                if df is not None and not df.empty:
+                    parts.append(df)
+                try:
+                    hist = mlb_history_loader.build_mlb_training_frame(market, mlb_pretrain_years)
+                    if not hist.empty:
+                        logger.info("MLB %s: +%d historical rows", market, len(hist))
+                        parts.append(hist)
+                except Exception as exc:
+                    logger.warning("MLB historical frame for %s failed (%s)", market, exc)
+                combined = parts[0] if len(parts) == 1 else pd.concat(parts, ignore_index=True)
+                _train_market(combined, market)
+            else:
+                _train_market(df, market)
 
     if nfl_markets:
         from . import nflverse_loader

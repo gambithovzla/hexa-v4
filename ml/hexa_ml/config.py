@@ -79,6 +79,22 @@ class Settings(BaseSettings):
         default="", validation_alias="SOCCER_PRETRAIN_SEASONS"
     )
 
+    # ── MLB pre-training (MLB Stats API schedule history) ─────────────────
+    # When enabled, the moneyline / runline models train on leakage-free
+    # team-strength features (run diff, win %, home/road win %, last-10) computed
+    # from many seasons of final scores, instead of relying on the handful of
+    # resolved live picks. Statcast columns stay NaN in the history (they don't
+    # exist for free historically); the same team-strength columns are populated
+    # live from standings so the schemas line up. Live picks (with full Statcast)
+    # are concatenated on top automatically.
+    mlb_pretrain_enabled: bool = Field(
+        default=True, validation_alias="MLB_PRETRAIN_ENABLED"
+    )
+    # Empty → last 8 completed seasons. Accepts "2016-2023" or "2018,2019,2020".
+    mlb_pretrain_seasons: str = Field(
+        default="", validation_alias="MLB_PRETRAIN_SEASONS"
+    )
+
     # ── Server ────────────────────────────────────────────────────────────
     port: int = Field(default=8000, validation_alias="PORT")
     log_level: str = Field(default="info", validation_alias="LOG_LEVEL")
