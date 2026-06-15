@@ -79,7 +79,7 @@ router.post('/analyze', async (req, res) => {
 
   try {
     const { date: resolvedDate, slate, confirmedGames, totalGames, excluded } = await buildScoredSlate({
-      gameIds, date, lang, sport: 'mlb',
+      gameIds, date, lang, sport: 'mlb', requireMarketPrice: true,
     });
 
     const selection = selectPickOfTheDay(slate, config);

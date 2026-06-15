@@ -400,7 +400,7 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
  *
  * @returns {Promise<{date, slate: object[], confirmedGames: number, totalGames: number, excluded: object[]}>}
  */
-export async function buildScoredSlate({ gameIds = null, date, lang = 'en', sport = 'mlb', stage2Cap = 15 }) {
+export async function buildScoredSlate({ gameIds = null, date, lang = 'en', sport = 'mlb', stage2Cap = 15, requireMarketPrice = false }) {
   const resolvedDate = date || new Date().toISOString().split('T')[0];
 
   let games = await getTodayGames(resolvedDate);
@@ -437,7 +437,12 @@ export async function buildScoredSlate({ gameIds = null, date, lang = 'en', spor
 
   // Only auto-resolvable candidates can be a real bet; rank by stage-1 conviction
   // and run the (costly) ML alignment on the strongest survivors only.
-  const resolvable = gameBundles.flatMap((b) => b.candidates).filter((c) => c.autoResolvable !== false);
+  let resolvable = gameBundles.flatMap((b) => b.candidates).filter((c) => c.autoResolvable !== false);
+  // Price-based selectors (e.g. Pick del Día) can only act on candidates that
+  // carry a market price. Without this filter, mathematically-generated alt-line
+  // candidates (Under 11.5, +3.5 RL — no posted odds) crowd out the bettable
+  // main markets in the conviction ranking and the slate ends up unusable.
+  if (requireMarketPrice) resolvable = resolvable.filter((c) => c.odds != null);
   const stage1 = rankCandidates(resolvable.map(scoreStage1));
   const topK = stage1.slice(0, Math.max(stage2Cap, TOP_K));
 
