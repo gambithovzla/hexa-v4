@@ -80,6 +80,7 @@ class MarketModelBase:
         y_train: np.ndarray,
         X_calib: pd.DataFrame | None = None,
         y_calib: np.ndarray | None = None,
+        sample_weight: np.ndarray | None = None,
     ) -> "MarketModelBase":
         """Train the booster, then fit the Platt calibrator on held-out data.
 
@@ -88,7 +89,7 @@ class MarketModelBase:
         """
         self.feature_columns = list(X_train.columns)
         self.booster = xgb.XGBClassifier(**self.params)
-        self.booster.fit(X_train, y_train)
+        self.booster.fit(X_train, y_train, sample_weight=sample_weight)
 
         if X_calib is not None and y_calib is not None and len(y_calib) > 0:
             raw = self.booster.predict_proba(X_calib)[:, 1]
