@@ -307,6 +307,8 @@ export default function Sidebar({
         icon: ICONS.architect, label: L('Sport Access', 'Acceso Deportes', lang) },
       { key: 'props-board', action: () => { window.location.href = '/props'; },
         icon: ICONS.game, label: L('Player Props', 'Player Props', lang) },
+      { key: 'edge-tools', action: () => { window.location.href = '/edge'; },
+        icon: ICONS.architect, label: L('Edge Tools', 'Edge Tools', lang) },
       isAdmin && { key: 'synergy', tab: 'synergy', icon: ICONS.architect,
         label: L('Architect', 'Arquitecto', lang) },
       isAdmin && { key: 'batch', tab: 'batch', icon: ICONS.synergy,

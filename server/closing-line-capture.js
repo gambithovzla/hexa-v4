@@ -114,13 +114,18 @@ export function findGameForMatchup(matchup, games) {
  * and computes CLV = implied_prob_closing − implied_prob_at_pick.
  */
 export async function captureClosingLines() {
-  // 1. Fetch pending picks that have opening odds but no closing odds yet
+  // 1. Fetch picks that have opening odds but no closing odds yet.
+  // Include recently resolved picks (last 6h) as a last-chance attempt —
+  // The Odds API sometimes still carries odds shortly after game end.
   const { rows: picks } = await pool.query(`
     SELECT id, matchup, pick, implied_prob_at_pick, created_at
     FROM picks
-    WHERE result = 'pending'
-      AND odds_at_pick IS NOT NULL
+    WHERE odds_at_pick IS NOT NULL
       AND closing_odds IS NULL
+      AND (
+        result = 'pending'
+        OR (result IN ('win','loss','push') AND created_at > NOW() - INTERVAL '6 hours')
+      )
   `);
 
   if (picks.length === 0) {
@@ -167,11 +172,13 @@ export async function captureClosingLines() {
           continue;
         }
 
-        // 3. Check game start time — only capture if within 30 min or already started
+        // 3. Check game start time — capture if within 3 hours of first pitch or
+        // already started. 3-hour window lets the 30-min job fire multiple times
+        // before the game starts, so the race vs the pick resolver is won.
         const gameStartMs = game.gameDate ? new Date(game.gameDate).getTime() : null;
-        const THIRTY_MIN_MS = 30 * 60 * 1000;
-        if (gameStartMs && gameStartMs - now > THIRTY_MIN_MS) {
-          // Game starts in more than 30 minutes — too early to capture closing line
+        const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+        if (gameStartMs && gameStartMs - now > THREE_HOURS_MS) {
+          // Game starts in more than 3 hours — too early
           continue;
         }
 

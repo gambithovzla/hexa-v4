@@ -43,6 +43,7 @@ import SynergyRunsDashboard  from './components/SynergyRunsDashboard';
 import MLCalibrationDashboard from './pages/MLCalibrationDashboard';
 import AdminMLControlCenter   from './pages/AdminMLControlCenter';
 import PlayerPropsPage        from './pages/PlayerPropsPage';
+import EdgeToolsPage          from './pages/EdgeToolsPage';
 import EquityDashboard        from './pages/EquityDashboard';
 import ImperdiblePage         from './pages/ImperdiblePage';
 import PickOfTheDayPage       from './pages/PickOfTheDayPage';
@@ -562,6 +563,10 @@ export default function App() {
     const propsSportRaw = new URLSearchParams(window.location.search).get('sport');
     const propsSport = ['nfl', 'soccer'].includes(propsSportRaw) ? propsSportRaw : 'mlb';
     return <PlayerPropsPage token={token} lang={lang} sport={propsSport} onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (window.location.pathname === '/edge') {
+    const token = localStorage.getItem('hexa_token');
+    return <EdgeToolsPage token={token} lang={lang} onBack={() => { window.location.href = '/'; }} />;
   }
 
 
