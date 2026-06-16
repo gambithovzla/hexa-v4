@@ -48,3 +48,15 @@ test('parsePick parses Spanish Bajo totals and line-last props', () => {
   assert.equal(prop?.player, 'Drew Rasmussen');
 });
 
+test('resolvePickFromFinalState: "Pitcher Moneyline (ABBR)" resolves via parenthetical abbr', () => {
+  // Oracle sometimes emits "Reid Detmers Moneyline (LAA)" — pitcher name as subject,
+  // team abbreviation inside parens. The resolver must extract LAA from the paren.
+  const game = makeFinalGame({ homeAbbr: 'AZ', awayAbbr: 'LAA', homeScore: 2, awayScore: 5 });
+  const win = resolvePickFromFinalState('Reid Detmers Moneyline (LAA)', game);
+  assert.equal(win.result, 'win', 'LAA wins 5-2 → pick should resolve win');
+
+  const lossGame = makeFinalGame({ homeAbbr: 'AZ', awayAbbr: 'LAA', homeScore: 6, awayScore: 1 });
+  const loss = resolvePickFromFinalState('Reid Detmers Moneyline (LAA)', lossGame);
+  assert.equal(loss.result, 'loss', 'LAA loses 1-6 → pick should resolve loss');
+});
+
