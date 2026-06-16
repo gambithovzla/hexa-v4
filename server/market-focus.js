@@ -44,6 +44,10 @@ export function marketFocusInstruction(value, { parlay = false } = {}) {
   if (focus === 'moneyline') return `${target} a MONEYLINE bet.`;
   if (focus === 'runline') return `${target} a RUN LINE bet.`;
   if (focus === 'totals') return `${target} an OVER/UNDER bet.`;
+  if (focus === 'all') {
+    if (parlay) return null;
+    return `You MUST evaluate ALL bet types (Moneyline, Run Line, Over/Under, Player Props) and default to the MONEYLINE market. Only switch to Over/Under or Run Line if that market's calculated edge is at least 4 percentage points higher than the best Moneyline edge. Do NOT choose Over/Under just because pitcher Statcast signals are present — those signals inform all markets equally. When edges are similar across markets, always prefer Moneyline.`;
+  }
   return null;
 }
 
