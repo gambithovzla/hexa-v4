@@ -1096,7 +1096,7 @@ export default function AnalysisPanel({
   const { isAuthenticated, token, user, updateCredits } = useAuth();
   const isAdmin = user?.is_admin === true;
 
-  const [betType,     setBetType]     = useState('moneyline');
+  const [betType,     setBetType]     = useState('all');
   const [modelMode,   setModelMode]   = useState('deep');
   const [engineMode,  setEngineMode]  = useState('sonnet');
   const [webSearch,   setWebSearch]   = useState(false);
