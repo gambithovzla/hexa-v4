@@ -333,6 +333,10 @@ def train_all(
                         parts.append(hist)
                 except Exception as exc:
                     logger.warning("MLB historical frame for %s failed (%s)", market, exc)
+                if not parts:
+                    logger.warning("MLB %s: no data (no live picks, no history) — skipping", market)
+                    summary[market] = {"skipped": True, "reason": "no_data"}
+                    continue
                 combined = parts[0] if len(parts) == 1 else pd.concat(parts, ignore_index=True)
                 _train_market(combined, market)
             else:
