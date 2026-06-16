@@ -87,7 +87,6 @@ OPTIONAL_FEATURE_COLUMNS = [
     "home_points", "away_points",
     "home_xg", "away_xg",
     "home_xga", "away_xga",
-    "home_last10_wins", "away_last10_wins",
     "draw_price", "btts_yes_price",
     "context_completeness",
     # Tennis-specific columns (Sprint 12 — tennis_* markets; player A = home slot)
