@@ -656,6 +656,16 @@ function normalizeEvent(event) {
   const mlAwayConsensus = consensusAmerican(mlAway);
   if (mlHomeConsensus == null && mlAwayConsensus == null) return null;
 
+  // Line shop: best price per outcome across ALL books (not just top-3), with
+  // book attribution + the EV gained vs the consensus price. Getting the best
+  // available price is free edge independent of model quality — you don't have
+  // to beat Vegas's probability, only the average book's price.
+  const lineShop = buildLineShop(event, {
+    mlHome: mlHomeConsensus, mlAway: mlAwayConsensus,
+    ouOver: consensusAmerican(ouOver), ouUnder: consensusAmerican(ouUnder),
+    rlHome: consensusAmerican(rlHomePrice), rlAway: consensusAmerican(rlAwayPrice),
+  });
+
   return {
     eventId: event.id ?? null,
     commenceTime: event.commence_time ?? null,
@@ -667,6 +677,7 @@ function normalizeEvent(event) {
       mlAway,
       totals: ouTotal,
     },
+    lineShop,
     odds: {
       moneyline: {
         home: mlHomeConsensus,
@@ -687,6 +698,74 @@ function normalizeEvent(event) {
         overPrice:  consensusAmerican(ouOver),
         underPrice: consensusAmerican(ouUnder),
       },
+    },
+  };
+}
+
+/**
+ * Picks the best (most bettor-favorable) price from {book, price} pairs.
+ * Best = lowest implied probability = highest payout. Returns null if empty.
+ */
+function bestOfPairs(pairs) {
+  let best = null, bestImplied = Infinity;
+  for (const { book, price } of pairs) {
+    const implied = americanToImplied(price);
+    if (implied == null) continue;
+    if (implied < bestImplied) { bestImplied = implied; best = { book, price }; }
+  }
+  return best;
+}
+
+/**
+ * Builds the line-shop block: for each outcome, the best price across all books,
+ * which book offers it, and how many implied-probability points cheaper it is
+ * than the consensus (the EV you capture by shopping). Iterates ALL bookmakers
+ * (the top-3 slice used for consensus is intentionally NOT applied here).
+ */
+export function buildLineShop(event, consensus) {
+  const collect = { mlHome: [], mlAway: [], ouOver: [], ouUnder: [], rlHome: [], rlAway: [] };
+
+  for (const book of event.bookmakers ?? []) {
+    const label = book.title ?? book.key ?? 'book';
+    for (const market of book.markets ?? []) {
+      for (const o of market.outcomes ?? []) {
+        if (market.key === 'h2h') {
+          if (o.name === event.home_team) collect.mlHome.push({ book: label, price: o.price });
+          else if (o.name === event.away_team) collect.mlAway.push({ book: label, price: o.price });
+        } else if (market.key === 'totals') {
+          if (o.name === 'Over') collect.ouOver.push({ book: label, price: o.price });
+          else if (o.name === 'Under') collect.ouUnder.push({ book: label, price: o.price });
+        } else if (market.key === 'spreads') {
+          if (o.name === event.home_team) collect.rlHome.push({ book: label, price: o.price });
+          else if (o.name === event.away_team) collect.rlAway.push({ book: label, price: o.price });
+        }
+      }
+    }
+  }
+
+  const buildOutcome = (pairs, consensusPrice) => {
+    const best = bestOfPairs(pairs);
+    if (!best) return null;
+    const bestImplied = americanToImplied(best.price);
+    const consImplied = americanToImplied(consensusPrice);
+    const edgePts = (bestImplied != null && consImplied != null)
+      ? +((consImplied - bestImplied) * 100).toFixed(2)  // positive = best book is cheaper
+      : null;
+    return { price: best.price, book: best.book, bookCount: pairs.length, edgeVsConsensusPts: edgePts };
+  };
+
+  return {
+    moneyline: {
+      home: buildOutcome(collect.mlHome, consensus.mlHome),
+      away: buildOutcome(collect.mlAway, consensus.mlAway),
+    },
+    overUnder: {
+      over:  buildOutcome(collect.ouOver, consensus.ouOver),
+      under: buildOutcome(collect.ouUnder, consensus.ouUnder),
+    },
+    runLine: {
+      home: buildOutcome(collect.rlHome, consensus.rlHome),
+      away: buildOutcome(collect.rlAway, consensus.rlAway),
     },
   };
 }
