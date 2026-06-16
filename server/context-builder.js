@@ -10,7 +10,7 @@
 import { getPitcherStats, getTeamHittingStats, getPitcherHistoricalStats, getTeamHittingHistoricalStats, getCurrentTeam, getTeamPitchingStats, getTeamHittingSplits, getBullpenUsage, getBatterSplits, getPitcherHomeSplits, getPitcherRestDays, getBatterVsPitcherStats, getUmpireForGame, getTeamScheduleFatigue, getTeamProjectedLineup, getPitcherStartsTrend } from './mlb-api.js';
 import { getBatterStatcast, getPitcherStatcast, getParkFactor, getCatcherFraming, getFieldingOAA, getCacheStatus, getPlayerHistory, getUmpireStats } from './savant-fetcher.js';
 import { getGameWeather } from './weather-api.js';
-import { calculateImpliedProbability } from './odds-api.js';
+import { calculateImpliedProbability, hydrateOddsForGame } from './odds-api.js';
 import { getLineMovement } from './line-movement.js';
 import { buildOracleMemory } from './oracle-memory.js';
 import { buildSimilarAnalysesBlock } from './services/oracleEmbeddingsService.js';
@@ -460,6 +460,46 @@ function buildScheduleFatigueBlock(homeName, awayName, homeFatigue, awayFatigue)
   lines.push('### END SCHEDULE FATIGUE ###');
 
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Bloque de líneas de props de pitcher (strikeouts) para el Oracle
+// ---------------------------------------------------------------------------
+
+function buildPitcherPropBlock(playerProps, homePitcher, awayPitcher) {
+  if (!playerProps) return null;
+  const offers = playerProps['pitcher_strikeouts'] ?? [];
+  if (offers.length === 0) return null;
+
+  const am = (n) => (n > 0 ? `+${n}` : String(n));
+
+  const formatLine = (pitcherName, label) => {
+    if (!pitcherName) return null;
+    const norm = pitcherName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').trim();
+    const lastName = norm.split(' ').at(-1);
+    const match = (o) => {
+      const n = o.normalizedPlayerName ?? '';
+      return n.includes(lastName) || n.includes(norm);
+    };
+    const over = offers.find(o => match(o) && o.direction === 'over');
+    const under = offers.find(o => match(o) && o.direction === 'under');
+    if (!over && !under) return null;
+    const line = over?.line ?? under?.line;
+    const overStr = over ? `O ${am(over.price)}` : '';
+    const underStr = under ? `U ${am(under.price)}` : '';
+    return `[${label}] ${pitcherName} — Strikeouts line ${line}: ${[overStr, underStr].filter(Boolean).join(' / ')}`;
+  };
+
+  const homeLine = formatLine(homePitcher?.fullName, 'HOME');
+  const awayLine = formatLine(awayPitcher?.fullName, 'AWAY');
+  if (!homeLine && !awayLine) return null;
+
+  const out = ['=== PITCHER STRIKEOUT PROP LINES ==='];
+  if (homeLine) out.push(homeLine);
+  if (awayLine) out.push(awayLine);
+  out.push('ORACLE INSTRUCTION: When recommending a pitcher strikeout prop, use the exact numeric line shown above (e.g. "Over 4.5 Strikeouts"). Never omit the line number.');
+  out.push('=== END PITCHER STRIKEOUT PROP LINES ===');
+  return out.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,6 +1414,19 @@ export async function buildContext(gameData, oddsData = null) {
     } catch { /* non-blocking */ }
   }
 
+  // ── Player prop lines (pitcher strikeouts) — non-blocking ─────────────────
+  let oddsWithProps = null;
+  if (oddsData?.eventId) {
+    try {
+      oddsWithProps = await hydrateOddsForGame(oddsData);
+      if (oddsWithProps?.playerProps?.pitcher_strikeouts?.length) {
+        console.log(`[context-builder] Pitcher prop lines loaded for ${oddsWithProps.playerProps.pitcher_strikeouts.length} offers`);
+      }
+    } catch (err) {
+      console.warn('[context-builder] Props hydration failed:', err.message);
+    }
+  }
+
   const homePitcherTeam = settled(homeTeamVerifyResult);
   const awayPitcherTeam = settled(awayTeamVerifyResult);
 
@@ -2119,6 +2172,13 @@ export async function buildContext(gameData, oddsData = null) {
       ` | RL Home ${sp(rl.home.spread)} ${am(rl.home.price)} Away ${sp(rl.away.spread)} ${am(rl.away.price)}` +
       ` | O/U ${ou.total ?? 'N/A'} O${am(ou.overPrice)} U${am(ou.underPrice)}`
     );
+  }
+
+  // ── Pitcher Strikeout Prop Lines ────────────────────────────────────────────
+  const pitcherPropBlock = buildPitcherPropBlock(oddsWithProps?.playerProps, homePitcher, awayPitcher);
+  if (pitcherPropBlock) {
+    blocks.push('');
+    blocks.push(pitcherPropBlock);
   }
 
   // ── Weather Conditions ─────────────────────────────────────────────────────
