@@ -5395,8 +5395,10 @@ runMigrations()
         }
       }, THIRTY_MIN).unref();
 
-      // ── Closing line capture: every 2 hours between 5pm–1am ET ──────────
-      const TWO_HOURS = 2 * 60 * 60 * 1000;
+      // ── Closing line capture: every 30 min between 2pm–1am ET ────────────
+      // Previously ran every 2h with a 30-min pre-game gate — most games fell
+      // in the gap between job fires. 30-min interval + 3h gate means we get
+      // at least 4-6 capture attempts per game before first pitch.
       setInterval(() => {
         const etHour = parseInt(
           new Intl.DateTimeFormat('en-US', {
@@ -5404,8 +5406,8 @@ runMigrations()
           }).format(new Date()),
           10
         );
-        // Closing line capture: 17:00–00:59 ET (before and during MLB game windows)
-        if (etHour >= 17 || etHour < 1) {
+        // Closing line capture: 14:00–01:59 ET (afternoon + evening MLB windows)
+        if (etHour >= 14 || etHour < 2) {
           console.log(`[closing-line] Scheduled capture triggered (ET hour: ${etHour})`);
           captureClosingLines().catch(err => {
             console.error('[closing-line] Scheduled capture failed:', err.message);
@@ -5418,7 +5420,7 @@ runMigrations()
             console.error('[closing-line-soccer] Scheduled capture failed:', err.message);
           });
         }
-      }, TWO_HOURS).unref();
+      }, THIRTY_MIN).unref();
 
       // ── Odds cache warm-up: once a day at 10am ET, refresh alt-line
       //     menu for every game of the day so Imperdible / Safe / Parlay /
