@@ -115,6 +115,22 @@ export function canonicalizeAnalysisDataPicks(data, gameData = null, extraCtx = 
     bestPick.detail = canonicalizePickTextForResolver(bestPick.detail, ctx);
   }
 
+  // When master_prediction.pick is a bare Over/Under without a line number
+  // (e.g. "Under (Total de Carreras)") but best_pick.detail has one
+  // (e.g. "Under 8.5 (-110)"), inject the line so the display title shows it.
+  // This happens when the LLM omits the number in mp.pick and marketTotal is null.
+  if (masterPrediction?.pick && bestPick?.detail) {
+    const mpPick = masterPrediction.pick;
+    const isOverUnder = /^(over|under)\b/i.test(mpPick.trim());
+    const hasLine = /\d/.test(mpPick);
+    if (isOverUnder && !hasLine) {
+      const lineMatch = bestPick.detail.match(/(\d+(?:\.\d+)?)/);
+      if (lineMatch) {
+        masterPrediction.pick = mpPick.replace(/^(over|under)/i, `$1 ${lineMatch[1]}`);
+      }
+    }
+  }
+
   return {
     ...data,
     ...(masterPrediction ? { master_prediction: masterPrediction } : {}),

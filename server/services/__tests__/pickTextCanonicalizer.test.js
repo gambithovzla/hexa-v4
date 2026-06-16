@@ -61,6 +61,25 @@ test('canonicalizeAnalysisDataPicks backfills bare Over/Under from extraCtx tota
   assert.equal(out.best_pick.detail, 'Over 8.5');
 });
 
+test('canonicalizeAnalysisDataPicks backfills line from best_pick.detail when mp.pick is bare Over/Under with description', () => {
+  const data = {
+    master_prediction: { pick: 'Under (Total de Carreras)', oracle_confidence: 60 },
+    best_pick: { type: 'Over-Under', detail: 'Under 8.5 (-110)' },
+  };
+  const out = canonicalizeAnalysisDataPicks(data);
+  assert.equal(out.master_prediction.pick, 'Under 8.5 (Total de Carreras)');
+  assert.equal(out.best_pick.detail, 'Under 8.5 (-110)');
+});
+
+test('canonicalizeAnalysisDataPicks does not modify mp.pick when line already present', () => {
+  const data = {
+    master_prediction: { pick: 'Under 8.5 Total de Carreras', oracle_confidence: 60 },
+    best_pick: { type: 'Over-Under', detail: 'Under 8.5' },
+  };
+  const out = canonicalizeAnalysisDataPicks(data);
+  assert.equal(out.master_prediction.pick, 'Under 8.5');
+});
+
 test('canonicalizeAnalysisDataPicks updates master_prediction and best_pick', () => {
   const data = {
     master_prediction: { pick: 'Bajo 7.5', oracle_confidence: 58 },
