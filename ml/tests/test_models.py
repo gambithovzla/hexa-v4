@@ -92,3 +92,38 @@ def test_alignment_handles_extra_input_columns(fake_dataset):
     X["unexpected_extra_col"] = 1.0  # noise the model has never seen
     probs = model.predict_proba(X)
     assert probs.shape == (3,)
+
+
+def test_predict_logs_warning_on_missing_training_feature(fake_dataset, caplog):
+    """_align_columns must emit a WARNING (not silently fill with NaN) when a
+    feature present in training is absent at inference time."""
+    import logging
+    model = _train_market(fake_dataset, "moneyline")
+    sub = filter_for_market(fake_dataset, "moneyline").head(3)
+    X = build_X(sub, "moneyline")
+    # Drop a feature the model was trained on to simulate a schema drift
+    X_stripped = X.drop(columns=[model.feature_columns[0]])
+    with caplog.at_level(logging.WARNING, logger="hexa_ml.model"):
+        probs = model.predict_proba(X_stripped)
+    assert probs.shape == (3,), "must still return predictions (graceful degradation)"
+    assert ((probs >= 0) & (probs <= 1)).all()
+    assert any("missing" in msg.lower() for msg in caplog.messages), (
+        "Expected a warning about missing training features but none was emitted"
+    )
+
+
+def test_single_class_y_train_returns_none(fake_dataset, tmp_path):
+    """train_one_market must return None (not a broken model) when y_train has
+    only one class — e.g. all picks are wins after a lucky streak."""
+    from hexa_ml.train import train_one_market
+    sub = filter_for_market(fake_dataset, "moneyline").copy()
+    # Force all outcomes to 'win' so make_target produces all-1 vector
+    sub["result"] = "win"
+    sub["home_score"] = 5
+    sub["away_score"] = 3
+    result = train_one_market(
+        sub, "moneyline", tmp_path, test_days=30, min_train_size=10
+    )
+    assert result is None, (
+        "Expected None when y_train is single-class, got a TrainMetrics object"
+    )

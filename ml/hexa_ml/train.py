@@ -118,6 +118,17 @@ def train_one_market(
     y_train = make_target(train_df, market).to_numpy()
     y_test = make_target(test_df, market).to_numpy()
 
+    # Guard: XGBoost needs both classes present in the training set. A single-class
+    # y_train silently produces a degenerate model that always predicts the same side.
+    unique_classes = np.unique(y_train)
+    if len(unique_classes) < 2:
+        logger.warning(
+            "Skipping %s — y_train has only one class (%s). "
+            "Need both 0 and 1 to train a meaningful model.",
+            market, unique_classes,
+        )
+        return None
+
     X_train = build_X(train_df, market)
     X_test = build_X(test_df, market)
 
@@ -152,6 +163,13 @@ def train_one_market(
         odds_test = pd.to_numeric(odds_series, errors="coerce").fillna(-110).to_numpy()
     roi = kelly_roi(y_test, p_test, odds_test, kelly_fraction=0.25)
 
+    low_sample = len(test_df) < 30
+    if low_sample:
+        logger.warning(
+            "[%s] n_test=%d < 30 — Brier/ROI metrics are unreliable at this sample size.",
+            market, len(test_df),
+        )
+
     # Reliability diagram on the (calibrated) held-out predictions, mapped to the
     # {label, pred_mean, actual_frac, count} shape the admin panel renders. Same
     # test slice as brier_test above, so the panel and the Brier tell one story.
@@ -177,6 +195,7 @@ def train_one_market(
         pick_accuracy_n=pick_acc_n,
         feature_columns=list(X_train.columns),
         reliability_diagram=curve,
+        low_sample_warning=low_sample,
         trained_at=_now_iso(),
     )
     model.metrics = metrics
@@ -324,6 +343,7 @@ def train_all(
                     "pick_accuracy_test": metrics.pick_accuracy_test,
                     "pick_accuracy_n": metrics.pick_accuracy_n,
                     "reliability_diagram": metrics.reliability_diagram,
+                    "low_sample_warning": metrics.low_sample_warning,
                     "trained_at": metrics.trained_at,
                     "min_train_size_used": effective_min,
                 }
