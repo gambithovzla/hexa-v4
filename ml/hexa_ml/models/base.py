@@ -30,6 +30,10 @@ class TrainMetrics:
     pick_accuracy_test: float = 0.0
     pick_accuracy_n: int = 0
     feature_columns: list[str] = field(default_factory=list)
+    # Reliability-diagram buckets for the admin calibration panel. Each entry is
+    # {label, pred_mean, actual_frac, count} on the held-out test set — the shape
+    # client/src/pages/AdminMLControlCenter.jsx consumes directly.
+    reliability_diagram: list[dict] = field(default_factory=list)
     trained_at: str = ""
 
 

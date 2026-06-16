@@ -24,7 +24,7 @@ from .data import filter_for_market, load_dataset, make_target, temporal_split
 from .features import build_X
 from .models import MARKET_MODELS
 from .models.base import TrainMetrics
-from .calibration import brier, kelly_roi, logloss
+from .calibration import brier, kelly_roi, logloss, reliability_diagram
 from .metrics import pick_accuracy
 
 logger = logging.getLogger("hexa_ml.train")
@@ -152,6 +152,19 @@ def train_one_market(
         odds_test = pd.to_numeric(odds_series, errors="coerce").fillna(-110).to_numpy()
     roi = kelly_roi(y_test, p_test, odds_test, kelly_fraction=0.25)
 
+    # Reliability diagram on the (calibrated) held-out predictions, mapped to the
+    # {label, pred_mean, actual_frac, count} shape the admin panel renders. Same
+    # test slice as brier_test above, so the panel and the Brier tell one story.
+    curve = [
+        {
+            "label": f"{int(round(p.bucket_low * 100))}-{int(round(p.bucket_high * 100))}%",
+            "pred_mean": round(p.predicted_mean, 4),
+            "actual_frac": round(p.actual_rate, 4),
+            "count": p.n,
+        }
+        for p in reliability_diagram(y_test, p_test, n_buckets=10)
+    ]
+
     metrics = TrainMetrics(
         market=market,
         n_train=len(X_train),
@@ -163,6 +176,7 @@ def train_one_market(
         pick_accuracy_test=pick_acc,
         pick_accuracy_n=pick_acc_n,
         feature_columns=list(X_train.columns),
+        reliability_diagram=curve,
         trained_at=_now_iso(),
     )
     model.metrics = metrics
@@ -309,6 +323,7 @@ def train_all(
                     "roi_kelly25_test": metrics.roi_kelly25_test,
                     "pick_accuracy_test": metrics.pick_accuracy_test,
                     "pick_accuracy_n": metrics.pick_accuracy_n,
+                    "reliability_diagram": metrics.reliability_diagram,
                     "trained_at": metrics.trained_at,
                     "min_train_size_used": effective_min,
                 }
