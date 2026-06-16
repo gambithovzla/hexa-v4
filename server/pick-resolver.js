@@ -507,8 +507,20 @@ export function resolvePickFromFinalState(pickText, game, playerStats = null, op
 
   if (!result && pickStr.match(/\bml\b|moneyline|a ganar/i)) {
     const teamInPick = pickStr.replace(/\s*(ml|moneyline|a ganar).*$/i, '').trim();
-    const isHome = tokenMatchesTeam(teamInPick, homeName, homeAbbr);
-    const isAway = tokenMatchesTeam(teamInPick, awayName, awayAbbr);
+    let isHome = tokenMatchesTeam(teamInPick, homeName, homeAbbr);
+    let isAway = tokenMatchesTeam(teamInPick, awayName, awayAbbr);
+
+    // Oracle sometimes emits "Pitcher Name Moneyline (ABBR)" — the team info is
+    // inside a parenthetical that gets stripped during parsePick. Fall back to
+    // extracting the abbreviation from any (ABBR) group in the original text.
+    if (!isHome && !isAway) {
+      const parenAbbr = (pickStr.match(/\(([A-Za-z]{2,4})\)/) ?? [])[1];
+      if (parenAbbr) {
+        isHome = tokenMatchesTeam(parenAbbr, homeName, homeAbbr);
+        isAway = tokenMatchesTeam(parenAbbr, awayName, awayAbbr);
+      }
+    }
+
     if (isHome) result = homeScore > awayScore ? 'win' : homeScore < awayScore ? 'loss' : 'push';
     else if (isAway) result = awayScore > homeScore ? 'win' : awayScore < homeScore ? 'loss' : 'push';
   }
