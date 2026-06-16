@@ -42,6 +42,7 @@ import { resolveParlayRunById, resolvePendingParlays } from './services/parlayRe
 import { getActualLegCount, loadLearningsForUser } from './services/parlayLearnings.js';
 import { deriveParlayOutcome } from './services/parlayRunOutcome.js';
 import { captureClosingLines } from './closing-line-capture.js';
+import { captureClosingLinesProps } from './closing-line-capture-props.js';
 import { captureSoccerClosingLines } from './closing-line-capture-soccer.js';
 import { getLiveGameData, getMultipleLiveGames, getGamePlayByPlay } from './live-feed.js';
 import { parseLivePick, calculatePickProgress, buildPickOutcomeContext } from './pick-tracker.js';
@@ -5411,6 +5412,9 @@ runMigrations()
           console.log(`[closing-line] Scheduled capture triggered (ET hour: ${etHour})`);
           captureClosingLines().catch(err => {
             console.error('[closing-line] Scheduled capture failed:', err.message);
+          });
+          captureClosingLinesProps().catch(err => {
+            console.error('[closing-line-props] Scheduled capture failed:', err.message);
           });
         }
         // Soccer closing-line capture runs across a wider window (European
