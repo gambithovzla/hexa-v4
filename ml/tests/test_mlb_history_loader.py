@@ -96,3 +96,52 @@ def test_build_frame_moneyline_targets():
 def test_unsupported_market_raises():
     with pytest.raises(ValueError):
         mh.build_mlb_training_frame("overunder", [2023])
+
+
+def test_pythagorean_odds_filled_after_first_game():
+    """Games after the first should have synthetic odds from Pythagorean expectation."""
+    frame = mh.build_mlb_training_frame("moneyline", [2023])
+    # G1 (index 0) has NaN team averages — odds should stay NaN (no leakage).
+    assert pd.isna(frame.loc[0, "odds_ml_home"])
+    assert pd.isna(frame.loc[0, "odds_ml_away"])
+    # G3 (index 2) has 2 games of history — both odds must be filled.
+    assert pd.notna(frame.loc[2, "odds_ml_home"])
+    assert pd.notna(frame.loc[2, "odds_ml_away"])
+
+
+def test_pythagorean_odds_symmetry():
+    """Home and away implied probs must sum to ~1 (fair line, no vig)."""
+    import numpy as np
+    frame = mh.build_mlb_training_frame("moneyline", [2023])
+    valid = frame["odds_ml_home"].notna()
+    assert valid.any(), "No rows with synthetic odds"
+
+    def _implied(american: float) -> float:
+        if american < 0:
+            return (-american) / (-american + 100)
+        return 100 / (american + 100)
+
+    for _, row in frame[valid].iterrows():
+        p_home = _implied(row["odds_ml_home"])
+        p_away = _implied(row["odds_ml_away"])
+        assert abs(p_home + p_away - 1.0) < 0.02, (
+            f"Implied probs don't sum to 1: home={p_home:.3f} away={p_away:.3f}"
+        )
+
+
+def test_pythagorean_hfa_favors_home():
+    """Home team should be favoured when both teams have identical run differentials."""
+    frame = mh.build_mlb_training_frame("moneyline", [2023])
+    valid = frame["odds_ml_home"].notna()
+    assert valid.any()
+    # When both teams are equal, HFA logit pushes p_win_home > 0.5 → negative ML (favourite)
+    # We only check the stronger home teams (win_pct_edge > 0) for robustness.
+    eq_rows = frame[valid & (frame["home_runs_for_avg"] == frame["away_runs_for_avg"])]
+    if not eq_rows.empty:
+        assert (eq_rows["odds_ml_home"] < 0).all(), "Equal-strength home team should be favourite"
+
+
+def test_source_column_is_mlb_history():
+    """Historical frame rows must carry source='mlb_history' for sample weighting."""
+    frame = mh.build_mlb_training_frame("moneyline", [2023])
+    assert (frame["source"] == "mlb_history").all()

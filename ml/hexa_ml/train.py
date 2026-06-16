@@ -132,11 +132,25 @@ def train_one_market(
     X_train = build_X(train_df, market)
     X_test = build_X(test_df, market)
 
+    # Sample weights: live picks (real Statcast + odds) get 5× the gradient
+    # contribution of historical pre-training rows (team-strength features only).
+    # Only applied when both kinds are present — if all rows are live or all are
+    # historical the uniform weight is equivalent and we skip it for clarity.
+    sample_weight: np.ndarray | None = None
+    if "source" in train_df.columns:
+        is_live = train_df["source"].isin(["live", "oracle_chat"]).to_numpy()
+        if is_live.any() and not is_live.all():
+            sample_weight = np.where(is_live, 5.0, 1.0)
+            logger.info(
+                "[%s] sample weights: %d live (5×) + %d historical (1×)",
+                market, int(is_live.sum()), int((~is_live).sum()),
+            )
+
     model_cls = MARKET_MODELS[market]
     model = model_cls()
     # Use the test set itself for calibration as well — fine for small data,
     # we re-evaluate Brier separately so this isn't double-counted as quality.
-    model.fit(X_train, y_train, X_calib=X_test, y_calib=y_test)
+    model.fit(X_train, y_train, X_calib=X_test, y_calib=y_test, sample_weight=sample_weight)
 
     # In-sample (sanity) and out-of-sample (real) metrics
     p_train = model.predict_proba(X_train)
