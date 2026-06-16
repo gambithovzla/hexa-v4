@@ -103,6 +103,18 @@ OPTIONAL_FEATURE_COLUMNS = [
 
 SELECT_COLUMNS = REQUIRED_COLUMNS + OPTIONAL_FEATURE_COLUMNS
 
+# Fail fast at import: duplicate entries in OPTIONAL_FEATURE_COLUMNS cause the
+# Postgres SELECT to return duplicate columns, which makes pd.concat raise
+# InvalidIndexError at training time (the 2026-06-16 production crash).
+_seen: set[str] = set()
+_dup_cols = [c for c in OPTIONAL_FEATURE_COLUMNS if c in _seen or _seen.add(c)]  # type: ignore[func-returns-value]
+if _dup_cols:
+    raise RuntimeError(
+        f"OPTIONAL_FEATURE_COLUMNS has duplicate entries: {_dup_cols}. "
+        "Each column must appear exactly once."
+    )
+del _seen, _dup_cols
+
 
 def load_from_postgres(database_url: str | None = None, sport: str = "mlb") -> pd.DataFrame:
     """Read the training dataset directly from `pick_features`.

@@ -6,7 +6,9 @@ import pandas as pd
 import pytest
 
 from hexa_ml.data import (
+    OPTIONAL_FEATURE_COLUMNS,
     REQUIRED_COLUMNS,
+    SELECT_COLUMNS,
     filter_for_market,
     load_from_csv,
     make_target,
@@ -97,3 +99,22 @@ def test_nfl_prop_filter_and_target():
     assert len(sub) == 2  # only the two resolved prop rows with a line
     y = make_target(sub, "nfl_prop")
     assert y.tolist() == [1, 0]
+
+
+def test_optional_feature_columns_no_duplicates():
+    """Duplicate entries in OPTIONAL_FEATURE_COLUMNS cause the Postgres SELECT to
+    return duplicate columns which makes pd.concat raise InvalidIndexError at training
+    time — the root cause of the 2026-06-16 production crash."""
+    seen: set[str] = set()
+    dups = [c for c in OPTIONAL_FEATURE_COLUMNS if c in seen or seen.add(c)]  # type: ignore[func-returns-value]
+    assert not dups, (
+        f"Duplicate entries found in OPTIONAL_FEATURE_COLUMNS: {dups}. "
+        "Each column must appear exactly once."
+    )
+
+
+def test_select_columns_no_duplicates():
+    """SELECT_COLUMNS = REQUIRED + OPTIONAL — duplicates in either list propagate
+    here and corrupt the Postgres query with repeated column names."""
+    dups = [c for c, n in pd.Series(SELECT_COLUMNS).value_counts().items() if n > 1]
+    assert not dups, f"SELECT_COLUMNS has duplicate entries: {dups}"

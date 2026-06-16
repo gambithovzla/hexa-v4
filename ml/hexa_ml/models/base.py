@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,6 +12,8 @@ import pandas as pd
 import xgboost as xgb
 
 from ..calibration import PlattCalibrator
+
+logger = logging.getLogger("hexa_ml.model")
 
 
 @dataclass
@@ -30,6 +33,13 @@ class TrainMetrics:
     pick_accuracy_test: float = 0.0
     pick_accuracy_n: int = 0
     feature_columns: list[str] = field(default_factory=list)
+    # Reliability-diagram buckets for the admin calibration panel. Each entry is
+    # {label, pred_mean, actual_frac, count} on the held-out test set — the shape
+    # client/src/pages/AdminMLControlCenter.jsx consumes directly.
+    reliability_diagram: list[dict] = field(default_factory=list)
+    # True when n_test < 30: Brier/ROI are noisy at that sample size and should
+    # not be used for model-quality decisions (e.g. runline with N_TEST=19).
+    low_sample_warning: bool = False
     trained_at: str = ""
 
 
@@ -141,7 +151,14 @@ class MarketModelBase:
         """Reorder + fill missing columns so inference matches training schema."""
         missing = [c for c in self.feature_columns if c not in X.columns]
         if missing:
+            logger.warning(
+                "[%s] inference missing %d training feature(s) — filling with NaN "
+                "(predictions may degrade): %s",
+                self.market_key,
+                len(missing),
+                missing[:10],
+            )
             X = X.copy()
             for c in missing:
-                X[c] = pd.NA
+                X[c] = np.nan  # float NaN keeps dtype numeric; pd.NA creates object columns
         return X[self.feature_columns]
