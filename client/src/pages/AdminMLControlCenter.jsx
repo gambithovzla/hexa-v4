@@ -79,6 +79,8 @@ const STRINGS = {
     lastRetrain:      'LAST RETRAIN',
     earlyModel:       'EARLY MODEL',
     earlyModelTip:    'Training set is below the standard floor of 60. Model is statistically thin — treat predictions as exploratory.',
+    lowSample:        'SMALL TEST SET',
+    lowSampleTip:     'n_test < 30 — Brier and ROI are statistically noisy at this sample size. Do not use them for model-quality decisions until more picks resolve.',
     trained:          'TRAINED',
     skipped:          (floor) => `SKIPPED — need more resolved picks (configured floor: ${floor})`,
     training:         '⟳ TRAINING…',
@@ -185,6 +187,8 @@ const STRINGS = {
     lastRetrain:      'ÚLT. REENTRENAMIENTO',
     earlyModel:       'MODELO INICIAL',
     earlyModelTip:    'El conjunto de entrenamiento está por debajo del umbral de 60. El modelo es estadísticamente débil — usa las predicciones como exploratorias.',
+    lowSample:        'MUESTRA PEQUEÑA',
+    lowSampleTip:     'n_test < 30 — Brier y ROI son estadísticamente ruidosos con tan pocas muestras. No usar para decisiones de calidad del modelo hasta acumular más picks resueltos.',
     trained:          'ENTRENADO',
     skipped:          (floor) => `OMITIDO — se necesitan más picks resueltos (mínimo: ${floor})`,
     training:         '⟳ ENTRENANDO…',
@@ -638,6 +642,7 @@ function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T
   const roi    = data?.roi_kelly25_test ?? null;
   const trainedAt = data?.trained_at ?? null;
   const early   = nTrain != null && nTrain < 60;
+  const lowSample = data?.low_sample_warning === true;
   const infMeta = marketObs ? inferenceMeta(marketObs.inference, T.lang) : null;
   const runlineGate = market === 'runline' && marketObs?.runlineNote;
 
@@ -682,6 +687,15 @@ function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T
                 label={T.earlyModel}
                 size="small"
                 sx={{ fontFamily: MONO, fontSize: '8px', color: AMBER, border: `1px solid ${AMBER}`, background: 'transparent', height: 18, letterSpacing: '1.5px' }}
+              />
+            </Tooltip>
+          )}
+          {lowSample && (
+            <Tooltip title={T.lowSampleTip}>
+              <Chip
+                label={T.lowSample}
+                size="small"
+                sx={{ fontFamily: MONO, fontSize: '8px', color: AMBER, border: `1px solid ${AMBER}`, background: `${AMBER}14`, height: 18, letterSpacing: '1.5px' }}
               />
             </Tooltip>
           )}
