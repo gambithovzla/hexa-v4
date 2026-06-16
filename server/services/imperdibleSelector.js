@@ -201,7 +201,7 @@ export function thresholdsForCandidate(scored) {
  * missing signal (e.g. no market odds) are skipped rather than failed, except
  * the ones that define "lock" (model prob, consensus, conviction, lineup).
  */
-function decimalFromAmerican(american) {
+export function decimalFromAmerican(american) {
   const n = Number(american);
   if (!Number.isFinite(n) || n === 0) return null;
   return n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n);

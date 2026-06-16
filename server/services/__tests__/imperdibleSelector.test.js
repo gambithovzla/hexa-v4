@@ -8,6 +8,7 @@ import {
   mlProbForPick,
   varianceKey,
   MARKET_VARIANCE,
+  decimalFromAmerican,
 } from '../imperdibleSelector.js';
 
 test('agreement: tight signals get a bonus, wide spread gets penalized', () => {
@@ -166,6 +167,41 @@ test('payout floor: candidate at +120 passes with floor of 1.10', () => {
     { minPayoutDecimal: 1.10 },
   );
   assert.equal(gate.pass, true);
+});
+
+test('decimalFromAmerican converts correctly', () => {
+  assert.ok(Math.abs(decimalFromAmerican(-200) - 1.50) < 0.001);
+  assert.ok(Math.abs(decimalFromAmerican(-110) - 1.909) < 0.001);
+  assert.ok(Math.abs(decimalFromAmerican(100) - 2.00) < 0.001);
+  assert.ok(Math.abs(decimalFromAmerican(120) - 2.20) < 0.001);
+  assert.equal(decimalFromAmerican(0), null);
+  assert.equal(decimalFromAmerican(null), null);
+});
+
+test('payout floor -200 American (1.50 decimal): heavy favorite -300 is rejected', () => {
+  const score = computeConviction({
+    modelProb: 85, impliedProb: 80, mlProb: 82, dataQuality: 92,
+    marketType: 'moneyline', lineupConfirmed: true,
+  });
+  // -300 American = 1.333 decimal — pays only $33 on $100 → below the floor
+  const gate = evaluateGate(
+    { ...score, lineupConfirmed: true, odds: -300 },
+    { minPayoutDecimal: decimalFromAmerican(-200) },
+  );
+  assert.equal(gate.pass, false);
+  assert.ok(gate.failedReasons.includes('payout_below_floor'));
+});
+
+test('payout floor -200 American (1.50 decimal): -200 itself and -150 both pass', () => {
+  const score = computeConviction({
+    modelProb: 72, impliedProb: 70, mlProb: 71, dataQuality: 90,
+    marketType: 'moneyline', lineupConfirmed: true,
+  });
+  const floor = decimalFromAmerican(-200); // 1.50
+  const at200 = evaluateGate({ ...score, lineupConfirmed: true, odds: -200 }, { minPayoutDecimal: floor });
+  const at150 = evaluateGate({ ...score, lineupConfirmed: true, odds: -150 }, { minPayoutDecimal: floor });
+  assert.equal(at200.pass, true, '-200 (exactly at floor) should pass');
+  assert.equal(at150.pass, true, '-150 (above floor) should pass');
 });
 
 test('extended candidate: ML signal is excluded from consensus', () => {

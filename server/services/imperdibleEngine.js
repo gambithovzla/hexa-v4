@@ -35,10 +35,17 @@ import {
   rankCandidates,
   mlProbForPick,
   DEFAULT_THRESHOLDS,
+  decimalFromAmerican,
 } from './imperdibleSelector.js';
 
 const TOP_K = Number(process.env.IMPERDIBLE_TOP_K) || 5;
 const ML_TIMEOUT_MS = Number(process.env.ML_ADMIN_TIMEOUT_MS) || 2500;
+
+// Minimum payout floor for the lock. Set IMPERDIBLE_MIN_PAYOUT_ODDS to an
+// American odds value (e.g. -200) to reject picks that pay less than that
+// (e.g. -300, -400). -200 = at least $50 profit on a $100 bet.
+const _minPayoutEnv = process.env.IMPERDIBLE_MIN_PAYOUT_ODDS;
+const MIN_PAYOUT_DECIMAL = _minPayoutEnv ? decimalFromAmerican(Number(_minPayoutEnv)) : null;
 const SOURCE = 'imperdible';
 
 function buildShadowStatcastData(features = {}) {
@@ -240,7 +247,10 @@ export async function analyzeImperdible({ gameIds, date, lang = 'en', thresholds
   // selects the right profile per candidate (main vs extended) and merges
   // these on top. So we pass `thresholds` as-is rather than pre-merging
   // with DEFAULT_THRESHOLDS (which would clobber the extended profile).
-  const gateOverrides = thresholds && typeof thresholds === 'object' ? thresholds : {};
+  const gateOverrides = {
+    ...(thresholds && typeof thresholds === 'object' ? thresholds : {}),
+    ...(MIN_PAYOUT_DECIMAL != null ? { minPayoutDecimal: MIN_PAYOUT_DECIMAL } : {}),
+  };
 
   let games = await getTodayGames(resolvedDate);
   if (!games.length) {
