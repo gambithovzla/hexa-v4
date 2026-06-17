@@ -433,7 +433,10 @@ export async function buildScoredSlate({ gameIds = null, date, lang = 'en', spor
     }));
 
   if (confirmed.length === 0) {
-    return { date: resolvedDate, slate: [], confirmedGames: 0, totalGames: wanted.length, excluded };
+    return {
+      date: resolvedDate, slate: [], confirmedGames: 0, totalGames: wanted.length, excluded,
+      diagnostics: { oddsEventsFetched: 0, gamesAnalyzed: 0, candidatesGenerated: 0, candidatesWithPrice: 0 },
+    };
   }
 
   let allOdds = [];
@@ -447,12 +450,13 @@ export async function buildScoredSlate({ gameIds = null, date, lang = 'en', spor
 
   // Only auto-resolvable candidates can be a real bet; rank by stage-1 conviction
   // and run the (costly) ML alignment on the strongest survivors only.
-  let resolvable = gameBundles.flatMap((b) => b.candidates).filter((c) => c.autoResolvable !== false);
+  const autoResolvable = gameBundles.flatMap((b) => b.candidates).filter((c) => c.autoResolvable !== false);
   // Price-based selectors (e.g. Pick del Día) can only act on candidates that
   // carry a market price. Without this filter, mathematically-generated alt-line
   // candidates (Under 11.5, +3.5 RL — no posted odds) crowd out the bettable
   // main markets in the conviction ranking and the slate ends up unusable.
-  if (requireMarketPrice) resolvable = resolvable.filter((c) => c.odds != null);
+  const priced = autoResolvable.filter((c) => c.odds != null);
+  const resolvable = requireMarketPrice ? priced : autoResolvable;
   const stage1 = rankCandidates(resolvable.map(scoreStage1));
   const topK = stage1.slice(0, Math.max(stage2Cap, TOP_K));
 
@@ -467,7 +471,23 @@ export async function buildScoredSlate({ gameIds = null, date, lang = 'en', spor
     slate.push({ ...scoreStage2(candidate, mlProb), mlOpinion, sport });
   }
 
-  return { date: resolvedDate, slate, confirmedGames: confirmed.length, totalGames: wanted.length, excluded };
+  return {
+    date: resolvedDate,
+    slate,
+    confirmedGames: confirmed.length,
+    totalGames: wanted.length,
+    excluded,
+    // Diagnostics so a caller can explain an empty slate honestly: whether odds
+    // were fetched at all, and how many candidates survived the price filter.
+    // An empty slate with candidatesGenerated > 0 but candidatesWithPrice === 0
+    // means "no market price available" — not "no edge".
+    diagnostics: {
+      oddsEventsFetched: allOdds.length,
+      gamesAnalyzed: gameBundles.length,
+      candidatesGenerated: autoResolvable.length,
+      candidatesWithPrice: priced.length,
+    },
+  };
 }
 
 /**

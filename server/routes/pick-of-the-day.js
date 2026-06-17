@@ -78,11 +78,22 @@ router.post('/analyze', async (req, res) => {
   const config = configFromBody(req.body ?? {});
 
   try {
-    const { date: resolvedDate, slate, confirmedGames, totalGames, excluded } = await buildScoredSlate({
+    const { date: resolvedDate, slate, confirmedGames, totalGames, excluded, diagnostics } = await buildScoredSlate({
       gameIds, date, lang, sport: 'mlb', requireMarketPrice: true,
     });
 
     const selection = selectPickOfTheDay(slate, config);
+
+    // When the slate is empty the selector reports a generic gate-failure
+    // ('no_candidate_clears_gate'). Replace it with the true cause so the admin
+    // isn't told "insufficient edge" when really no market price was available
+    // for any game — Pick del Día needs a posted price to evaluate a candidate.
+    let reason = selection.reason;
+    if (selection.status === 'PASS' && selection.considered === 0) {
+      if (confirmedGames === 0) reason = 'no_confirmed_lineups';
+      else if (diagnostics?.oddsEventsFetched === 0) reason = 'no_odds_data';
+      else if (diagnostics?.candidatesWithPrice === 0) reason = 'no_priced_candidates';
+    }
 
     res.json({
       success: true,
@@ -91,13 +102,14 @@ router.post('/analyze', async (req, res) => {
       config,
       status: selection.status,           // 'PICK' | 'PASS'
       pick: selection.pick,               // the single best pick to win, or null
-      reason: selection.reason,
+      reason,
       considered: selection.considered,
       eligibleCount: selection.eligibleCount,
       rejected: selection.rejected,
       confirmedGames,
       totalGames,
       excluded,
+      diagnostics,
     });
   } catch (err) {
     console.error(`[pick-of-the-day] /analyze failed: ${err.message}`);
