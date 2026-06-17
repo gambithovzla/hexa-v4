@@ -44,6 +44,12 @@ const REASON_TEXT = (reason, lang) => {
   const map = {
     no_candidate_clears_gate: T(lang, 'Ningún juego superó el filtro hoy (cuota o ventaja insuficiente).',
       'No game cleared the filter today (odds or edge insufficient).'),
+    no_confirmed_lineups: T(lang, 'Ningún juego tiene lineup confirmado todavía (salen ~1-2h antes del juego).',
+      'No game has a confirmed lineup yet (they post ~1-2h before game time).'),
+    no_odds_data: T(lang, 'El proveedor de cuotas no devolvió líneas para hoy. Revisa el Odds API e intenta de nuevo.',
+      'The odds provider returned no lines for today. Check the Odds API and retry.'),
+    no_priced_candidates: T(lang, 'Hay juegos analizados pero ninguno tiene cuota publicada todavía. Intenta más cerca de la hora del juego.',
+      'Games were analyzed but none has a posted market price yet. Try again closer to game time.'),
     odds_too_short: T(lang, 'cuota demasiado baja (paga poco)', 'odds too short (pays too little)'),
     odds_too_long: T(lang, 'cuota demasiado alta (muy arriesgado)', 'odds too long (too risky)'),
     no_edge_over_breakeven: T(lang, 'sin ventaja sobre el break-even', 'no edge over break-even'),
@@ -241,6 +247,16 @@ function ResultView({ result, lang }) {
       <Typography sx={{ fontFamily: MONO, fontSize: 11, color: MUTED, mt: 1.5 }}>
         {result.confirmedGames}/{result.totalGames} {T(lang, 'juegos con lineup · candidatos evaluados', 'games with lineup · candidates considered')}: {result.considered} · {T(lang, 'elegibles', 'eligible')}: {result.eligibleCount}
       </Typography>
+
+      {/* Diagnostics — explains an empty slate: were odds fetched, how many
+          candidates were generated, how many carried a posted price. */}
+      {result.diagnostics && (
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: MUTED, mt: 0.5 }}>
+          {T(lang, 'cuotas del proveedor', 'provider odds')}: {result.diagnostics.oddsEventsFetched} ·{' '}
+          {T(lang, 'candidatos generados', 'candidates generated')}: {result.diagnostics.candidatesGenerated} ·{' '}
+          {T(lang, 'con cuota', 'with price')}: {result.diagnostics.candidatesWithPrice}
+        </Typography>
+      )}
 
       {/* Rejected list — why other candidates didn't make it */}
       {Array.isArray(result.rejected) && result.rejected.length > 0 && (
