@@ -150,6 +150,7 @@ import {
   canonicalizePickTextForResolver,
   canonicalizeAnalysisDataPicks,
 } from './services/pickTextCanonicalizer.js';
+import { estimateProjectedTotal } from './services/projectedTotal.js';
 import { KNOWN_SPORTS, normalizeSportFilter as normalizeKnownSportFilter } from './sports.js';
 
 dotenv.config();
@@ -438,6 +439,32 @@ function annotateAnalysisData(data, features = {}, gameData = null) {
     analysis_meta: analysisMeta,
     value_breakdown: valueBreakdown ?? data.value_breakdown ?? null,
   }, gameData, { marketTotal });
+
+  // Over/Under fallback line. When the sportsbook total is unavailable (odds
+  // not loaded) the canonicalizer can't attach the market line, so the pick
+  // renders as a bare "Over/Under (Total de Carreras)". Surface the model's
+  // projected total as a DISPLAY-ONLY reference — never injected into the pick
+  // text itself, so the persisted pick stays bare and the resolver never grades
+  // against a fabricated line.
+  if (marketTotal == null) {
+    const pickStr = String(
+      canonicalized?.master_prediction?.pick ?? canonicalized?.best_pick?.detail ?? '',
+    );
+    const isBareOverUnder =
+      /^\s*(over|under|bajo|alto|más de|mas de|menos de)\b/i.test(pickStr) && !/\d/.test(pickStr);
+    if (isBareOverUnder) {
+      const projected = estimateProjectedTotal(features);
+      if (projected != null) {
+        const vb =
+          canonicalized.value_breakdown && typeof canonicalized.value_breakdown === 'object'
+            ? { ...canonicalized.value_breakdown }
+            : {};
+        vb.projected_total = projected;
+        canonicalized.value_breakdown = vb;
+        canonicalized.projected_total = projected;
+      }
+    }
+  }
 
   return canonicalized;
 }

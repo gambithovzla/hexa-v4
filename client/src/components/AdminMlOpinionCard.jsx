@@ -53,8 +53,9 @@ export default function AdminMlOpinionCard({ mlOpinion, lang = 'es' }) {
   if (!mlOpinion) return null;
 
   const isEs = lang === 'es';
-  const pickLabel = mlOpinion.pickText
-    ? `${mlOpinion.pickText}${mlOpinion.market_type ? ` · ${mlOpinion.market_type}` : ''}`
+  const pickBase = mlOpinion.pickDisplay ?? mlOpinion.pickText;
+  const pickLabel = pickBase
+    ? `${pickBase}${mlOpinion.market_type ? ` · ${mlOpinion.market_type}` : ''}`
     : '—';
 
   return (

@@ -27,6 +27,7 @@ import {
 import HeroCard from './HeroCard';
 import EdgeBar from './EdgeBar';
 import DataChip from './DataChip';
+import { applyProjectedLine } from '../../utils/pickLineDisplay';
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const L = {
@@ -494,7 +495,7 @@ function ValuePanel({ hexa, lang, t }) {
 
 // ── Alternatives rail ────────────────────────────────────────────────────────
 
-function AlternativesRail({ hexa, t }) {
+function AlternativesRail({ hexa, t, lang = 'en' }) {
   const { C, MONO, SCALE, SPACE } = useHexaTheme();
   const bp = hexa.best_pick;
   const alts = Array.isArray(hexa.alternatives) ? hexa.alternatives : [];
@@ -504,7 +505,7 @@ function AlternativesRail({ hexa, t }) {
     items.push({
       key:   'best',
       label: `${t.bestPick}${bp.type ? ` · ${bp.type}` : ''}`,
-      value: bp.detail,
+      value: applyProjectedLine(bp.detail, hexa.value_breakdown?.projected_total ?? hexa.projected_total, { lang }),
       meta:  bp.confidence != null ? `${Math.round(Number(bp.confidence) * 100)}%` : null,
       intent:'action',
     });
@@ -659,7 +660,7 @@ export default function DecisionCenter({ hexa, lang = 'en', slots = {} }) {
         <HeroCard
           intent={intent}
           eyebrow={t.verdict}
-          title={mp.pick || bp.detail || '—'}
+          title={applyProjectedLine(mp.pick || bp.detail, hexa.value_breakdown?.projected_total ?? hexa.projected_total, { lang }) || '—'}
           meta={hexa.matchup || hexa.odds?.game || undefined}
         >
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
@@ -705,7 +706,7 @@ export default function DecisionCenter({ hexa, lang = 'en', slots = {} }) {
 
       {/* ── BAND 3 · ALTERNATIVES ── */}
       <motion.div variants={reduced ? reducedVariant : fadeUp}>
-        <AlternativesRail hexa={hexa} t={t} />
+        <AlternativesRail hexa={hexa} t={t} lang={lang} />
       </motion.div>
 
       {/* Slot · market odds + bet calculator */}

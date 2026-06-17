@@ -1,4 +1,5 @@
 import { parsePick } from '../parsers/pickParser.js';
+import { estimateProjectedTotal } from './projectedTotal.js';
 import {
   buildMLFeaturePayload,
   buildPropMLFeaturePayload,
@@ -218,12 +219,36 @@ export async function buildPickAlignedMlOpinion({
     }
   }
 
+  // Over/Under line backfill for display. The Oracle often emits a bare
+  // "Over/Under (Total de Carreras)" with no number; recover it so the admin
+  // card and per-model rows show the line instead of just "Over (60%)".
+  // Prefer the real sportsbook total; fall back to the model's projected total
+  // (display-only, tagged) when odds weren't available.
+  let projectedTotal = null;
+  if (marketType === 'overunder' && parsed.line == null) {
+    const marketTotalOu = toNumber(features?.oddsData?.odds?.overUnder?.total);
+    if (marketTotalOu != null) {
+      parsed = { ...parsed, line: marketTotalOu };
+    } else {
+      projectedTotal = estimateProjectedTotal(features);
+    }
+  }
+
   const oracleProb = extractOraclePickProb(analysisData);
   // The Oracle's side IS whatever its pick text says — never infer it from the
   // confidence number. Guessing "home" because prob ≥ 50% produced false
   // "Home ML" labels (and spurious DISAGREE) for away/over picks the parser
   // couldn't read. When the side is genuinely unknown, leave it null → "—".
   const oracleSide = parsed.side ?? null;
+
+  const pickDisplay = (() => {
+    if (marketType === 'overunder' && oracleSide) {
+      const dir = oracleSide === 'under' ? 'Under' : 'Over';
+      if (parsed.line != null) return `${dir} ${parsed.line}`;
+      if (projectedTotal != null) return `${dir} ${projectedTotal} (proy.)`;
+    }
+    return pickText;
+  })();
 
   const legacy = buildLegacyOpinion(marketType, xgboostResult, gameData, parsed);
   legacy.agree = sidesAgree(oracleSide, legacy.side);
@@ -284,6 +309,8 @@ export async function buildPickAlignedMlOpinion({
 
   const mlOpinion = {
     pickText,
+    pickDisplay,
+    projected_total: projectedTotal,
     market_type: marketType,
     side: oracleSide,
     line: parsed.line,

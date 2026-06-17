@@ -32,6 +32,7 @@ import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
 import { getNflLogoUrl } from '../utils/nflLogoUrl';
 import { getNhlLogoUrl } from '../utils/nhlLogoUrl';
 import { groupHistoryByPeriod } from '../utils/historyPeriodStats.js';
+import { applyProjectedLine } from '../utils/pickLineDisplay';
 
 const TRANSLATIONS = { en, es };
 
@@ -467,7 +468,7 @@ function PickCard({ entry, onMarkResult, onDelete, onRequestPostmortem, isAdmin,
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <Typography sx={{ fontFamily: MONO, fontSize: '12px', color: C.textPrimary, flex: 1, letterSpacing: '0.05em' }}>
-              {entry.pick}
+              {applyProjectedLine(entry.pick, entry.value_breakdown?.projected_total ?? entry.projected_total, { lang })}
             </Typography>
             {entry.confidence > 0 && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
