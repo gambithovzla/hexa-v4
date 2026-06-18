@@ -1675,7 +1675,7 @@ export default function AnalysisPanel({
           {isAdmin && sport === 'mlb' && result?.f5Suggestion?.suggested && (
             <F5SuggestionCard suggestion={result.f5Suggestion} lang={lang} />
           )}
-          <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} />
+          <ResultCard data={hexaData} lang={lang} selectedGames={selectedGames} pickId={result?.savedPick?.id ?? null} />
         </>
       )}
 

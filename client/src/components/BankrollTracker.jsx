@@ -20,6 +20,24 @@ function formatMoney(n) {
   if (n == null) return "$0.00";
   return "$" + parseFloat(n).toFixed(2);
 }
+// American odds → implied probability (with vig).
+function impliedProbFromAmerican(odds) {
+  const o = Number(odds);
+  if (!Number.isFinite(o) || o === 0) return null;
+  return o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
+}
+// Closing Line Value: how much better the real line you got is vs the system line.
+// Positive = you got a better price (lower implied prob) than the system odds.
+function computeClv(systemOdds, realOdds) {
+  const pSystem = impliedProbFromAmerican(systemOdds);
+  const pReal   = impliedProbFromAmerican(realOdds);
+  if (pSystem == null || pReal == null) return null;
+  return {
+    systemOdds: Number(systemOdds),
+    realOdds:   Number(realOdds),
+    delta:      (pSystem - pReal) * 100,
+  };
+}
 function ResultBadge({ result }) {
   const map = {
     won:     { label: "WON",     bg: C.greenDim,  color: C.green,  border: C.greenLine  },
@@ -57,20 +75,20 @@ function OraclePickBadge({ pickResult }) {
 }
 // ── Oracle ROI Panel ──────────────────────────────────────────────────
 function OracleROIPanel({ bets }) {
-  const oracleBets = bets.filter(b => b.pick_id != null);
+  const oracleBets = bets.filter(b => b.pickId != null);
   if (oracleBets.length === 0) return null;
 
   const settledBets = oracleBets.filter(
-    b => b.pick_result && b.pick_result !== "pending"
+    b => b.pickResult && b.pickResult !== "pending"
   );
-  const wins   = settledBets.filter(b => b.pick_result === "win").length;
-  const losses = settledBets.filter(b => b.pick_result === "loss").length;
-  const pushes = settledBets.filter(b => b.pick_result === "push").length;
+  const wins   = settledBets.filter(b => b.pickResult === "win").length;
+  const losses = settledBets.filter(b => b.pickResult === "loss").length;
+  const pushes = settledBets.filter(b => b.pickResult === "push").length;
 
   const totalStaked = settledBets.reduce((sum, b) => sum + parseFloat(b.stake || 0), 0);
   const totalReturned = settledBets.reduce((sum, b) => {
-    if (b.pick_result === "win")  return sum + parseFloat(b.stake || 0) + calcPotentialWin(b.stake, b.odds);
-    if (b.pick_result === "push") return sum + parseFloat(b.stake || 0);
+    if (b.pickResult === "win")  return sum + parseFloat(b.stake || 0) + calcPotentialWin(b.stake, b.odds);
+    if (b.pickResult === "push") return sum + parseFloat(b.stake || 0);
     return sum;
   }, 0);
 
@@ -82,6 +100,12 @@ function OracleROIPanel({ bets }) {
   const winRate = (wins + losses) > 0
     ? ((wins / (wins + losses)) * 100).toFixed(0)
     : 0;
+
+  // CLV: average gap between the system line and the real line the user got.
+  const clvBets = oracleBets.map(b => computeClv(b.systemOdds, b.odds)).filter(Boolean);
+  const avgClv  = clvBets.length
+    ? clvBets.reduce((s, c) => s + c.delta, 0) / clvBets.length
+    : null;
 
   return (
     <div style={{
@@ -136,6 +160,15 @@ function OracleROIPanel({ bets }) {
             {winRate}%
           </div>
         </div>
+        {avgClv != null && (
+          <div style={{ background: C.bg, borderRadius: 0, padding: "12px 14px", border: `1px solid ${avgClv >= 0 ? C.greenLine : C.redLine}` }}>
+            <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 8, textTransform: "uppercase", letterSpacing: 2, marginBottom: 4 }} title="Cuánto mejor (o peor) fue tu cuota real vs la del sistema">AVG CLV</div>
+            <div style={{ color: avgClv >= 0 ? C.green : C.red, fontSize: 20, fontFamily: BARLOW, textShadow: `0 0 10px ${avgClv >= 0 ? C.green : C.red}44` }}>
+              {avgClv >= 0 ? "+" : ""}{avgClv.toFixed(1)}%
+            </div>
+            <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 7, marginTop: 2 }}>{clvBets.length} vs sistema</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -689,13 +722,14 @@ function BetRow({ bet, onUpdate, onDelete }) {
     setUpdating(false);
   };
   const potentialWin = calcPotentialWin(bet.stake, bet.odds);
-  const hasOraclePick = bet.pick_id != null;
+  const hasOraclePick = bet.pickId != null;
   const borderColor = hasOraclePick
-    ? (PICK_RESULT_BORDER[bet.pick_result] || PICK_RESULT_BORDER.pending)
+    ? (PICK_RESULT_BORDER[bet.pickResult] || PICK_RESULT_BORDER.pending)
     : C.border;
-  const dateStr = bet.created_at
-    ? new Date(bet.created_at).toISOString().slice(0, 10)
+  const dateStr = bet.date
+    ? new Date(bet.date).toISOString().slice(0, 10)
     : "—";
+  const clv = computeClv(bet.systemOdds, bet.odds);
   return (
     <div style={{
       background: C.bg,
@@ -717,17 +751,17 @@ function BetRow({ bet, onUpdate, onDelete }) {
           <div style={{ color: C.textPrimary, fontFamily: MONO, fontSize: 12, letterSpacing: "0.04em" }}>{bet.pick}</div>
           <div style={{ color: C.textMuted, fontFamily: MONO, fontSize: 9, marginTop: 2, letterSpacing: 1 }}>{bet.matchup}</div>
           {/* Oracle pick info */}
-          {hasOraclePick && (bet.oracle_pick || bet.pick_result) && (
+          {hasOraclePick && (bet.oraclePick || bet.pickResult) && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-              {bet.oracle_pick && (
+              {bet.oraclePick && (
                 <span style={{
                   color: C.accent, fontFamily: MONO, fontSize: 8, background: C.accentDim,
                   border: `1px solid ${C.accentLine}`, borderRadius: 0, padding: "1px 6px", letterSpacing: 1,
                 }}>
-                  ORACLE: {bet.oracle_pick}
+                  ORACLE: {bet.oraclePick}
                 </span>
               )}
-              {bet.pick_result && <OraclePickBadge pickResult={bet.pick_result} />}
+              {bet.pickResult && <OraclePickBadge pickResult={bet.pickResult} />}
             </div>
           )}
         </div>
@@ -740,6 +774,11 @@ function BetRow({ bet, onUpdate, onDelete }) {
         <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 9 }}>STAKE: <span style={{ color: C.textPrimary }}>${bet.stake}</span></span>
         <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 9 }}>ODDS: <span style={{ color: C.cyan }}>{bet.odds > 0 ? "+" : ""}{bet.odds}</span></span>
         <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 9 }}>WIN: <span style={{ color: C.green }}>{formatMoney(potentialWin)}</span></span>
+        {clv && (
+          <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 9 }} title={`Cuota sistema ${clv.systemOdds > 0 ? "+" : ""}${clv.systemOdds} → tu cuota ${clv.realOdds > 0 ? "+" : ""}${clv.realOdds}`}>
+            CLV: <span style={{ color: clv.delta >= 0 ? C.green : C.red }}>{clv.delta >= 0 ? "+" : ""}{clv.delta.toFixed(1)}%</span>
+          </span>
+        )}
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         {bet.result === "pending" && (

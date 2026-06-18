@@ -110,7 +110,8 @@ async function getBankrollData(userId) {
   const betsRes = await pool.query(
     `SELECT b.id, b.date, b.matchup, b.pick, b.odds, b.stake, b.potential_win,
             b.result, b.source, b.notes, b.pick_id,
-            p.matchup AS pick_matchup, p.pick AS oracle_pick, p.result AS pick_result
+            p.matchup AS pick_matchup, p.pick AS oracle_pick, p.result AS pick_result,
+            p.odds_at_pick AS system_odds
      FROM bets b
      LEFT JOIN picks p ON b.pick_id = p.id
      WHERE b.user_id = $1
@@ -136,6 +137,7 @@ async function getBankrollData(userId) {
       pickMatchup:  b.pick_matchup ?? null,
       oraclePick:   b.oracle_pick ?? null,
       pickResult:   b.pick_result ?? null,
+      systemOdds:   b.system_odds != null ? Number(b.system_odds) : null,
     })),
   };
 }

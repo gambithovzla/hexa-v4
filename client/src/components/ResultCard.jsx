@@ -1205,17 +1205,17 @@ function ParlayOddsPanel({ legOdds, legs, t }) {
 
 // ── AgregarABanca button + inline form ───────────────────────────────────────
 
-function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
+function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en', pickId = null }) {
   const { isAuthenticated, token } = useAuth();
   const [open,            setOpen]            = useState(false);
   const [stake,           setStake]           = useState('');
+  const [realOdds,        setRealOdds]        = useState('');
   const [busy,            setBusy]            = useState(false);
   const [success,         setSuccess]         = useState(false);
   const [err,             setErr]             = useState('');
   const [kellySuggestion, setKellySuggestion] = useState(null);
   const normalizedOdds = sanitizeOdds(odds);
   const canRegister = Boolean(matchup && pick && normalizedOdds != null);
-  const pickIncludesOdds = extractAmericanOddsFromText(pick) != null;
   const copy = lang === 'es'
     ? {
         add: '+ AGREGAR A BANCA',
@@ -1227,6 +1227,8 @@ function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
         matchup: 'PARTIDO',
         pick: 'PICK',
         stake: 'STAKE',
+        yourOdds: 'TU CUOTA',
+        oddsHint: 'La cuota real que conseguiste (FanDuel, bet365, etc.)',
         cancel: 'Cancelar',
         submit: 'Registrar',
       }
@@ -1240,6 +1242,8 @@ function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
         matchup: 'MATCHUP',
         pick: 'PICK',
         stake: 'STAKE',
+        yourOdds: 'YOUR ODDS',
+        oddsHint: 'The real line you got (FanDuel, bet365, etc.)',
         cancel: 'Cancel',
         submit: 'Save',
       };
@@ -1263,19 +1267,23 @@ function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
     if (!canRegister) { setErr(copy.missingBetMeta); return; }
     const s = Number(stake);
     if (!s || s <= 0) { setErr('Ingresa un monto válido'); return; }
+    // The real line the user got at their book; falls back to the system odds.
+    const enteredOdds = sanitizeOdds(realOdds);
+    const oddsToSave  = enteredOdds ?? normalizedOdds;
     setBusy(true);
     setErr('');
     try {
       const res = await fetch(`${API_URL}/api/bankroll/bet`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ matchup, pick, odds: normalizedOdds, stake: s, source: 'hexa' }),
+        body:    JSON.stringify({ matchup, pick, odds: oddsToSave, stake: s, source: 'hexa', pick_id: pickId }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? copy.submitError);
       setSuccess(true);
       setOpen(false);
       setStake('');
+      setRealOdds('');
       setKellySuggestion(null);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
@@ -1320,6 +1328,7 @@ function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
           disabled={!canRegister}
           onClick={() => {
             if (!canRegister) return;
+            setRealOdds(normalizedOdds != null ? String(normalizedOdds) : '');
             setOpen(true);
             fetchKelly();
           }}
@@ -1371,6 +1380,23 @@ function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
             onChange={e => setStake(e.target.value)}
             style={inputSx}
           />
+          <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted, flexShrink: 0 }}>
+            {copy.yourOdds}:
+          </Typography>
+          <input
+            type="number"
+            step="1"
+            placeholder={normalizedOdds != null ? String(normalizedOdds) : '-110'}
+            value={realOdds}
+            onChange={e => setRealOdds(e.target.value)}
+            style={inputSx}
+            title={copy.oddsHint}
+          />
+          {normalizedOdds != null && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.62rem', color: C.textMuted, width: '100%', mt: '-2px' }}>
+              {copy.oddsHint} · {lang === 'es' ? 'cuota del sistema' : 'system odds'}: {fmtAmericanOdds(normalizedOdds)}
+            </Typography>
+          )}
           {matchup && (
             <Typography sx={{ fontFamily: MONO, fontSize: '10px', color: C.textMuted, width: '100%' }}>
               {copy.matchup}: <span style={{ color: C.textSecondary }}>{matchup}</span>
@@ -1399,17 +1425,12 @@ function AgregarABanca({ matchup, pick, odds, confidence, lang = 'en' }) {
               </Box>
             )}
           </Typography>
-          {!pickIncludesOdds && normalizedOdds != null && (
-            <Typography sx={{ fontFamily: MONO, fontSize: '0.65rem', color: C.textMuted, flexShrink: 0 }}>
-              {fmtAmericanOdds(normalizedOdds)}
-            </Typography>
-          )}
           {err && <Typography sx={{ fontFamily: SANS, fontSize: '0.65rem', color: C.red, width: '100%' }}>{err}</Typography>}
           <Box sx={{ display: 'flex', gap: '6px', ml: 'auto', flexShrink: 0 }}>
             <Box
               component="button"
               type="button"
-              onClick={() => { setOpen(false); setErr(''); setStake(''); }}
+              onClick={() => { setOpen(false); setErr(''); setStake(''); setRealOdds(''); }}
               sx={{ px: '10px', py: '4px', bgcolor: 'transparent', border: `1px solid ${C.border}`, borderRadius: '2px', color: C.textMuted, fontFamily: MONO, fontSize: '0.68rem', cursor: 'pointer' }}
             >
               {copy.cancel}
@@ -1751,7 +1772,7 @@ function SafePickResult({ data, lang, t }) {
   );
 }
 
-function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
+function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null, pickId = null }) {
   const mp         = hexa.master_prediction ?? {};
   const bp         = hexa.best_pick;
   const valueBreakdown = hexa.value_breakdown ?? null;
@@ -1777,6 +1798,7 @@ function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
               odds={bankrollOdds}
               confidence={confidence}
               lang={lang}
+              pickId={pickId}
             />
           ),
           oddsPanel: hexa.odds?.odds ? <OddsPanel odds={hexa.odds.odds} hexa={hexa} t={t} /> : null,
@@ -2096,7 +2118,7 @@ function FullDayResult({ hexa, t }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function ResultCard({ data, lang = 'en', selectedGames = [] }) {
+export default function ResultCard({ data, lang = 'en', selectedGames = [], pickId = null }) {
   const t = L[lang] ?? L.en;
 
   if (!data) {
@@ -2301,7 +2323,7 @@ export default function ResultCard({ data, lang = 'en', selectedGames = [] }) {
 
   // Single game
   if (data.master_prediction || data.best_pick || data.oracle_report) {
-    return <SingleGameResult hexa={data} t={t} lang={lang} selectedGame={selectedGames[0] ?? null} />;
+    return <SingleGameResult hexa={data} t={t} lang={lang} selectedGame={selectedGames[0] ?? null} pickId={pickId} />;
   }
 
   // Parlay
