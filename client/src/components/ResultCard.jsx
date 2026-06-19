@@ -1756,7 +1756,8 @@ function SingleGameResult({ hexa, t, lang = 'en', selectedGame = null }) {
   const bp         = hexa.best_pick;
   const valueBreakdown = hexa.value_breakdown ?? null;
   const confidence = Math.min(100, Math.max(0, Number(mp.oracle_confidence) || 0));
-  const pickText   = mp.pick ?? bp?.detail ?? '';
+  // bp.detail always carries the exact numeric line ("Over 8.5"); mp.pick sometimes omits it in Spanish
+  const pickText   = (bp?.detail && /\d/.test(bp.detail)) ? bp.detail : (mp.pick ?? bp?.detail ?? '');
   const bankrollMatchup = String(hexa.matchup ?? hexa.odds?.game ?? getGameMatchupLabel(selectedGame) ?? '').trim();
   const bankrollOdds = sanitizeOdds(valueBreakdown?.odds)
     ?? inferBankrollOdds({ pick: pickText, bestPickType: bp?.type, oddsData: hexa.odds, gameData: selectedGame });
