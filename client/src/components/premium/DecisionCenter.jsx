@@ -659,7 +659,7 @@ export default function DecisionCenter({ hexa, lang = 'en', slots = {} }) {
         <HeroCard
           intent={intent}
           eyebrow={t.verdict}
-          title={mp.pick || bp.detail || '—'}
+          title={(bp.detail && /\d/.test(bp.detail)) ? bp.detail : (mp.pick || bp.detail || '—')}
           meta={hexa.matchup || hexa.odds?.game || undefined}
         >
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: SPACE.md }}>
