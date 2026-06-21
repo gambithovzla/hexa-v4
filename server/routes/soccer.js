@@ -21,12 +21,12 @@ import { Router } from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/auth-middleware.js';
 import { getSoccerGamesForDate } from '../soccer-api.js';
-import { isSupportedLeague, SOCCER_LEAGUE_SLUGS } from '../soccer-league-map.js';
+import { isSupportedLeague, getSoccerLeague, SOCCER_LEAGUE_SLUGS } from '../soccer-league-map.js';
 import { getSoccerPlayerPropOdds } from '../soccer-props-odds.js';
 import { enrichSoccerPropOffers } from '../services/soccerPropFeatureEnricher.js';
 import { parseSoccerProp } from '../soccer-props-resolver.js';
 import { buildSoccerGameContext } from '../soccer-context-builder.js';
-import { analyzeSoccerGame, analyzeSoccerChat } from '../services/oracleSoccer.js';
+import { analyzeSoccerGame, analyzeSoccerChat, analyzeSoccerExpertChat } from '../services/oracleSoccer.js';
 import { getSoccerGameOdds, matchSoccerOddsToGame, buildMarketOddsForGame } from '../soccer-odds.js';
 import { getSoccerAltMarkets } from '../soccer-alt-markets.js';
 import { validateSoccerAnalysisOutput } from '../services/soccerOutputGuard.js';
@@ -378,12 +378,67 @@ router.post('/analyze/chat', soccerEnabled, verifyToken, requireSportAccess('soc
     marketOdds = null,
     sessionKey,
     matchups,
+    leagueSlug: bodyLeague = null,
   } = req.body;
+
+  if (!question?.trim()) return res.status(400).json({ success: false, error: 'question is required' });
+
+  // ── Free-form expert chat ────────────────────────────────────────────────
+  // No specific game selected → converse as a world-class soccer analyst from
+  // general knowledge (no live context block). `leagueSlug` is an optional focus
+  // hint only. Pick extraction is skipped (no game to attach a pick to).
+  if (!gameId) {
+    const leagueMeta = bodyLeague && isSupportedLeague(bodyLeague) ? getSoccerLeague(bodyLeague) : null;
+    try {
+      const result = await analyzeSoccerExpertChat({
+        question: question.trim(),
+        conversationHistory,
+        lang,
+        leagueMeta,
+      });
+
+      if (sessionKey) {
+        const todayEt = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        const fullMessages = [
+          ...conversationHistory.flatMap(t => [
+            { role: 'user', text: t.question },
+            { role: 'assistant', text: t.answer },
+          ]),
+          { role: 'user', text: question.trim() },
+          { role: 'assistant', text: result.text },
+        ];
+        upsertOracleSession({
+          userId: req.user.id,
+          sessionKey,
+          dateEt: todayEt,
+          mode: 'libre',
+          gameIds: [],
+          matchups: matchups || (lang === 'es' ? 'Chat libre' : 'Free chat'),
+          messages: fullMessages,
+        }).catch(err => console.warn(`[soccer-route] expert chat session upsert failed: ${err.message}`));
+      }
+
+      return res.json({
+        success: true,
+        answer: result.text,
+        text: result.text,
+        picked: null,
+        mode: 'chat-general',
+        meta: {
+          model:      result.model,
+          usage:      result.usage,
+          sport:      'soccer',
+          leagueSlug: bodyLeague ?? null,
+        },
+      });
+    } catch (err) {
+      console.error(`[soccer-route] analyze/chat (expert) error: ${err.message}`);
+      return res.status(500).json({ success: false, error: safeErr(err) });
+    }
+  }
 
   const leagueSlug = validateLeague(req, res);
   if (!leagueSlug) return;
-  if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
-  if (!question?.trim()) return res.status(400).json({ success: false, error: 'question is required' });
 
   try {
     const game = await findSoccerGame({ gameId, leagueSlug, date });

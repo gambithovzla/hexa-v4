@@ -287,7 +287,10 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   // NBA, NHL and Soccer share the date-based games shape and per-sport chat route.
   // Tennis has its own mapping (players → teams) handled by the isTennis branch.
   const isDateSportNonMlb = isNba || isNhl || isSoccer;
-  const [soccerLeague, setSoccerLeague] = useState('eng.1');
+  // Default to the World Cup: the European club leagues are off-season in
+  // summer (Aug–May), so the slate would be empty; fifa.world is the live
+  // competition mid-2026.
+  const [soccerLeague, setSoccerLeague] = useState('fifa.world');
   const [tour, setTour] = useState('atp'); // tennis only (atp|wta)
   const [games, setGames] = useState([]);
   const [mode, setMode] = useState('partido'); // 'partido' | 'jornada'
@@ -299,6 +302,9 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   // Jornada mode
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [jornadaActive, setJornadaActive] = useState(false);
+
+  // Libre (free-chat) mode — soccer only: open conversation with no game selected
+  const [libreActive, setLibreActive] = useState(false);
 
   const [question, setQuestion] = useState('');
   const [conversation, setConversation] = useState([]);
@@ -542,8 +548,63 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Libre mode (soccer): free-form expert chat with no specific game
+  // --------------------------------------------------------------------------
+  async function handleSendLibre() {
+    if (!question.trim() || loading) return;
+    const q = question.trim();
+    setQuestion('');
+    setLoading(true);
+    setConversation(prev => [...prev, { role: 'user', text: q }]);
+
+    try {
+      const token = localStorage.getItem('hexa_token');
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      if (skipExtract) headers['X-HEXA-Skip-Pick-Extract'] = '1';
+      const res = await fetch(`${API_URL}/api/soccer/analyze/chat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          // No gameId → server routes to the free-form expert analyst.
+          question: q,
+          leagueSlug: soccerLeague,
+          conversationHistory: buildHistory(),
+          lang,
+          sessionKey,
+          matchups: lang === 'es' ? 'Chat libre' : 'Free chat',
+        }),
+      });
+      const data = await res.json();
+      const answerText = data.answer ?? data.text;
+      if (data.success && answerText) {
+        setConversation(prev => [
+          ...prev,
+          { role: 'assistant', text: answerText, picked: data.picked ?? null },
+        ]);
+      } else if (res.status === 503) {
+        setConversation(prev => [...prev, {
+          role: 'assistant',
+          text: lang === 'es'
+            ? 'Oracle Chat Soccer requiere SOCCER_ANALYSIS_ENABLED=true en el servidor.'
+            : 'Soccer Oracle Chat requires SOCCER_ANALYSIS_ENABLED=true on the server.',
+        }]);
+      } else {
+        setConversation(prev => [...prev, { role: 'assistant', text: data.error || 'Error getting response.' }]);
+      }
+    } catch {
+      setConversation(prev => [...prev, { role: 'assistant', text: 'Connection error.' }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function handleSend() {
     if (mode === 'partido') handleSendPartido();
+    else if (mode === 'libre') handleSendLibre();
     else handleSendJornada();
   }
 
@@ -567,6 +628,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
     setSelectedGame(null);
     setSelectedIds(new Set());
     setJornadaActive(false);
+    setLibreActive(false);
     setConversation([]);
   }
 
@@ -575,7 +637,9 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
     resetAll();
   }
 
-  const inChat = mode === 'partido' ? !!selectedGame : jornadaActive;
+  const inChat = mode === 'partido' ? !!selectedGame
+    : mode === 'libre' ? libreActive
+    : jornadaActive;
   const sendDisabled = loading || !question.trim() || (mode === 'jornada' && selectedIds.size < 2);
 
   // --------------------------------------------------------------------------
@@ -631,7 +695,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
               padding: '6px 12px', borderRadius: '3px', fontFamily: MONO, fontSize: '10px',
               cursor: 'pointer',
             }}>
-              {mode === 'partido' ? 'CHANGE GAME' : 'CHANGE SELECTION'}
+              {mode === 'partido' ? 'CHANGE GAME' : mode === 'libre' ? (lang === 'es' ? 'NUEVO CHAT' : 'NEW CHAT') : 'CHANGE SELECTION'}
             </button>
           )}
         </div>
@@ -648,7 +712,9 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         {/* MODE TOGGLE — only show when not in an active chat */}
         {!inChat && (
           <div style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
-            {(isNba ? ['partido'] : ['partido', 'jornada']).map(m => (
+            {(isNba ? ['partido']
+              : isSoccer ? ['partido', 'libre']
+              : ['partido', 'jornada']).map(m => (
               <button
                 key={m}
                 onClick={() => switchMode(m)}
@@ -663,6 +729,8 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
               >
                 {m === 'partido'
                   ? (lang === 'es' ? 'PARTIDO' : 'SINGLE GAME')
+                  : m === 'libre'
+                  ? (lang === 'es' ? 'CHAT LIBRE' : 'FREE CHAT')
                   : (lang === 'es' ? 'JORNADA' : 'MATCHDAY')}
               </button>
             ))}
@@ -760,6 +828,68 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* LIBRE MODE — free expert chat, no game needed (soccer)            */}
+        {/* ------------------------------------------------------------------ */}
+        {mode === 'libre' && !libreActive && (
+          <div>
+            <div style={{
+              fontFamily: MONO, fontSize: '10px', color: C.textDim,
+              letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '6px',
+            }}>
+              {lang === 'es' ? 'CHAT LIBRE CON EL ORACLE' : 'FREE CHAT WITH THE ORACLE'}
+            </div>
+            <div style={{
+              fontFamily: SANS, fontSize: '12px', color: C.textDim,
+              lineHeight: 1.6, marginBottom: '14px',
+            }}>
+              {lang === 'es'
+                ? 'Conversa con el Oracle como el mayor experto de fútbol de la historia: táctica, tendencias, comparaciones, lecturas de partidos que le describas. Sin datos en vivo (cuotas/alineaciones); para un pick calibrado usa el modo PARTIDO.'
+                : 'Talk to the Oracle as the greatest soccer expert in history: tactics, trends, comparisons, reads on matches you describe. No live data (odds/lineups); for a calibrated pick use SINGLE GAME mode.'}
+            </div>
+            <div style={{
+              fontFamily: MONO, fontSize: '9px', color: C.textDim,
+              letterSpacing: '1px', marginBottom: '6px',
+            }}>
+              {lang === 'es' ? 'LIGA DE ENFOQUE (OPCIONAL)' : 'FOCUS LEAGUE (OPTIONAL)'}
+            </div>
+            <select
+              value={soccerLeague}
+              onChange={e => setSoccerLeague(e.target.value)}
+              style={{
+                width: '100%', marginBottom: '14px',
+                background: C.surface, border: `1px solid ${C.border}`,
+                color: C.textPrimary, fontFamily: MONO, fontSize: '11px',
+                padding: '7px 10px', cursor: 'pointer', outline: 'none',
+                colorScheme: 'dark', appearance: 'none',
+              }}
+            >
+              {[
+                { slug: 'fifa.world', label: '🏆 World Cup'   },
+                { slug: 'eng.1',      label: 'Premier League' },
+                { slug: 'esp.1',      label: 'La Liga'        },
+                { slug: 'ita.1',      label: 'Serie A'        },
+                { slug: 'ger.1',      label: 'Bundesliga'     },
+                { slug: 'fra.1',      label: 'Ligue 1'        },
+                { slug: 'usa.1',      label: 'MLS'            },
+              ].map(l => (
+                <option key={l.slug} value={l.slug}>{l.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => { setLibreActive(true); setConversation([]); }}
+              style={{
+                width: '100%', padding: '12px', borderRadius: '3px',
+                fontFamily: BARLOW, fontWeight: 700, fontSize: '13px', letterSpacing: '1px',
+                cursor: 'pointer', background: C.accent, color: '#111',
+                border: `1px solid ${C.accent}`, transition: 'all 0.15s',
+              }}
+            >
+              {lang === 'es' ? 'EMPEZAR CONVERSACIÓN' : 'START CONVERSATION'}
+            </button>
           </div>
         )}
 
@@ -882,6 +1012,14 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                 }}>
                   {getMatchup(selectedGame)}
                 </span>
+              ) : mode === 'libre' ? (
+                <span style={{
+                  fontFamily: MONO, fontSize: '10px', color: C.accent,
+                  background: C.accentDim, border: `1px solid ${C.accentLine}`,
+                  padding: '4px 10px', borderRadius: '3px', letterSpacing: '2px',
+                }}>
+                  {lang === 'es' ? 'CHAT LIBRE' : 'FREE CHAT'} · {soccerLeague}
+                </span>
               ) : (
                 games
                   .filter(g => selectedIds.has(g.gamePk || g.id))
@@ -969,9 +1107,13 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
                         ? (lang === 'es'
                             ? 'ej: ¿Cuál es el pick más seguro de hoy? ¿Dame los top 3...'
                             : 'e.g. What\'s the safest pick today? Rank all games by confidence...')
-                        : (lang === 'es'
-                            ? 'Pregunta al Oracle... (ej: ¿Arraez hace más de 1.5 hits?)'
-                            : 'Ask the Oracle... (e.g. Does Cole get 7+ strikeouts?)')
+                        : mode === 'libre'
+                          ? (lang === 'es'
+                              ? 'Pregúntale lo que sea de fútbol... (ej: ¿Cómo le iría a Brasil vs Francia?)'
+                              : 'Ask anything about soccer... (e.g. How would Brazil fare vs France?)')
+                          : (lang === 'es'
+                              ? 'Pregunta al Oracle... (ej: ¿Arraez hace más de 1.5 hits?)'
+                              : 'Ask the Oracle... (e.g. Does Cole get 7+ strikeouts?)')
                   }
                   style={{
                     flex: 1, background: C.surface, border: `1px solid ${isListening ? '#FF3344' : C.border}`,
