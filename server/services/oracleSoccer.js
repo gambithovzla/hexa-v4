@@ -25,7 +25,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
-import { SOCCER_CHAT_PROMPT, SOCCER_SYSTEM_PROMPT } from '../prompts/oracle-soccer-prompts.js';
+import { SOCCER_CHAT_PROMPT, SOCCER_SYSTEM_PROMPT, SOCCER_EXPERT_CHAT_PROMPT } from '../prompts/oracle-soccer-prompts.js';
 
 dotenv.config();
 
@@ -660,6 +660,64 @@ export async function analyzeSoccerChat({
       model: modelId,
       max_tokens: 1200,
       system: SOCCER_CHAT_PROMPT,
+      messages,
+    },
+    { timeout: timeoutMs },
+  );
+
+  const text = response.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('\n')
+    .trim();
+
+  return {
+    provider: 'anthropic',
+    model: modelId,
+    text,
+    usage: response.usage,
+  };
+}
+
+/**
+ * analyzeSoccerExpertChat — free-form expert conversation NOT tied to a specific
+ * match. No live context block; the Oracle answers as a world-class soccer
+ * analyst from general knowledge, with an explicit live-data disclaimer baked
+ * into SOCCER_EXPERT_CHAT_PROMPT. An optional `leagueMeta` is passed only as a
+ * focus hint (which competition the admin cares about), never as live data.
+ */
+export async function analyzeSoccerExpertChat({
+  question,
+  conversationHistory = [],
+  lang = 'en',
+  leagueMeta = null,
+  model,
+  timeoutMs = 90_000,
+}) {
+  // Use the deeper Sonnet model for richer expert conversation (vs the Haiku
+  // default of the game-grounded chat, which leans on a tight context block).
+  const modelId = model || SOCCER_MODELS.deep.id;
+
+  const messages = [];
+  for (const turn of conversationHistory) {
+    if (turn?.question) messages.push({ role: 'user', content: turn.question });
+    if (turn?.answer)   messages.push({ role: 'assistant', content: turn.answer });
+  }
+
+  const leagueLine = leagueMeta
+    ? `\n\n[FOCUS HINT — not live data] The admin is currently focused on ${leagueMeta.name}` +
+      `${leagueMeta.country ? ` (${leagueMeta.country})` : ''}. ` +
+      `Historical profile: ~${fmt(leagueMeta.avgGoals, 1)} goals/game, ~${Math.round((leagueMeta.drawPct ?? 0) * 100)}% draws. ` +
+      `Style: ${leagueMeta.style ?? 'n/a'}`
+    : '';
+  const langTag = lang === 'es' ? '\n\n(Responde en español.)' : '\n\n(Respond in English.)';
+  messages.push({ role: 'user', content: `${question}${leagueLine}${langTag}` });
+
+  const response = await anthropic.messages.create(
+    {
+      model: modelId,
+      max_tokens: 1500,
+      system: SOCCER_EXPERT_CHAT_PROMPT,
       messages,
     },
     { timeout: timeoutMs },
