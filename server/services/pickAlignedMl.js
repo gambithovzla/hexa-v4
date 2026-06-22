@@ -102,6 +102,18 @@ function formatProbLabel(sideLabel, prob) {
   return `${sideLabel} (${(prob * 100).toFixed(0)}%)`;
 }
 
+// Convert an absolute model probability (P(over) for overunder, P(home) for
+// moneyline/runline) to P(the given side wins). Props are already pick-aligned
+// so they pass through unchanged.
+function toSideProb(prob, marketType, side) {
+  if (prob == null || !side) return prob;
+  if (marketType === 'overunder') return side === 'over' ? prob : 1 - prob;
+  if (marketType === 'moneyline' || marketType === 'runline') {
+    return side === 'home' ? prob : 1 - prob;
+  }
+  return prob;
+}
+
 function buildFeaturePayloadForMarket({ marketType, parsed, statcastData, features }) {
   const base = buildMLFeaturePayload(statcastData, features);
   if (marketType === 'prop') {
@@ -239,12 +251,29 @@ export async function buildPickAlignedMlOpinion({
     }
   }
 
-  // When the canonicalized pick text still lacks a numeric line (e.g. odds were
-  // unavailable during annotation), fall back to features.oddsData so the Python
-  // model and the label formatters get the real market total.
+  // When the canonicalized pick text still lacks a numeric line, try sibling
+  // Oracle output fields first (e.g. best_pick.pick / oracle_report may have
+  // "Under 8.5" even when master_prediction.pick is a bare "Under (Total de
+  // Carreras)"), then fall back to the odds market total.
   if (marketType === 'overunder' && parsed.line == null) {
-    const fallbackLine = features?.oddsData?.odds?.overUnder?.total ?? null;
-    if (fallbackLine != null) parsed = { ...parsed, line: fallbackLine };
+    const siblingTexts = [
+      analysisData?.best_pick?.pick,
+      analysisData?.best_pick?.detail,
+      analysisData?.oracle_report?.recommended_pick,
+      analysisData?.safe_pick?.pick,
+    ];
+    for (const t of siblingTexts) {
+      if (!t) continue;
+      const sib = parsePick(String(t), { homeAbbr, awayAbbr });
+      if (sib?.line != null) {
+        parsed = { ...parsed, line: sib.line };
+        break;
+      }
+    }
+    if (parsed.line == null) {
+      const fallbackLine = features?.oddsData?.odds?.overUnder?.total ?? null;
+      if (fallbackLine != null) parsed = { ...parsed, line: fallbackLine };
+    }
   }
 
   const oracleProb = extractOraclePickProb(analysisData);
@@ -335,7 +364,7 @@ export async function buildPickAlignedMlOpinion({
       model_version: pythonRun.prediction?.model_version ?? null,
       status: pythonRun.status,
       label: pythonProb != null
-        ? formatProbLabel(pythonSideLabel, pythonProb)
+        ? formatProbLabel(pythonSideLabel, toSideProb(pythonProb, marketType, pythonSide))
         : (pythonRun.status === 'disabled' ? 'Sidecar deshabilitado' : 'No disponible'),
     },
     ensemble: {
@@ -362,7 +391,11 @@ export async function buildPickAlignedMlOpinion({
     prop_kind: parsed.prop_kind,
     oracle_pick_prob: oracleProb,
     legacy_pick_prob: legacy.prob,
-    python_pick_prob: pythonProb,
+    // Store pick-aligned P(Oracle's pick wins), not raw P(over)/P(home). The ML
+    // models predict absolute direction (P(over) for overunder, P(home) for
+    // moneyline) — flipping when Oracle picked the opposite side ensures the
+    // ensemble trains on consistent P(pick wins) across all picks.
+    python_pick_prob: toSideProb(pythonProb, marketType, oracleSide),
     python_pick_market: pythonRun.market,
     pick_agree_legacy: legacy.agree,
     pick_agree_python: mlOpinion.agree.python,
