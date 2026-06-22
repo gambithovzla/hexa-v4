@@ -1434,9 +1434,18 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       });
     }
 
-    const responseData = analysis.data
+    const shadowStatcast = buildShadowStatcastData(featureStore?.features ?? {});
+    const shadowFeatures = featureStore?.features ?? {};
+    // Canonicalize once — normalises pick text (line injection, Spanish tokens)
+    // so every downstream consumer (responseData, mlOpinion, persist, shadow)
+    // sees the same canonical picks rather than the raw LLM output.
+    const annotatedData = analysis.data
+      ? annotateAnalysisData(analysis.data, shadowFeatures, gameData)
+      : null;
+
+    const responseData = annotatedData
       ? {
-          ...annotateAnalysisData(analysis.data, featureStore?.features ?? {}, gameData),
+          ...annotatedData,
           matchup: `${gameData.teams?.away?.abbreviation ?? 'AWAY'} @ ${gameData.teams?.home?.abbreviation ?? 'HOME'}`,
           odds: matchedOdds ?? undefined,
         }
@@ -1444,13 +1453,11 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
 
     let mlOpinion = null;
     let pickAlignedForShadow = null;
-    const shadowStatcast = buildShadowStatcastData(featureStore?.features ?? {});
-    const shadowFeatures = featureStore?.features ?? {};
 
-    if (req.user.is_admin && analysis?.data && gameData) {
+    if (req.user.is_admin && annotatedData && gameData) {
       try {
         const aligned = await buildPickAlignedMlOpinion({
-          analysisData: analysis.data,
+          analysisData: annotatedData,
           gameData,
           statcastData: shadowStatcast,
           features: shadowFeatures,
@@ -1488,7 +1495,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
           userEmail: req.user.email ?? null,
           type: 'single',
           matchup,
-          analysisData: annotateAnalysisData(analysis.data, featureStore?.features ?? {}, gameData),
+          analysisData: annotatedData,
           model: model ?? 'fast',
           language: resolvedLang,
           gamePk: gameData.gamePk,
@@ -1502,7 +1509,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
       }
     }
 
-    if (isShadowModeEnabled() && analysis?.data && gameData) {
+    if (isShadowModeEnabled() && annotatedData && gameData) {
       try {
         await recordShadowModelRun({
           userId: req.user.id,
@@ -1512,7 +1519,7 @@ app.post('/api/analyze/game', analysisLimiter, verifyToken, async (req, res) => 
           analysisMode: 'single',
           gameData,
           gameDate: normalizeDateInput(date ?? gameData?.gameDate),
-          analysisData: analysis.data,
+          analysisData: annotatedData,
           xgboostResult: analysis.xgboostResult ?? null,
           statcastData: shadowStatcast,
           features: shadowFeatures,

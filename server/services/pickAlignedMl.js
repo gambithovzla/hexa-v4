@@ -218,6 +218,35 @@ export async function buildPickAlignedMlOpinion({
     }
   }
 
+  // Moneyline/runline picks often contain the full city name instead of the
+  // abbreviation — e.g. "Tampa Bay Moneyline" where abbr is "TB". The parser
+  // checks exact abbreviation substrings and misses these. Try whole-word
+  // matching against team names from gameData when side is still null.
+  if ((marketType === 'moneyline' || marketType === 'runline') && !parsed.side && gameData?.teams) {
+    const pickWords = new Set(
+      String(pickText ?? '').toUpperCase().split(/\s+/).filter(w => w.length >= 3)
+    );
+    const nameWords = (name) =>
+      String(name ?? '').toUpperCase().split(/\s+/).filter(w => w.length >= 3);
+    const homeWords = nameWords(gameData.teams.home?.name);
+    const awayWords = nameWords(gameData.teams.away?.name);
+    const homeHits = homeWords.filter(w => pickWords.has(w)).length;
+    const awayHits = awayWords.filter(w => pickWords.has(w)).length;
+    if (homeHits > 0 && homeHits > awayHits) {
+      parsed = { ...parsed, side: 'home' };
+    } else if (awayHits > 0 && awayHits > homeHits) {
+      parsed = { ...parsed, side: 'away' };
+    }
+  }
+
+  // When the canonicalized pick text still lacks a numeric line (e.g. odds were
+  // unavailable during annotation), fall back to features.oddsData so the Python
+  // model and the label formatters get the real market total.
+  if (marketType === 'overunder' && parsed.line == null) {
+    const fallbackLine = features?.oddsData?.odds?.overUnder?.total ?? null;
+    if (fallbackLine != null) parsed = { ...parsed, line: fallbackLine };
+  }
+
   const oracleProb = extractOraclePickProb(analysisData);
   // The Oracle's side IS whatever its pick text says — never infer it from the
   // confidence number. Guessing "home" because prob ≥ 50% produced false

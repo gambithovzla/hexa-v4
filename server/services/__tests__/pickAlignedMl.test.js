@@ -78,3 +78,49 @@ test('prop legacy is not available', async () => {
   assert.equal(mlOpinion.prop_kind, 'hits');
   assert.equal(mlOpinion.legacy.available, false);
 });
+
+test('full city name in pick resolves side via team name word matching', async () => {
+  const gameDataTB = {
+    gamePk: 456,
+    teams: {
+      home: { id: 139, abbreviation: 'TB', name: 'Tampa Bay Rays' },
+      away: { id: 146, abbreviation: 'MIA', name: 'Miami Marlins' },
+    },
+  };
+  const { mlOpinion } = await buildPickAlignedMlOpinion({
+    analysisData: {
+      master_prediction: { pick: 'Tampa Bay Moneyline', oracle_confidence: 63 },
+    },
+    gameData: gameDataTB,
+    xgboostResult: { score: 58, predicted_winner: 139, predicted_winner_abbr: 'TB' },
+    statcastData: {},
+    features: {},
+  });
+
+  assert.equal(mlOpinion.market_type, 'moneyline');
+  assert.equal(mlOpinion.side, 'home');
+  assert.equal(mlOpinion.agree.legacy, true);
+});
+
+test('ambiguous city name shared by both teams does not set side', async () => {
+  const gameDataNY = {
+    gamePk: 789,
+    teams: {
+      home: { id: 147, abbreviation: 'NYY', name: 'New York Yankees' },
+      away: { id: 121, abbreviation: 'NYM', name: 'New York Mets' },
+    },
+  };
+  const { mlOpinion } = await buildPickAlignedMlOpinion({
+    analysisData: {
+      master_prediction: { pick: 'New York Moneyline', oracle_confidence: 55 },
+    },
+    gameData: gameDataNY,
+    xgboostResult: { score: 53, predicted_winner: 147 },
+    statcastData: {},
+    features: {},
+  });
+
+  assert.equal(mlOpinion.market_type, 'moneyline');
+  assert.equal(mlOpinion.side, null);
+  assert.equal(mlOpinion.agree.legacy, null);
+});
