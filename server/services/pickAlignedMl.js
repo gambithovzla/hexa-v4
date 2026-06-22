@@ -218,6 +218,14 @@ export async function buildPickAlignedMlOpinion({
     }
   }
 
+  // When the canonicalized pick text still lacks a numeric line (e.g. odds were
+  // unavailable during annotation), fall back to features.oddsData so the Python
+  // model and the label formatters get the real market total.
+  if (marketType === 'overunder' && parsed.line == null) {
+    const fallbackLine = features?.oddsData?.odds?.overUnder?.total ?? null;
+    if (fallbackLine != null) parsed = { ...parsed, line: fallbackLine };
+  }
+
   const oracleProb = extractOraclePickProb(analysisData);
   // The Oracle's side IS whatever its pick text says — never infer it from the
   // confidence number. Guessing "home" because prob ≥ 50% produced false
