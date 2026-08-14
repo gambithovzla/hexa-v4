@@ -8,6 +8,7 @@
  */
 
 import { NFL_OUTPUT_SCHEMA_VERSION } from '../prompts/oracle-nfl-prompts.js';
+import { PRESEASON_ALERT_FLAG, PRESEASON_CONFIDENCE_CEIL } from './nflSeasonPhase.js';
 
 const ALLOWED_BET_TYPES = new Set(['moneyline', 'ml', 'spread', 'pointspread', 'total', 'overunder', 'ou']);
 const BLOCKED_BET_TYPES = new Set(['playerprop', 'playerprops', 'prop', 'props']);
@@ -28,7 +29,7 @@ function normalizeConfidence(raw) {
   return Math.round(n);
 }
 
-export function validateNflAnalysisOutput(data, { parseError = false } = {}) {
+export function validateNflAnalysisOutput(data, { parseError = false, isPreseason = false } = {}) {
   if (parseError) {
     return { ok: false, quality: 'reject', errors: ['json_parse_failed'], schema_version: NFL_OUTPUT_SCHEMA_VERSION, data: null };
   }
@@ -49,9 +50,18 @@ export function validateNflAnalysisOutput(data, { parseError = false } = {}) {
   if (/\b(abstain|pass)\b/i.test(pick)) errors.push('abstain_pick');
 
   const conf = normalizeConfidence(mp.oracle_confidence);
+  let preseasonCapped = false;
   if (conf == null) errors.push('missing_confidence');
   else if (conf < NFL_CONFIDENCE_FLOOR || conf > NFL_CONFIDENCE_CEIL) errors.push('confidence_out_of_range');
   else mp.oracle_confidence = conf;
+
+  // Clamp rather than reject: the read is still worth showing in preseason, it
+  // just may not claim conviction it cannot have. The cap is applied even when
+  // the raw value was out of range, so a 78 cannot survive as a preseason pick.
+  if (isPreseason && conf != null && conf > PRESEASON_CONFIDENCE_CEIL) {
+    mp.oracle_confidence = PRESEASON_CONFIDENCE_CEIL;
+    preseasonCapped = true;
+  }
 
   const bpType = normalizeBetType(data.best_pick?.type);
   if (bpType && BLOCKED_BET_TYPES.has(bpType)) errors.push('player_prop_blocked');
@@ -78,6 +88,16 @@ export function validateNflAnalysisOutput(data, { parseError = false } = {}) {
     master_prediction: mp,
     alert_flags: Array.isArray(data.alert_flags) ? data.alert_flags : [],
   };
+
+  if (isPreseason) {
+    sanitized.alert_flags = [...sanitized.alert_flags, PRESEASON_ALERT_FLAG];
+    if (preseasonCapped) {
+      sanitized.alert_flags = [
+        ...sanitized.alert_flags,
+        `PRESEASON_CONFIDENCE_CAPPED: ${conf} → ${PRESEASON_CONFIDENCE_CEIL}`,
+      ];
+    }
+  }
 
   if (errors.length) {
     sanitized.alert_flags = [...sanitized.alert_flags, `OUTPUT_GUARD: ${errors.join(', ')}`];

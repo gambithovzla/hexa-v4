@@ -109,6 +109,7 @@ async function buildGameBundle({ game, oddsEvents, lang }) {
     awayTeamAbbr: game.away_team_abbr,
     gameDate: game.game_date,
     gameTime: game.game_time ?? null,
+    seasonType: game.season_type ?? null,
     season: game.season ?? null,
     marketOdds: odds,
   });
@@ -129,6 +130,7 @@ async function buildGameBundle({ game, oddsEvents, lang }) {
   const modelCertified = model != null;
   const shadow = calculateNflShadowScore(context, gameMeta);
   const qb = assessQbConfirmation(context);
+  const isPreseason = context?.seasonPhase?.isPreseason === true;
   const dataQuality = Math.round((context?.context_meta?.overallCompleteness ?? 0.5) * 100);
   const matchup = `${game.away_team_abbr ?? 'AWAY'} @ ${game.home_team_abbr ?? 'HOME'}`;
 
@@ -148,6 +150,7 @@ async function buildGameBundle({ game, oddsEvents, lang }) {
     qbConfirmed: qb.confirmed,
     qbDetail: qb.detail,
     modelCertified,
+    isPreseason,
     mlProb: shadowProbForCandidate(c, shadow),
   }));
 

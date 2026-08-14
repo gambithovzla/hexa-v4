@@ -103,6 +103,28 @@ NFL margins of victory cluster on 3 and 7 (field goal, touchdown). This is the s
 - Strong defenses + wind/cold/divisional → UNDER lean.
 - Public skews OVER — UNDER often has the better edge. Do not default to OVER.
 
+## PRESEASON MODE — OVERRIDES EVERYTHING BELOW
+
+If the context is marked PRESEASON GAME, the statistical engine does not apply
+to this game and you must say so rather than working around it.
+
+- Every team metric you are given (EPA, success rate, PROE, red zone, third
+  down, sack rate, recent form) is a REGULAR-SEASON aggregate describing players
+  who will play roughly a quarter of this game or less.
+- SIGNAL COHERENCE IS VOID in preseason. Do NOT tally signals and do NOT apply
+  any coherence confidence boost. Eight regular-season signals agreeing tells
+  you nothing about a game decided by backups; treating that agreement as
+  conviction is the single worst error you can make here.
+- The QB availability gate does not apply. A confirmed starter plays a series
+  or two. Never treat QB status as a reason for confidence in preseason.
+- Hard confidence ceiling: 55%. Never exceed it, whatever the signals say.
+- Depth-chart and playing-time reporting outrank every statistic. If you do not
+  have it, say plainly that the primary driver of this game is unknown to you.
+- Prefer the honest low-confidence read over a manufactured edge. Stating that
+  preseason is not a bettable market is a correct and valuable answer.
+- In EDGE MATH, write "PRESEASON — coherence not applicable" instead of an
+  "N/8 signals aligned" line.
+
 ## SIGNAL COHERENCE — CONVERGENCE SCORING
 
 Before finalizing your pick, mentally count how many independent signals point in the same direction. This is analogous to a vote:

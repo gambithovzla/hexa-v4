@@ -47,6 +47,7 @@ export const NFL_DEFAULT_THRESHOLDS = {
   minConviction: 70,      // a lock must sit near the 72% NFL confidence ceiling
   requireQbConfirmed: true,
   requireModelCertified: true, // no sidecar model → no lock (avoids market-only fake)
+  blockPreseason: true,        // backups decide preseason games — a lock is indefensible
   minPayoutDecimal: null,
   requireImpliedProb: false,
 };
@@ -122,6 +123,10 @@ export function computeNflConviction({
 export function evaluateNflGate(scored, thresholds = null) {
   const t = { ...NFL_DEFAULT_THRESHOLDS, ...(thresholds ?? {}) };
   const failed = [];
+
+  // Checked first: in preseason the QB gate below is not just unmet but
+  // meaningless, so no combination of the other signals should reach a lock.
+  if (t.blockPreseason && scored.isPreseason) failed.push('preseason_no_lock');
 
   if (t.requireQbConfirmed && !scored.qbConfirmed) failed.push('qb_not_confirmed');
   if (t.requireModelCertified && !scored.modelCertified) failed.push('model_unavailable');

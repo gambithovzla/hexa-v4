@@ -19,6 +19,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
 import { NFL_CHAT_PROMPT, NFL_SYSTEM_PROMPT } from '../prompts/oracle-nfl-prompts.js';
+import { PRESEASON_CONFIDENCE_CEIL } from './nflSeasonPhase.js';
 
 dotenv.config();
 
@@ -231,13 +232,36 @@ function describeDataQuality(context_meta) {
  * Serialise the NFL context into a single deterministic text block. Keep
  * ordering stable — the system prompt references "MARKET ODDS block" by name.
  */
+// The statistical blocks below are all regular-season aggregates. In preseason
+// they describe a team that will barely take the field, so the context has to
+// say that before the model reads them — otherwise agreement between eight
+// irrelevant signals reads as conviction.
+function describePreseason(seasonPhase) {
+  if (!seasonPhase?.isPreseason) return null;
+  return [
+    '⚠️ PRESEASON GAME — READ THIS BEFORE THE NUMBERS',
+    '- Starters typically play one or two series; the result is decided by',
+    '  second- and third-string players who do not appear in any metric below.',
+    '- EPA, success rate, PROE, red-zone %, third-down %, and sack rates are',
+    '  REGULAR-SEASON averages. They do not describe this game.',
+    '- The QB listed as starter is not the QB who will play most of this game,',
+    '  so QB status is NOT a usable availability signal here.',
+    '- Market lines move on playing-time reports, not team strength.',
+    '- Coaching intent (evaluating players, vanilla scheme, no game-planning)',
+    '  dominates outcome and is not in the data.',
+    `- Confidence is capped at ${PRESEASON_CONFIDENCE_CEIL}% for preseason regardless of signal agreement.`,
+  ].join('\n');
+}
+
 export function serializeNflContext({ context, marketOdds }) {
   if (!context) return 'No NFL context provided.';
-  const { season, gameDate, home, away, weather, context_meta } = context;
+  const { season, seasonPhase, gameDate, home, away, weather, context_meta } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   const effDeltas = describeEfficiencyDeltas(home, away);
+  const preseasonBlock = describePreseason(seasonPhase);
   return [
-    `H.E.X.A. NFL CONTEXT — ${gameDate} (Season ${season ?? 'n/a'})`,
+    `H.E.X.A. NFL CONTEXT — ${gameDate} (Season ${season ?? 'n/a'}${seasonPhase?.label && seasonPhase.label !== 'unknown' ? `, ${seasonPhase.label}` : ''})`,
+    ...(preseasonBlock ? ['', preseasonBlock] : []),
     '',
     describeStrengthDelta(home, away),
     describeRestDelta(home, away),

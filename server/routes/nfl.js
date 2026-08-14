@@ -198,6 +198,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       gameDate,
       gameTime: game.game_datetime ?? null,
       season: game.season,
+      seasonType: game.season_type ?? seasonType ?? null,
       marketOdds: resolvedOdds,
     });
 
@@ -215,7 +216,10 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       console.warn(`[nfl-route] parse error for game ${gameId} — raw text returned`);
     }
 
-    const guard = validateNflAnalysisOutput(result.data, { parseError: result.parseError });
+    const guard = validateNflAnalysisOutput(result.data, {
+      parseError: result.parseError,
+      isPreseason: context?.seasonPhase?.isPreseason === true,
+    });
     if (!guard.ok) {
       return res.status(422).json({
         success: false,
@@ -381,6 +385,7 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireSportAccess('nfl'),
       awayTeamAbbr: game.away_team_abbr ?? null,
       gameDate,
       gameTime: game.game_datetime ?? null,
+      seasonType: game.season_type ?? null,
       season: game.season,
       marketOdds: resolvedOdds,
     });
@@ -657,6 +662,7 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
           awayTeamAbbr: g.away_team_abbr,
           gameDate: g.game_date,
           gameTime: g.game_time ?? null,
+          seasonType: g.season_type ?? null,
           season: g.season ?? null,
           marketOdds: odds,
         });
