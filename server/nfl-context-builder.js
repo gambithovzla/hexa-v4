@@ -21,6 +21,7 @@ import {
 } from './nfl-api.js';
 import { getNflAdvancedTeamStats, findAdvancedStats } from './nfl-advanced-fetcher.js';
 import { resolveNflTeamId, getNflTeam, getNflStadium } from './nfl-team-map.js';
+import { buildSeasonPhase } from './services/nflSeasonPhase.js';
 
 /** NFL season year for a calendar date (Sep–Feb belongs to the Sep year). */
 function seasonFromDate(dateStr) {
@@ -267,6 +268,7 @@ export async function buildNflGameContext({
   gameDate,
   gameTime = null,
   season = null,
+  seasonType = null,
   marketOdds = null,
 }) {
   const startedAt = Date.now();
@@ -397,5 +399,13 @@ export async function buildNflGameContext({
     staleFlags,
   };
 
-  return { season, gameDate, home, away, weather: weatherBlock, context_meta };
+  const seasonPhase = buildSeasonPhase(seasonType);
+  if (seasonPhase.isPreseason) {
+    // Every team-level metric below is a regular-season average, and the models
+    // were trained with season_type == "REG" only. Say so loudly rather than
+    // letting the numbers pass as if they described this game.
+    staleFlags.push('preseason_metrics_out_of_distribution');
+  }
+
+  return { season, seasonPhase, gameDate, home, away, weather: weatherBlock, context_meta };
 }
