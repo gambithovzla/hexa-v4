@@ -40,6 +40,26 @@ class TrainMetrics:
     # True when n_test < 30: Brier/ROI are noisy at that sample size and should
     # not be used for model-quality decisions (e.g. runline with N_TEST=19).
     low_sample_warning: bool = False
+    # Brier is only meaningful next to a reference. `vs_base_rate` compares the
+    # model against predicting the training mean on every row; `vs_market`
+    # against the de-vigged closing line. Both carry a bootstrap CI on the
+    # paired difference, and `beats_reference` is True only when that whole
+    # interval sits below zero. A model that does not beat `vs_market` has no
+    # demonstrated edge no matter how good its Brier looks alone.
+    base_rate: float = 0.5
+    vs_base_rate: dict = field(default_factory=dict)
+    vs_market: dict = field(default_factory=dict)
+    market_reference_source: str = "unavailable"
+    market_reference_coverage: float = 0.0
+    market_reference_note: str = ""
+    # Where the prices behind roi_kelly25_test came from. Anything other than
+    # "stored_prices" means the ROI rests on an assumed number, so it measures
+    # the assumption as much as the model.
+    roi_odds_source: str = "unknown"
+    roi_trustworthy: bool = False
+    # True when the Platt calibrator was fitted on the same rows the test
+    # metrics are computed from, which biases brier_test optimistically.
+    calibrated_on_test: bool = False
     trained_at: str = ""
 
 

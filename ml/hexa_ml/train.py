@@ -25,6 +25,7 @@ from .features import build_X
 from .models import MARKET_MODELS
 from .models.base import TrainMetrics
 from .calibration import brier, kelly_roi, logloss, reliability_diagram
+from .market_baseline import build_baseline_report
 from .metrics import pick_accuracy
 
 logger = logging.getLogger("hexa_ml.train")
@@ -80,6 +81,73 @@ def min_train_size_for_market(market: str, override: int | None = None) -> int:
     if per_market is not None:
         return int(per_market)
     return int(settings.min_train_size)
+
+
+# American-price columns, keyed by market, oriented to the side the training
+# target is oriented to. There is deliberately no entry for the line-priced
+# markets: `odds_ou_total` (8.5 runs) and `spread_close` (-3.5 points) are
+# closing NUMBERS, not prices. Passing one into an odds argument silently
+# reads 8.5 as "+8.5", an implied probability of 92%.
+_ROI_PRICE_COLUMNS = {
+    "moneyline": "odds_ml_home",
+    "nfl_moneyline": "odds_ml_home",
+    "soccer_moneyline": "odds_ml_home",
+}
+
+# Standard two-way vig, used only where no price is stored at all. It is an
+# assumption about the book, not an observation, so any ROI resting on it is
+# reported as untrustworthy.
+_ASSUMED_PRICE = -110.0
+
+# Historical rows whose odds are modelled rather than observed (see
+# market_baseline._SYNTHETIC_ODDS_SOURCES). Simulating a return against a
+# price derived from the model's own features measures nothing.
+_SYNTHETIC_ODDS_SOURCES = {"mlb_history"}
+
+
+def _resolve_roi_odds(
+    test_df: pd.DataFrame, market: str
+) -> tuple[np.ndarray, str, bool]:
+    """Pick the price series that the Kelly ROI simulation should settle at.
+
+    Returns (odds, source_label, trustworthy).
+    """
+    if market.startswith("prop_") or market == "nfl_prop":
+        col = "prop_odds_american"
+    else:
+        col = _ROI_PRICE_COLUMNS.get(market)
+
+    if col is None:
+        return (
+            np.full(len(test_df), _ASSUMED_PRICE),
+            f"assumed_{int(_ASSUMED_PRICE)}",
+            False,
+        )
+
+    series = test_df.get(col)
+    if series is None:
+        return (
+            np.full(len(test_df), _ASSUMED_PRICE),
+            f"assumed_{int(_ASSUMED_PRICE)}_column_absent",
+            False,
+        )
+
+    odds = pd.to_numeric(series, errors="coerce").to_numpy()
+
+    synthetic = (
+        test_df["source"].isin(_SYNTHETIC_ODDS_SOURCES).to_numpy()
+        if "source" in test_df.columns
+        else np.zeros(len(test_df), dtype=bool)
+    )
+    real = np.isfinite(odds) & (odds != 0) & ~synthetic
+    n_real = int(real.sum())
+
+    filled = np.where(real, odds, _ASSUMED_PRICE)
+    coverage = n_real / len(test_df) if len(test_df) else 0.0
+    label = f"{col}({n_real}/{len(test_df)} real)"
+    # Below full coverage the simulation is partly betting into an assumed
+    # price, so the number stops being a measurement of the model.
+    return filled, label, coverage >= 0.95
 
 
 def train_one_market(
@@ -146,35 +214,52 @@ def train_one_market(
                 market, int(is_live.sum()), int((~is_live).sum()),
             )
 
+    # The Platt calibrator must not see the rows brier_test is scored on.
+    # Fitting it on the test set and then reporting the Brier from that same
+    # slice tunes the probabilities to the answers and biases the score
+    # optimistically. Carve the calibration slice off the tail of the training
+    # window instead, keeping the split chronological. Only fall back to the
+    # old in-test calibration when training data is too thin to spare a slice,
+    # and flag it on the model card when that happens.
+    order = np.argsort(train_df["game_date"].to_numpy(), kind="stable")
+    n_calib = int(len(order) * 0.2)
+    if n_calib >= 25 and (len(order) - n_calib) >= min_split_train:
+        fit_idx, calib_idx = order[:-n_calib], order[-n_calib:]
+        calibrated_on_test = False
+    else:
+        fit_idx, calib_idx = order, None
+        calibrated_on_test = True
+        logger.warning(
+            "[%s] train slice too thin (%d rows) to hold out a calibration set — "
+            "falling back to calibrating on test; brier_test is optimistic.",
+            market, len(order),
+        )
+
+    X_fit, y_fit = X_train.iloc[fit_idx], y_train[fit_idx]
+    fit_weight = sample_weight[fit_idx] if sample_weight is not None else None
+
+    if calib_idx is not None:
+        X_calib, y_calib = X_train.iloc[calib_idx], y_train[calib_idx]
+    else:
+        X_calib, y_calib = X_test, y_test
+
     model_cls = MARKET_MODELS[market]
     model = model_cls()
-    # Use the test set itself for calibration as well — fine for small data,
-    # we re-evaluate Brier separately so this isn't double-counted as quality.
-    model.fit(X_train, y_train, X_calib=X_test, y_calib=y_test, sample_weight=sample_weight)
+    model.fit(X_fit, y_fit, X_calib=X_calib, y_calib=y_calib, sample_weight=fit_weight)
 
     # In-sample (sanity) and out-of-sample (real) metrics
-    p_train = model.predict_proba(X_train)
+    p_train = model.predict_proba(X_fit)
     p_test = model.predict_proba(X_test)
 
-    brier_train = brier(y_train, p_train)
+    brier_train = brier(y_fit, p_train)
     brier_test = brier(y_test, p_test)
     ll_test = logloss(y_test, p_test)
     pick_acc, pick_acc_n = pick_accuracy(y_test, p_test)
 
-    if market.startswith("prop_") or market == "nfl_prop":
-        odds_col = "prop_odds_american"
-    elif market in {"moneyline", "runline", "nfl_moneyline"}:
-        odds_col = "odds_ml_home"
-    else:
-        odds_col = "odds_ou_total"
-    # The column may be absent entirely (e.g. nflverse historical frames carry
-    # closing points, not American prices) — fall back to the -110 vig default
-    # so the diagnostic ROI metric still computes instead of crashing on a scalar.
-    odds_series = test_df.get(odds_col)
-    if odds_series is None:
-        odds_test = pd.Series([-110.0] * len(test_df)).to_numpy()
-    else:
-        odds_test = pd.to_numeric(odds_series, errors="coerce").fillna(-110).to_numpy()
+    # A Brier means nothing on its own — score it against what it has to beat.
+    baseline = build_baseline_report(y_fit, y_test, p_test, test_df, market)
+
+    odds_test, roi_odds_source, roi_trustworthy = _resolve_roi_odds(test_df, market)
     roi = kelly_roi(y_test, p_test, odds_test, kelly_fraction=0.25)
 
     low_sample = len(test_df) < 30
@@ -207,9 +292,18 @@ def train_one_market(
         roi_kelly25_test=roi,
         pick_accuracy_test=pick_acc,
         pick_accuracy_n=pick_acc_n,
-        feature_columns=list(X_train.columns),
+        feature_columns=list(X_fit.columns),
         reliability_diagram=curve,
         low_sample_warning=low_sample,
+        base_rate=baseline.base_rate,
+        vs_base_rate=baseline.vs_base_rate,
+        vs_market=baseline.vs_market,
+        market_reference_source=baseline.market_source,
+        market_reference_coverage=baseline.market_coverage,
+        market_reference_note=baseline.market_note,
+        roi_odds_source=roi_odds_source,
+        roi_trustworthy=roi_trustworthy,
+        calibrated_on_test=calibrated_on_test,
         trained_at=_now_iso(),
     )
     model.metrics = metrics
@@ -219,7 +313,51 @@ def train_one_market(
         "[%s] saved → %s | brier_test=%.4f logloss=%.4f roi_kelly25=%.4f pick_acc=%.3f (n=%d, vs 0.524 break-even)",
         market, saved, brier_test, ll_test, roi, pick_acc, pick_acc_n,
     )
+    _log_baseline_verdict(market, brier_test, baseline, roi_odds_source, roi_trustworthy)
     return metrics
+
+
+def _log_baseline_verdict(
+    market: str,
+    brier_test: float,
+    baseline,
+    roi_odds_source: str,
+    roi_trustworthy: bool,
+) -> None:
+    """Say plainly whether the model beat what it had to beat."""
+    base = baseline.vs_base_rate or {}
+    mkt = baseline.vs_market or {}
+
+    logger.info(
+        "[%s] vs base rate (%.3f): model=%s reference=%s delta=%s CI=[%s, %s] → %s",
+        market, baseline.base_rate,
+        base.get("brier_model"), base.get("brier_reference"), base.get("delta"),
+        base.get("ci_low"), base.get("ci_high"),
+        "BEATS base rate" if base.get("beats_reference") else "NOT distinguishable from base rate",
+    )
+
+    if mkt.get("n"):
+        logger.info(
+            "[%s] vs market (%s, %.0f%% coverage): model=%s market=%s delta=%s "
+            "CI=[%s, %s] skill=%s → %s",
+            market, baseline.market_source, baseline.market_coverage * 100,
+            mkt.get("brier_model"), mkt.get("brier_reference"), mkt.get("delta"),
+            mkt.get("ci_low"), mkt.get("ci_high"), mkt.get("skill_score"),
+            "BEATS the market" if mkt.get("beats_reference") else "NO demonstrated edge over the market",
+        )
+    else:
+        logger.warning(
+            "[%s] no market reference available (%s) — edge over the closing "
+            "line is UNVERIFIED for this market.",
+            market, baseline.market_note,
+        )
+
+    if not roi_trustworthy:
+        logger.warning(
+            "[%s] roi_kelly25 rests on assumed prices (%s) — treat it as a "
+            "diagnostic, not a return.",
+            market, roi_odds_source,
+        )
 
 
 def train_all(
@@ -358,6 +496,15 @@ def train_all(
                     "pick_accuracy_n": metrics.pick_accuracy_n,
                     "reliability_diagram": metrics.reliability_diagram,
                     "low_sample_warning": metrics.low_sample_warning,
+                    "base_rate": metrics.base_rate,
+                    "vs_base_rate": metrics.vs_base_rate,
+                    "vs_market": metrics.vs_market,
+                    "market_reference_source": metrics.market_reference_source,
+                    "market_reference_coverage": metrics.market_reference_coverage,
+                    "market_reference_note": metrics.market_reference_note,
+                    "roi_odds_source": metrics.roi_odds_source,
+                    "roi_trustworthy": metrics.roi_trustworthy,
+                    "calibrated_on_test": metrics.calibrated_on_test,
                     "trained_at": metrics.trained_at,
                     "min_train_size_used": effective_min,
                 }
