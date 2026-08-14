@@ -102,6 +102,20 @@ export function buildMlObservability({
             n_test: manifest.n_test ?? null,
             brier_test: manifest.brier_test ?? null,
             roi_kelly25_test: manifest.roi_kelly25_test ?? null,
+            // A Brier is only interpretable next to what it had to beat: the
+            // de-vigged closing line (vs_market) and the no-information base
+            // rate (vs_base_rate). Both carry a bootstrap CI on the paired
+            // difference, so the HUD can say "no demonstrated edge" instead of
+            // showing a bare 0.24 that reads as precision.
+            base_rate: manifest.base_rate ?? null,
+            vs_base_rate: manifest.vs_base_rate ?? null,
+            vs_market: manifest.vs_market ?? null,
+            market_reference_source: manifest.market_reference_source ?? null,
+            market_reference_coverage: manifest.market_reference_coverage ?? null,
+            market_reference_note: manifest.market_reference_note ?? null,
+            roi_odds_source: manifest.roi_odds_source ?? null,
+            roi_trustworthy: manifest.roi_trustworthy === true,
+            calibrated_on_test: manifest.calibrated_on_test === true,
             trained_at: manifest.trained_at ?? null,
             skipped: !!manifest.skipped,
             min_train_size_used: manifest.min_train_size_used ?? null,

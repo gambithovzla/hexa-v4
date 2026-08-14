@@ -715,6 +715,8 @@ function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T
         <Metric label="N TEST"  value={data?.n_test ?? '—'} color={INK1} tip={T.help?.nTest} />
       </Box>
 
+      <EdgeVerdict data={data} />
+
       <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED, mt: 2 }}>
         {T.trained}: <span style={{ color: INK1 }}>{trainedAt ? `${fmtDate(trainedAt)} (${timeAgo(trainedAt)})` : T.never}</span>
       </Typography>
@@ -745,6 +747,82 @@ function MarketCard({ market, manifest, marketObs, onRetrain, busy, index = 0, T
         </Button>
         <HelpTip title={T.help?.retrainBtn} />
       </Box>
+    </Box>
+  );
+}
+
+// A Brier score alone is unreadable: 0.25 is exactly "predict 50% on
+// everything", and the closing line normally scores better than that. This
+// block puts the model next to both references so the card can't be misread as
+// precision. Verdicts come from a bootstrap CI on the paired per-row
+// difference, so a lucky 77-game slice does not get to read as an edge.
+const fmtDelta = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(4)}`);
+
+function VerdictRow({ title, cmp, subtitle }) {
+  if (!cmp || !cmp.n) return null;
+  const beats = cmp.beats_reference === true;
+  const color = beats ? GREEN : cmp.delta > 0 ? RED : AMBER;
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: MUTED, letterSpacing: '1.5px' }}>
+        {title}{subtitle ? ` · ${subtitle}` : ''}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: INK1 }}>
+        modelo {cmp.brier_model?.toFixed(4)} · ref {cmp.brier_reference?.toFixed(4)} · Δ {fmtDelta(cmp.delta)}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color }}>
+        {beats ? '✓ SUPERA' : '✗ SIN EDGE DEMOSTRABLE'} · IC95 [{fmtDelta(cmp.ci_low)}, {fmtDelta(cmp.ci_high)}] · n={cmp.n}
+      </Typography>
+    </Box>
+  );
+}
+
+function EdgeVerdict({ data }) {
+  if (!data || data.skipped || data.error) return null;
+  const market = data.vs_market;
+  const base = data.vs_base_rate;
+  if (!market && !base) return null;
+
+  const refLabel = {
+    devig_two_way: 'línea de cierre de-vigueada',
+    symmetric_line: 'línea asumida justa a 0.5',
+    one_way_vig_inclusive: 'precio con vig (barra fácil)',
+  }[data.market_reference_source] ?? data.market_reference_source;
+
+  return (
+    <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BORDER}` }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: INK1, fontWeight: 700, letterSpacing: '2px' }}>
+        ¿HAY EDGE?
+      </Typography>
+
+      <VerdictRow
+        title="VS MERCADO"
+        subtitle={refLabel}
+        cmp={market}
+      />
+      {(!market || !market.n) && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: AMBER, mt: 1 }}>
+          ⚠ Sin referencia de mercado — el edge contra la línea de cierre está SIN VERIFICAR
+          {data.market_reference_note ? ` (${data.market_reference_note})` : ''}
+        </Typography>
+      )}
+
+      <VerdictRow
+        title="VS BASE RATE"
+        subtitle={data.base_rate != null ? `predecir ${(data.base_rate * 100).toFixed(1)}% siempre` : null}
+        cmp={base}
+      />
+
+      {data.roi_trustworthy === false && data.roi_odds_source && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: AMBER, mt: 1 }}>
+          ⚠ ROI sobre precios asumidos ({data.roi_odds_source}) — diagnóstico, no retorno
+        </Typography>
+      )}
+      {data.calibrated_on_test === true && (
+        <Typography sx={{ fontFamily: MONO, fontSize: '8px', color: AMBER, mt: 0.5 }}>
+          ⚠ Calibrado sobre el test — el Brier de arriba es optimista
+        </Typography>
+      )}
     </Box>
   );
 }
