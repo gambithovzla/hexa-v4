@@ -38,6 +38,11 @@ function cacheSet(key, data, ttlMs) {
   _cache.set(key, { data, expiresAt: Date.now() + ttlMs });
 }
 
+/** Test seam: the module-level cache otherwise bleeds between cases. */
+export function _resetNflApiCache() {
+  _cache.clear();
+}
+
 const TTL = {
   TEAM_STATS:    6 * 60 * 60 * 1000, // 6h
   WEEK_GAMES:    5 * 60 * 1000,      // 5min — schedule/final
@@ -144,12 +149,12 @@ export async function getCurrentNflWeek() {
 
   try {
     const data = await espnFetch(`${ESPN_SITE}/scoreboard`, { label: 'current week' });
-    const result = {
-      season: data.season?.year ?? new Date().getFullYear(),
-      seasonType: data.season?.type ?? 2,
-      week: data.week?.number ?? 1,
-    };
+    const result = resolveCurrentWeek(data);
     cacheSet(cacheKey, result, TTL.CURRENT_WEEK);
+    // The no-param scoreboard already carries the active slate. Keeping it lets
+    // getNflGamesForWeek recover when the explicit seasontype/week query comes
+    // back empty, instead of showing an empty board on a day with games.
+    cacheSet(CURRENT_SLATE_KEY, normalizeScoreboardEvents(data, result), TTL.WEEK_GAMES);
     return result;
   } catch (err) {
     console.warn(`[nfl-api] current week failed (${err.message}) — defaulting to regular week 1`);
@@ -157,6 +162,40 @@ export async function getCurrentNflWeek() {
     if (stale) return stale;
     return { season: new Date().getFullYear(), seasonType: 2, week: 1 };
   }
+}
+
+const CURRENT_SLATE_KEY = 'current_slate';
+
+// ESPN reports seasontype 4 (offseason) on the root of the scoreboard well into
+// the preseason, and a 4 fed back into ?seasontype= matches no games at all —
+// the board goes empty on a day that has games. The events themselves carry the
+// authoritative season/type/week for the slate being shown, so prefer those and
+// only fall back to the root when the slate is empty.
+function resolveCurrentWeek(data) {
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const fromEvent = events.find(ev => VALID_SEASON_TYPES.has(Number(ev?.season?.type)));
+
+  const season = fromEvent?.season?.year ?? data?.season?.year ?? new Date().getFullYear();
+  const rootType = Number(data?.season?.type);
+  const seasonType = fromEvent
+    ? Number(fromEvent.season.type)
+    : (VALID_SEASON_TYPES.has(rootType) ? rootType : 2);
+  const week = fromEvent?.week?.number ?? data?.week?.number ?? 1;
+
+  if (fromEvent && Number(fromEvent.season.type) !== rootType) {
+    console.log(
+      `[nfl-api] scoreboard root reported seasontype=${data?.season?.type} but the slate is ` +
+      `seasontype=${seasonType} week=${week} — trusting the slate`,
+    );
+  }
+  return { season, seasonType, week };
+}
+
+const VALID_SEASON_TYPES = new Set([1, 2, 3]);
+
+function normalizeScoreboardEvents(data, ctx) {
+  const events = Array.isArray(data?.events) ? data.events : [];
+  return events.map(ev => normalizeScoreboardEvent(ev, ctx)).filter(Boolean);
 }
 
 // ── Games by week ──────────────────────────────────────────────────────────────
@@ -169,6 +208,10 @@ export async function getCurrentNflWeek() {
  */
 export async function getNflGamesForWeek({ season = null, seasonType = null, week = null } = {}) {
   let s = season, st = seasonType, w = week;
+  // Only the fully-implicit call is "show me what's on now", and only that call
+  // may fall back to the live slate — an explicit week request must answer for
+  // the week that was asked for, empty or not.
+  const isCurrent = season == null && seasonType == null && week == null;
   if (s == null || st == null || w == null) {
     const cur = await getCurrentNflWeek();
     s = s ?? cur.season;
@@ -187,6 +230,17 @@ export async function getNflGamesForWeek({ season = null, seasonType = null, wee
     const games = events
       .map(ev => normalizeScoreboardEvent(ev, { season: s, seasonType: st, week: w }))
       .filter(Boolean);
+    if (games.length === 0 && isCurrent) {
+      const slate = cacheGetStale(CURRENT_SLATE_KEY);
+      if (slate?.length) {
+        console.warn(
+          `[nfl-api] scoreboard ${s} st${st} wk${w} returned 0 games but the live slate has ` +
+          `${slate.length} — serving the slate`,
+        );
+        cacheSet(cacheKey, slate, TTL.WEEK_GAMES);
+        return slate;
+      }
+    }
     const anyLive = games.some(g => g.game_status_id === 2);
     cacheSet(cacheKey, games, anyLive ? TTL.WEEK_GAMES_LIVE : TTL.WEEK_GAMES);
     console.log(`[nfl-api] scoreboard ${s} st${st} wk${w}: ${games.length} games (live=${anyLive})`);
