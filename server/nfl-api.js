@@ -111,7 +111,10 @@ function normalizeScoreboardEvent(event, ctx = {}) {
   return enrichGameTeamIds({
     game_id: String(event.id ?? comp.id),
     season: ctx.season ?? event.season?.year ?? null,
-    season_type: ctx.seasonType ?? event.season?.type ?? null,
+    // The event's own season type wins: the scoreboard ROOT reports 4 (offseason)
+    // well into the preseason, and season_type now drives both the preseason gate
+    // and which Odds API sport key we query. Fall back to ctx only when absent.
+    season_type: event.season?.type ?? ctx.seasonType ?? null,
     week: ctx.week ?? event.week?.number ?? null,
     game_date: safeDate,
     game_datetime: event.date ?? null,

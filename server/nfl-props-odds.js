@@ -153,7 +153,7 @@ function round4(v) {
   return v == null ? null : Math.round(v * 1e4) / 1e4;
 }
 
-async function fetchEventOdds(apiKey, eventId) {
+async function fetchEventOdds(apiKey, eventId, sportKey) {
   const params = new URLSearchParams({
     apiKey,
     regions: 'us',
@@ -161,7 +161,7 @@ async function fetchEventOdds(apiKey, eventId) {
     oddsFormat: 'american',
     dateFormat: 'iso',
   });
-  const url = `${ODDS_API_BASE}/sports/${SPORT_KEY}/events/${eventId}/odds/?${params.toString()}`;
+  const url = `${ODDS_API_BASE}/sports/${sportKey}/events/${eventId}/odds/?${params.toString()}`;
   const res = await fetch(url);
   const quota = {
     remaining: res.headers.get('x-requests-remaining'),
@@ -180,7 +180,7 @@ async function fetchEventOdds(apiKey, eventId) {
  * Cached NFL player prop offers for a single Odds API event. Never throws — on
  * failure returns [] and exposes the error via getNflPropOddsStatus().
  */
-export async function getNflPlayerPropOdds({ eventId } = {}) {
+export async function getNflPlayerPropOdds({ eventId, sportKey = SPORT_KEY } = {}) {
   if (!eventId) {
     setLastFetchMeta({ eventId: null, offers: 0, status: 'missing_event', ok: false, error: 'eventId required' });
     return [];
@@ -192,7 +192,8 @@ export async function getNflPlayerPropOdds({ eventId } = {}) {
     return [];
   }
 
-  const cached = _cache.get(eventId);
+  const cacheKey = `${sportKey}:${eventId}`;
+  const cached = _cache.get(cacheKey);
   if (cached?.data && Date.now() - cached.ts < CACHE_TTL_MS) {
     setLastFetchMeta({ eventId, offers: cached.data.length, status: 'cache_hit', ok: true, error: null, quota: cached.quota });
     return cached.data;
@@ -200,10 +201,10 @@ export async function getNflPlayerPropOdds({ eventId } = {}) {
 
   const tryKey = async (apiKey, slot) => {
     try {
-      const result = await fetchEventOdds(apiKey, eventId);
+      const result = await fetchEventOdds(apiKey, eventId, sportKey);
       if (!result.ok) return { slot, result };
       const data = normalizeNflPropEvent(result.raw);
-      _cache.set(eventId, { data, ts: Date.now(), quota: result.quota, keySlot: slot });
+      _cache.set(cacheKey, { data, ts: Date.now(), quota: result.quota, keySlot: slot });
       setLastFetchMeta({ eventId, offers: data.length, status: result.status, ok: true, error: null, quota: result.quota });
       console.log(`[nfl-props-odds] event ${eventId}: ${data.length} prop offers (key=${slot})`);
       return { slot, data };

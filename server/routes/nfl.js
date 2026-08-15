@@ -86,7 +86,7 @@ async function resolveMarketOdds({ clientMarketOdds, game }) {
     return { marketOdds: { ...clientMarketOdds, provided: 'client' }, source: 'client' };
   }
   try {
-    const events = await getNflGameOdds({ date: game.game_date });
+    const events = await getNflGameOdds({ date: game.game_date, seasonType: game.season_type ?? null });
     if (!events.length) return { marketOdds: null, source: null };
     const match = matchNflOddsToGame(events, game.home_team_name, game.away_team_name);
     if (!match) return { marketOdds: null, source: null };
@@ -219,6 +219,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
     const guard = validateNflAnalysisOutput(result.data, {
       parseError: result.parseError,
       isPreseason: context?.seasonPhase?.isPreseason === true,
+      marketOdds: resolvedOdds,
     });
     if (!guard.ok) {
       return res.status(422).json({
@@ -287,6 +288,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       parseError: result.parseError,
       outputQuality: guard.quality,
       validationErrors: guard.errors.length ? guard.errors : undefined,
+      lineProvenance: guard.line_provenance,
       savedPick: savedPick ? {
         id:                savedPick.id,
         matchup:           savedPick.matchup,
@@ -534,10 +536,8 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
   const propKindFilter = req.query.propKind ? String(req.query.propKind) : null;
 
   try {
-    const [games, oddsEvents] = await Promise.all([
-      getNflGamesForDate(date),
-      getNflGameOdds({ date }),
-    ]);
+    const games = await getNflGamesForDate(date);
+    const oddsEvents = await getNflGameOdds({ date, seasonType: games[0]?.season_type ?? null });
 
     const boardGames = [];
     let oddsAvailable = false;
@@ -546,7 +546,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
       const event = matchNflOddsToGame(oddsEvents, game.home_team_name, game.away_team_name);
       let props = [];
       if (event?.eventId) {
-        const offers = await getNflPlayerPropOdds({ eventId: event.eventId });
+        const offers = await getNflPlayerPropOdds({ eventId: event.eventId, sportKey: event.sportKey });
         if (offers.length) oddsAvailable = true;
         props = enrichNflPropOffers(offers)
           .filter(o => !propKindFilter || o.propKind === propKindFilter)
@@ -643,7 +643,7 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
       return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: 0, note: 'no NFL games for the requested window' });
     }
 
-    const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date });
+    const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date, seasonType: games[0]?.season_type ?? null });
     const entries = (await Promise.all(games.map(async (g) => {
       const ev = matchNflOddsToGame(oddsEvents, g.home_team_name, g.away_team_name);
       const odds = ev ? buildMarketOddsForGame(ev) : null;

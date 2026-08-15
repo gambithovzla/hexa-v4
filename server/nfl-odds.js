@@ -1,5 +1,5 @@
 /**
- * nfl-odds.js — NFL market odds via The Odds API (americanfootball_nfl).
+ * nfl-odds.js — NFL market odds via The Odds API.
  *
  * Isolated from the frozen MLB odds-api.js (and the NBA nba-odds.js) so we
  * never regress other sports. Mirrors the dual-key handling and normalisation
@@ -8,16 +8,41 @@
  * manufacture fake half-points off the key numbers (-3 and -2.5 → -2.75), and
  * NFL spreads live or die on 3 and 7. Prices still use consensus.
  *
+ * The Odds API splits NFL across TWO sport keys: preseason games are published
+ * under `americanfootball_nfl_preseason`, not under `americanfootball_nfl`.
+ * Querying only the regular-season key in August returns zero events, which
+ * reaches the Oracle as "MARKET ODDS: not provided" — and a pick whose numeric
+ * line is then the model's own invention rather than a line any book posted.
+ * So the season type picks which key to try first, and an empty answer falls
+ * through to the other key (one extra request only in the empty case).
+ *
  * Public API:
- *   getNflGameOdds({ date })  → cached array of normalized NFL events
+ *   getNflGameOdds({ date, seasonType })  → cached array of normalized NFL events
  *   matchNflOddsToGame(events, homeTeamName, awayTeamName)
  *   buildMarketOddsForGame(event)  → { spread, total, moneyline } the Oracle expects
  *   getNflOddsStatus()
  */
 
+import { isPreseason } from './services/nflSeasonPhase.js';
+
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
-const SPORT_KEY     = 'americanfootball_nfl';
 const CACHE_TTL_MS  = 5 * 60 * 1000; // 5 min
+
+export const NFL_SPORT_KEYS = {
+  REGULAR:   'americanfootball_nfl',
+  PRESEASON: 'americanfootball_nfl_preseason',
+};
+
+/**
+ * Sport keys to try, best guess first. An unknown season type keeps today's
+ * behaviour (regular first) and only pays for the preseason probe when the
+ * regular key comes back empty.
+ */
+export function nflSportKeysFor(seasonType) {
+  return isPreseason(seasonType)
+    ? [NFL_SPORT_KEYS.PRESEASON, NFL_SPORT_KEYS.REGULAR]
+    : [NFL_SPORT_KEYS.REGULAR, NFL_SPORT_KEYS.PRESEASON];
+}
 
 const _cache = new Map();
 let _lastFetchMeta = {
@@ -25,6 +50,7 @@ let _lastFetchMeta = {
   backupKeyConfigured: Boolean(process.env.ODDS_API_BACKUP_KEY),
   cacheKey: null,
   keySlot: null,
+  sportKey: null,
   requestedDate: null,
   events: 0,
   status: null,
@@ -43,8 +69,8 @@ function getDateWindow(date) {
   return { from: iso(start), to: iso(end) };
 }
 
-function getCacheKey(date) {
-  return date ? `date:${date}` : 'upcoming';
+function getCacheKey(date, sportKey) {
+  return `${sportKey}:${date ? `date:${date}` : 'upcoming'}`;
 }
 
 function setLastFetchMeta(patch) {
@@ -66,7 +92,7 @@ export function getNflOddsStatus() {
   };
 }
 
-async function fetchOdds(apiKey, requestedDate) {
+async function fetchOdds(apiKey, requestedDate, sportKey) {
   const params = new URLSearchParams({
     apiKey,
     regions: 'us',
@@ -79,7 +105,7 @@ async function fetchOdds(apiKey, requestedDate) {
     params.set('commenceTimeFrom', window.from);
     params.set('commenceTimeTo',   window.to);
   }
-  const url = `${ODDS_API_BASE}/sports/${SPORT_KEY}/odds/?${params.toString()}`;
+  const url = `${ODDS_API_BASE}/sports/${sportKey}/odds/?${params.toString()}`;
   const res = await fetch(url);
   const quota = {
     remaining: res.headers.get('x-requests-remaining'),
@@ -98,68 +124,79 @@ async function fetchOdds(apiKey, requestedDate) {
  * Public: cached NFL market odds for a calendar date. Never throws — on failure
  * returns `[]` and exposes the error via getNflOddsStatus().
  */
-export async function getNflGameOdds({ date } = {}) {
+export async function getNflGameOdds({ date, seasonType = null } = {}) {
   const primary = process.env.ODDS_API_KEY;
   const backup  = process.env.ODDS_API_BACKUP_KEY;
-  const cacheKey = getCacheKey(date);
 
   if (!primary && !backup) {
-    setLastFetchMeta({ cacheKey, keySlot: null, requestedDate: date, events: 0, status: 'missing_key', ok: false, error: 'ODDS_API_KEY not set', quota: null });
+    setLastFetchMeta({ cacheKey: null, keySlot: null, sportKey: null, requestedDate: date, events: 0, status: 'missing_key', ok: false, error: 'ODDS_API_KEY not set', quota: null });
     return [];
   }
 
+  const candidates = nflSportKeysFor(seasonType);
+  let lastEmpty = null;
+
+  for (const sportKey of candidates) {
+    const result = await fetchForSportKey({ sportKey, date, primary, backup });
+    if (result.data?.length) return result.data;
+    // An empty-but-successful answer is the signal that this slate lives under
+    // the other sport key; a hard failure is not, so stop and report it.
+    if (!result.ok) return result.data ?? [];
+    lastEmpty = result.data ?? [];
+  }
+
+  if (candidates.length > 1) {
+    console.warn(`[nfl-odds] no events for ${date ?? 'upcoming'} under any sport key (${candidates.join(', ')})`);
+  }
+  return lastEmpty ?? [];
+}
+
+/** Runs the primary→backup API-key ladder for ONE sport key. Never throws. */
+async function fetchForSportKey({ sportKey, date, primary, backup }) {
+  const cacheKey = getCacheKey(date, sportKey);
+
   const cached = _cache.get(cacheKey);
   if (cached?.data && Date.now() - cached.ts < CACHE_TTL_MS) {
-    setLastFetchMeta({ cacheKey, keySlot: cached.keySlot, requestedDate: date, events: cached.data.length, status: 'cache_hit', ok: true, error: null, quota: cached.quota });
-    return cached.data;
+    setLastFetchMeta({ cacheKey, keySlot: cached.keySlot, sportKey, requestedDate: date, events: cached.data.length, status: 'cache_hit', ok: true, error: null, quota: cached.quota });
+    return { ok: true, data: cached.data };
   }
 
   const tryKey = async (apiKey, slot) => {
     try {
-      const result = await fetchOdds(apiKey, date);
+      const result = await fetchOdds(apiKey, date, sportKey);
       if (!result.ok) return { slot, result };
-      const data = result.raw.map(normalizeEvent).filter(Boolean);
+      const data = result.raw.map(ev => normalizeEvent(ev, sportKey)).filter(Boolean);
       _cache.set(cacheKey, { data, ts: Date.now(), quota: result.quota, keySlot: slot });
-      setLastFetchMeta({ cacheKey, keySlot: slot, requestedDate: date, events: data.length, status: result.status, ok: true, error: null, quota: result.quota });
-      console.log(`[nfl-odds] ${SPORT_KEY} ${date ?? 'upcoming'}: ${data.length} events (key=${slot})`);
+      setLastFetchMeta({ cacheKey, keySlot: slot, sportKey, requestedDate: date, events: data.length, status: result.status, ok: true, error: null, quota: result.quota });
+      console.log(`[nfl-odds] ${sportKey} ${date ?? 'upcoming'}: ${data.length} events (key=${slot})`);
       return { slot, data };
     } catch (err) {
       return { slot, error: err };
     }
   };
 
-  if (primary) {
-    const r = await tryKey(primary, 'primary');
-    if (r.data) return r.data;
-    if (backup && backup !== primary) {
-      const body = r.result?.body ?? '';
-      const isOutOfCredits = typeof body === 'string' && body.includes('OUT_OF_USAGE_CREDITS');
-      if (isOutOfCredits || r.error) {
-        console.warn(`[nfl-odds] primary key failed (${isOutOfCredits ? 'OUT_OF_USAGE_CREDITS' : r.error?.message ?? r.result?.status}) — trying backup`);
-        const rb = await tryKey(backup, 'backup');
-        if (rb.data) return rb.data;
-      }
+  const firstSlot = primary ? 'primary' : 'backup';
+  const r = primary ? await tryKey(primary, 'primary') : await tryKey(backup, 'backup');
+  if (r.data) return { ok: true, data: r.data };
+
+  if (primary && backup && backup !== primary) {
+    const body = r.result?.body ?? '';
+    const isOutOfCredits = typeof body === 'string' && body.includes('OUT_OF_USAGE_CREDITS');
+    if (isOutOfCredits || r.error) {
+      console.warn(`[nfl-odds] primary key failed (${isOutOfCredits ? 'OUT_OF_USAGE_CREDITS' : r.error?.message ?? r.result?.status}) — trying backup`);
+      const rb = await tryKey(backup, 'backup');
+      if (rb.data) return { ok: true, data: rb.data };
     }
-    setLastFetchMeta({
-      cacheKey, keySlot: 'primary', requestedDate: date,
-      events: cached?.data?.length ?? 0,
-      status: r.result?.status ?? 'fetch_error', ok: false,
-      error: r.error?.message ?? (typeof r.result?.body === 'string' ? r.result.body.substring(0, 200) : null),
-      quota: r.result?.quota ?? null,
-    });
-    return cached?.data ?? [];
   }
 
-  const rb = await tryKey(backup, 'backup');
-  if (rb.data) return rb.data;
   setLastFetchMeta({
-    cacheKey, keySlot: 'backup', requestedDate: date,
+    cacheKey, keySlot: firstSlot, sportKey, requestedDate: date,
     events: cached?.data?.length ?? 0,
-    status: rb.result?.status ?? 'fetch_error', ok: false,
-    error: rb.error?.message ?? (typeof rb.result?.body === 'string' ? rb.result.body.substring(0, 200) : null),
-    quota: rb.result?.quota ?? null,
+    status: r.result?.status ?? 'fetch_error', ok: false,
+    error: r.error?.message ?? (typeof r.result?.body === 'string' ? r.result.body.substring(0, 200) : null),
+    quota: r.result?.quota ?? null,
   });
-  return cached?.data ?? [];
+  return { ok: false, data: cached?.data ?? [] };
 }
 
 // ── Normalisation ─────────────────────────────────────────────────────────────
@@ -199,7 +236,7 @@ function consensusAmerican(prices) {
   return impliedToAmerican(avg(implied));
 }
 
-function normalizeEvent(event) {
+function normalizeEvent(event, sportKey = NFL_SPORT_KEYS.REGULAR) {
   if (!event?.bookmakers?.length) return null;
   const books = event.bookmakers.slice(0, 3);
 
@@ -242,6 +279,9 @@ function normalizeEvent(event) {
 
   return {
     eventId:      event.id ?? null,
+    // Event ids are scoped to their sport key — the per-event props endpoint
+    // 404s if queried under the wrong one.
+    sportKey,
     commenceTime: event.commence_time ?? null,
     homeTeam:     event.home_team,
     awayTeam:     event.away_team,
