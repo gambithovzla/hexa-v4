@@ -212,7 +212,7 @@ export async function analyzeNflImperdible({ gameIds, season, seasonType, week, 
   const resolvedDate = requested[0]?.game_date ?? date ?? new Date().toISOString().split('T')[0];
 
   let oddsEvents = [];
-  try { oddsEvents = await getNflGameOdds({ date: requested[0]?.game_date }); } catch { /* optional */ }
+  try { oddsEvents = await getNflGameOdds({ date: requested[0]?.game_date, seasonType: requested[0]?.season_type ?? null }); } catch { /* optional */ }
 
   const settled = await Promise.allSettled(
     requested.map((game) => buildGameBundle({ game, oddsEvents, lang })),

@@ -9,6 +9,7 @@
 
 import { NFL_OUTPUT_SCHEMA_VERSION } from '../prompts/oracle-nfl-prompts.js';
 import { PRESEASON_ALERT_FLAG, PRESEASON_CONFIDENCE_CEIL } from './nflSeasonPhase.js';
+import { evaluateNflLineProvenance } from './nflLineProvenance.js';
 
 const ALLOWED_BET_TYPES = new Set(['moneyline', 'ml', 'spread', 'pointspread', 'total', 'overunder', 'ou']);
 const BLOCKED_BET_TYPES = new Set(['playerprop', 'playerprops', 'prop', 'props']);
@@ -29,7 +30,7 @@ function normalizeConfidence(raw) {
   return Math.round(n);
 }
 
-export function validateNflAnalysisOutput(data, { parseError = false, isPreseason = false } = {}) {
+export function validateNflAnalysisOutput(data, { parseError = false, isPreseason = false, marketOdds = null } = {}) {
   if (parseError) {
     return { ok: false, quality: 'reject', errors: ['json_parse_failed'], schema_version: NFL_OUTPUT_SCHEMA_VERSION, data: null };
   }
@@ -83,11 +84,26 @@ export function validateNflAnalysisOutput(data, { parseError = false, isPreseaso
     return { ok: false, quality: 'reject', errors, schema_version: NFL_OUTPUT_SCHEMA_VERSION, data: null };
   }
 
+  // A spread/total pick must carry a number, and the model will supply one even
+  // with no MARKET ODDS block to read it from. Label that rather than let a
+  // model-authored line reach the user looking like a quoted one.
+  const lineProvenance = evaluateNflLineProvenance({
+    betType: data.best_pick?.type,
+    pickText: pick,
+    detail: data.best_pick?.detail,
+    marketOdds,
+  });
+
   const sanitized = {
     ...data,
     master_prediction: mp,
     alert_flags: Array.isArray(data.alert_flags) ? data.alert_flags : [],
+    line_provenance: lineProvenance,
   };
+
+  if (lineProvenance.flag) {
+    sanitized.alert_flags = [...sanitized.alert_flags, lineProvenance.flag];
+  }
 
   if (isPreseason) {
     sanitized.alert_flags = [...sanitized.alert_flags, PRESEASON_ALERT_FLAG];
@@ -107,6 +123,7 @@ export function validateNflAnalysisOutput(data, { parseError = false, isPreseaso
     ok: true,
     quality: errors.length ? 'degraded' : 'ok',
     errors,
+    line_provenance: lineProvenance,
     schema_version: NFL_OUTPUT_SCHEMA_VERSION,
     data: sanitized,
   };

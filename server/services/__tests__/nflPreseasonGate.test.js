@@ -65,7 +65,12 @@ test('an out-of-range confidence cannot survive as a preseason pick', () => {
 });
 
 test('regular season keeps the 72 ceiling and gains no preseason flags', () => {
-  const r = validateNflAnalysisOutput(validData(), { isPreseason: false });
+  // The pick quotes the market's own spread, so line provenance is clean too and
+  // alert_flags stays empty — the phase is the only thing under test here.
+  const r = validateNflAnalysisOutput(validData(), {
+    isPreseason: false,
+    marketOdds: { spread: { home: -3.5, away: 3.5 } },
+  });
   assert.equal(r.data.master_prediction.oracle_confidence, 68);
   assert.equal(r.data.alert_flags.length, 0);
 });
