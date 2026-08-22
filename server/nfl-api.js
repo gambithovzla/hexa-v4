@@ -14,6 +14,7 @@
  */
 
 import { enrichGameTeamIds, getNflTeam } from './nfl-team-map.js';
+import { espnRequest } from './espn-http.js';
 
 const ESPN_SITE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/football/nfl/standings';
@@ -56,19 +57,8 @@ const TTL = {
 
 // ── HTTP helper ────────────────────────────────────────────────────────────────
 
-async function espnFetch(url, { timeoutMs = 8000, label = 'espn' } = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    const msg = err.name === 'AbortError' ? `timeout after ${Math.round(timeoutMs / 1000)}s` : err.message;
-    throw new Error(`[nfl-api] ${label} → ${msg}`);
-  } finally {
-    clearTimeout(timeout);
-  }
+function espnFetch(url, { timeoutMs = 8000, label = 'espn' } = {}) {
+  return espnRequest(url, { timeoutMs, label, prefix: 'nfl-api' });
 }
 
 // ── Status mapping ─────────────────────────────────────────────────────────────
@@ -514,9 +504,15 @@ export async function getNflLeagueInjuries() {
     const byTeamId = {};
     const byAbbr = {};
     for (const t of teams) {
-      const team = t?.team ?? {};
+      // The NFL league feed hangs {id, displayName, injuries} straight off the
+      // node — there is no nested `team` and no abbreviation, unlike the NBA
+      // feed this was modelled on. Reading `t.team` built two empty indexes, so
+      // every findTeamInjuries() lookup came back null and NFL contexts shipped
+      // with no injuries at all. The abbr index has to come from the team map.
+      const team = t?.team ?? t ?? {};
       const teamId = team.id != null ? String(team.id) : null;
-      const abbr = team.abbreviation ?? null;
+      const meta = getNflTeam({ teamId, teamAbbr: team.abbreviation }) ?? {};
+      const abbr = team.abbreviation ?? meta.abbr ?? null;
       const list = Array.isArray(t?.injuries) ? t.injuries.map(normaliseInjuryEntry) : [];
       const payload = {
         teamId,
@@ -531,7 +527,10 @@ export async function getNflLeagueInjuries() {
     const result = { byTeamId, byAbbr, fetchedAt: new Date().toISOString(), source: 'espn', stale: false };
     cacheSet(cacheKey, result, TTL.INJURIES);
     const total = teams.reduce((n, t) => n + (Array.isArray(t.injuries) ? t.injuries.length : 0), 0);
-    console.log(`[nfl-api] injuries (ESPN): ${teams.length} teams, ${total} entries`);
+    console.log(
+      `[nfl-api] injuries (ESPN): ${teams.length} teams, ${total} entries, ` +
+      `indexed ${Object.keys(byTeamId).length} by id / ${Object.keys(byAbbr).length} by abbr`,
+    );
     return result;
   } catch (err) {
     const stale = cacheGetStale(cacheKey);
