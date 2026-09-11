@@ -102,14 +102,16 @@ function nflWeatherFlags(temp, wind, precip) {
   return flags;
 }
 
-async function fetchNflWeather({ lat, lon, gameTime }) {
+export async function fetchNflWeather({ lat, lon, gameTime }) {
   if (lat == null || lon == null) return null;
+  const kickoff = Date.parse(gameTime);
+  if (!Number.isFinite(kickoff)) return null;
   try {
     const url =
       `https://api.open-meteo.com/v1/forecast` +
       `?latitude=${lat}&longitude=${lon}` +
       `&hourly=temperature_2m,windspeed_10m,winddirection_10m,precipitation_probability,weathercode` +
-      `&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=auto&forecast_days=2`;
+      `&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=UTC&timeformat=unixtime&forecast_days=16`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     let data;
@@ -122,13 +124,14 @@ async function fetchNflWeather({ lat, lon, gameTime }) {
     }
     const times = data.hourly?.time ?? [];
     if (!times.length) return null;
-    const gameHour = gameTime ? new Date(gameTime).getHours() : 13;
-    let idx = times.findIndex(t => new Date(t).getHours() >= gameHour);
-    if (idx === -1) idx = times.length - 1;
+    const targetHour = Math.floor(kickoff / 3_600_000) * 3600;
+    const idx = times.findIndex(t => Number(t) === targetHour);
+    if (idx === -1) return null;
     const temp = data.hourly.temperature_2m?.[idx] ?? null;
     const wind = data.hourly.windspeed_10m?.[idx] ?? null;
     const precip = data.hourly.precipitation_probability?.[idx] ?? null;
     return {
+      validAt: new Date(targetHour * 1000).toISOString(),
       temperature: temp,
       windSpeed: wind,
       windDirection: data.hourly.winddirection_10m?.[idx] ?? null,

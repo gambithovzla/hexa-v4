@@ -139,11 +139,11 @@ function describeTeamBlock(label, side) {
 function describeStrengthDelta(home, away) {
   // Prefer EPA diff; fall back to point differential per game.
   if (home?.epaOff != null && away?.epaDef != null && home?.epaDef != null && away?.epaOff != null) {
-    const homeNet = (home.epaOff - away.epaDef);
-    const awayNet = (away.epaOff - home.epaDef);
+    const homeNet = (home.epaOff - home.epaDef);
+    const awayNet = (away.epaOff - away.epaDef);
     const gap = homeNet - awayNet;
     const fav = teamLabel(gap > 0 ? home : away);
-    return `EPA matchup: ${fav} edge ${fmt(Math.abs(gap), 3)} (home net ${fmt(homeNet, 3)} vs away net ${fmt(awayNet, 3)}).`;
+    return `Net EPA (offense minus own defense EPA allowed): ${fav} edge ${fmt(Math.abs(gap), 3)} (home net ${fmt(homeNet, 3)} vs away net ${fmt(awayNet, 3)}).`;
   }
   const hd = home?.pointDiff, adp = away?.pointDiff;
   if (hd == null || adp == null) return 'Team-strength gap: not computable (EPA + point differential both missing).';

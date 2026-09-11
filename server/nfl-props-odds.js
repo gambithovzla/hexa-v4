@@ -102,12 +102,12 @@ export function normalizeNflPropEvent(event) {
 
   // group[key] = { propKind, playerName, side, points[], prices[] }
   const group = new Map();
-  const add = (propKind, playerName, side, point, price) => {
-    if (!playerName) return;
+  const add = (propKind, playerName, side, point, price, bookmaker) => {
+    if (!playerName || !Number.isFinite(point) || price == null || price === ''
+      || !Number.isFinite(Number(price)) || Math.abs(Number(price)) < 100) return;
     const k = `${propKind}|${normKey(playerName)}|${side}`;
-    const g = group.get(k) ?? { propKind, playerName, side, points: [], prices: [] };
-    if (Number.isFinite(point)) g.points.push(point);
-    if (Number.isFinite(Number(price))) g.prices.push(Number(price));
+    const g = group.get(k) ?? { propKind, playerName, side, quotes: [] };
+    g.quotes.push({ line: point, oddsAmerican: Number(price), bookmaker });
     group.set(k, g);
   };
 
@@ -119,10 +119,11 @@ export function normalizeNflPropEvent(event) {
         // For O/U markets: outcome.description = player, outcome.name = 'Over'/'Under'.
         // For anytime_td: outcome.name = player, no point.
         if (propKind === 'anytime_td') {
-          add('anytime_td', o.name ?? o.description, 'over', 0.5, o.price);
+          add('anytime_td', o.description ?? o.name, 'over', 0.5, o.price, book.key);
         } else {
-          const side = /under/i.test(o.name ?? '') ? 'under' : 'over';
-          add(propKind, o.description ?? o.name, side, Number(o.point), o.price);
+          const side = String(o.name ?? '').toLowerCase();
+          if (!['over', 'under'].includes(side) || o.point == null || o.point === '') continue;
+          add(propKind, o.description, side, Number(o.point), o.price, book.key);
         }
       }
     }
@@ -130,8 +131,9 @@ export function normalizeNflPropEvent(event) {
 
   const offers = [];
   for (const g of group.values()) {
-    const line = g.points.length ? mode(g.points) : (g.propKind === 'anytime_td' ? 0.5 : null);
-    const oddsAmerican = consensusAmerican(g.prices);
+    const line = mode(g.quotes.map(q => q.line));
+    const quotes = g.quotes.filter(q => q.line === line);
+    const oddsAmerican = consensusAmerican(quotes.map(q => q.oddsAmerican));
     if (oddsAmerican == null && line == null) continue;
     offers.push({
       propKind: g.propKind,
@@ -140,6 +142,9 @@ export function normalizeNflPropEvent(event) {
       line,
       oddsAmerican,
       impliedProb: oddsAmerican != null ? round4(americanToImplied(oddsAmerican)) : null,
+      quotes,
+      bookmakerCount: new Set(quotes.map(q => q.bookmaker).filter(Boolean)).size,
+      priceSource: 'consensus',
     });
   }
   return offers;

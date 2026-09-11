@@ -20,11 +20,15 @@ import {
   buildNflFeaturePayload,
   predictNflMoneyline,
   predictNflSpread,
+  predictNflTotal,
 } from './nflMlClient.js';
+import { classifyNflMarket } from './nflLineProvenance.js';
+import { alignNflModelToPick } from './nflPickModel.js';
 
 const SEVERE_QB = new Set(['out', 'out_for_season', 'doubtful']);
 
 function toNumber(value) {
+  if (value == null || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -38,10 +42,10 @@ function normalizeMarketType(rawPick) {
   return null;
 }
 
-// A starting QB is "active" unless flagged out/doubtful; null status = assume active.
+// Match inference: absence of an injury designation is not starter confirmation.
 function qbActive(side) {
   const key = side?.qbStatus?.statusKey;
-  if (!key) return true;
+  if (!key) return null;
   return !SEVERE_QB.has(key);
 }
 
@@ -130,8 +134,8 @@ export async function saveNflPickFeatures({
         home.isOffBye ?? null, away.isOffBye ?? null,
         qbActive(home), qbActive(away),
         windMph, isDome, spreadClose, totalClose,
-        toNumber(home.injuries?.severeCount) ?? 0,
-        toNumber(away.injuries?.severeCount) ?? 0,
+        home.injuries?.ok ? toNumber(home.injuries.severeCount) : null,
+        away.injuries?.ok ? toNumber(away.injuries.severeCount) : null,
         overallCompleteness,
         oddsMlHome, oddsMlAway, oddsOuTotal,
         toNumber(oracleConfidence),
@@ -160,6 +164,7 @@ export async function recordNflShadowRun({
   context,
   gameMeta,
   analysisData,
+  marketOdds = null,
 }) {
   if (pickId == null || gamePk == null) return null;
 
@@ -197,14 +202,15 @@ export async function recordNflShadowRun({
   let pythonPickProb = null;
   let pythonPickMarket = null;
   try {
-    const marketType = normalizeMarketType(mp.pick ?? bp.detail ?? '');
-    const features = buildNflFeaturePayload(context, gameMeta, analysisData?.market_odds ?? {});
-    const pred = marketType === 'spread'
-      ? await predictNflSpread(features)
-      : await predictNflMoneyline(features);
-    if (pred?.probability != null) {
-      pythonPickProb = pred.probability;
-      pythonPickMarket = marketType === 'spread' ? 'nfl_spread' : 'nfl_moneyline';
+    const marketType = classifyNflMarket(bp.type, mp.pick ?? bp.detail ?? '');
+    const odds = marketOdds ?? analysisData?.market_odds ?? {};
+    const features = buildNflFeaturePayload(context, gameMeta, odds);
+    const predict = { spread: predictNflSpread, total: predictNflTotal, moneyline: predictNflMoneyline }[marketType];
+    const pred = predict ? await predict(features) : null;
+    const aligned = alignNflModelToPick({ analysisData, context, gameMeta, marketOdds: odds, probability: pred?.probability });
+    if (aligned) {
+      pythonPickProb = aligned.probability;
+      pythonPickMarket = aligned.market;
     }
   } catch {
     // sidecar unavailable — leave null

@@ -1,7 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { getCurrentNflWeek, getNflGamesForWeek, _resetNflApiCache } = await import('../nfl-api.js');
+const { getCurrentNflWeek, getNflGamesForWeek, getNflWeekSchedule, _resetNflApiCache } = await import('../nfl-api.js');
 
 let originalFetch;
 beforeEach(() => { originalFetch = global.fetch; _resetNflApiCache(); });
@@ -115,4 +115,88 @@ test('a populated week query is returned as-is', async () => {
   const games = await getNflGamesForWeek();
   assert.equal(games.length, 1);
   assert.equal(games[0].game_id, '9');
+});
+
+test('recovers the current slate when both weekly ESPN hosts fail', async () => {
+  global.fetch = async url => {
+    if (String(url).includes('seasontype=')) throw new Error('provider offline');
+    return { ok: true, json: async () => ({ events: [event({ id: 1, seasonType: 2, week: 1 })] }) };
+  };
+  const result = await getNflWeekSchedule();
+  assert.equal(result.games.length, 1);
+  assert.equal(result.meta.status, 'degraded');
+  assert.equal(result.meta.source, 'espn-scoreboard');
+  assert.equal(result.meta.partial, true);
+  assert.equal(result.games[0].home_score, null);
+});
+
+test('unavailable schedule rejects instead of claiming an empty week', async () => {
+  global.fetch = async () => { throw new Error('offline'); };
+  await assert.rejects(getNflWeekSchedule(), /offline/);
+  assert.deepEqual(await getNflGamesForWeek(), []); // compatibility for background consumers
+});
+
+test('malformed weekly payload is not cached as a successful empty response', async () => {
+  global.fetch = async () => ({ ok: true, json: async () => ({ error: 'upstream' }) });
+  const options = { season: 2026, seasonType: 2, week: 5 };
+  await assert.rejects(getNflWeekSchedule(options), /Invalid NFL/);
+  global.fetch = async () => ({ ok: true, json: async () => ({ events: [event({ id: 5, seasonType: 2, week: 5 })] }) });
+  assert.equal((await getNflWeekSchedule(options)).games.length, 1);
+});
+
+test('parallel callers share discovery and weekly requests', async () => {
+  let count = 0;
+  global.fetch = async () => {
+    count++;
+    return { ok: true, json: async () => ({ events: [event({ id: 1, seasonType: 2, week: 1 })] }) };
+  };
+  const results = await Promise.all(Array.from({ length: 12 }, () => getNflWeekSchedule()));
+  assert.equal(count, 2);
+  assert.ok(results.every(r => r.games[0].game_id === '1'));
+});
+
+test('fallback slate does not poison a subsequent explicit week cache', async () => {
+  global.fetch = async url => ({ ok: true, json: async () => ({
+    events: String(url).includes('seasontype=') ? [] : [event({ id: 1, seasonType: 2, week: 1 })],
+  }) });
+  assert.equal((await getNflWeekSchedule()).games.length, 1);
+  assert.equal((await getNflWeekSchedule({ season: 2026, seasonType: 2, week: 1 })).games.length, 0);
+});
+
+test('expired live cache recovers briefly but is rejected after the age limit', async t => {
+  const options = { season: 2026, seasonType: 2, week: 1 };
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const live = event({ id: 1, seasonType: 2, week: 1 });
+  live.status.type.state = 'in';
+  global.fetch = async () => ({ ok: true, json: async () => ({ events: [live] }) });
+  const initial = await getNflWeekSchedule(options);
+  now += 31_000;
+  global.fetch = async () => { throw new Error('offline'); };
+  const stale = await getNflWeekSchedule(options);
+  assert.equal(stale.meta.stale, true);
+  assert.equal(stale.meta.fetchedAt, initial.meta.fetchedAt);
+  now += 15 * 60_000;
+  await assert.rejects(getNflWeekSchedule(options), /offline/);
+});
+
+test('changing season phase cannot borrow the previous slate', async t => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  global.fetch = async () => ({ ok: true, json: async () => ({ events: [event({ id: 1, seasonType: 1, week: 4 })] }) });
+  await getNflWeekSchedule();
+  now += 11 * 60_000;
+  global.fetch = async () => ({ ok: true, json: async () => ({ season: { year: 2026, type: 2 }, week: { number: 1 }, events: [] }) });
+  const next = await getNflWeekSchedule();
+  assert.equal(next.seasonType, 2);
+  assert.equal(next.week, 1);
+  assert.equal(next.games.length, 0);
+});
+
+test('a cached empty explicit week cannot hide a populated current slate', async () => {
+  global.fetch = async url => ({ ok: true, json: async () => ({
+    events: String(url).includes('seasontype=') ? [] : [event({ id: 1, seasonType: 2, week: 1 })],
+  }) });
+  assert.equal((await getNflWeekSchedule({ season: 2026, seasonType: 2, week: 1 })).games.length, 0);
+  assert.equal((await getNflWeekSchedule()).games.length, 1);
 });

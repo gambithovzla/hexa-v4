@@ -9,8 +9,9 @@
  * recent form, and injuries.
  *
  * Cache TTLs mirror NBA: schedule 5min (30s when live), team/standings 6h/15min,
- * injuries 15min. On fetch failure we serve stale cache, then degrade to empty —
- * never throw to callers (resilient like getNbaLeagueInjuries).
+ * injuries 15min. The schedule endpoint uses getNflWeekSchedule to distinguish
+ * outages from empty weeks. Array-based background consumers retain the empty
+ * fallback through getNflGamesForWeek.
  */
 
 import { enrichGameTeamIds, getNflTeam } from './nfl-team-map.js';
@@ -36,7 +37,23 @@ function cacheGetStale(key) {
 }
 
 function cacheSet(key, data, ttlMs) {
-  _cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  _cache.set(key, { data, fetchedAt: Date.now(), expiresAt: Date.now() + ttlMs });
+}
+
+const SCHEDULE_MAX_AGE_MS = 15 * 60 * 1000;
+const _inflight = new Map();
+
+async function singleFlight(key, work) {
+  if (_inflight.has(key)) return _inflight.get(key);
+  const pending = work();
+  _inflight.set(key, pending);
+  try { return await pending; }
+  finally { _inflight.delete(key); }
+}
+
+function recentScheduleCache(key) {
+  const entry = _cache.get(key);
+  return entry && Date.now() - entry.fetchedAt <= SCHEDULE_MAX_AGE_MS ? entry : null;
 }
 
 /** Test seam: the module-level cache otherwise bleeds between cases. */
@@ -92,6 +109,7 @@ function normalizeScoreboardEvent(event, ctx = {}) {
 
   const mappedStatus = mapEspnStatusType(event.status?.type ?? {});
   const parseScore = value => {
+    if (value == null || value === '') return null;
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   };
@@ -100,12 +118,12 @@ function normalizeScoreboardEvent(event, ctx = {}) {
 
   return enrichGameTeamIds({
     game_id: String(event.id ?? comp.id),
-    season: ctx.season ?? event.season?.year ?? null,
+    season: event.season?.year ?? ctx.season ?? null,
     // The event's own season type wins: the scoreboard ROOT reports 4 (offseason)
     // well into the preseason, and season_type now drives both the preseason gate
     // and which Odds API sport key we query. Fall back to ctx only when absent.
     season_type: event.season?.type ?? ctx.seasonType ?? null,
-    week: ctx.week ?? event.week?.number ?? null,
+    week: event.week?.number ?? ctx.week ?? null,
     game_date: safeDate,
     game_datetime: event.date ?? null,
     status: mappedStatus.status,
@@ -136,24 +154,30 @@ function normalizeScoreboardEvent(event, ctx = {}) {
  * seasonType: 1=preseason, 2=regular, 3=postseason.
  */
 export async function getCurrentNflWeek() {
+  return singleFlight('current_week', fetchCurrentNflWeek);
+}
+
+async function fetchCurrentNflWeek() {
   const cacheKey = 'current_week';
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
   try {
     const data = await espnFetch(`${ESPN_SITE}/scoreboard`, { label: 'current week' });
+    if (!Array.isArray(data?.events)) throw new Error('Invalid NFL scoreboard');
     const result = resolveCurrentWeek(data);
     cacheSet(cacheKey, result, TTL.CURRENT_WEEK);
     // The no-param scoreboard already carries the active slate. Keeping it lets
     // getNflGamesForWeek recover when the explicit seasontype/week query comes
     // back empty, instead of showing an empty board on a day with games.
-    cacheSet(CURRENT_SLATE_KEY, normalizeScoreboardEvents(data, result), TTL.WEEK_GAMES);
+    const games = normalizeScoreboardEvents(data, result);
+    cacheSet(CURRENT_SLATE_KEY, games, games.some(g => g.game_status_id === 2) ? TTL.WEEK_GAMES_LIVE : TTL.WEEK_GAMES);
     return result;
   } catch (err) {
-    console.warn(`[nfl-api] current week failed (${err.message}) — defaulting to regular week 1`);
-    const stale = cacheGetStale(cacheKey);
-    if (stale) return stale;
-    return { season: new Date().getFullYear(), seasonType: 2, week: 1 };
+    console.warn(`[nfl-api] current week failed (${err.message})`);
+    const stale = recentScheduleCache(cacheKey);
+    if (stale) return stale.data;
+    throw err;
   }
 }
 
@@ -199,7 +223,12 @@ function normalizeScoreboardEvents(data, ctx) {
  *   week: 1–18 regular / 1–4 post (defaults to current week).
  *   Returns array of normalized games.
  */
-export async function getNflGamesForWeek({ season = null, seasonType = null, week = null } = {}) {
+export async function getNflWeekSchedule(options = {}) {
+  const key = `schedule:${options.season ?? ''}:${options.seasonType ?? ''}:${options.week ?? ''}`;
+  return singleFlight(key, () => fetchNflWeekSchedule(options));
+}
+
+async function fetchNflWeekSchedule({ season = null, seasonType = null, week = null } = {}) {
   let s = season, st = seasonType, w = week;
   // Only the fully-implicit call is "show me what's on now", and only that call
   // may fall back to the live slate — an explicit week request must answer for
@@ -212,39 +241,60 @@ export async function getNflGamesForWeek({ season = null, seasonType = null, wee
     w = w ?? cur.week;
   }
 
-  const cacheKey = `games:${s}:${st}:${w}`;
+  const cacheKey = `schedule_games:${s}:${st}:${w}`;
   const cached = cacheGet(cacheKey);
-  if (cached) return cached;
+  if (cached && (!isCurrent || cached.games.length)) return cached;
+
+  const response = (games, entry = null, source = 'espn-week', degraded = false) => ({
+    season: s, seasonType: st, week: w, games,
+    meta: {
+      source,
+      status: degraded ? 'degraded' : 'fresh',
+      stale: !!entry && Date.now() > entry.expiresAt,
+      fetchedAt: new Date(entry?.fetchedAt ?? Date.now()).toISOString(),
+      partial: source === 'espn-scoreboard',
+    },
+  });
+  const fallback = () => {
+    const stale = recentScheduleCache(cacheKey);
+    if (stale?.data.games.length) return response(stale.data.games, stale, 'espn-week-cache', true);
+    if (!isCurrent) return null;
+    const slate = recentScheduleCache(CURRENT_SLATE_KEY);
+    const games = slate?.data.filter(g => Number(g.season) === Number(s)
+      && Number(g.season_type) === Number(st) && Number(g.week) === Number(w));
+    return games?.length ? response(games, slate, 'espn-scoreboard', true) : null;
+  };
+  if (cached) return fallback() ?? cached;
 
   const url = `${ESPN_SITE}/scoreboard?seasontype=${st}&week=${w}&dates=${s}`;
   try {
     const data = await espnFetch(url, { label: `scoreboard ${s} st${st} wk${w}` });
-    const events = Array.isArray(data.events) ? data.events : [];
+    if (!Array.isArray(data?.events)) throw new Error('Invalid NFL scoreboard');
+    const events = data.events;
     const games = events
       .map(ev => normalizeScoreboardEvent(ev, { season: s, seasonType: st, week: w }))
       .filter(Boolean);
-    if (games.length === 0 && isCurrent) {
-      const slate = cacheGetStale(CURRENT_SLATE_KEY);
-      if (slate?.length) {
-        console.warn(
-          `[nfl-api] scoreboard ${s} st${st} wk${w} returned 0 games but the live slate has ` +
-          `${slate.length} — serving the slate`,
-        );
-        cacheSet(cacheKey, slate, TTL.WEEK_GAMES);
-        return slate;
-      }
+    if (events.length && !games.length) throw new Error('Unusable NFL scoreboard events');
+    if (games.length === 0) {
+      const recovered = fallback();
+      if (recovered) return recovered;
     }
     const anyLive = games.some(g => g.game_status_id === 2);
-    cacheSet(cacheKey, games, anyLive ? TTL.WEEK_GAMES_LIVE : TTL.WEEK_GAMES);
+    const result = response(games);
+    cacheSet(cacheKey, result, !games.length || anyLive ? TTL.WEEK_GAMES_LIVE : TTL.WEEK_GAMES);
     console.log(`[nfl-api] scoreboard ${s} st${st} wk${w}: ${games.length} games (live=${anyLive})`);
-    return games;
+    return result;
   } catch (err) {
-    const stale = cacheGetStale(cacheKey);
-    if (stale) {
-      console.warn(`[nfl-api] scoreboard ${s} st${st} wk${w} failed (${err.message}) — serving stale`);
-      return stale;
-    }
-    console.error(`[nfl-api] scoreboard ${s} st${st} wk${w} failed (${err.message}) — returning empty`);
+    const recovered = fallback();
+    if (recovered) return recovered;
+    throw err;
+  }
+}
+
+export async function getNflGamesForWeek(options = {}) {
+  try { return (await getNflWeekSchedule(options)).games; }
+  catch (err) {
+    console.warn(`[nfl-api] weekly schedule unavailable: ${err.message}`);
     return [];
   }
 }

@@ -13,6 +13,45 @@ import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { buildNflPropFeaturePayload } from '../services/nflMlClient.js';
 import { findNflPlayerPropStat } from '../nfl-player-fetcher.js';
 
+function propBook(key, line, over, under) {
+  return { key, markets: [{ key: 'player_pass_yds', outcomes: [
+    { name: 'Over', description: 'Test QB', point: line, price: over },
+    { name: 'Under', description: 'Test QB', point: line, price: under },
+  ] }] };
+}
+
+test('prop consensus prices only use quotes at the selected line', () => {
+  const offers = normalizeNflPropEvent({ bookmakers: [
+    propBook('a', 250.5, -110, -110), propBook('b', 250.5, -110, -110),
+    propBook('c', 280.5, 250, -350),
+  ] });
+  const over = offers.find(o => o.side === 'over');
+  assert.equal(over.line, 250.5);
+  assert.equal(over.oddsAmerican, -110);
+  assert.equal(over.bookmakerCount, 2);
+  const enriched = enrichNflPropOffers(offers);
+  assert.equal(enriched[0].fairProb, 0.5);
+  assert.equal(enriched[0].pairedBookmakerCount, 2);
+});
+
+test('unpaired bookmaker quotes cannot manufacture a fair prop probability', () => {
+  const offers = normalizeNflPropEvent({ bookmakers: [
+    propBook('a', 250.5, -110, null), propBook('b', 250.5, null, -110),
+  ] });
+  assert.equal(offers.length, 2);
+  for (const offer of enrichNflPropOffers(offers)) {
+    assert.equal(offer.fairProb, null);
+    assert.equal(offer.pairComplete, false);
+  }
+});
+
+test('missing lines and malformed outcomes are not turned into zero-line overs', () => {
+  assert.deepEqual(normalizeNflPropEvent({ bookmakers: [propBook('a', null, -110, -110)] }), []);
+  const book = propBook('a', 250.5, -110, -110);
+  book.markets[0].outcomes.forEach(o => { o.name = 'Unknown'; });
+  assert.deepEqual(normalizeNflPropEvent({ bookmakers: [book] }), []);
+});
+
 // ── parseNflProp ──────────────────────────────────────────────────────────────
 
 test('parseNflProp: side-line-kind ordering', () => {

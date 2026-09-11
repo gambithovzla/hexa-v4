@@ -37,6 +37,7 @@ const CONFIDENCE_CEIL  = 72;
 const SEVERE_QB = new Set(['out', 'out_for_season', 'doubtful']);
 
 function toNumber(value) {
+  if (value == null || value === '' || typeof value === 'boolean') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -57,14 +58,15 @@ function strengthAdvantage(home, away) {
   const hOff = toNumber(home.epaOff), hDef = toNumber(home.epaDef);
   const aOff = toNumber(away.epaOff), aDef = toNumber(away.epaDef);
   if (hOff != null && aDef != null && hDef != null && aOff != null) {
-    const homeNet = hOff - aDef;
-    const awayNet = aOff - hDef;
+    // Defensive EPA is EPA allowed: lower is better. Compare team net EPA.
+    const homeNet = hOff - hDef;
+    const awayNet = aOff - aDef;
     return deltaToAdvantage(homeNet - awayNet, 0.15); // 0.15 EPA/play gap ~ 0.75
   }
   const hPd = toNumber(home.pointDiff);
   const aPd = toNumber(away.pointDiff);
-  if (hPd == null && aPd == null) return null;
-  return deltaToAdvantage((hPd ?? 0) - (aPd ?? 0), 60); // 60-pt season diff gap ~ 0.75
+  if (hPd == null || aPd == null) return null;
+  return deltaToAdvantage(hPd - aPd, 60);
 }
 
 /** QB availability: a severe QB status on one side swings the line hard. */
@@ -130,13 +132,13 @@ function situationalAdvantage(home, away) {
 
   let scores = [];
   if (rzBothPresent) {
-    const homeRzNet = hRzOff - aRzDef;  // home offense vs away defense in RZ
-    const awayRzNet = aRzOff - hRzDef;
+    const homeRzNet = hRzOff - hRzDef;
+    const awayRzNet = aRzOff - aRzDef;
     scores.push(deltaToAdvantage(homeRzNet - awayRzNet, 0.15));
   }
   if (tdBothPresent) {
-    const home3dNet = h3dOff - a3dDef;
-    const away3dNet = a3dOff - h3dDef;
+    const home3dNet = h3dOff - h3dDef;
+    const away3dNet = a3dOff - a3dDef;
     scores.push(deltaToAdvantage(home3dNet - away3dNet, 0.12));
   }
   return scores.reduce((s, v) => s + v, 0) / scores.length;
@@ -246,4 +248,4 @@ export function calculateNflShadowScore(context, gameMeta = {}) {
 }
 
 export const NFL_SHADOW_MODEL_KEY     = 'nfl_shadow_validator_v1';
-export const NFL_SHADOW_MODEL_VERSION = '1';
+export const NFL_SHADOW_MODEL_VERSION = '2';

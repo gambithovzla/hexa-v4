@@ -102,3 +102,27 @@ test('all signals absent falls back to a coin flip plus home boost', () => {
 test('exposes a stable model key', () => {
   assert.equal(NFL_SHADOW_MODEL_KEY, 'nfl_shadow_validator_v1');
 });
+
+test('explicit null EPA uses point differential instead of inventing zero EPA', () => {
+  const r = calculateNflShadowScore(ctx({
+    home: { epaOff: null, epaDef: null, pointDiff: -100, redZoneTdPctOff: null, sackRateOff: null },
+    away: { epaOff: null, epaDef: null, pointDiff: 100, redZoneTdPctOff: null, sackRateOff: null },
+  }), meta);
+  assert.equal(r.predicted_winner_abbr, 'BUF');
+  assert.equal(r.breakdown.sitAdv, null);
+  assert.equal(r.breakdown.trAdv, null);
+});
+
+test('lower defensive EPA allowed improves the same team, not its opponent', () => {
+  const baseline = { home: { epaOff: 0.1, epaDef: 0.05 }, away: { epaOff: 0.1, epaDef: 0.05 } };
+  const before = calculateNflShadowScore(ctx(baseline), meta);
+  const after = calculateNflShadowScore(ctx({ ...baseline, home: { ...baseline.home, epaDef: -0.1 } }), meta);
+  assert.ok(after.breakdown.strAdv > before.breakdown.strAdv);
+  assert.ok(after.score > before.score);
+});
+
+test('lower defensive red-zone and third-down conversion allowed helps the defense', () => {
+  const team = { redZoneTdPctOff: 0.6, redZoneTdPctDef: 0.6, thirdDownConvOff: 0.4, thirdDownConvDef: 0.4 };
+  const r = calculateNflShadowScore(ctx({ home: { ...team, redZoneTdPctDef: 0.4, thirdDownConvDef: 0.25 }, away: team }), meta);
+  assert.ok(r.breakdown.sitAdv > 0.5);
+});
