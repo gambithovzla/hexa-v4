@@ -276,6 +276,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
         context,
         gameMeta,
         analysisData,
+        marketOdds: resolvedOdds,
       }).catch(err => console.warn(`[nfl-route] shadow_model persist swallowed: ${err.message}`));
     }
 

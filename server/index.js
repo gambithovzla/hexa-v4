@@ -27,6 +27,7 @@ import oracleHistoryRouter, { upsertOracleSession } from './routes/oracle-histor
 import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
+import { handleNflGames } from './routes/nfl-schedule.js';
 import nhlRouter from './routes/nhl.js';
 import soccerRouter from './routes/soccer.js';
 import tennisRouter from './routes/tennis.js';
@@ -115,7 +116,6 @@ import {
   getNbaPlayoffBracket,
 } from './nba-api.js';
 import {
-  getNflGamesForWeek,
   getNflTeamStats,
   getNflStandings,
   getCurrentNflWeek,
@@ -1088,31 +1088,7 @@ app.get('/api/nba/playoffs', async (req, res) => {
 
 // ── NFL endpoints (Sprint 9a scaffolding — public, read-only) ─────────────────
 // GET /api/nfl/games?season=&seasonType=&week=  — by week (NFL cadence). No params → current week.
-app.get('/api/nfl/games', async (req, res) => {
-  try {
-    const season = req.query.season != null ? Number(req.query.season) : null;
-    const seasonType = req.query.seasonType != null ? Number(req.query.seasonType) : null;
-    const week = req.query.week != null ? Number(req.query.week) : null;
-    if (season != null && !/^\d{4}$/.test(String(season))) {
-      return res.status(400).json({ success: false, error: 'season must be a 4-digit year' });
-    }
-    if (seasonType != null && ![1, 2, 3].includes(seasonType)) {
-      return res.status(400).json({ success: false, error: 'seasonType must be 1 (pre), 2 (regular) or 3 (post)' });
-    }
-    const games = await getNflGamesForWeek({ season, seasonType, week });
-    const resolved = (season == null || seasonType == null || week == null) ? await getCurrentNflWeek() : null;
-    res.json({
-      success: true,
-      season: season ?? resolved?.season ?? null,
-      seasonType: seasonType ?? resolved?.seasonType ?? null,
-      week: week ?? resolved?.week ?? null,
-      count: games.length,
-      data: games,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: safeError(err) });
-  }
-});
+app.get('/api/nfl/games', handleNflGames);
 
 // GET /api/nfl/teams?season=2025  — season team stats (standings-derived)
 app.get('/api/nfl/teams', async (req, res) => {

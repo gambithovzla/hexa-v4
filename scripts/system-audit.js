@@ -322,10 +322,11 @@ async function runAudit() {
       // 5a. Overall coverage: resolved picks vs picks with at least one feature row
       const coverageRes = await pool.query(`
         SELECT
-          COUNT(*)                                        AS total_picks,
-          COUNT(*) FILTER (WHERE deleted_at IS NULL
-            AND result IS NOT NULL AND result != 'pending') AS resolved_picks,
-          COUNT(DISTINCT pf.pick_id)                     AS picks_with_features
+          COUNT(DISTINCT p.id) AS total_picks,
+          COUNT(DISTINCT p.id) FILTER (WHERE p.result IS NOT NULL
+            AND p.result != 'pending') AS resolved_picks,
+          COUNT(DISTINCT pf.pick_id) FILTER (WHERE p.result IS NOT NULL
+            AND p.result != 'pending') AS picks_with_features
         FROM picks p
         LEFT JOIN pick_features pf ON pf.pick_id = p.id
         WHERE p.deleted_at IS NULL

@@ -153,24 +153,34 @@ export function buildNflFeaturePayload(context = {}, gameMeta = {}, marketOdds =
                                  ? home.pointsForPerGame - home.pointsAgainstPerGame : null,
     away_form_point_diff:      (away.pointsForPerGame != null && away.pointsAgainstPerGame != null)
                                  ? away.pointsForPerGame - away.pointsAgainstPerGame : null,
-    home_rest_days:       gameMeta.homeRestDays ?? null,
-    away_rest_days:       gameMeta.awayRestDays ?? null,
-    home_is_short_week:   gameMeta.homeIsShortWeek ? 1 : gameMeta.homeIsShortWeek === false ? 0 : null,
-    away_is_short_week:   gameMeta.awayIsShortWeek ? 1 : gameMeta.awayIsShortWeek === false ? 0 : null,
-    home_is_off_bye:      gameMeta.homeIsOffBye ? 1 : gameMeta.homeIsOffBye === false ? 0 : null,
-    away_is_off_bye:      gameMeta.awayIsOffBye ? 1 : gameMeta.awayIsOffBye === false ? 0 : null,
+    home_rest_days:       gameMeta.homeRestDays ?? home.restDays ?? null,
+    away_rest_days:       gameMeta.awayRestDays ?? away.restDays ?? null,
+    home_is_short_week:   optionalBoolean(gameMeta.homeIsShortWeek ?? home.isShortWeek),
+    away_is_short_week:   optionalBoolean(gameMeta.awayIsShortWeek ?? away.isShortWeek),
+    home_is_off_bye:      optionalBoolean(gameMeta.homeIsOffBye ?? home.isOffBye),
+    away_is_off_bye:      optionalBoolean(gameMeta.awayIsOffBye ?? away.isOffBye),
     qb_home_active:       qbHomeActive != null ? (qbHomeActive ? 1 : 0) : null,
     qb_away_active:       qbAwayActive != null ? (qbAwayActive ? 1 : 0) : null,
     wind_mph:             (weather.windSpeed ?? weather.wind_speed) ?? null,
-    is_dome:              gameMeta.isDome ? 1 : gameMeta.isDome === false ? 0 : null,
-    spread_close:         marketOdds.spread ?? null,
-    total_close:          marketOdds.total ?? null,
-    injuries_home_severe: injuries.homeSevere ?? null,
-    injuries_away_severe: injuries.awaySevere ?? null,
+    is_dome:              optionalBoolean(gameMeta.isDome ?? weather.dome),
+    spread_close:         optionalNumber(marketOdds?.spread?.home ?? marketOdds?.spread),
+    total_close:          optionalNumber(marketOdds?.total?.line ?? marketOdds?.total),
+    injuries_home_severe: injuries.homeSevere ?? (home.injuries?.ok ? home.injuries.severeCount : null) ?? null,
+    injuries_away_severe: injuries.awaySevere ?? (away.injuries?.ok ? away.injuries.severeCount : null) ?? null,
     oracle_confidence:    gameMeta.oracleConfidence ?? null,
-    data_quality_score:   context.dataQuality ?? null,
+    data_quality_score:   context.dataQuality ?? context.context_meta?.overallCompleteness ?? null,
     signal_coherence_score: context.signalCoherence ?? null,
   };
+}
+
+function optionalBoolean(value) {
+  return value === true ? 1 : value === false ? 0 : null;
+}
+
+function optionalNumber(value) {
+  if (value == null || value === '' || typeof value === 'object' || typeof value === 'boolean') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -238,7 +248,7 @@ export async function predictNflGameModel(context = {}, gameMeta = {}, marketOdd
     predictNflSpread(features),
     predictNflTotal(features),
   ]);
-  const prob = r => (r && typeof r.probability === 'number' ? r.probability : null);
+  const prob = r => (Number.isFinite(r?.probability) && r.probability >= 0 && r.probability <= 1 ? r.probability : null);
   const moneyline = prob(ml);
   const spread = prob(sp);
   const total = prob(tot);

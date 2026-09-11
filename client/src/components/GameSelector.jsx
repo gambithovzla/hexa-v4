@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Checkbox, Skeleton, Typography } from '@mui/material';
+import { Box, Button, Checkbox, Skeleton, Typography } from '@mui/material';
 import { C, BARLOW, MONO, SANS } from '../theme';
 import SportSwitcher from './SportSwitcher';
 import { getNbaLogoUrl } from '../utils/nbaLogoUrl';
@@ -911,6 +911,8 @@ export default function GameSelector({
   const [games, setGames]             = useState([]);
   const [loading, setLoading]         = useState(false);
   const [fetchErr, setFetchErr]       = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [nflSchedule, setNflSchedule] = useState(null);
   const [analyzedPks, setAnalyzedPks] = useState(new Set());
   const [selectedLeague, setSelectedLeague] = useState('eng.1');
 
@@ -945,6 +947,11 @@ export default function GameSelector({
     let cancelled = false;
     setLoading(true);
     setFetchErr(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 40_000);
+    let retryTimer;
+    setGames([]);
+    setNflSchedule(null);
     setSingleGame(null);
     setSelectedIds(new Set());
     onSelectGame?.(null);
@@ -963,11 +970,16 @@ export default function GameSelector({
       ? `${API_URL}/api/tennis/matches?tour=${tour}&date=${date}`
       : `${API_URL}/api/games?date=${date}`;
 
-    fetch(url)
-      .then(r => r.json())
+    fetch(url, { signal: controller.signal, cache: 'no-store' })
+      .then(async r => {
+        const json = await r.json();
+        if (!r.ok || !json.success || !Array.isArray(json.data)) throw new Error('schedule_unavailable');
+        return json;
+      })
       .then(json => {
         if (cancelled) return;
-        const raw = json.success ? json.data : [];
+        const raw = json.data;
+        if (sport === 'nfl') setNflSchedule({ season: json.season, seasonType: json.seasonType, week: json.week, ...json.meta });
         const list = sport === 'nfl' ? raw.map(normalizeNflGame)
           : sport === 'nba' ? raw.map(normalizeNbaGame)
           : sport === 'nhl' ? raw.map(normalizeNhlGame)
@@ -982,11 +994,23 @@ export default function GameSelector({
           onSelectMultiple?.(selectable);
         }
       })
-      .catch(() => { if (!cancelled) setFetchErr(t.error); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch(() => {
+        if (cancelled) return;
+        setFetchErr(t.error);
+        if (sport === 'nfl') retryTimer = setTimeout(() => setReloadKey(k => k + 1), 30_000);
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (!cancelled) setLoading(false);
+      });
 
-    return () => { cancelled = true; };
-  }, [date, sport, tour, selectedLeague]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timeout);
+      clearTimeout(retryTimer);
+    };
+  }, [date, sport, tour, selectedLeague, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleSingleClick(game) {
@@ -1087,7 +1111,12 @@ export default function GameSelector({
               bgcolor: C.surfaceAlt,
             }}
           >
-            {language === 'es' ? 'Semana actual' : 'Current week'}
+            {nflSchedule?.week
+              ? `${nflSchedule.season} · ${language === 'es' ? 'Semana' : 'Week'} ${nflSchedule.week}`
+              : language === 'es' ? 'Semana actual' : 'Current week'}
+            <Button size="small" disabled={loading || analyzing} onClick={() => setReloadKey(k => k + 1)}>
+              {language === 'es' ? 'Actualizar' : 'Refresh'}
+            </Button>
           </Box>
         ) : (
           <input
@@ -1243,6 +1272,13 @@ export default function GameSelector({
       )}
 
       {/* ── Game grid ── */}
+      {sport === 'nfl' && nflSchedule?.status === 'degraded' && (
+        <Typography role="status" sx={{ color: C.amber, fontSize: '0.8rem', mb: 2 }}>
+          {language === 'es'
+            ? 'Mostrando el último calendario disponible. La jornada puede estar incompleta; actualiza para confirmar horarios y estados.'
+            : 'Showing the latest available schedule. The slate may be incomplete; refresh to confirm times and statuses.'}
+        </Typography>
+      )}
       {loading ? (
         <Box
           sx={{
@@ -1261,12 +1297,15 @@ export default function GameSelector({
           ))}
         </Box>
       ) : fetchErr ? (
-        <Box sx={{ textAlign: 'center', py: 5 }}>
+        <Box role="alert" sx={{ textAlign: 'center', py: 5 }}>
           <Typography
             sx={{ fontFamily: SANS, fontSize: '0.875rem', color: C.red }}
           >
             {fetchErr}
           </Typography>
+          <Button onClick={() => setReloadKey(k => k + 1)} sx={{ mt: 1 }}>
+            {language === 'es' ? 'Reintentar' : 'Retry'}
+          </Button>
         </Box>
       ) : games.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 7 }}>

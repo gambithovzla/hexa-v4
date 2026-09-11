@@ -20,6 +20,8 @@
  *   resolveNflPropFromActual(parsed, actual) — pure resolver (unit-testable, no network)
  */
 
+import { espnRequest } from './espn-http.js';
+
 const ESPN_NFL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 
 export const NFL_PROP_KINDS = new Set([
@@ -245,9 +247,7 @@ export function parseNflBoxscorePlayers(teams) {
  */
 export async function getNflGameBoxscore(eventId) {
   const url = `${ESPN_NFL}/summary?event=${eventId}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`ESPN summary failed: ${res.status}`);
-  const data = await res.json();
+  const data = await espnRequest(url, { label: `summary ${eventId}`, prefix: 'nfl-props-resolver', timeoutMs: 10000 });
   return parseNflBoxscorePlayers(data?.boxscore?.players);
 }
 

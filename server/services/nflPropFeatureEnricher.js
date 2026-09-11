@@ -54,7 +54,25 @@ export function enrichNflPropOffers(offers) {
 
     let fairProb = null;
     let vig = null;
-    if (over != null && under != null && over + under > 0) {
+    let pairedBookmakerCount = 0;
+    const quoted = Array.isArray(pair.over?.quotes) || Array.isArray(pair.under?.quotes);
+    if (quoted) {
+      const underByBook = new Map((pair.under?.quotes ?? [])
+        .filter(q => q.bookmaker && q.line === o.line)
+        .map(q => [q.bookmaker, americanToImplied(q.oddsAmerican)]));
+      const paired = (pair.over?.quotes ?? []).flatMap(q => {
+        const pOver = americanToImplied(q.oddsAmerican);
+        const pUnder = underByBook.get(q.bookmaker);
+        return q.line === o.line && pOver != null && pUnder != null
+          ? [{ over: pOver / (pOver + pUnder), vig: pOver + pUnder - 1 }] : [];
+      });
+      pairedBookmakerCount = paired.length;
+      if (paired.length) {
+        const fairOver = paired.reduce((sum, p) => sum + p.over, 0) / paired.length;
+        fairProb = round4(o.side === 'under' ? 1 - fairOver : fairOver);
+        vig = round4(paired.reduce((sum, p) => sum + p.vig, 0) / paired.length);
+      }
+    } else if (over != null && under != null && over + under > 0) {
       const overhead = over + under;
       vig = round4(overhead - 1);
       const fair = (o.side === 'under' ? under : over) / overhead;
@@ -66,7 +84,8 @@ export function enrichNflPropOffers(offers) {
       impliedProb: round4(implied),
       fairProb,
       vig,
-      pairComplete: over != null && under != null,
+      pairComplete: fairProb != null,
+      pairedBookmakerCount,
     };
   });
 }

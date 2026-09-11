@@ -65,6 +65,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg}', '**/!(icon-*|favicon-*|apple-touch-icon).png'],
         runtimeCaching: [
           {
+            urlPattern: ({ url }) => url.pathname === '/api/nfl/games',
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /^https:\/\/hexa-v4-production\.up\.railway\.app\/api/,
             handler: 'NetworkFirst',
             options: {
