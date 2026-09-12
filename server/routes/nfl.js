@@ -26,6 +26,8 @@ import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
+import { getNflLeagueInjuries } from '../nfl-api.js';
+import { buildNflAvailabilityIndex, findNflPlayerAvailability, summarizeNflUnavailable } from '../services/nflAvailability.js';
 import { buildHexaNflBoard } from '../services/hexaNflBoardService.js';
 import { buildNflParlayCandidates } from '../services/parlayEngine/nflParlayCandidates.js';
 import { composeParlays } from '../services/parlayEngine/composer.js';
@@ -521,19 +523,29 @@ async function fetchOraclePropPicks(userId, date) {
 router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? req.query.date : todayEt();
   const propKindFilter = req.query.propKind ? String(req.query.propKind) : null;
+  // The per-event odds endpoint bills a credit per market, so the extra markets
+  // (kicking, defense, longest play) are opt-in: ?markets=extended|all.
+  const marketScope = ['core', 'extended', 'all'].includes(String(req.query.markets))
+    ? String(req.query.markets) : 'core';
 
   try {
     const games = await resolveNflSlate({ date });
     const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date ?? date, seasonType: games[0]?.season_type ?? null });
+    // Availability rides along: an OUT receiver's over is not a bet, it's a void.
+    const injuryFeed = await getNflLeagueInjuries().catch(() => null);
 
     const boardGames = [];
     let oddsAvailable = false;
 
     for (const game of games) {
       const event = matchNflOddsToGame(oddsEvents, game.home_team_name, game.away_team_name);
+      const availability = buildNflAvailabilityIndex(injuryFeed, [
+        { teamId: game.home_team_id, teamAbbr: game.home_team_abbr },
+        { teamId: game.away_team_id, teamAbbr: game.away_team_abbr },
+      ]);
       let props = [];
       if (event?.eventId) {
-        const offers = await getNflPlayerPropOdds({ eventId: event.eventId, sportKey: event.sportKey });
+        const offers = await getNflPlayerPropOdds({ eventId: event.eventId, sportKey: event.sportKey, markets: marketScope });
         if (offers.length) oddsAvailable = true;
         props = enrichNflPropOffers(offers)
           .filter(o => !propKindFilter || o.propKind === propKindFilter)
@@ -548,6 +560,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
             vig: o.vig,
             modelProb: null, // filled below when the nfl_prop model is live
             edge: null,
+            availability: findNflPlayerAvailability(availability, o.playerName),
           }))
           .sort((a, b) =>
             a.propKind.localeCompare(b.propKind) || String(a.playerName).localeCompare(String(b.playerName)));
@@ -581,6 +594,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
         homeTeam: game.home_team_abbr,
         startTime: game.game_datetime ?? null,
         props,
+        unavailable: summarizeNflUnavailable(availability),
       });
     }
 
@@ -590,6 +604,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
       success: true,
       date,
       sport: 'nfl',
+      markets: marketScope,
       mlPublic: false,
       mlEnabled: boardGames.some(g => g.props.some(p => p.modelProb != null)),
       games: boardGames,

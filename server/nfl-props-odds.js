@@ -20,7 +20,11 @@ const SPORT_KEY = 'americanfootball_nfl';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Odds API market key → our canonical prop kind (see nfl-props-resolver.js).
-const MARKET_KIND_MAP = {
+// Split core/extended because the per-event endpoint bills one credit per market
+// per region: the core set is what a bettor reaches for (passing, rushing,
+// receiving, TD scorers), the extended set adds kicking, defense and longest-play
+// markets for when the quota allows.
+const CORE_MARKET_KIND_MAP = {
   player_pass_yds: 'pass_yds',
   player_pass_tds: 'pass_tds',
   player_pass_completions: 'pass_completions',
@@ -31,9 +35,39 @@ const MARKET_KIND_MAP = {
   player_reception_yds: 'reception_yds',
   player_receptions: 'receptions',
   player_anytime_td: 'anytime_td',
+  player_1st_td: 'first_td',
+  player_rush_reception_yds: 'rush_rec_yds',
+  player_pass_rush_reception_tds: 'pass_rush_rec_tds',
 };
 
-export const NFL_PROP_MARKETS = Object.keys(MARKET_KIND_MAP);
+const EXTENDED_MARKET_KIND_MAP = {
+  player_last_td: 'last_td',
+  player_pass_rush_reception_yds: 'pass_rush_rec_yds',
+  player_pass_longest_completion: 'longest_completion',
+  player_rush_longest: 'longest_rush',
+  player_reception_longest: 'longest_reception',
+  player_kicking_points: 'kicking_points',
+  player_field_goals: 'field_goals',
+  player_sacks: 'sacks',
+  player_tackles_assists: 'tackles_assists',
+  player_defensive_interceptions: 'def_interceptions',
+};
+
+const MARKET_KIND_MAP = { ...CORE_MARKET_KIND_MAP, ...EXTENDED_MARKET_KIND_MAP };
+
+// Markets with one outcome per player and no line (the book quotes "yes").
+const YES_MARKET_KINDS = new Set(['anytime_td', 'first_td', 'last_td']);
+
+export const NFL_PROP_MARKETS = Object.keys(CORE_MARKET_KIND_MAP);
+export const NFL_PROP_MARKETS_EXTENDED = Object.keys(EXTENDED_MARKET_KIND_MAP);
+export const NFL_PROP_MARKETS_ALL = Object.keys(MARKET_KIND_MAP);
+
+/** Market keys for a scope: 'core' (default), 'extended' (the extras) or 'all'. */
+export function nflPropMarketsFor(scope) {
+  if (scope === 'all') return NFL_PROP_MARKETS_ALL;
+  if (scope === 'extended') return NFL_PROP_MARKETS_EXTENDED;
+  return NFL_PROP_MARKETS;
+}
 
 const _cache = new Map();
 let _lastFetchMeta = {
@@ -94,7 +128,7 @@ function consensusAmerican(prices) {
  * (player, propKind, side). Consolidates across books: line by MODE (preserves
  * real book lines), price by implied-prob consensus.
  *
- * anytime_td is a yes-market: emitted as side='over', line=0.5.
+ * Yes-markets (anytime/1st/last TD) are emitted as side='over', line=0.5.
  */
 export function normalizeNflPropEvent(event) {
   if (!event?.bookmakers?.length) return [];
@@ -118,8 +152,8 @@ export function normalizeNflPropEvent(event) {
       for (const o of market.outcomes ?? []) {
         // For O/U markets: outcome.description = player, outcome.name = 'Over'/'Under'.
         // For anytime_td: outcome.name = player, no point.
-        if (propKind === 'anytime_td') {
-          add('anytime_td', o.description ?? o.name, 'over', 0.5, o.price, book.key);
+        if (YES_MARKET_KINDS.has(propKind)) {
+          add(propKind, o.description ?? o.name, 'over', 0.5, o.price, book.key);
         } else {
           const side = String(o.name ?? '').toLowerCase();
           if (!['over', 'under'].includes(side) || o.point == null || o.point === '') continue;
@@ -158,11 +192,11 @@ function round4(v) {
   return v == null ? null : Math.round(v * 1e4) / 1e4;
 }
 
-async function fetchEventOdds(apiKey, eventId, sportKey) {
+async function fetchEventOdds(apiKey, eventId, sportKey, markets = NFL_PROP_MARKETS) {
   const params = new URLSearchParams({
     apiKey,
     regions: 'us',
-    markets: NFL_PROP_MARKETS.join(','),
+    markets: markets.join(','),
     oddsFormat: 'american',
     dateFormat: 'iso',
   });
@@ -185,7 +219,8 @@ async function fetchEventOdds(apiKey, eventId, sportKey) {
  * Cached NFL player prop offers for a single Odds API event. Never throws — on
  * failure returns [] and exposes the error via getNflPropOddsStatus().
  */
-export async function getNflPlayerPropOdds({ eventId, sportKey = SPORT_KEY } = {}) {
+export async function getNflPlayerPropOdds({ eventId, sportKey = SPORT_KEY, markets = 'core' } = {}) {
+  const marketKeys = Array.isArray(markets) ? markets : nflPropMarketsFor(markets);
   if (!eventId) {
     setLastFetchMeta({ eventId: null, offers: 0, status: 'missing_event', ok: false, error: 'eventId required' });
     return [];
@@ -197,7 +232,7 @@ export async function getNflPlayerPropOdds({ eventId, sportKey = SPORT_KEY } = {
     return [];
   }
 
-  const cacheKey = `${sportKey}:${eventId}`;
+  const cacheKey = `${sportKey}:${eventId}:${marketKeys.length}`;
   const cached = _cache.get(cacheKey);
   if (cached?.data && Date.now() - cached.ts < CACHE_TTL_MS) {
     setLastFetchMeta({ eventId, offers: cached.data.length, status: 'cache_hit', ok: true, error: null, quota: cached.quota });
@@ -206,7 +241,7 @@ export async function getNflPlayerPropOdds({ eventId, sportKey = SPORT_KEY } = {
 
   const tryKey = async (apiKey, slot) => {
     try {
-      const result = await fetchEventOdds(apiKey, eventId, sportKey);
+      const result = await fetchEventOdds(apiKey, eventId, sportKey, marketKeys);
       if (!result.ok) return { slot, result };
       const data = normalizeNflPropEvent(result.raw);
       _cache.set(cacheKey, { data, ts: Date.now(), quota: result.quota, keySlot: slot });

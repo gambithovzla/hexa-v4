@@ -28,6 +28,7 @@ import insightsRouter from './routes/insights.js';
 import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
 import { handleNflGames } from './routes/nfl-schedule.js';
+import { nflInjurySeverity } from './services/nflAvailability.js';
 import nhlRouter from './routes/nhl.js';
 import soccerRouter from './routes/soccer.js';
 import tennisRouter from './routes/tennis.js';
@@ -118,6 +119,8 @@ import {
 import {
   getNflTeamStats,
   getNflStandings,
+  getNflLeagueInjuries,
+  findTeamInjuries,
   getCurrentNflWeek,
 } from './nfl-api.js';
 import {
@@ -1113,6 +1116,38 @@ app.get('/api/nfl/standings', async (req, res) => {
     }
     const data = await getNflStandings(season);
     res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: safeError(err) });
+  }
+});
+
+// GET /api/nfl/injuries?team=KC,PHI  — the league injury report ("altas y bajas").
+// No team filter → every team. Sorted most-severe first so the UI can cut the tail.
+app.get('/api/nfl/injuries', async (req, res) => {
+  try {
+    const payload = await getNflLeagueInjuries();
+    const requested = String(req.query.team ?? '')
+      .split(',').map(t => t.trim()).filter(Boolean);
+
+    const teams = requested.length
+      ? requested
+          .map(t => findTeamInjuries(payload, { teamId: /^\d+$/.test(t) ? t : null, teamAbbr: t }))
+          .filter(Boolean)
+      : Object.values(payload?.byAbbr ?? {});
+
+    const data = teams.map(t => ({
+      ...t,
+      injuries: [...(t.injuries ?? [])].sort(
+        (a, b) => nflInjurySeverity(b.statusKey) - nflInjurySeverity(a.statusKey)),
+    }));
+
+    res.json({
+      success: true,
+      count: data.length,
+      fetchedAt: payload?.fetchedAt ?? null,
+      stale: payload?.stale ?? false,
+      data,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
   }
