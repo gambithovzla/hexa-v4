@@ -16,7 +16,7 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/auth-middleware.js';
-import { getNflGamesForWeek, getNflGamesForDate } from '../nfl-api.js';
+import { findNflGame, resolveNflSlate } from '../services/nflGameLookup.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { analyzeNflGame, analyzeNflChat } from '../services/oracleNfl.js';
 import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
@@ -61,20 +61,6 @@ function nflParlayEnabled(req, res, next) {
 
 function safeErr(err) {
   return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
-}
-
-/**
- * Locate an NFL game by id. Prefers an explicit date (single-day lookup); else
- * resolves by week (season/seasonType/week — defaults to the current week).
- */
-async function findNflGame({ gameId, season, seasonType, week, date }) {
-  let games;
-  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    games = await getNflGamesForDate(date);
-  } else {
-    games = await getNflGamesForWeek({ season, seasonType, week });
-  }
-  return games.find(g => String(g.game_id) === String(gameId)) ?? null;
 }
 
 /**
@@ -537,8 +523,8 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
   const propKindFilter = req.query.propKind ? String(req.query.propKind) : null;
 
   try {
-    const games = await getNflGamesForDate(date);
-    const oddsEvents = await getNflGameOdds({ date, seasonType: games[0]?.season_type ?? null });
+    const games = await resolveNflSlate({ date });
+    const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date ?? date, seasonType: games[0]?.season_type ?? null });
 
     const boardGames = [];
     let oddsAvailable = false;
@@ -630,16 +616,12 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
   } = req.body ?? {};
 
   try {
-    let games;
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      games = await getNflGamesForDate(date);
-    } else {
-      games = await getNflGamesForWeek({
-        season: season != null ? Number(season) : null,
-        seasonType: seasonType != null ? Number(seasonType) : null,
-        week: week != null ? Number(week) : null,
-      });
-    }
+    const games = await resolveNflSlate({
+      season: season != null ? Number(season) : null,
+      seasonType: seasonType != null ? Number(seasonType) : null,
+      week: week != null ? Number(week) : null,
+      date,
+    });
     if (!games?.length) {
       return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: 0, note: 'no NFL games for the requested window' });
     }

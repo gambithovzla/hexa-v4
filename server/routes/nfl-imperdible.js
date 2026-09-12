@@ -15,7 +15,7 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin } from '../middleware/auth-middleware.js';
-import { getNflGamesForWeek, getNflGamesForDate } from '../nfl-api.js';
+import { resolveNflSlate } from '../services/nflGameLookup.js';
 import {
   analyzeNflImperdible,
   persistNflImperdible,
@@ -42,16 +42,12 @@ router.use(verifyToken, requireAdmin, imperdibleNflEnabled);
 router.get('/games', async (req, res) => {
   const { season = null, seasonType = null, week = null, date = null } = req.query ?? {};
   try {
-    let games;
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
-      games = await getNflGamesForDate(String(date));
-    } else {
-      games = await getNflGamesForWeek({
-        season: season != null ? Number(season) : null,
-        seasonType: seasonType != null ? Number(seasonType) : null,
-        week: week != null ? Number(week) : null,
-      });
-    }
+    const games = await resolveNflSlate({
+      season: season != null ? Number(season) : null,
+      seasonType: seasonType != null ? Number(seasonType) : null,
+      week: week != null ? Number(week) : null,
+      date: date != null ? String(date) : null,
+    });
     const payload = (games ?? []).map((g) => ({
       gamePk: String(g.game_id),
       gameDate: g.game_date ?? null,

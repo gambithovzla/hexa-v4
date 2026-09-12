@@ -1223,9 +1223,14 @@ export default function AnalysisPanel({
       } else if (mode === 'single' && sport === 'nfl') {
         const g = selectedGames[0];
         endpoint = `${API_URL}/api/nfl/analyze/game`;
+        // NFL slates are weekly: send the game's own week + kickoff date, not the
+        // date picker's day (a Saturday holds no games and the lookup would 404).
         body = {
           gameId:      g.gamePk,
-          date:        selectedDate,
+          season:      g._season ?? null,
+          seasonType:  g._seasonType ?? null,
+          week:        g._week ?? null,
+          date:        g._gameDate ?? selectedDate,
           lang,
           riskProfile: 'balanced',
           engine:      modelMode === 'premium' ? 'premium' : 'deep',

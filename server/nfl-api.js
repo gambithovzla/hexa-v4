@@ -299,6 +299,50 @@ export async function getNflGamesForWeek(options = {}) {
   }
 }
 
+/**
+ * getNflGameById(eventId) → a single normalized game record, resolved straight
+ * from ESPN's per-event summary. The scoreboard is week-scoped, so a lookup that
+ * only knows the game id (a client that sent the wrong week, or a date that
+ * isn't the kickoff day) has no list to search; this answers for any event id.
+ * Returns null when ESPN doesn't know the id.
+ */
+export async function getNflGameById(eventId) {
+  if (eventId == null || eventId === '') return null;
+  const cacheKey = `game_by_id:${eventId}`;
+  const cached = cacheGet(cacheKey);
+  if (cached !== null && cached !== undefined) return cached;
+
+  const url = `${ESPN_SITE}/summary?event=${encodeURIComponent(eventId)}`;
+  try {
+    const data = await espnFetch(url, { label: `summary ${eventId}`, timeoutMs: 10000 });
+    const header = data?.header ?? {};
+    const comp = header.competitions?.[0];
+    if (!comp) throw new Error('Summary carries no competition');
+    // The summary header nests season/week beside the competition rather than on
+    // the event, so rebuild the scoreboard event shape the normalizer expects.
+    const event = {
+      id: header.id ?? eventId,
+      season: header.season ?? null,
+      week: header.week != null ? { number: header.week } : null,
+      date: comp.date ?? null,
+      status: comp.status ?? null,
+      competitions: [{
+        ...comp,
+        venue: comp.venue ?? data?.gameInfo?.venue ?? null,
+      }],
+    };
+    const game = normalizeScoreboardEvent(event);
+    if (!game) throw new Error('Unusable NFL summary event');
+    cacheSet(cacheKey, game, game.game_status_id === 2 ? TTL.SUMMARY_LIVE : TTL.WEEK_GAMES);
+    return game;
+  } catch (err) {
+    const stale = cacheGetStale(cacheKey);
+    if (stale) return stale;
+    console.warn(`[nfl-api] game lookup ${eventId} failed (${err.message})`);
+    return null;
+  }
+}
+
 /** getNflGamesForDate(YYYY-MM-DD) — convenience for a single calendar day. */
 export async function getNflGamesForDate(dateStr) {
   const cacheKey = `games_date:${dateStr}`;
