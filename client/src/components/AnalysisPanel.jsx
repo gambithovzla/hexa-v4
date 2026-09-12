@@ -16,6 +16,7 @@ import AuthModal from './AuthModal';
 import NbaContextMetaBadge from './NbaContextMetaBadge';
 import AdminMlOpinionCard from './AdminMlOpinionCard';
 import F5SuggestionCard from './F5SuggestionCard';
+import NflInjuryReport from './NflInjuryReport';
 import { useAuth } from '../store/authStore';
 import { BARLOW, MONO, SANS } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
@@ -1546,6 +1547,17 @@ export default function AnalysisPanel({
           mode={mode}
           modelMode={modelMode}
         />
+
+        {/* Availability report — the NFL analogue of MLB's lineup badges */}
+        {sport === 'nfl' && selectedGames.length === 1 && (
+          <NflInjuryReport
+            lang={lang}
+            teams={[
+              selectedGames[0]?.teams?.away?.abbreviation,
+              selectedGames[0]?.teams?.home?.abbreviation,
+            ]}
+          />
+        )}
 
         {/* Lineup status badges — MLB only */}
         {sport === 'mlb' && selectedGames.length > 0 && (
