@@ -16,6 +16,7 @@ import AuthModal from './AuthModal';
 import NbaContextMetaBadge from './NbaContextMetaBadge';
 import AdminMlOpinionCard from './AdminMlOpinionCard';
 import F5SuggestionCard from './F5SuggestionCard';
+import NflInjuryReport from './NflInjuryReport';
 import { useAuth } from '../store/authStore';
 import { BARLOW, MONO, SANS } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
@@ -1223,9 +1224,14 @@ export default function AnalysisPanel({
       } else if (mode === 'single' && sport === 'nfl') {
         const g = selectedGames[0];
         endpoint = `${API_URL}/api/nfl/analyze/game`;
+        // NFL slates are weekly: send the game's own week + kickoff date, not the
+        // date picker's day (a Saturday holds no games and the lookup would 404).
         body = {
           gameId:      g.gamePk,
-          date:        selectedDate,
+          season:      g._season ?? null,
+          seasonType:  g._seasonType ?? null,
+          week:        g._week ?? null,
+          date:        g._gameDate ?? selectedDate,
           lang,
           riskProfile: 'balanced',
           engine:      modelMode === 'premium' ? 'premium' : 'deep',
@@ -1541,6 +1547,17 @@ export default function AnalysisPanel({
           mode={mode}
           modelMode={modelMode}
         />
+
+        {/* Availability report — the NFL analogue of MLB's lineup badges */}
+        {sport === 'nfl' && selectedGames.length === 1 && (
+          <NflInjuryReport
+            lang={lang}
+            teams={[
+              selectedGames[0]?.teams?.away?.abbreviation,
+              selectedGames[0]?.teams?.home?.abbreviation,
+            ]}
+          />
+        )}
 
         {/* Lineup status badges — MLB only */}
         {sport === 'mlb' && selectedGames.length > 0 && (

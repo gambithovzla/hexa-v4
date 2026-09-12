@@ -32,6 +32,8 @@ const STRINGS = {
     playerSearch: 'Player name…',
     showSavant: 'Savant',
     hideSavant: 'Hide Savant',
+    extraMarkets: '+ Kicking / Defense',
+    unavailable: 'INJURY REPORT — out or doubtful',
     player: 'Player',
     market: 'Market',
     line: 'Line',
@@ -78,6 +80,8 @@ const STRINGS = {
     playerSearch: 'Buscar jugador…',
     showSavant: 'Savant',
     hideSavant: 'Ocultar Savant',
+    extraMarkets: '+ Pateo / Defensa',
+    unavailable: 'ALTAS Y BAJAS — fuera o dudosos',
     player: 'Jugador',
     market: 'Mercado',
     line: 'Línea',
@@ -150,14 +154,26 @@ const KIND_LABELS = {
     en: {
       pass_yds: 'Pass Yds', pass_tds: 'Pass TD', pass_completions: 'Completions',
       pass_attempts: 'Pass Att', pass_interceptions: 'INT',
-      rush_yds: 'Rush Yds', rush_attempts: 'Carries',
-      reception_yds: 'Rec Yds', receptions: 'Receptions', anytime_td: 'Anytime TD',
+      longest_completion: 'Longest Pass',
+      rush_yds: 'Rush Yds', rush_attempts: 'Carries', longest_rush: 'Longest Rush',
+      reception_yds: 'Rec Yds', receptions: 'Receptions', longest_reception: 'Longest Rec',
+      rush_rec_yds: 'Rush+Rec Yds', pass_rush_rec_yds: 'Pass+Rush+Rec Yds',
+      pass_rush_rec_tds: 'Total TDs',
+      anytime_td: 'Anytime TD', first_td: '1st TD', last_td: 'Last TD',
+      kicking_points: 'Kicking Pts', field_goals: 'Field Goals',
+      sacks: 'Sacks', tackles_assists: 'Tackles+Ast', def_interceptions: 'Def INT',
     },
     es: {
       pass_yds: 'Yds Pase', pass_tds: 'TD Pase', pass_completions: 'Completos',
       pass_attempts: 'Int. Pase', pass_interceptions: 'INT',
-      rush_yds: 'Yds Tierra', rush_attempts: 'Acarreos',
-      reception_yds: 'Yds Recep', receptions: 'Recepciones', anytime_td: 'TD Anytime',
+      longest_completion: 'Pase mas largo',
+      rush_yds: 'Yds Tierra', rush_attempts: 'Acarreos', longest_rush: 'Acarreo mas largo',
+      reception_yds: 'Yds Recep', receptions: 'Recepciones', longest_reception: 'Recep. mas larga',
+      rush_rec_yds: 'Yds Tierra+Recep', pass_rush_rec_yds: 'Yds Totales',
+      pass_rush_rec_tds: 'TD Totales',
+      anytime_td: 'TD Anytime', first_td: 'Primer TD', last_td: 'Ultimo TD',
+      kicking_points: 'Puntos de pateo', field_goals: 'Goles de campo',
+      sacks: 'Capturas', tackles_assists: 'Tacleadas', def_interceptions: 'INT defensiva',
     },
   },
   soccer: {
@@ -188,6 +204,24 @@ function fmtPct(v) {
   return `${(Number(v) * 100).toFixed(1)}%`;
 }
 
+const AVAILABILITY_LABELS = {
+  en: { out_for_season: 'OUT (IR)', out: 'OUT', doubtful: 'DOUBT', game_time_decision: 'GTD',
+        questionable: 'QUEST', day_to_day: 'DTD', probable: 'PROB' },
+  es: { out_for_season: 'FUERA (IR)', out: 'FUERA', doubtful: 'DUDOSO', game_time_decision: 'DECIDE',
+        questionable: 'EN DUDA', day_to_day: 'DIA A DIA', probable: 'PROBABLE' },
+};
+
+function availabilityLabel(statusKey, lang) {
+  const table = AVAILABILITY_LABELS[lang] ?? AVAILABILITY_LABELS.es;
+  return table[statusKey] ?? String(statusKey ?? '').replace(/_/g, ' ').toUpperCase();
+}
+
+function availabilityColor(statusKey) {
+  if (statusKey === 'out' || statusKey === 'out_for_season') return RED;
+  if (statusKey === 'doubtful') return '#e08a2e';
+  return '#c8a415';
+}
+
 function fmtEdge(v) {
   if (v == null) return '—';
   const pct = (Number(v) * 100).toFixed(1);
@@ -211,6 +245,9 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
   const [minEdge, setMinEdge] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
   const [showSavant, setShowSavant] = useState(false);
+  // Extra NFL markets (kicking, defense, longest play) cost an Odds API credit
+  // each, so they are opt-in rather than always requested.
+  const [nflExtraMarkets, setNflExtraMarkets] = useState(false);
   const [altLines, setAltLines] = useState(null); // { eventId, playerName, propKind }
   const [loading, setLoading] = useState(true);
   const [board, setBoard] = useState(null);
@@ -225,6 +262,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
       if (propKind) params.set('propKind', propKind);
       if (minEdge) params.set('minEdge', minEdge);
       if (isSoccer && soccerLeague) params.set('league', soccerLeague);
+      if (isNfl && nflExtraMarkets) params.set('markets', 'all');
       const boardPath = isSoccer ? '/api/soccer/props/board'
         : isNfl ? '/api/nfl/props/board' : '/api/mlb/props/board';
       const res = await fetch(`${API_URL}${boardPath}?${params}`, {
@@ -238,7 +276,7 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
     } finally {
       setLoading(false);
     }
-  }, [token, date, propKind, minEdge, isNfl, isSoccer, soccerLeague]);
+  }, [token, date, propKind, minEdge, isNfl, isSoccer, soccerLeague, nflExtraMarkets]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -354,6 +392,18 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
             style={{ background: SURF, color: INK0, border: `1px solid ${BORDER}`, padding: '8px', width: 160, fontFamily: MONO, fontSize: '11px' }}
           />
         </Box>
+        {isNfl && (
+          <Button
+            onClick={() => setNflExtraMarkets((v) => !v)}
+            size="small"
+            sx={{
+              color: nflExtraMarkets ? CYAN : MUTED, fontFamily: MONO, fontSize: '10px',
+              border: `1px solid ${nflExtraMarkets ? CYAN : BORDER}`,
+            }}
+          >
+            {T.extraMarkets}
+          </Button>
+        )}
         {!isNfl && !isSoccer && (
           <Button
             onClick={() => setShowSavant((v) => !v)}
@@ -440,6 +490,18 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
             title={`${T.game}: ${g.awayTeam} @ ${g.homeTeam}${g.startTime ? ` · ${g.startTime}` : ''}`}
             help={H.gameBlock}
           />
+          {(g.unavailable?.length ?? 0) > 0 && (
+            <Box sx={{ mb: 1.5, border: `1px solid ${RED}`, borderLeft: `3px solid ${RED}`, p: '8px 10px' }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: RED, fontWeight: 700, mb: 0.5 }}>
+                {T.unavailable}
+              </Typography>
+              <Typography sx={{ fontFamily: MONO, fontSize: '9px', color: MUTED }}>
+                {g.unavailable.slice(0, 12).map(u => (
+                  `${u.playerName}${u.position ? ` (${u.position})` : ''} · ${u.team ?? ''} · ${availabilityLabel(u.statusKey, lang)}`
+                )).join('   |   ')}
+              </Typography>
+            </Box>
+          )}
           <Box sx={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: MONO, fontSize: '10px' }}>
               <thead>
@@ -464,6 +526,19 @@ export default function PlayerPropsPage({ token, onBack, lang = 'es', sport: ini
                     <tr key={`${p.playerName}-${p.propKind}-${p.side}-${p.line}-${idx}`} style={{ borderTop: `1px solid ${BORDER}` }}>
                       <td style={{ padding: '8px' }}>
                         <span>{p.playerName}</span>
+                        {p.availability && (
+                          <span
+                            title={[p.availability.status, p.availability.detail].filter(Boolean).join(' — ')}
+                            style={{
+                              marginLeft: 6, padding: '1px 5px', borderRadius: 2, fontSize: '8px',
+                              fontWeight: 700, letterSpacing: '0.5px',
+                              border: `1px solid ${availabilityColor(p.availability.statusKey)}`,
+                              color: availabilityColor(p.availability.statusKey),
+                            }}
+                          >
+                            {availabilityLabel(p.availability.statusKey, lang)}
+                          </span>
+                        )}
                         {board?.mlEnabled && (
                           <Chip
                             label={board.mlPublic ? board.mlPublic : ''}

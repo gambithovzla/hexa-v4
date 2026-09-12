@@ -16,7 +16,7 @@
 import { Router } from 'express';
 import pool from '../db.js';
 import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/auth-middleware.js';
-import { getNflGamesForWeek, getNflGamesForDate } from '../nfl-api.js';
+import { findNflGame, resolveNflSlate } from '../services/nflGameLookup.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { analyzeNflGame, analyzeNflChat } from '../services/oracleNfl.js';
 import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
@@ -26,6 +26,8 @@ import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
+import { getNflLeagueInjuries } from '../nfl-api.js';
+import { buildNflAvailabilityIndex, findNflPlayerAvailability, summarizeNflUnavailable } from '../services/nflAvailability.js';
 import { buildHexaNflBoard } from '../services/hexaNflBoardService.js';
 import { buildNflParlayCandidates } from '../services/parlayEngine/nflParlayCandidates.js';
 import { composeParlays } from '../services/parlayEngine/composer.js';
@@ -61,20 +63,6 @@ function nflParlayEnabled(req, res, next) {
 
 function safeErr(err) {
   return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
-}
-
-/**
- * Locate an NFL game by id. Prefers an explicit date (single-day lookup); else
- * resolves by week (season/seasonType/week — defaults to the current week).
- */
-async function findNflGame({ gameId, season, seasonType, week, date }) {
-  let games;
-  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    games = await getNflGamesForDate(date);
-  } else {
-    games = await getNflGamesForWeek({ season, seasonType, week });
-  }
-  return games.find(g => String(g.game_id) === String(gameId)) ?? null;
 }
 
 /**
@@ -535,19 +523,29 @@ async function fetchOraclePropPicks(userId, date) {
 router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? req.query.date : todayEt();
   const propKindFilter = req.query.propKind ? String(req.query.propKind) : null;
+  // The per-event odds endpoint bills a credit per market, so the extra markets
+  // (kicking, defense, longest play) are opt-in: ?markets=extended|all.
+  const marketScope = ['core', 'extended', 'all'].includes(String(req.query.markets))
+    ? String(req.query.markets) : 'core';
 
   try {
-    const games = await getNflGamesForDate(date);
-    const oddsEvents = await getNflGameOdds({ date, seasonType: games[0]?.season_type ?? null });
+    const games = await resolveNflSlate({ date });
+    const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date ?? date, seasonType: games[0]?.season_type ?? null });
+    // Availability rides along: an OUT receiver's over is not a bet, it's a void.
+    const injuryFeed = await getNflLeagueInjuries().catch(() => null);
 
     const boardGames = [];
     let oddsAvailable = false;
 
     for (const game of games) {
       const event = matchNflOddsToGame(oddsEvents, game.home_team_name, game.away_team_name);
+      const availability = buildNflAvailabilityIndex(injuryFeed, [
+        { teamId: game.home_team_id, teamAbbr: game.home_team_abbr },
+        { teamId: game.away_team_id, teamAbbr: game.away_team_abbr },
+      ]);
       let props = [];
       if (event?.eventId) {
-        const offers = await getNflPlayerPropOdds({ eventId: event.eventId, sportKey: event.sportKey });
+        const offers = await getNflPlayerPropOdds({ eventId: event.eventId, sportKey: event.sportKey, markets: marketScope });
         if (offers.length) oddsAvailable = true;
         props = enrichNflPropOffers(offers)
           .filter(o => !propKindFilter || o.propKind === propKindFilter)
@@ -562,6 +560,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
             vig: o.vig,
             modelProb: null, // filled below when the nfl_prop model is live
             edge: null,
+            availability: findNflPlayerAvailability(availability, o.playerName),
           }))
           .sort((a, b) =>
             a.propKind.localeCompare(b.propKind) || String(a.playerName).localeCompare(String(b.playerName)));
@@ -595,6 +594,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
         homeTeam: game.home_team_abbr,
         startTime: game.game_datetime ?? null,
         props,
+        unavailable: summarizeNflUnavailable(availability),
       });
     }
 
@@ -604,6 +604,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
       success: true,
       date,
       sport: 'nfl',
+      markets: marketScope,
       mlPublic: false,
       mlEnabled: boardGames.some(g => g.props.some(p => p.modelProb != null)),
       games: boardGames,
@@ -630,16 +631,12 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
   } = req.body ?? {};
 
   try {
-    let games;
-    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      games = await getNflGamesForDate(date);
-    } else {
-      games = await getNflGamesForWeek({
-        season: season != null ? Number(season) : null,
-        seasonType: seasonType != null ? Number(seasonType) : null,
-        week: week != null ? Number(week) : null,
-      });
-    }
+    const games = await resolveNflSlate({
+      season: season != null ? Number(season) : null,
+      seasonType: seasonType != null ? Number(seasonType) : null,
+      week: week != null ? Number(week) : null,
+      date,
+    });
     if (!games?.length) {
       return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: 0, note: 'no NFL games for the requested window' });
     }

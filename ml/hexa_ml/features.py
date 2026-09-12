@@ -198,9 +198,17 @@ PROP_NUMERIC_FEATURES = [
 # P(the bet side wins). Player season/recent averages are null until the nflverse
 # player-stats fetcher lands (Fase 2.1) — XGBoost tolerates the NaNs; the strongest
 # present signal is the de-vigged market fair prob and the average-vs-line gap.
+# Canonical prop kinds, mirroring NFL_PROP_KINDS in server/nfl-props-resolver.js.
+# Pooled into one model, so the kind is a one-hot rather than a separate model.
 NFL_PROP_KINDS = (
     "pass_yds", "pass_tds", "pass_completions", "pass_attempts", "pass_interceptions",
-    "rush_yds", "rush_attempts", "reception_yds", "receptions", "anytime_td",
+    "longest_completion",
+    "rush_yds", "rush_attempts", "longest_rush",
+    "reception_yds", "receptions", "longest_reception",
+    "rush_rec_yds", "pass_rush_rec_yds", "pass_rush_rec_tds",
+    "anytime_td", "first_td", "last_td",
+    "kicking_points", "field_goals",
+    "sacks", "tackles_assists", "def_interceptions",
 )
 NFL_PROP_KIND_ONEHOT = [f"propkind_{k}" for k in NFL_PROP_KINDS]
 NFL_PROP_FEATURES = [

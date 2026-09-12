@@ -24,7 +24,7 @@
  */
 
 import pool from '../db.js';
-import { getNflGamesForWeek, getNflGamesForDate } from '../nfl-api.js';
+import { resolveNflSlate } from './nflGameLookup.js';
 import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { buildNflGameCandidates } from './parlayEngine/nflParlayCandidates.js';
@@ -193,16 +193,12 @@ function scoreCandidate(candidate) {
 export async function analyzeNflImperdible({ gameIds, season, seasonType, week, date, lang = 'en', thresholds = {} }) {
   const gateOverrides = thresholds && typeof thresholds === 'object' ? thresholds : {};
 
-  let games;
-  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    games = await getNflGamesForDate(date);
-  } else {
-    games = await getNflGamesForWeek({
-      season: season != null ? Number(season) : null,
-      seasonType: seasonType != null ? Number(seasonType) : null,
-      week: week != null ? Number(week) : null,
-    });
-  }
+  const games = await resolveNflSlate({
+    season: season != null ? Number(season) : null,
+    seasonType: seasonType != null ? Number(seasonType) : null,
+    week: week != null ? Number(week) : null,
+    date,
+  });
 
   const requested = (games ?? []).filter((g) => gameIds.map(String).includes(String(g.game_id)));
   if (requested.length === 0) {

@@ -281,6 +281,7 @@ function getEasternDateString(value = new Date()) {
 export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
   const { C, isLeague } = useHexaTheme();
   const isNba    = sport === 'nba';
+  const isNfl    = sport === 'nfl';
   const isNhl    = sport === 'nhl';
   const isSoccer = sport === 'soccer';
   const isTennis = sport === 'tennis';
@@ -325,6 +326,9 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
     const date = getEasternDateString();
     const url = isNba
       ? `${API_URL}/api/nba/games?date=${date}`
+      : isNfl
+      // NFL is weekly, not daily: the bare endpoint answers for the current week.
+      ? `${API_URL}/api/nfl/games`
       : isNhl
       ? `${API_URL}/api/nhl/games?date=${date}`
       : isSoccer
@@ -347,12 +351,16 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
               home: { abbreviation: g.players?.b?.name, name: g.players?.b?.name },
             },
           }));
-        } else if (isDateSportNonMlb && Array.isArray(gameList)) {
+        } else if ((isDateSportNonMlb || isNfl) && Array.isArray(gameList)) {
           gameList = gameList.map((g) => ({
             gamePk:      String(g.game_id),
             game_id:     g.game_id,
             gameTime:    g.status,
             _leagueSlug: isSoccer ? soccerLeague : undefined,
+            _season:     g.season ?? null,
+            _seasonType: g.season_type ?? null,
+            _week:       g.week ?? null,
+            _gameDate:   g.game_date ?? null,
             teams: {
               away: { abbreviation: g.away_team_abbr, name: g.away_team_name },
               home: { abbreviation: g.home_team_abbr, name: g.home_team_name },
@@ -362,7 +370,7 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         setGames(Array.isArray(gameList) ? gameList : []);
       })
       .catch(() => {});
-  }, [isNba, isNhl, isSoccer, soccerLeague, isTennis, tour, isDateSportNonMlb]);
+  }, [isNba, isNfl, isNhl, isSoccer, soccerLeague, isTennis, tour, isDateSportNonMlb]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -447,6 +455,8 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
       if (skipExtract) headers['X-HEXA-Skip-Pick-Extract'] = '1';
       const chatUrl = isNba
         ? `${API_URL}/api/nba/analyze/chat`
+        : isNfl
+        ? `${API_URL}/api/nfl/analyze/chat`
         : isNhl
         ? `${API_URL}/api/nhl/analyze/chat`
         : isSoccer
@@ -461,13 +471,18 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         body: JSON.stringify({
           gameId: matchId,
           ...(isSoccer ? { leagueSlug: selectedGame._leagueSlug ?? soccerLeague } : {}),
+          ...(isNfl ? {
+            season:     selectedGame._season ?? null,
+            seasonType: selectedGame._seasonType ?? null,
+            week:       selectedGame._week ?? null,
+          } : {}),
           ...(isTennis ? { matchId, tour: selectedGame._tour ?? tour } : {}),
           question: q,
           conversationHistory: buildHistory(),
           lang,
           sessionKey,
           matchups: getMatchup(selectedGame),
-          date: getEasternDateString(),
+          date: (isNfl ? selectedGame._gameDate : null) ?? getEasternDateString(),
         }),
       });
       const data = await res.json();
@@ -483,6 +498,13 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
           text: lang === 'es'
             ? 'Oracle Chat NBA requiere NBA_ANALYSIS_ENABLED=true en el servidor.'
             : 'NBA Oracle Chat requires NBA_ANALYSIS_ENABLED=true on the server.',
+        }]);
+      } else if (res.status === 503 && isNfl) {
+        setConversation(prev => [...prev, {
+          role: 'assistant',
+          text: lang === 'es'
+            ? 'Oracle Chat NFL requiere NFL_ANALYSIS_ENABLED=true en el servidor.'
+            : 'NFL Oracle Chat requires NFL_ANALYSIS_ENABLED=true on the server.',
         }]);
       } else if (res.status === 503 && isSoccer) {
         setConversation(prev => [...prev, {
@@ -712,9 +734,10 @@ export default function OracleChat({ lang = 'en', sport = 'mlb', onBack }) {
         {/* MODE TOGGLE — only show when not in an active chat */}
         {!inChat && (
           <div style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
-            {(isNba ? ['partido']
-              : isSoccer ? ['partido', 'libre']
-              : ['partido', 'jornada']).map(m => (
+            {/* Jornada rides the MLB multi-game endpoint, so only MLB offers it. */}
+            {(isSoccer ? ['partido', 'libre']
+              : sport === 'mlb' ? ['partido', 'jornada']
+              : ['partido']).map(m => (
               <button
                 key={m}
                 onClick={() => switchMode(m)}

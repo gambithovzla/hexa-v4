@@ -712,7 +712,12 @@ function normalizeNflGame(g) {
     gamePk:   String(g.game_id),
     gameDate: g.game_date ? `${g.game_date}T00:00:00Z` : null,
     _displayTime: displayTime,
+    // NFL lookups are week-scoped: carry the game's own week + kickoff date so
+    // analysis doesn't have to guess from the (date-based) date picker.
     _week: g.week ?? null,
+    _season: g.season ?? null,
+    _seasonType: g.season_type ?? null,
+    _gameDate: g.game_date ?? null,
     status: { simplified },
     teams: {
       away: {

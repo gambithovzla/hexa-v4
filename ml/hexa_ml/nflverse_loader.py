@@ -406,7 +406,9 @@ _PROP_STAT_COLUMN = {
     "reception_yds": "receiving_yards",
     "receptions": "receptions",
 }
-_PROP_KINDS = (*_PROP_STAT_COLUMN.keys(), "anytime_td")
+# Derived kinds computed from the weekly columns rather than read from them.
+_DERIVED_PROP_KINDS = ("anytime_td", "rush_rec_yds", "pass_rush_rec_yds", "pass_rush_rec_tds")
+_PROP_KINDS = (*_PROP_STAT_COLUMN.keys(), *_DERIVED_PROP_KINDS)
 _RECENT_WINDOW = 4  # last N games for the "recent form" average
 
 _PLAYER_STATS_TTL_S = 6 * 60 * 60
@@ -482,10 +484,11 @@ def build_player_stats(season: int) -> dict:
         weeks = weeks.copy()
 
     name_col = "player_display_name" if "player_display_name" in weeks.columns else "player_name"
-    weeks["anytime_td"] = (
-        pd.to_numeric(weeks.get("rushing_tds"), errors="coerce").fillna(0)
-        + pd.to_numeric(weeks.get("receiving_tds"), errors="coerce").fillna(0)
-    )
+    num = lambda col: pd.to_numeric(weeks.get(col), errors="coerce").fillna(0)
+    weeks["anytime_td"] = num("rushing_tds") + num("receiving_tds")
+    weeks["rush_rec_yds"] = num("rushing_yards") + num("receiving_yards")
+    weeks["pass_rush_rec_yds"] = num("passing_yards") + weeks["rush_rec_yds"]
+    weeks["pass_rush_rec_tds"] = num("passing_tds") + weeks["anytime_td"]
     if "week" in weeks.columns:
         weeks = weeks.sort_values("week")
 
@@ -501,7 +504,7 @@ def build_player_stats(season: int) -> dict:
         season_avg: dict[str, float | None] = {}
         recent_avg: dict[str, float | None] = {}
         for kind in _PROP_KINDS:
-            col = _PROP_STAT_COLUMN.get(kind, kind)  # anytime_td maps to itself
+            col = _PROP_STAT_COLUMN.get(kind, kind)  # derived kinds map to themselves
             if col not in grp.columns:
                 season_avg[kind] = None
                 recent_avg[kind] = None
