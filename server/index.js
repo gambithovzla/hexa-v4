@@ -5348,12 +5348,20 @@ runMigrations()
       // midweek, so a game-day-only window would miss the move entirely — and
       // the move is the whole signal. One bulk odds call covers the slate.
       const THREE_HOURS_NFL_LM = 3 * 60 * 60 * 1000;
-      setInterval(() => {
+      const captureNflLines = () => {
         if (process.env.NFL_ANALYSIS_ENABLED !== 'true') return;
         captureNflOddsSnapshot().catch(err => {
           console.error('[nfl-line-movement] Scheduled snapshot failed:', err.message);
         });
-      }, THREE_HOURS_NFL_LM).unref();
+      };
+      // setInterval's first tick is three hours out, so a deploy would otherwise
+      // punch a three-hour hole in the history — and on a game day that is the
+      // window the line actually moves in. The opening snapshot is also the
+      // baseline every later comparison is measured against, so it is worth
+      // taking as early as the process can. One minute lets boot and migrations
+      // finish first.
+      setTimeout(captureNflLines, 60_000).unref();
+      setInterval(captureNflLines, THREE_HOURS_NFL_LM).unref();
 
       // ── Pick resolver: every 30 min between 7pm–6am ET ───────────────────
       const THIRTY_MIN = 30 * 60 * 1000;
