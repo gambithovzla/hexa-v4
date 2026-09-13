@@ -491,11 +491,12 @@ function ResultPanel({ result, t, lang, expandedAlt, setExpandedAlt }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ParlayArchitect({ lang = 'en' }) {
+export default function ParlayArchitect({ lang = 'en', sport = 'mlb' }) {
   const t = L[lang] ?? L.en;
   const { token } = useAuth();
   const { isLeague } = useHexaTheme();
-  const { games, date, setDate, gamesLoading } = useGames();
+  const isNfl = sport === 'nfl';
+  const { games, date, setDate, gamesLoading } = useGames(sport);
   const { grouped, groupedDates, stats, winRate, addRun, markResult, autoResolve, deleteRun } = useParlayArchitectHistory(token);
   const { data: learningsData, loading: learningsLoading, error: learningsError } = useParlayLearnings(
     token,
@@ -537,25 +538,36 @@ export default function ParlayArchitect({ lang = 'en' }) {
     setResult(null);
     setExpandedAlt(null);
     try {
-      const res = await fetch(`${API_URL}/api/analyze/parlay-synergy`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          gameIds:       [...selectedIds],
-          requestedLegs,
-          mode,
-          engine: llmEngine,
-          model,
-          betType,
-          lang,
-          date,
-        }),
-      });
+      // NFL runs the same engine and architect through its own route; the
+      // response shape matches, so everything below renders unchanged. betType
+      // and the engine picker are MLB-only controls and are not sent.
+      const res = await fetch(
+        `${API_URL}${isNfl ? '/api/nfl/parlay' : '/api/analyze/parlay-synergy'}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(
+            isNfl
+              ? { gameIds: [...selectedIds], requestedLegs, mode, lang, date }
+              : {
+                  gameIds:       [...selectedIds],
+                  requestedLegs,
+                  mode,
+                  engine: llmEngine,
+                  model,
+                  betType,
+                  lang,
+                  date,
+                }
+          ),
+        }
+      );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      if (!json.data) throw new Error(json.note || 'No parlay could be built for this selection.');
       setResult(json.data);
       addRun({
         date,

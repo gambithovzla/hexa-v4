@@ -621,3 +621,60 @@ test('a real pick that merely mentions passing is still held to the bar', () => 
   const res = validateNflAnalysisOutput(sneaky, { allowPass: true });
   assert.equal(res.ok, false, 'only a standalone PASS counts as declining the game');
 });
+
+// ── Props as parlay legs ──────────────────────────────────────────────────────
+
+import { buildNflPropLegCandidates } from '../services/nflParlayPropLegs.js';
+
+const GAME_ENTRY = { gameId: '401', matchup: 'GB @ MIN', gameDate: '2026-09-13', dataQuality: 80 };
+
+const projection = (over) => ({
+  ok: true, playerName: 'A Player', side: 'over', line: 50.5, propKind: 'rush_yds',
+  label: 'Rushing Yards', modelProb: 0.66, oddsAmerican: -115, confidence: 0.82,
+  rationale: 'because', factors: { script: 1.04 }, ...over,
+});
+
+test('a prop leg carries the shape the parlay engine consumes', () => {
+  const [leg] = buildNflPropLegCandidates(GAME_ENTRY, [projection()]);
+  assert.equal(leg.marketType, 'prop');
+  assert.equal(leg.propKind, 'rush_yds');
+  assert.equal(leg.type, 'single');
+  assert.equal(leg.gamePk, '401');
+  assert.equal(leg.modelProbability, 66, 'engine works in 0-100, not 0-1');
+  assert.ok(leg.decimalOdds > 1);
+  assert.ok(leg.edge > 0, 'edge is model minus implied, both as percentages');
+  // The projection's own confidence drives quality, not the game-level number.
+  assert.equal(leg.dataQualityScore, 82);
+});
+
+test('a weak leg is kept out of the parlay entirely', () => {
+  // A parlay multiplies, so a sub-50% leg drags down every combination it joins.
+  const legs = buildNflPropLegCandidates(GAME_ENTRY, [projection({ modelProb: 0.44 })]);
+  assert.equal(legs.length, 0);
+});
+
+test('an unpriced prop cannot become a leg', () => {
+  const legs = buildNflPropLegCandidates(GAME_ENTRY, [projection({ oddsAmerican: null })]);
+  assert.equal(legs.length, 0, 'a leg with no price cannot be staked or combined');
+});
+
+test('legs from one game are capped', () => {
+  const many = Array.from({ length: 9 }, (_, i) =>
+    projection({ playerName: `Player ${i}`, line: 50 + i }));
+  const legs = buildNflPropLegCandidates(GAME_ENTRY, many, { maxPerGame: 4 });
+  assert.equal(legs.length, 4, 'six props off one offence is one bet wearing a costume');
+});
+
+test('prop legs get distinct candidate ids', () => {
+  const legs = buildNflPropLegCandidates(GAME_ENTRY, [
+    projection({ playerName: 'One' }),
+    projection({ playerName: 'Two', propKind: 'reception_yds' }),
+  ]);
+  assert.equal(new Set(legs.map(l => l.candidateId)).size, 2);
+});
+
+test('no ranked projections means no legs, never a crash', () => {
+  assert.deepEqual(buildNflPropLegCandidates(GAME_ENTRY, []), []);
+  assert.deepEqual(buildNflPropLegCandidates(GAME_ENTRY, null), []);
+  assert.deepEqual(buildNflPropLegCandidates(null, [projection()]), []);
+});

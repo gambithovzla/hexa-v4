@@ -25,6 +25,7 @@ import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
 import { buildNflPropCandidates, propOffersFromRanked, appendPropPrice } from '../services/nflPropCandidates.js';
+import { buildNflPropLegCandidates } from '../services/nflParlayPropLegs.js';
 import { resolveNflBetTypeDirective } from '../services/nflBetTypeDirective.js';
 import { resolveNflObjective } from '../services/nflObjectiveDirective.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
@@ -36,6 +37,7 @@ import { buildNflParlayCandidates } from '../services/parlayEngine/nflParlayCand
 import { composeParlays } from '../services/parlayEngine/composer.js';
 import { buildCorrelationMatrix } from '../services/parlayEngine/correl.js';
 import { computeHitDistribution } from '../services/parlayEngine/hitMath.js';
+import { askArchitect, resolveLegs } from '../services/parlayEngine/architect.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
 import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
@@ -808,7 +810,11 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
 router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, res) => {
   const {
     season = null, seasonType = null, week = null, date = null,
-    requestedLegs = 3, mode = 'safe', lang = 'en',
+    requestedLegs = 3, mode = 'safe', lang = 'en', gameIds = null,
+    // Props are the softest part of the board, so they belong in the parlay —
+    // but the per-event odds endpoint bills per market per game, so a whole
+    // slate is the expensive call. Opt out when the quota matters.
+    includeProps = true,
   } = req.body ?? {};
 
   try {
@@ -819,11 +825,21 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
       date,
     });
     if (!games?.length) {
-      return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: 0, note: 'no NFL games for the requested window' });
+      return res.json({ success: true, sport: 'nfl', mode, data: null, candidateCount: 0, note: 'no NFL games for the requested window' });
     }
 
-    const oddsEvents = await getNflGameOdds({ date: games[0]?.game_date, seasonType: games[0]?.season_type ?? null });
-    const entries = (await Promise.all(games.map(async (g) => {
+    // Honour an explicit selection: the user picked these games, so the parlay is
+    // built from them and not from the whole week's slate.
+    const wanted = Array.isArray(gameIds) && gameIds.length
+      ? new Set(gameIds.map(String))
+      : null;
+    const slate = wanted ? games.filter(g => wanted.has(String(g.game_id))) : games;
+    if (!slate.length) {
+      return res.json({ success: true, sport: 'nfl', mode, data: null, candidateCount: 0, note: 'none of the selected games are in the NFL slate' });
+    }
+
+    const oddsEvents = await getNflGameOdds({ date: slate[0]?.game_date, seasonType: slate[0]?.season_type ?? null });
+    const entries = (await Promise.all(slate.map(async (g) => {
       const ev = matchNflOddsToGame(oddsEvents, g.home_team_name, g.away_team_name);
       const odds = ev ? buildMarketOddsForGame(ev) : null;
       if (!odds) return null;
@@ -861,7 +877,7 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
         console.warn(`[nfl-route] parlay model enrich failed for ${g.game_id}: ${err.message}`);
       }
 
-      return {
+      const entry = {
         gameId: String(g.game_id),
         matchup: `${g.away_team_abbr ?? 'AWAY'} @ ${g.home_team_abbr ?? 'HOME'}`,
         gameDate: g.game_date,
@@ -871,22 +887,125 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
         model, // { moneyline, spread, total } in [0,1], or null → de-vig fallback
         dataQuality: Math.round((context?.context_meta?.overallCompleteness ?? 0.7) * 100),
       };
+
+      // Player props as legs. Never fatal: a game whose props fail to load still
+      // contributes its team markets.
+      entry.propLegs = [];
+      if (includeProps && process.env.NFL_PROPS_ENABLED === 'true' && ev?.eventId) {
+        try {
+          const propCandidates = await buildNflPropCandidates({
+            game: g,
+            event: ev,
+            marketOdds: odds,
+            markets: 'core',
+            limit: 8,
+          });
+          entry.propLegs = buildNflPropLegCandidates(entry, propCandidates.ranked);
+        } catch (err) {
+          console.warn(`[nfl-route] parlay prop legs failed for ${g.game_id}: ${err.message}`);
+        }
+      }
+
+      return entry;
     }))).filter(Boolean);
 
     const modelEnriched = entries.some(e => e.model != null);
-    const candidates = buildNflParlayCandidates(entries);
+    const propLegs = entries.flatMap(e => e.propLegs ?? []);
+    const candidates = [...buildNflParlayCandidates(entries), ...propLegs];
     if (candidates.length < 2) {
-      return res.json({ success: true, sport: 'nfl', mode, parlays: [], candidateCount: candidates.length, modelEnriched, note: 'not enough priced NFL candidates' });
+      return res.json({ success: true, sport: 'nfl', mode, data: null, candidateCount: candidates.length, modelEnriched, note: 'not enough priced NFL candidates' });
     }
 
     const correlationMatrix = buildCorrelationMatrix(candidates);
-    const { parlays, meta } = composeParlays({ candidates, correlationMatrix, N: Number(requestedLegs) || 3, mode });
-    const enriched = parlays.map(p => ({
-      ...p,
-      hit_distribution: computeHitDistribution(p.legs.map(l => l.modelProbability / 100)),
+    const composerStart = Date.now();
+    const { parlays, meta: composerMeta } = composeParlays({
+      candidates, correlationMatrix, N: Number(requestedLegs) || 3, mode,
+    });
+    const composerMs = Date.now() - composerStart;
+
+    if (!parlays.length) {
+      return res.json({
+        success: true, sport: 'nfl', mode,
+        data: null, candidateCount: candidates.length, propLegCount: propLegs.length,
+        note: 'composer produced no parlay for this mode',
+      });
+    }
+
+    // The LLM architect audits the composer's shortlist and picks the final
+    // combination — it is sport-agnostic, so NFL gets the same second opinion
+    // MLB has had, and the response takes the MLB shape so one UI renders both.
+    const llmStart = Date.now();
+    const architectDecision = await askArchitect({
+      candidatePool: candidates,
+      composedParlays: parlays,
+      mode,
+      N: Number(requestedLegs) || 3,
+      lang,
+    });
+    const llmMs = Date.now() - llmStart;
+
+    const finalLegs = resolveLegs(architectDecision.final_legs, candidates);
+    const hitDistribution = computeHitDistribution(finalLegs.map(l => l.modelProbability / 100));
+    const legSummary = legs => legs.map(l => ({
+      candidateId: l.candidateId,
+      gamePk: l.gamePk,
+      matchup: l.matchup,
+      pick: l.pick,
+      type: l.type,
+      marketType: l.marketType,
+      propKind: l.propKind,
+      odds: l.odds,
+      decimalOdds: l.decimalOdds,
+      modelProbability: l.modelProbability,
+      edge: l.edge,
+      reasoning: (l.reasoning ?? '').slice(0, 200),
+      riskVector: l.riskVector,
+      gameScript: l.gameScript,
     }));
 
-    return res.json({ success: true, sport: 'nfl', mode, lang, candidateCount: candidates.length, modelEnriched, parlays: enriched, meta });
+    return res.json({
+      success: true,
+      sport: 'nfl',
+      data: {
+        run_id: null,
+        chosen_parlay: {
+          legs:                  legSummary(finalLegs),
+          actual_legs:           finalLegs.length,
+          requested_legs:        Number(requestedLegs) || 3,
+          combined_probability:  architectDecision.combined_probability,
+          combined_decimal_odds: architectDecision.combined_decimal_odds,
+          combined_edge_score:   finalLegs.reduce((sum, l) => sum + (l.edge ?? 0), 0),
+          hit_distribution:      hitDistribution,
+          synergy_type:          architectDecision.synergy_type,
+          synergy_thesis:        architectDecision.synergy_thesis,
+          warnings:              architectDecision.warnings ?? [],
+        },
+        alternatives: parlays.slice(1).map((alt, i) => ({
+          index:                 i + 1,
+          legs:                  legSummary(alt.legs),
+          combined_probability:  alt.combinedMarginalProbability,
+          combined_decimal_odds: alt.combinedDecimalOdds,
+          combined_edge_score:   alt.legs.reduce((sum, l) => sum + (l.edge ?? 0), 0),
+          score:                 alt.score,
+        })),
+        composer_meta: {
+          mode,
+          sport:                'nfl',
+          candidate_pool_size:  candidates.length,
+          prop_leg_count:       propLegs.length,
+          model_enriched:       modelEnriched,
+          eligible_count:       composerMeta?.eligibleCount ?? null,
+          requested_legs:       Number(requestedLegs) || 3,
+          built_legs:           finalLegs.length,
+        },
+        architect_meta: {
+          validated:                    !architectDecision._fallback,
+          overrode_composer:            architectDecision.decision === 'modify',
+          hidden_correlations_detected: architectDecision.hidden_correlations_detected ?? [],
+          timings: { composer_ms: composerMs, llm_ms: llmMs, total_ms: composerMs + llmMs },
+        },
+      },
+    });
   } catch (err) {
     console.error(`[nfl-route] parlay error: ${err.message}`);
     return res.status(500).json({ success: false, error: safeErr(err) });
