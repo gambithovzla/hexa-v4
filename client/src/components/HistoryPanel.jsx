@@ -898,18 +898,38 @@ function AnalisisTab({ lang, sport = 'all' }) {
   const confirmTimeout = useRef(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const [resolving, setResolving] = useState(false);
+  const [resolveMsg, setResolveMsg] = useState(null);
+
   async function resolveAllPicks() {
+    if (resolving) return;
+    setResolving(true);
+    setResolveMsg(null);
     try {
       const res = await fetch(`${API_URL}/api/picks/resolve`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
       if (json.success) {
-        // Reload picks
+        const d = json.data ?? {};
+        // A sweep that resolves nothing is the normal answer while games are in
+        // progress, so say so instead of leaving the button looking broken.
+        setResolveMsg(d.resolved
+          ? (lang === 'es'
+            ? `${d.resolved} pick(s) resueltos · ${d.wins}W ${d.losses}L ${d.pushes}P`
+            : `${d.resolved} pick(s) resolved · ${d.wins}W ${d.losses}L ${d.pushes}P`)
+          : (lang === 'es'
+            ? 'Sin picks para resolver (juegos aun no finalizados).'
+            : 'Nothing to resolve yet (games not final).'));
         loadHistory();
+      } else {
+        setResolveMsg(json.error ?? 'Error');
       }
     } catch (e) {
       console.error('Resolve error:', e);
+      setResolveMsg(lang === 'es' ? 'Error de conexion.' : 'Connection error.');
+    } finally {
+      setResolving(false);
     }
   }
 
@@ -997,7 +1017,12 @@ function AnalisisTab({ lang, sport = 'all' }) {
 
       {/* Clear footer */}
       {history.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', pt: '8px', borderTop: `1px solid ${C.border}` }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', pt: '8px', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+          {resolveMsg && (
+            <Typography sx={{ fontFamily: MONO, fontSize: '0.58rem', color: C.textMuted }}>
+              {resolveMsg}
+            </Typography>
+          )}
           <Box
             component="button"
             onClick={resolveAllPicks}
@@ -1017,7 +1042,9 @@ function AnalisisTab({ lang, sport = 'all' }) {
               '&:hover': { bgcolor: C.accentDim || 'rgba(0,217,255,0.08)', borderColor: C.accent },
             }}
           >
-            {lang === 'es' ? '⟳ RESOLVER PICKS' : '⟳ RESOLVE PICKS'}
+            {resolving
+              ? (lang === 'es' ? '⟳ RESOLVIENDO…' : '⟳ RESOLVING…')
+              : (lang === 'es' ? '⟳ RESOLVER PICKS' : '⟳ RESOLVE PICKS')}
           </Box>
           {isAdmin && (
             <Box component="button" onClick={() => setShowDeleteConfirm(true)} sx={{
