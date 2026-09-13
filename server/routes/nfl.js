@@ -24,7 +24,7 @@ import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
-import { buildNflPropCandidates, propOffersFromRanked } from '../services/nflPropCandidates.js';
+import { buildNflPropCandidates, propOffersFromRanked, appendPropPrice } from '../services/nflPropCandidates.js';
 import { resolveNflBetTypeDirective } from '../services/nflBetTypeDirective.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
@@ -139,14 +139,32 @@ async function buildPropMarket({ game, oddsEvent, resolvedOdds, propKinds = null
   }
 }
 
+/** American odds → implied probability percentage. */
+function impliedProbPct(american) {
+  const n = Number(american);
+  if (!Number.isFinite(n) || n === 0) return null;
+  const p = n > 0 ? 100 / (n + 100) : Math.abs(n) / (Math.abs(n) + 100);
+  return Math.round(p * 1000) / 10;
+}
+
 async function persistNflPick({ userId, userEmail, matchup, analysisData, model, language, gameId, gameDate, marketOdds }) {
   if (!userId || !analysisData) return null;
 
   const mp = analysisData.master_prediction ?? {};
   const bp = analysisData.best_pick ?? {};
-  const pickText = mp.pick ?? bp.detail ?? null;
+  let pickText = mp.pick ?? bp.detail ?? null;
   const conf = typeof mp.oracle_confidence === 'number' ? mp.oracle_confidence : null;
   const gamePkInt = gameId ? parseInt(gameId, 10) : null;
+
+  // A prop's price lives in the per-event odds endpoint, not the MARKET ODDS
+  // block, so the prompt (rightly) tells the model to omit it rather than guess.
+  // The guard knows it though: prop_selection carries the offer the pick was
+  // matched against. Attaching that verified price is what lets a prop be staked
+  // and tracked like every other pick — without it the bankroll card has nothing
+  // to size against and the pick sits outside CLV entirely.
+  const propOdds = analysisData.prop_selection?.offer?.oddsAmerican ?? null;
+  const oddsAtPick = Number.isFinite(Number(propOdds)) ? Number(propOdds) : null;
+  pickText = appendPropPrice(pickText, oddsAtPick);
 
   const { rows } = await pool.query(
     `INSERT INTO picks (
@@ -177,8 +195,8 @@ async function persistNflPick({ userId, userEmail, matchup, analysisData, model,
       JSON.stringify(analysisData.best_pick ?? {}),
       model,
       language,
-      null,
-      null,
+      oddsAtPick,
+      impliedProbPct(oddsAtPick),
       marketOdds ? JSON.stringify(marketOdds) : null,
       analysisData.kelly_recommendation ?? null,
       gamePkInt,

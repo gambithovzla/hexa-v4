@@ -245,3 +245,23 @@ export function propOffersFromRanked(ranked) {
     confidence: p.confidence,
   }));
 }
+
+/**
+ * Append a prop's verified American price to its pick text, when it has none.
+ *
+ * The price of a prop lives in the per-event odds endpoint, not the MARKET ODDS
+ * block, so the prompt tells the model to omit it rather than guess at it. The
+ * guard does know it — prop_selection carries the matched offer — and a pick
+ * without a price cannot be staked, sized by Kelly, or tracked for closing-line
+ * value. The resolver strips a trailing price before parsing, so adding it here
+ * changes nothing downstream.
+ *
+ * Idempotent: a text that already carries a price is returned unchanged.
+ */
+export function appendPropPrice(pickText, oddsAmerican) {
+  const text = typeof pickText === 'string' ? pickText.trim() : '';
+  const odds = Number(oddsAmerican);
+  if (!text || !Number.isFinite(odds) || odds === 0) return pickText;
+  if (/\([+-]?\d+\)\s*$/.test(text)) return text;
+  return `${text} (${odds > 0 ? '+' : ''}${odds})`;
+}

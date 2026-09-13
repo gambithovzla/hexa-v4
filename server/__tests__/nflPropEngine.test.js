@@ -499,3 +499,33 @@ test('prior-season form is weighted down, not treated as 17 games of evidence', 
   assert.ok(prior.confidence < current.confidence);
   assert.match(prior.rationale, /2025/, 'the rationale must say the form is not current-season');
 });
+
+// ── Prop price on the saved pick ──────────────────────────────────────────────
+
+import { appendPropPrice } from '../services/nflPropCandidates.js';
+import { parseNflProp, resolveNflPlayerProp } from '../nfl-props-resolver.js';
+
+test('a prop pick carries its verified price so it can be staked and tracked', () => {
+  assert.equal(
+    appendPropPrice('Matthew Golden Under 38.5 Receiving Yards', -115),
+    'Matthew Golden Under 38.5 Receiving Yards (-115)'
+  );
+  assert.equal(appendPropPrice('Josh Jacobs Anytime TD', 145), 'Josh Jacobs Anytime TD (+145)');
+});
+
+test('appending a price is idempotent and never invents one', () => {
+  const withPrice = 'Josh Jacobs Anytime TD (+145)';
+  assert.equal(appendPropPrice(withPrice, -110), withPrice, 'an existing price is left alone');
+  assert.equal(appendPropPrice('Josh Jacobs Anytime TD', null), 'Josh Jacobs Anytime TD');
+  assert.equal(appendPropPrice('Josh Jacobs Anytime TD', 0), 'Josh Jacobs Anytime TD');
+});
+
+test('the appended price does not break resolution', () => {
+  // The whole point: the resolver must still grade the pick afterwards.
+  const bare = 'Matthew Golden Under 38.5 Receiving Yards';
+  const priced = appendPropPrice(bare, -115);
+  assert.deepEqual(parseNflProp(priced), parseNflProp(bare));
+
+  const boxscore = { 'matthew golden': { reception_yds: 31, receptions: 4 } };
+  assert.equal(resolveNflPlayerProp(priced, boxscore).result, 'win');
+});
