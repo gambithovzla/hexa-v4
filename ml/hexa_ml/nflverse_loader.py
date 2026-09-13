@@ -368,11 +368,13 @@ def refresh_team_stats(season: int | None = None) -> dict:
             _pbp_cache.clear()
             _player_stats_cache.clear()
             _player_weeks_cache.clear()
+            _defense_allowed_cache.clear()
         else:
             _team_stats_cache.pop(int(season), None)
             _pbp_cache.pop(int(season), None)
             _player_stats_cache.pop(int(season), None)
             _player_weeks_cache.pop(int(season), None)
+            _defense_allowed_cache.pop(int(season), None)
     return {"cleared": "all" if season is None else int(season)}
 
 
@@ -519,13 +521,31 @@ def build_player_stats(season: int) -> dict:
 
         pid = grp["player_id"].iloc[0] if "player_id" in grp.columns else None
         pos = grp["position"].iloc[0] if "position" in grp.columns else None
+        # Most recent team, not the first: mid-season trades would otherwise
+        # attribute a player to the roster he left. The Node side needs this to
+        # know which side of the spread a prop sits on.
+        team = grp["recent_team"].iloc[-1] if "recent_team" in grp.columns else None
+
+        # Per-game dispersion drives the distribution width downstream; a mean
+        # with no spread cannot price an over/under.
+        season_std: dict[str, float | None] = {}
+        for kind in _PROP_KINDS:
+            col = _PROP_STAT_COLUMN.get(kind, kind)
+            if col not in grp.columns or grp.shape[0] < 2:
+                season_std[kind] = None
+                continue
+            s_full = pd.to_numeric(grp[col], errors="coerce").dropna()
+            season_std[kind] = None if s_full.shape[0] < 2 else round(float(s_full.std(ddof=1)), 3)
+
         players[norm] = {
             "name": str(raw_name),
             "player_id": None if pd.isna(pid) else str(pid),
             "position": None if pos is None or pd.isna(pos) else str(pos),
+            "team": None if team is None or pd.isna(team) else str(team),
             "games": int(grp.shape[0]),
             "season_avg": season_avg,
             "recent_avg": recent_avg,
+            "season_std": season_std,
         }
 
     payload = {

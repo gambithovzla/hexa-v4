@@ -165,6 +165,9 @@ const DEGRADED_STATUSES = new Set(['questionable', 'gtd', 'game-time decision', 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
 function num(v) {
+  // Number(null) and Number('') are 0, not NaN — without this guard a missing
+  // average would be read as a real zero and drag every blend and factor down.
+  if (v == null || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }

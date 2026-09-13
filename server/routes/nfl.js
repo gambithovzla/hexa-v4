@@ -24,6 +24,8 @@ import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
+import { buildNflPropCandidates, propOffersFromRanked } from '../services/nflPropCandidates.js';
+import { resolveNflBetTypeDirective } from '../services/nflBetTypeDirective.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
 import { getNflLeagueInjuries } from '../nfl-api.js';
@@ -71,19 +73,69 @@ function safeErr(err) {
  */
 async function resolveMarketOdds({ clientMarketOdds, game }) {
   if (clientMarketOdds) {
-    return { marketOdds: { ...clientMarketOdds, provided: 'client' }, source: 'client' };
+    return { marketOdds: { ...clientMarketOdds, provided: 'client' }, source: 'client', event: null };
   }
   try {
     const events = await getNflGameOdds({ date: game.game_date, seasonType: game.season_type ?? null });
-    if (!events.length) return { marketOdds: null, source: null };
+    if (!events.length) return { marketOdds: null, source: null, event: null };
     const match = matchNflOddsToGame(events, game.home_team_name, game.away_team_name);
-    if (!match) return { marketOdds: null, source: null };
+    if (!match) return { marketOdds: null, source: null, event: null };
     const odds = buildMarketOddsForGame(match);
-    if (!odds) return { marketOdds: null, source: null };
-    return { marketOdds: { ...odds, provided: 'server' }, source: 'server' };
+    if (!odds) return { marketOdds: null, source: null, event: match };
+    return { marketOdds: { ...odds, provided: 'server' }, source: 'server', event: match };
   } catch (err) {
     console.warn(`[nfl-route] server-side odds lookup failed: ${err.message}`);
-    return { marketOdds: null, source: null };
+    return { marketOdds: null, source: null, event: null };
+  }
+}
+
+/**
+ * Build the player-prop menu for a game, or null when props are off, the flag is
+ * disabled, or nothing survives the projection gate. Never throws: a prop
+ * failure must not cost the user their team-market analysis.
+ */
+async function buildPropMarket({ game, oddsEvent, resolvedOdds, propKinds = null, propsRequested = false }) {
+  if (process.env.NFL_PROPS_ENABLED !== 'true') return null;
+  if (!oddsEvent?.eventId) return null;
+
+  try {
+    const injuryFeed = await getNflLeagueInjuries().catch(() => null);
+    const availability = buildNflAvailabilityIndex(injuryFeed, [
+      { teamId: game.home_team_id, teamAbbr: game.home_team_abbr },
+      { teamId: game.away_team_id, teamAbbr: game.away_team_abbr },
+    ]);
+
+    const candidates = await buildNflPropCandidates({
+      game,
+      event: oddsEvent,
+      marketOdds: resolvedOdds,
+      availability,
+      findAvailability: findNflPlayerAvailability,
+      markets: 'core',
+      limit: 12,
+      propKinds,
+      // An explicit prop request means "your best prop", so the edge floor comes
+      // off — the user asked for this market. Left on, a thin slate would answer
+      // a prop request with a spread. The data-quality floor stays: a projection
+      // with no history behind it is still not shown.
+      rankOptions: propsRequested ? { minEdge: 0, minConfidence: 0.35 } : {},
+    });
+
+    if (!candidates.ranked.length) {
+      console.log(
+        `[nfl-route] props: 0 of ${candidates.meta.offerCount} offers cleared the gate` +
+        `${candidates.meta.reason ? ` (${candidates.meta.reason})` : ''}`
+      );
+      return null;
+    }
+    console.log(
+      `[nfl-route] props: ${candidates.meta.rankedCount}/${candidates.meta.offerCount} offers cleared ` +
+      `(projected ${candidates.meta.projectedCount}, defense=${candidates.meta.defenseStats})`
+    );
+    return { ranked: candidates.ranked, meta: candidates.meta };
+  } catch (err) {
+    console.warn(`[nfl-route] prop market build failed: ${err.message}`);
+    return null;
   }
 }
 
@@ -151,6 +203,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
     lang        = 'en',
     riskProfile = 'balanced',
     engine      = 'deep',
+    betType     = 'all',
     marketOdds  = null,
     bankroll    = null,
   } = req.body;
@@ -173,7 +226,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
     const matchup = `${game.away_team_abbr ?? game.away_team_name ?? 'AWAY'} @ ${game.home_team_abbr ?? game.home_team_name ?? 'HOME'}`;
     const gameDate = game.game_date ?? date ?? new Date().toISOString().split('T')[0];
 
-    const { marketOdds: resolvedOdds, source: oddsSource } = await resolveMarketOdds({
+    const { marketOdds: resolvedOdds, source: oddsSource, event: oddsEvent } = await resolveMarketOdds({
       clientMarketOdds: marketOdds,
       game,
     });
@@ -190,6 +243,22 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       marketOdds: resolvedOdds,
     });
 
+    // Player props (flag NFL_PROPS_ENABLED). The Oracle only gets the prop menu
+    // when there is one: if nothing clears the edge and data-quality gate we fall
+    // back to the props-disabled prompt, so the model is never invited to pick
+    // from an empty board and invent a line instead.
+    const focus = resolveNflBetTypeDirective(betType, { propsAvailable: false });
+    const propMarket = await buildPropMarket({
+      game,
+      oddsEvent,
+      resolvedOdds,
+      propKinds: focus.propKinds,
+      propsRequested: focus.propsRequested,
+    });
+    const propsActive = Boolean(propMarket);
+    if (propsActive) context.propMarket = propMarket;
+    const betDirective = resolveNflBetTypeDirective(betType, { propsAvailable: propsActive });
+
     const result = await analyzeNflGame({
       context,
       gameDescription: `${matchup} — ${gameDate}`,
@@ -198,6 +267,8 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       userBankroll: bankroll != null ? Number(bankroll) : undefined,
       marketOdds: resolvedOdds,
       engine,
+      propsEnabled: propsActive,
+      betDirective: betDirective.directive,
     });
 
     if (result.parseError) {
@@ -208,6 +279,8 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       parseError: result.parseError,
       isPreseason: context?.seasonPhase?.isPreseason === true,
       marketOdds: resolvedOdds,
+      propsEnabled: propsActive,
+      propOffers: propsActive ? propOffersFromRanked(propMarket.ranked) : null,
     });
     if (!guard.ok) {
       return res.status(422).json({
@@ -278,6 +351,14 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       outputQuality: guard.quality,
       validationErrors: guard.errors.length ? guard.errors : undefined,
       lineProvenance: guard.line_provenance,
+      propMarket: propsActive
+        ? { candidates: propMarket.ranked, meta: propMarket.meta }
+        : null,
+      betFocus: {
+        requested: betDirective.betType,
+        propsRequested: betDirective.propsRequested,
+        unavailable: betDirective.unavailable,
+      },
       savedPick: savedPick ? {
         id:                savedPick.id,
         matchup:           savedPick.matchup,
@@ -364,7 +445,7 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireSportAccess('nfl'),
     const matchup = matchups || `${game.away_team_abbr ?? 'AWAY'} @ ${game.home_team_abbr ?? 'HOME'}`;
     const gameDate = game.game_date ?? date ?? new Date().toISOString().split('T')[0];
 
-    const { marketOdds: resolvedOdds, source: oddsSource } = await resolveMarketOdds({
+    const { marketOdds: resolvedOdds, source: oddsSource, event: oddsEvent } = await resolveMarketOdds({
       clientMarketOdds: marketOdds,
       game,
     });
@@ -481,6 +562,12 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireSportAccess('nfl'),
 // ML model probability is intentionally null until the dedicated NFL-prop model
 // ships (mirrors MLB props gating). Flag: NFL_PROPS_ENABLED.
 
+/** Identity of one prop row: kind + player + side + line. */
+function propRowKey(o) {
+  const name = String(o.playerName ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return `${o.propKind}|${name}|${o.side}|${o.line}`;
+}
+
 const MAX_MODEL_PREDICTIONS = 40; // cap sidecar calls per game on the admin board
 
 function todayEt() {
@@ -536,6 +623,7 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
 
     const boardGames = [];
     let oddsAvailable = false;
+    let projectionAvailable = false;
 
     for (const game of games) {
       const event = matchNflOddsToGame(oddsEvents, game.home_team_name, game.away_team_name);
@@ -547,28 +635,67 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
       if (event?.eventId) {
         const offers = await getNflPlayerPropOdds({ eventId: event.eventId, sportKey: event.sportKey, markets: marketScope });
         if (offers.length) oddsAvailable = true;
-        props = enrichNflPropOffers(offers)
-          .filter(o => !propKindFilter || o.propKind === propKindFilter)
-          .map(o => ({
-            propKind: o.propKind,
-            playerName: o.playerName,
-            side: o.side,
-            line: o.line,
-            oddsAmerican: o.oddsAmerican,
-            impliedProb: o.impliedProb,
-            fairProb: o.fairProb,
-            vig: o.vig,
-            modelProb: null, // filled below when the nfl_prop model is live
-            edge: null,
-            availability: findNflPlayerAvailability(availability, o.playerName),
-          }))
-          .sort((a, b) =>
-            a.propKind.localeCompare(b.propKind) || String(a.playerName).localeCompare(String(b.playerName)));
 
-        // Admin board: attach the pooled nfl_prop model probability when the
-        // sidecar is up and the model is trained. predictNflProp returns null
-        // (circuit open / disabled / no artifact) → modelProb stays null. Player
-        // averages mirror the training features so board preds are consistent.
+        // Projection engine: the board's primary model signal. Unlike the pooled
+        // nfl_prop XGBoost — which needs live resolved picks before it exists —
+        // this produces a probability from the first week of the season.
+        const candidates = await buildNflPropCandidates({
+          game,
+          marketOdds: buildMarketOddsForGame(event),
+          availability,
+          offers,
+          findAvailability: findNflPlayerAvailability,
+          limit: Number.MAX_SAFE_INTEGER,
+        });
+        projectionAvailable = projectionAvailable || candidates.meta.projectedCount > 0;
+
+        const byKey = new Map(candidates.projections.map(pr => [propRowKey(pr), pr]));
+
+        props = candidates.enriched
+          .filter(o => !propKindFilter || o.propKind === propKindFilter)
+          .map(o => {
+            const pr = byKey.get(propRowKey(o));
+            return {
+              propKind: o.propKind,
+              playerName: o.playerName,
+              side: o.side,
+              line: o.line,
+              oddsAmerican: o.oddsAmerican,
+              impliedProb: o.impliedProb,
+              fairProb: o.fairProb,
+              vig: o.vig,
+              modelProb: pr?.modelProb ?? null,
+              edge: pr?.edge ?? null,
+              projection: pr
+                ? {
+                    mean: pr.projectedMean,
+                    sd: pr.projectedSd,
+                    confidence: pr.confidence,
+                    distribution: pr.distribution,
+                    scriptFactor: pr.factors?.script ?? null,
+                    defenseFactor: pr.factors?.defense ?? null,
+                    sampleGames: pr.sampleGames,
+                    kellyStake: pr.kellyStake,
+                    rationale: pr.rationale,
+                  }
+                : null,
+              mlProb: null,  // pooled nfl_prop model, filled below when trained
+              mlEdge: null,
+              availability: findNflPlayerAvailability(availability, o.playerName),
+            };
+          })
+          .sort((a, b) => {
+            // Lead with the biggest modelled edges; unprojected rows sink.
+            const ea = a.edge ?? -Infinity;
+            const eb = b.edge ?? -Infinity;
+            if (ea !== eb) return eb - ea;
+            return a.propKind.localeCompare(b.propKind) ||
+              String(a.playerName).localeCompare(String(b.playerName));
+          });
+
+        // The pooled nfl_prop model rides alongside as a second opinion once it
+        // has been trained. Null (circuit open / disabled / no artifact) is the
+        // normal state until enough live props resolve.
         const top = props.slice(0, MAX_MODEL_PREDICTIONS);
         const playerStats = await getNflPlayerStats(game.season);
         await Promise.all(top.map(async (p) => {
@@ -582,8 +709,8 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
           });
           const pred = await predictNflProp(payload);
           if (pred && typeof pred.probability === 'number') {
-            p.modelProb = Math.round(pred.probability * 1e4) / 1e4;
-            if (p.impliedProb != null) p.edge = Math.round((p.modelProb - p.impliedProb) * 1e4) / 1e4;
+            p.mlProb = Math.round(pred.probability * 1e4) / 1e4;
+            if (p.impliedProb != null) p.mlEdge = Math.round((p.mlProb - p.impliedProb) * 1e4) / 1e4;
           }
         }));
       }
@@ -606,7 +733,8 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
       sport: 'nfl',
       markets: marketScope,
       mlPublic: false,
-      mlEnabled: boardGames.some(g => g.props.some(p => p.modelProb != null)),
+      mlEnabled: boardGames.some(g => g.props.some(p => p.mlProb != null)),
+      projectionEnabled: projectionAvailable,
       games: boardGames,
       oraclePropPicks,
       oddsAvailable,

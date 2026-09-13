@@ -18,7 +18,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
-import { NFL_CHAT_PROMPT, NFL_SYSTEM_PROMPT } from '../prompts/oracle-nfl-prompts.js';
+import { NFL_CHAT_PROMPT, NFL_SYSTEM_PROMPT, buildNflSystemPrompt } from '../prompts/oracle-nfl-prompts.js';
 import { PRESEASON_CONFIDENCE_CEIL } from './nflSeasonPhase.js';
 
 dotenv.config();
@@ -253,10 +253,61 @@ function describePreseason(seasonPhase) {
   ].join('\n');
 }
 
+function fmtPct(p) {
+  return p == null ? '  n/a' : `${(p * 100).toFixed(1)}%`.padStart(5);
+}
+
+/**
+ * The prop menu the model is allowed to choose from.
+ *
+ * Deliberately tabular and explicit: every row is a line a book actually posted,
+ * and the output guard rejects any pick that does not match one of these rows.
+ * MKT is the de-vigged market probability, MODEL the projection's, EDGE the gap,
+ * CONF how much history the projection rests on.
+ */
+function describePropMarket(propMarket) {
+  const ranked = propMarket?.ranked ?? [];
+  if (!ranked.length) return null;
+
+  const lines = [
+    'PLAYER PROP MARKET — projected edges (you may ONLY pick from these rows)',
+    'PLAYER                    SIDE  LINE  MARKET                 PROJ   MKT  MODEL   EDGE  CONF',
+  ];
+  for (const p of ranked) {
+    const name = String(p.playerName ?? '').slice(0, 24).padEnd(24);
+    const side = String(p.side ?? '').toUpperCase().padEnd(5);
+    const line = String(p.line).padStart(5);
+    const label = String(p.label ?? p.propKind ?? '').slice(0, 20).padEnd(20);
+    const proj = p.projectedMean == null ? '   n/a' : p.projectedMean.toFixed(1).padStart(6);
+    const edge = p.edge == null ? '   n/a' : `${p.edge >= 0 ? '+' : ''}${(p.edge * 100).toFixed(1)}`.padStart(6);
+    const conf = p.confidence == null ? ' n/a' : p.confidence.toFixed(2).padStart(5);
+    lines.push(
+      `${name} ${side} ${line}  ${label} ${proj} ${fmtPct(p.marketProb)} ${fmtPct(p.modelProb)} ${edge} ${conf}`
+    );
+  }
+
+  const flagged = ranked.filter(p => p.availability?.status &&
+    String(p.availability.status).toLowerCase() !== 'active');
+  if (flagged.length) {
+    lines.push(
+      `AVAILABILITY: ${flagged.map(p => `${p.playerName} (${p.availability.status})`).join(', ')}`
+    );
+  }
+
+  const meta = propMarket.meta ?? {};
+  lines.push(
+    `PROP DATA: ${meta.rankedCount ?? ranked.length} of ${meta.offerCount ?? '?'} offers cleared the edge and data-quality gate` +
+    (meta.defenseStats ? '' : ' · no opponent-defense data (matchup factor neutral)') +
+    (meta.defenseFallbackSeason ? ` · defense rates from ${meta.defenseFallbackSeason}` : '')
+  );
+  return lines.join('\n');
+}
+
 export function serializeNflContext({ context, marketOdds }) {
   if (!context) return 'No NFL context provided.';
-  const { season, seasonPhase, gameDate, home, away, weather, context_meta } = context;
+  const { season, seasonPhase, gameDate, home, away, weather, context_meta, propMarket } = context;
   const dataQualityLine = describeDataQuality(context_meta);
+  const propBlock = describePropMarket(propMarket);
   const effDeltas = describeEfficiencyDeltas(home, away);
   const preseasonBlock = describePreseason(seasonPhase);
   return [
@@ -274,6 +325,7 @@ export function serializeNflContext({ context, marketOdds }) {
     describeWeather(weather),
     '',
     describeMarketOdds(marketOdds),
+    ...(propBlock ? ['', propBlock] : []),
     ...(dataQualityLine ? ['', dataQualityLine] : []),
   ].join('\n');
 }
@@ -334,7 +386,7 @@ function parseResponse(rawText) {
 
 // ── User-message builders ─────────────────────────────────────────────────────
 
-function buildAnalysisUserMessage({ gameDescription, lang, riskProfile, userBankroll, contextText }) {
+function buildAnalysisUserMessage({ gameDescription, lang, riskProfile, userBankroll, contextText, betDirective }) {
   const langTag = lang === 'es'
     ? '\n\nIMPORTANT: Responde TODO el contenido de texto en español. Todos los campos: oracle_report, hexa_hunch, alert_flags, descripciones de picks, todo en español.'
     : '';
@@ -343,7 +395,7 @@ function buildAnalysisUserMessage({ gameDescription, lang, riskProfile, userBank
     : '';
   return (
     `Analyze NFL game: ${gameDescription}\n` +
-    `Bet focus: spread first, then total, then moneyline — select the highest-value bet type based on the data. Respect key numbers 3 and 7. No player props.\n` +
+    `${betDirective ?? 'Bet focus: spread first, then total, then moneyline — select the highest-value bet type based on the data. Respect key numbers 3 and 7. No player props.'}\n` +
     `Risk: ${riskProfile ?? 'balanced'}${bankrollLine}\n\n` +
     `CONTEXT:\n${contextText}` +
     langTag
@@ -384,6 +436,8 @@ export async function analyzeNflGame({
   marketOdds,
   engine = 'deep',
   model,
+  propsEnabled = false,
+  betDirective = null,
   timeoutMs = 120_000,
 }) {
   const contextText = serializeNflContext({ context, marketOdds });
@@ -393,6 +447,7 @@ export async function analyzeNflGame({
     riskProfile,
     userBankroll,
     contextText,
+    betDirective,
   });
 
   const cfg = NFL_MODELS[engine] ?? NFL_MODELS.deep;
@@ -402,7 +457,7 @@ export async function analyzeNflGame({
     {
       model: modelId,
       max_tokens: cfg.maxTokens,
-      system: NFL_SYSTEM_PROMPT,
+      system: propsEnabled ? buildNflSystemPrompt({ propsEnabled: true }) : NFL_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
     },
     { timeout: timeoutMs },
