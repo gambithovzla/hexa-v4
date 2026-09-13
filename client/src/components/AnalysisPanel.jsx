@@ -45,6 +45,15 @@ const L = {
       nflQbProps:   '🎯 QB Props (Yards, TDs)',
       nflRushProps: '🏃 Rushing Props (Yards, Carries)',
       nflRecProps:  '🙌 Receiving Props (Yards, Catches)',
+    },
+    objective: {
+      label:            'Analysis Objective',
+      value:            '💰 Best Value',
+      valueHint:        'Where the market looks most wrong. Maximises long-run return, not hit rate.',
+      probability:      '🎯 Most Likely To Hit',
+      probabilityHint:  'Whatever is most likely to happen, whatever it pays.',
+      conviction:       '🧠 Conviction Analyst',
+      convictionHint:   'Bets rarely. Fades the narrative the market is pricing. Says PASS when nothing clears the bar.',
       fadehits:     '🚫 FADE HITS',
     },
     modelSelect: {
@@ -111,6 +120,15 @@ const L = {
       nflQbProps:   '🎯 Props de QB (Yardas, TDs)',
       nflRushProps: '🏃 Props Terrestres (Yardas, Acarreos)',
       nflRecProps:  '🙌 Props de Recepción (Yardas, Atrapadas)',
+    },
+    objective: {
+      label:            'Objetivo del Análisis',
+      value:            '💰 Mejor Valor',
+      valueHint:        'Donde el mercado parece más equivocado. Maximiza ganancia a largo plazo, no aciertos.',
+      probability:      '🎯 Más Probable Que Se Dé',
+      probabilityHint:  'Lo que tiene más chance de pasar, pague lo que pague.',
+      conviction:       '🧠 Analista de Convicción',
+      convictionHint:   'Apuesta poco. Va contra la narrativa que el mercado está cobrando. Dice PASS cuando nada convence.',
       pitcherprops: '🔥 Pitcher Props (Ponches)',
       batterprops:  '🦇 Batter Props (HR, Hits)',
       fadehits:     '🚫 FADE HITS',
@@ -393,6 +411,56 @@ function BetTypeSelect({ value, onChange, t, sport = 'mlb' }) {
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    </Box>
+  );
+}
+
+// Values must match NFL_OBJECTIVES in server/services/nflObjectiveDirective.js.
+function ObjectiveSelect({ value, onChange, t }) {
+  const options = [
+    { value: 'value',       label: t.objective.value,       hint: t.objective.valueHint       },
+    { value: 'probability', label: t.objective.probability, hint: t.objective.probabilityHint },
+    { value: 'conviction',  label: t.objective.conviction,  hint: t.objective.convictionHint  },
+  ];
+  const active = options.find(o => o.value === value) ?? options[0];
+
+  return (
+    <Box>
+      <SectionLabel>{t.objective.label}</SectionLabel>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width:             '100%',
+          background:        '#000000',
+          border:            '1px solid rgba(0, 217, 255, 0.22)',
+          borderRadius:      '0',
+          color:             '#E8F4FF',
+          fontFamily:        MONO,
+          fontSize:          '10px',
+          letterSpacing:     '0.08em',
+          padding:           '8px 10px',
+          cursor:            'pointer',
+          outline:           'none',
+          colorScheme:       'dark',
+          appearance:        'none',
+          backgroundImage:   `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2300D9FF' d='M5 6L0 0h10z'/%3E%3C/svg%3E")`,
+          backgroundRepeat:  'no-repeat',
+          backgroundPosition:'right 10px center',
+          paddingRight:      '28px',
+        }}
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      {/* The modes trade off against each other, so say which one is loaded. */}
+      <Box sx={{
+        mt: '4px', fontFamily: MONO, fontSize: '9px', lineHeight: 1.4,
+        letterSpacing: '0.04em', color: 'rgba(232,244,255,0.45)',
+      }}>
+        {active.hint}
+      </Box>
     </Box>
   );
 }
@@ -1128,6 +1196,7 @@ export default function AnalysisPanel({
   const isAdmin = user?.is_admin === true;
 
   const [betType,     setBetType]     = useState('all');
+  const [objective,   setObjective]   = useState('value');
   const [modelMode,   setModelMode]   = useState('deep');
   const [engineMode,  setEngineMode]  = useState('sonnet');
   const [webSearch,   setWebSearch]   = useState(false);
@@ -1141,7 +1210,7 @@ export default function AnalysisPanel({
   // Bet-focus values are sport-specific (NFL has no run line, MLB no TD scorer),
   // so carrying a selection across a sport switch would silently fall back to
   // 'all' on the server while the dropdown still showed the old choice.
-  useEffect(() => { setBetType('all'); }, [sport]);
+  useEffect(() => { setBetType('all'); setObjective('value'); }, [sport]);
 
   // Sync parlay legs with actual selection count
   useEffect(() => {
@@ -1271,6 +1340,7 @@ export default function AnalysisPanel({
           riskProfile: 'balanced',
           engine:      modelMode === 'premium' ? 'premium' : 'deep',
           betType,
+          objective,
         };
       } else if (mode === 'single' && sport === 'nba') {
         const g = selectedGames[0];
@@ -1542,6 +1612,12 @@ export default function AnalysisPanel({
         {/* Bet type — MLB only (NBA/NFL Oracle selects best bet type internally) */}
         {(sport === 'mlb' || sport === 'nfl') && (
           <BetTypeSelect value={betType} onChange={setBetType} t={t} sport={sport} />
+        )}
+
+        {/* Objective — NFL only. Separate from bet focus so the two compose:
+            "QB props, most likely to hit" needs both, not 27 combined options. */}
+        {sport === 'nfl' && (
+          <ObjectiveSelect value={objective} onChange={setObjective} t={t} />
         )}
 
         {/* Model picker */}
