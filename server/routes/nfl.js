@@ -697,6 +697,10 @@ router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (re
         // has been trained. Null (circuit open / disabled / no artifact) is the
         // normal state until enough live props resolve.
         const top = props.slice(0, MAX_MODEL_PREDICTIONS);
+        // Current season only, deliberately: the pooled nfl_prop model is trained
+        // on current-season averages, so feeding it last season's would predict
+        // off a different distribution. The projection engine's own prior-season
+        // fallback lives in buildNflPropCandidates and stays out of training.
         const playerStats = await getNflPlayerStats(game.season);
         await Promise.all(top.map(async (p) => {
           const ps = findNflPlayerPropStat(playerStats, p.playerName, p.propKind);

@@ -413,3 +413,89 @@ test('the guard menu is derived from exactly what was ranked', () => {
   assert.equal(offers[0].line, 50);
   assert.ok(verifyNflPropPick({ pickText: 'X Over 50 Rushing Yards', propOffers: offers }).ok);
 });
+
+// ── Prior-season fallback (Week 1) ────────────────────────────────────────────
+
+import { findNflPlayerPropStat as findStat } from '../nfl-player-fetcher.js';
+
+const WEEK1_PAYLOAD = {
+  season: 2026,
+  players: {},  // nobody has played a 2026 game yet
+  priorSeason: {
+    season: 2025,
+    players: {
+      'saquon barkley': {
+        name: 'Saquon Barkley', team: 'PHI', position: 'RB', games: 17,
+        season_avg: { rush_yds: 105.4 }, recent_avg: { rush_yds: 98.0 },
+        season_std: { rush_yds: 42.1 },
+      },
+    },
+  },
+};
+
+test('Week 1 falls back to last season rather than projecting nothing', () => {
+  const stat = findStat(WEEK1_PAYLOAD, 'Saquon Barkley', 'rush_yds');
+  assert.ok(stat, 'a player with no current-season games must still resolve');
+  assert.equal(stat.fromPriorSeason, true);
+  assert.equal(stat.priorSeasonYear, 2025);
+  assert.equal(stat.seasonAvg, 105.4);
+});
+
+test('the current season takes over once it has enough games', () => {
+  const payload = {
+    ...WEEK1_PAYLOAD,
+    players: {
+      'saquon barkley': {
+        name: 'Saquon Barkley', team: 'PHI', games: 4,
+        season_avg: { rush_yds: 70 }, recent_avg: { rush_yds: 70 },
+      },
+    },
+  };
+  const stat = findStat(payload, 'Saquon Barkley', 'rush_yds');
+  assert.equal(stat.fromPriorSeason, false);
+  assert.equal(stat.seasonAvg, 70);
+});
+
+test('a thin current-season sample defers to last season', () => {
+  const payload = {
+    ...WEEK1_PAYLOAD,
+    players: {
+      'saquon barkley': {
+        name: 'Saquon Barkley', team: 'PHI', games: 1,
+        season_avg: { rush_yds: 12 },  // one bad game is not a projection
+        recent_avg: { rush_yds: 12 },
+      },
+    },
+  };
+  const stat = findStat(payload, 'Saquon Barkley', 'rush_yds');
+  assert.equal(stat.fromPriorSeason, true, 'one game is noise, last season is the better prior');
+});
+
+test('a rookie with neither current nor prior history resolves to nothing', () => {
+  assert.equal(findStat(WEEK1_PAYLOAD, 'Some Rookie', 'rush_yds'), null);
+});
+
+test('prior-season form is weighted down, not treated as 17 games of evidence', () => {
+  const common = {
+    propKind: 'rush_yds', side: 'over', line: 80,
+    player: { seasonAvg: 105, recentAvg: 105, games: 17 },
+    environment: { teamSpread: 0, total: 44.5 },
+    market: { fairProb: 0.5, impliedProb: 0.5, oddsAmerican: -110, pairedBookmakerCount: 4 },
+  };
+  const current = projectProp(common);
+  const prior = projectProp({
+    ...common,
+    player: { ...common.player, fromPriorSeason: true, priorSeasonYear: 2025 },
+  });
+
+  assert.ok(current.ok && prior.ok);
+  assert.equal(prior.fromPriorSeason, true);
+  assert.ok(prior.sampleGames < current.sampleGames, 'effective sample must be capped');
+  assert.ok(
+    prior.projectedMean < current.projectedMean,
+    'with less evidence the projection sits closer to the market line'
+  );
+  assert.ok(prior.edge < current.edge, 'and the claimed edge shrinks with it');
+  assert.ok(prior.confidence < current.confidence);
+  assert.match(prior.rationale, /2025/, 'the rationale must say the form is not current-season');
+});
