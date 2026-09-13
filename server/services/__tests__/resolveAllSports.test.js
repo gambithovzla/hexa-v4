@@ -76,3 +76,18 @@ test('a resolver that reports voids (tennis) carries them into the total', async
 
   assert.equal(out.voids, 1);
 });
+
+test('the pending breakdown separates stuck picks from games not yet played', async () => {
+  const out = await resolveAllSportsPicks({
+    resolvers: { nfl: stub({ resolved: 0, wins: 0, losses: 0, pushes: 0, errors: [] }) },
+    countPending: async () => ({
+      pending: 28, future: 5, today: 21, past: 2, undated: 0,
+      bySport: { nfl: { pending: 28, future: 5, today: 21, past: 2, undated: 0 } },
+    }),
+  });
+
+  assert.equal(out.resolved, 0);
+  assert.equal(out.stillPending.past, 2, 'only these are worth chasing');
+  assert.equal(out.stillPending.today, 21);
+  assert.equal(out.stillPending.bySport.nfl.future, 5);
+});

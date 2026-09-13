@@ -920,14 +920,20 @@ function AnalisisTab({ lang, sport = 'all' }) {
             ? `${d.resolved} pick(s) resueltos · ${d.wins}W ${d.losses}L ${d.pushes}P`
             : `${d.resolved} pick(s) resolved · ${d.wins}W ${d.losses}L ${d.pushes}P`);
         } else {
-          const pending = Object.entries(d.stillPending ?? {})
-            .map(([sp, n]) => `${sp.toUpperCase()} ${n}`).join(' · ');
-          const why = (d.skipped ?? [])[0]?.reason;
-          const head = lang === 'es'
-            ? 'Nada resuelto' : 'Nothing resolved';
+          const p = d.stillPending ?? {};
+          const es = lang === 'es';
+          // Only picks on games that already finished are actually stuck; the
+          // rest are pending because the game has not been played yet.
+          const parts = [
+            p.today ? (es ? `${p.today} de hoy (en juego)` : `${p.today} today (in play)`) : null,
+            p.future ? (es ? `${p.future} de partidos futuros` : `${p.future} on future games`) : null,
+            p.past ? (es ? `${p.past} atrasados` : `${p.past} overdue`) : null,
+            p.undated ? (es ? `${p.undated} sin fecha` : `${p.undated} undated`) : null,
+          ].filter(Boolean);
+          const why = (d.skipped ?? []).find(sk => !/not final/i.test(sk.reason ?? ''))?.reason;
           setResolveMsg([
-            head,
-            pending ? (lang === 'es' ? `pendientes: ${pending}` : `pending: ${pending}`) : null,
+            es ? 'Nada resuelto' : 'Nothing resolved',
+            parts.length ? parts.join(' · ') : null,
             why ? `— ${why}` : null,
           ].filter(Boolean).join(' · '));
         }
