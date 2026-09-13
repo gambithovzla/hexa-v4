@@ -156,6 +156,11 @@ const DEFENSE_CAP = 0.18;           // max ±18% from matchup alone
 const RECENT_WEIGHT = 0.42;         // last-4 form vs season-to-date
 const SHRINK_PSEUDO_GAMES = 4.0;    // games of prior weight in the shrinkage
 const SD_PRIOR_PSEUDO_GAMES = 4;    // sample weight when blending measured sd
+// Last season's averages are a real prior but a weak one — rosters, schemes and
+// roles change over an offseason. Capping the effective sample keeps Week 1
+// projections honest: the market keeps most of the weight until current-season
+// games accumulate.
+const PRIOR_SEASON_EFFECTIVE_GAMES = 3;
 const KELLY_FRACTION = 0.25;        // quarter Kelly
 const KELLY_CAP = 0.02;             // never stake more than 2% of bankroll
 
@@ -329,9 +334,9 @@ export function kellyStake({ modelProb, oddsAmerican }) {
  * Data-quality score in [0,1]. Low confidence does not mean "do not bet" on its
  * own — it means the edge needs to be bigger to clear the bar downstream.
  */
-export function confidenceScore({ games, pairedBookmakerCount, hasDefenseData, availabilityStatus }) {
+export function confidenceScore({ games, pairedBookmakerCount, hasDefenseData, availabilityStatus, fromPriorSeason = false }) {
   const g = Math.max(0, num(games) ?? 0);
-  const sample = clamp(g / 6, 0, 1);
+  const sample = clamp(g / 6, 0, 1) * (fromPriorSeason ? 0.8 : 1);
   const books = num(pairedBookmakerCount) ?? 0;
   const market = books >= 3 ? 1 : books >= 1 ? 0.7 : 0.35;
   const defense = hasDefenseData ? 1 : 0.75;
@@ -384,8 +389,12 @@ export function projectProp({
   const recentAvg = num(player.recentAvg);
   if (seasonAvg == null && recentAvg == null) return { ok: false, reason: 'no_player_history' };
 
-  const games = num(player.games) ?? 0;
-  const blended = blendSeasonRecent({ seasonAvg, recentAvg, games });
+  // A prior-season row carries a full 17-game sample, but it is not 17 games of
+  // evidence about *this* season — cap it so the market shrinkage stays dominant.
+  const fromPriorSeason = player.fromPriorSeason === true;
+  const rawGames = num(player.games) ?? 0;
+  const games = fromPriorSeason ? Math.min(rawGames, PRIOR_SEASON_EFFECTIVE_GAMES) : rawGames;
+  const blended = blendSeasonRecent({ seasonAvg, recentAvg, games: rawGames });
   if (blended == null || blended <= 0) return { ok: false, reason: 'no_baseline' };
 
   const script = gameScriptFactor({
@@ -451,6 +460,7 @@ export function projectProp({
     pairedBookmakerCount: market.pairedBookmakerCount,
     hasDefenseData: dFactor !== 1,
     availabilityStatus: status,
+    fromPriorSeason,
   });
 
   return {
@@ -484,6 +494,8 @@ export function projectProp({
     kellyStake: kellyStake({ modelProb, oddsAmerican: market.oddsAmerican }),
     confidence,
     sampleGames: games,
+    fromPriorSeason,
+    priorSeasonYear: player.priorSeasonYear ?? null,
     rationale: buildRationale({
       propKind,
       side: sideLc,
@@ -496,8 +508,10 @@ export function projectProp({
       modelProb,
       marketProb,
       edge,
-      games,
+      games: rawGames,
       status,
+      fromPriorSeason,
+      priorSeasonYear: player.priorSeasonYear ?? null,
     }),
   };
 }
@@ -514,10 +528,14 @@ function signedPct(f) {
 function buildRationale({
   propKind, side, line, blended, adjustedForm, projectedMean,
   script, dFactor, modelProb, marketProb, edge, games, status,
+  fromPriorSeason, priorSeasonYear,
 }) {
   const parts = [];
+  const sampleLabel = fromPriorSeason
+    ? `${games} game(s) in ${priorSeasonYear ?? 'the prior season'}`
+    : `${games} game(s)`;
   parts.push(
-    `${propKind} ${side} ${line}: form ${blended == null ? 'n/a' : blended.toFixed(1)} over ${games} game(s)`
+    `${propKind} ${side} ${line}: form ${blended == null ? 'n/a' : blended.toFixed(1)} over ${sampleLabel}`
   );
   if (script !== 1) parts.push(`game script ${signedPct(script)}`);
   if (dFactor !== 1) parts.push(`matchup ${signedPct(dFactor)}`);

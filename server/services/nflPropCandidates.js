@@ -126,11 +126,15 @@ export async function buildNflPropCandidates({
   }
 
   const [playerStats, defenseStats] = await Promise.all([
-    getNflPlayerStats(game.season).catch(() => null),
+    // includePriorSeason: in Week 1 nobody has current-season games yet, so
+    // without last season's averages there is nothing to project from at all.
+    getNflPlayerStats(game.season, { includePriorSeason: true }).catch(() => null),
     getNflDefenseAllowed(game.season).catch(() => null),
   ]);
 
-  if (!playerStats) {
+  const hasCurrent = Object.keys(playerStats?.players ?? {}).length > 0;
+  const hasPrior = Object.keys(playerStats?.priorSeason?.players ?? {}).length > 0;
+  if (!playerStats || (!hasCurrent && !hasPrior)) {
     return {
       offers: rawOffers,
       enriched,
@@ -173,6 +177,8 @@ export async function buildNflPropCandidates({
         games: stat.games,
         playerStd: stat.playerStd,
         position: stat.position,
+        fromPriorSeason: stat.fromPriorSeason === true,
+        priorSeasonYear: stat.priorSeasonYear ?? null,
       },
       environment: { teamSpread, total },
       defense: defense ?? {},
@@ -214,6 +220,8 @@ export async function buildNflPropCandidates({
       playerStats: true,
       defenseStats: Boolean(defenseStats),
       defenseFallbackSeason: defenseStats?.isFallback ? defenseStats.season : null,
+      priorSeasonForm: ranked.some(p => p.fromPriorSeason),
+      priorSeasonYear: ranked.find(p => p.fromPriorSeason)?.priorSeasonYear ?? null,
       reason: null,
     },
   };

@@ -298,7 +298,10 @@ function describePropMarket(propMarket) {
   lines.push(
     `PROP DATA: ${meta.rankedCount ?? ranked.length} of ${meta.offerCount ?? '?'} offers cleared the edge and data-quality gate` +
     (meta.defenseStats ? '' : ' · no opponent-defense data (matchup factor neutral)') +
-    (meta.defenseFallbackSeason ? ` · defense rates from ${meta.defenseFallbackSeason}` : '')
+    (meta.defenseFallbackSeason ? ` · defense rates from ${meta.defenseFallbackSeason}` : '') +
+    (meta.priorSeasonForm
+      ? ` · some player form is from ${meta.priorSeasonYear ?? 'last season'} (no current-season sample yet) — treat those projections as weaker`
+      : '')
   );
   return lines.join('\n');
 }
