@@ -61,6 +61,9 @@ _PBP_COLUMNS = [
     # Additional columns for red zone, 3rd-down, and trench metrics:
     "yardline_100", "down", "first_down", "touchdown", "sack", "qb_hit",
     "pass_attempt",
+    # Columns for defense-allowed rates that back player-prop matchup factors:
+    "passing_yards", "rushing_yards", "complete_pass", "rush_attempt",
+    "pass_touchdown", "rush_touchdown", "interception",
 ]
 
 
@@ -532,6 +535,92 @@ def build_player_stats(season: int) -> dict:
     }
     with _lock:
         _player_stats_cache[season] = {"_ts": now, "payload": payload}
+    return payload
+
+
+_DEFENSE_ALLOWED_TTL_S = 6 * 60 * 60
+_defense_allowed_cache: dict[int, dict] = {}
+
+# Per-game rates a defense surrenders. Player props are priced against these:
+# a receiver's yardage line moves on who is covering him, not only on his form.
+_DEFENSE_RAW_STATS = (
+    "pass_yds", "rush_yds", "completions", "pass_attempts", "rush_attempts",
+    "pass_tds", "rush_tds", "interceptions", "sacks",
+)
+
+
+def build_defense_allowed(season: int) -> dict:
+    """Per-team per-game stats allowed by each defense, plus league means.
+
+    Returns { season, fetched_at, league: {stat: mean}, teams: { ABBR: {
+        games, pass_yds, rush_yds, completions, pass_attempts, rush_attempts,
+        pass_tds, rush_tds, interceptions, sacks, scrimmage_yds, total_tds } } }.
+
+    Team keys are nflverse abbreviations; the Node side re-keys them to canonical
+    ESPN abbreviations. Cached 6h. Raises RuntimeError when nflverse has no rows
+    for the season yet (the caller turns that into a 503).
+    """
+    season = int(season)
+    now = time.time()
+    with _lock:
+        cached = _defense_allowed_cache.get(season)
+    if cached and (now - cached["_ts"]) < _DEFENSE_ALLOWED_TTL_S:
+        return cached["payload"]
+
+    pbp = _load_pbp([season])
+    if "season_type" in pbp.columns:
+        pbp = pbp[pbp["season_type"].astype(str).str.upper() == "REG"]
+    pbp = pbp[pbp["defteam"].notna()].copy()
+    if pbp.empty:
+        raise RuntimeError(f"no nflverse play-by-play rows for season {season}")
+
+    def col(name: str) -> pd.Series:
+        if name not in pbp.columns:
+            return pd.Series(0.0, index=pbp.index)
+        return pd.to_numeric(pbp[name], errors="coerce").fillna(0.0)
+
+    pbp["_pass_yds"] = col("passing_yards")
+    pbp["_rush_yds"] = col("rushing_yards")
+    pbp["_completions"] = col("complete_pass")
+    pbp["_pass_attempts"] = col("pass_attempt")
+    pbp["_rush_attempts"] = col("rush_attempt")
+    pbp["_pass_tds"] = col("pass_touchdown")
+    pbp["_rush_tds"] = col("rush_touchdown")
+    pbp["_interceptions"] = col("interception")
+    pbp["_sacks"] = col("sack")
+
+    grouped = pbp.groupby("defteam")
+    totals = grouped[[f"_{s}" for s in _DEFENSE_RAW_STATS]].sum()
+    games = grouped["game_id"].nunique().rename("games")
+
+    teams: dict[str, dict] = {}
+    for abbr, row in totals.iterrows():
+        n_games = int(games.get(abbr, 0) or 0)
+        if n_games <= 0:
+            continue
+        entry = {"games": n_games}
+        for stat in _DEFENSE_RAW_STATS:
+            entry[stat] = round(float(row[f"_{stat}"]) / n_games, 3)
+        entry["scrimmage_yds"] = round(entry["pass_yds"] + entry["rush_yds"], 3)
+        entry["total_tds"] = round(entry["pass_tds"] + entry["rush_tds"], 3)
+        teams[str(abbr)] = entry
+
+    if not teams:
+        raise RuntimeError(f"no defensive rows derived for season {season}")
+
+    league: dict[str, float] = {}
+    for stat in (*_DEFENSE_RAW_STATS, "scrimmage_yds", "total_tds"):
+        vals = [t[stat] for t in teams.values() if t.get(stat) is not None]
+        league[stat] = round(sum(vals) / len(vals), 3) if vals else None
+
+    payload = {
+        "season": season,
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "league": league,
+        "teams": teams,
+    }
+    with _lock:
+        _defense_allowed_cache[season] = {"_ts": now, "payload": payload}
     return payload
 
 

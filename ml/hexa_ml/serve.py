@@ -717,6 +717,36 @@ async def nfl_player_stats(season: int) -> NflPlayerStatsResponse:
     return NflPlayerStatsResponse(**payload)
 
 
+class NflDefenseAllowedResponse(BaseModel):
+    season: int
+    fetched_at: str | None = None
+    league: dict[str, float | None]
+    teams: dict[str, dict]
+
+
+@app.get(
+    "/nfl/defense-allowed",
+    response_model=NflDefenseAllowedResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+async def nfl_defense_allowed(season: int) -> NflDefenseAllowedResponse:
+    """Per-game stats each defense allows, plus league means.
+
+    Backs the opponent-matchup factor in the Node prop projection engine: a
+    receiving line means something different against the defense giving up the
+    most passing yards in the league than against the one giving up the fewest.
+    """
+    _require_nflverse()
+    try:
+        payload = await asyncio.to_thread(nflverse_loader.build_defense_allowed, season)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"nflverse defense-allowed failed: {exc}",
+        ) from exc
+    return NflDefenseAllowedResponse(**payload)
+
+
 # ── FanGraphs ZiPS projections (A2) ──────────────────────────────────────────
 
 class FangraphsRefreshResponse(BaseModel):

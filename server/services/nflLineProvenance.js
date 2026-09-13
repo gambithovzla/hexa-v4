@@ -22,14 +22,18 @@ export const NFL_LINE_TOLERANCE = 0.5;
 
 const SPREAD_TYPES = new Set(['spread', 'pointspread', 'spreads']);
 const TOTAL_TYPES  = new Set(['total', 'totals', 'overunder', 'ou']);
+// Prop picks read like totals ("Over 74.5") but the number is a player line, not
+// the game total — comparing it to the game's total would flag every prop.
+const PROP_TYPES   = new Set(['playerprop', 'playerprops', 'prop', 'props']);
 
 function normalizeType(raw) {
   return String(raw ?? '').toLowerCase().replace(/[^a-z]/g, '');
 }
 
-/** Which market a pick belongs to: 'spread' | 'total' | 'moneyline' | null. */
+/** Which market a pick belongs to: 'spread' | 'total' | 'moneyline' | 'prop' | null. */
 export function classifyNflMarket(betType, pickText = '') {
   const t = normalizeType(betType);
+  if (PROP_TYPES.has(t)) return 'prop';
   if (SPREAD_TYPES.has(t)) return 'spread';
   if (TOTAL_TYPES.has(t)) return 'total';
   if (t === 'moneyline' || t === 'ml') return 'moneyline';
@@ -84,7 +88,7 @@ export function marketLineFor(marketOdds, market) {
  * Classify a pick's line against the market it claims to quote.
  *
  * status:
- *   'not_applicable' — moneyline, or no line to check
+ *   'not_applicable' — moneyline, player prop, or no line to check
  *   'verified'       — market line present and the pick matches it
  *   'unverified'     — no market line existed; the number is the model's own
  *   'mismatch'       — market line existed and the pick disagrees materially
@@ -93,7 +97,7 @@ export function evaluateNflLineProvenance({ betType, pickText, detail, marketOdd
   const text = [detail, pickText].filter(Boolean).join(' ');
   const market = classifyNflMarket(betType, text);
 
-  if (market == null || market === 'moneyline') {
+  if (market == null || market === 'moneyline' || market === 'prop') {
     return { market, status: 'not_applicable', pickLine: null, marketLine: null, flag: null };
   }
 
