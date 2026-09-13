@@ -26,6 +26,7 @@ import { parseNflProp } from '../nfl-props-resolver.js';
 import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
 import { buildNflPropCandidates, propOffersFromRanked, appendPropPrice } from '../services/nflPropCandidates.js';
 import { resolveNflBetTypeDirective } from '../services/nflBetTypeDirective.js';
+import { resolveNflObjective } from '../services/nflObjectiveDirective.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
 import { getNflLeagueInjuries } from '../nfl-api.js';
@@ -94,7 +95,7 @@ async function resolveMarketOdds({ clientMarketOdds, game }) {
  * disabled, or nothing survives the projection gate. Never throws: a prop
  * failure must not cost the user their team-market analysis.
  */
-async function buildPropMarket({ game, oddsEvent, resolvedOdds, propKinds = null, propsRequested = false }) {
+async function buildPropMarket({ game, oddsEvent, resolvedOdds, propKinds = null, propsRequested = false, rankOptions = {} }) {
   if (process.env.NFL_PROPS_ENABLED !== 'true') return null;
   if (!oddsEvent?.eventId) return null;
 
@@ -117,8 +118,12 @@ async function buildPropMarket({ game, oddsEvent, resolvedOdds, propKinds = null
       // An explicit prop request means "your best prop", so the edge floor comes
       // off — the user asked for this market. Left on, a thin slate would answer
       // a prop request with a spread. The data-quality floor stays: a projection
-      // with no history behind it is still not shown.
-      rankOptions: propsRequested ? { minEdge: 0, minConfidence: 0.35 } : {},
+      // with no history behind it is still not shown. The objective's own options
+      // win when it is not the default: asking for "most likely" already means
+      // edge is not the criterion, and conviction deliberately tightens instead.
+      rankOptions: Object.keys(rankOptions).length
+        ? rankOptions
+        : (propsRequested ? { minEdge: 0, minConfidence: 0.35 } : {}),
     });
 
     if (!candidates.ranked.length) {
@@ -222,6 +227,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
     riskProfile = 'balanced',
     engine      = 'deep',
     betType     = 'all',
+    objective   = 'value',
     marketOdds  = null,
     bankroll    = null,
   } = req.body;
@@ -266,12 +272,14 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
     // back to the props-disabled prompt, so the model is never invited to pick
     // from an empty board and invent a line instead.
     const focus = resolveNflBetTypeDirective(betType, { propsAvailable: false });
+    const analysisObjective = resolveNflObjective(objective);
     const propMarket = await buildPropMarket({
       game,
       oddsEvent,
       resolvedOdds,
       propKinds: focus.propKinds,
       propsRequested: focus.propsRequested,
+      rankOptions: analysisObjective.rankOptions,
     });
     const propsActive = Boolean(propMarket);
     if (propsActive) context.propMarket = propMarket;
@@ -286,7 +294,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       marketOdds: resolvedOdds,
       engine,
       propsEnabled: propsActive,
-      betDirective: betDirective.directive,
+      betDirective: `${betDirective.directive}\n${analysisObjective.directive}`,
     });
 
     if (result.parseError) {
@@ -299,6 +307,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       marketOdds: resolvedOdds,
       propsEnabled: propsActive,
       propOffers: propsActive ? propOffersFromRanked(propMarket.ranked) : null,
+      allowPass: analysisObjective.allowPass,
     });
     if (!guard.ok) {
       return res.status(422).json({
@@ -310,6 +319,27 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
     }
 
     const analysisData = guard.data;
+
+    // The conviction objective declined this game. Persisting a "PASS" row would
+    // put an ungradeable pick into the history, the resolver queue and the ROI
+    // maths, so the read is returned and nothing is saved.
+    if (guard.is_pass) {
+      console.log(`[nfl-route] conviction PASS on game=${gameId} — no pick saved`);
+      return res.json({
+        success: true,
+        pass: true,
+        data: analysisData,
+        outputQuality: guard.quality,
+        savedPick: null,
+        meta: {
+          model: result.model,
+          objective: analysisObjective.objective,
+          betFocus: { requested: betDirective.betType, propsRequested: betDirective.propsRequested },
+          oddsSource,
+          propMarket: propsActive ? { meta: propMarket.meta } : null,
+        },
+      });
+    }
 
     const savedPick = await persistNflPick({
       userId: req.user.id,
@@ -377,6 +407,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
         propsRequested: betDirective.propsRequested,
         unavailable: betDirective.unavailable,
       },
+      objective: analysisObjective.objective,
       savedPick: savedPick ? {
         id:                savedPick.id,
         matchup:           savedPick.matchup,

@@ -552,24 +552,40 @@ function buildRationale({
 // ── Ranking ───────────────────────────────────────────────────────────────────
 
 /**
- * Rank projected props by expected value, gated on data quality.
+ * Rank projected props, gated on data quality.
  *
  * The gate matters more than the sort: a 12% "edge" built on two games and one
  * bookmaker is a data artifact, not a bet. minEdge scales with (1 - confidence)
  * so thin data has to clear a higher bar.
+ *
+ * `sortBy` follows the analysis objective — 'score' (edge x confidence) when
+ * hunting value, 'probability' when the user asked for whatever is most likely
+ * to hit regardless of price.
  */
 export function rankPropProjections(projections, {
   minEdge = 0.03,
   maxEdge = 0.25,
   minConfidence = 0.45,
   minGames = 2,
+  minModelProb = null,
+  sortBy = 'score',
   limit = 12,
 } = {}) {
+  // minEdge === null means the caller is not optimising for price at all (the
+  // maximum-hit-probability objective). The edge gate comes off, but the data
+  // gates stay: "most likely" must not be satisfiable by the least-bad row on a
+  // thin slate, which is what minModelProb is for.
+  const edgeGated = minEdge != null;
+
   const eligible = (projections ?? []).filter((p) => {
     if (!p?.ok) return false;
-    if (p.edge == null) return false;
     if (p.confidence < minConfidence) return false;
     if (p.sampleGames < minGames) return false;
+    if (minModelProb != null && !(p.modelProb >= minModelProb)) return false;
+
+    if (!edgeGated) return true;
+
+    if (p.edge == null) return false;
     // An edge this large against a liquid market is a data fault — a mismatched
     // player, a stale line, an alt line read as the main one — far more often
     // than it is free money. Drop it rather than lead the board with it.
@@ -579,7 +595,12 @@ export function rankPropProjections(projections, {
   });
 
   return eligible
-    .map((p) => ({ ...p, score: round(p.edge * p.confidence, 5) }))
-    .sort((a, b) => b.score - a.score)
+    .map((p) => ({
+      ...p,
+      score: sortBy === 'probability'
+        ? round(p.modelProb, 5)
+        : round((p.edge ?? 0) * p.confidence, 5),
+    }))
+    .sort((a, b) => b.score - a.score || b.confidence - a.confidence)
     .slice(0, limit);
 }

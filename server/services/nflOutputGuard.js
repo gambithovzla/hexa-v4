@@ -9,6 +9,11 @@
  * Player props: blocked outright unless `propsEnabled` is set (NFL_PROPS_ENABLED).
  * When enabled they are held to the menu — a prop pick must match one of the
  * `propOffers` the model was actually shown, or it is rejected as fabricated.
+ *
+ * PASS: normally an ABSTAIN is fatal, because a pick the user asked for and did
+ * not get is a failure. Under `allowPass` (the conviction objective) it is the
+ * opposite — declining a game with no edge is the behaviour being bought — so a
+ * standalone PASS returns ok with is_pass set and no pick to persist.
  */
 
 import { NFL_OUTPUT_SCHEMA_VERSION } from '../prompts/oracle-nfl-prompts.js';
@@ -41,6 +46,7 @@ export function validateNflAnalysisOutput(data, {
   marketOdds = null,
   propsEnabled = false,
   propOffers = null,
+  allowPass = false,
 } = {}) {
   if (parseError) {
     return { ok: false, quality: 'reject', errors: ['json_parse_failed'], schema_version: NFL_OUTPUT_SCHEMA_VERSION, data: null };
@@ -59,6 +65,28 @@ export function validateNflAnalysisOutput(data, {
   const pick = typeof mp.pick === 'string' ? mp.pick.trim() : '';
 
   if (!pick || pick.length < 3) errors.push('missing_pick');
+
+  // The conviction objective is allowed to decline the game — declining is the
+  // whole point of it, and a forced pick from a mode built on selectivity is
+  // worse than no pick. Only a standalone PASS counts: "KC -3, pass on the
+  // total" is still a pick and still has to stand on its own.
+  const isPass = allowPass && /^pass\b/i.test(pick) && pick.length < 60;
+  if (isPass) {
+    const report = String(data.oracle_report ?? '').trim();
+    return {
+      ok: true,
+      quality: report.length >= 80 ? 'pass' : 'pass_degraded',
+      errors: [],
+      schema_version: NFL_OUTPUT_SCHEMA_VERSION,
+      is_pass: true,
+      data: {
+        ...data,
+        master_prediction: { ...mp, pick: 'PASS', oracle_confidence: 50, bet_value: 'NO VALUE' },
+        alert_flags: Array.isArray(data.alert_flags) ? data.alert_flags : [],
+      },
+    };
+  }
+
   if (/\b(abstain|pass)\b/i.test(pick)) errors.push('abstain_pick');
 
   const conf = normalizeConfidence(mp.oracle_confidence);

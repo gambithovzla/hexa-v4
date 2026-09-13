@@ -529,3 +529,95 @@ test('the appended price does not break resolution', () => {
   const boxscore = { 'matthew golden': { reception_yds: 31, receptions: 4 } };
   assert.equal(resolveNflPlayerProp(priced, boxscore).result, 'win');
 });
+
+// ── Analysis objectives (value / probability / conviction) ────────────────────
+
+import {
+  resolveNflObjective,
+  normalizeObjective,
+  nflObjectiveAllowsPass,
+  NFL_OBJECTIVES,
+} from '../services/nflObjectiveDirective.js';
+
+test('objectives are distinct and unknown input falls back to value', () => {
+  assert.deepEqual(NFL_OBJECTIVES, ['value', 'probability', 'conviction']);
+  assert.equal(normalizeObjective('nonsense'), 'value');
+  assert.equal(normalizeObjective(null), 'value');
+  assert.equal(normalizeObjective('CONVICTION'), 'conviction');
+
+  const directives = NFL_OBJECTIVES.map(o => resolveNflObjective(o).directive);
+  assert.equal(new Set(directives).size, 3, 'each objective must instruct differently');
+});
+
+test('only the conviction objective may decline a game', () => {
+  assert.equal(nflObjectiveAllowsPass('conviction'), true);
+  assert.equal(nflObjectiveAllowsPass('value'), false);
+  assert.equal(nflObjectiveAllowsPass('probability'), false);
+});
+
+test('the probability objective drops the price gate and raises a probability floor', () => {
+  const { rankOptions } = resolveNflObjective('probability');
+  assert.equal(rankOptions.minEdge, null, 'price cannot be a criterion here');
+  assert.ok(rankOptions.minModelProb >= 0.6, '"most likely" needs an actual floor');
+  assert.equal(rankOptions.sortBy, 'probability');
+});
+
+test('the conviction objective tightens every gate instead of loosening them', () => {
+  const value = resolveNflObjective('value').rankOptions;
+  const conviction = resolveNflObjective('conviction').rankOptions;
+  assert.ok(conviction.minEdge > (value.minEdge ?? 0.03));
+  assert.ok(conviction.minConfidence > (value.minConfidence ?? 0.45));
+  assert.ok(conviction.minGames > (value.minGames ?? 2));
+});
+
+const candidate = (name, modelProb, edge, confidence) =>
+  ({ ok: true, name, modelProb, edge, confidence, sampleGames: 8 });
+
+test('each objective selects a different play from the same pool', () => {
+  const pool = [
+    candidate('priced dog', 0.54, 0.09, 0.9),
+    candidate('safe favourite', 0.78, -0.02, 0.9),
+    candidate('middling', 0.66, 0.03, 0.9),
+  ];
+
+  const byValue = rankPropProjections(pool, resolveNflObjective('value').rankOptions);
+  const byProb = rankPropProjections(pool, resolveNflObjective('probability').rankOptions);
+
+  assert.equal(byValue[0].name, 'priced dog', 'value hunts mispricing');
+  assert.equal(byProb[0].name, 'safe favourite', 'probability takes the likeliest outcome');
+  assert.ok(byProb[0].edge < 0, 'even when the price is bad — that is the trade the user chose');
+});
+
+test('the probability objective still refuses thin data', () => {
+  const weak = [candidate('coin flip', 0.55, 0.02, 0.9)];
+  assert.equal(
+    rankPropProjections(weak, resolveNflObjective('probability').rankOptions).length,
+    0,
+    '"most likely" must not be satisfied by the least-bad row on a thin slate'
+  );
+});
+
+test('a PASS is accepted only under the objective that allows it', () => {
+  const passOutput = {
+    master_prediction: { pick: 'PASS', oracle_confidence: 50 },
+    best_pick: { type: 'Spread', detail: 'PASS' },
+    oracle_report: 'x'.repeat(200),
+  };
+
+  assert.equal(validateNflAnalysisOutput(passOutput, {}).ok, false, 'normally a PASS is a failure');
+
+  const allowed = validateNflAnalysisOutput(passOutput, { allowPass: true });
+  assert.equal(allowed.ok, true);
+  assert.equal(allowed.is_pass, true);
+  assert.equal(allowed.data.master_prediction.bet_value, 'NO VALUE');
+});
+
+test('a real pick that merely mentions passing is still held to the bar', () => {
+  const sneaky = {
+    master_prediction: { pick: 'KC -2.5 Spread, pass on the total', oracle_confidence: 64 },
+    best_pick: { type: 'Spread', detail: 'KC -2.5' },
+    oracle_report: 'x'.repeat(200),
+  };
+  const res = validateNflAnalysisOutput(sneaky, { allowPass: true });
+  assert.equal(res.ok, false, 'only a standalone PASS counts as declining the game');
+});
