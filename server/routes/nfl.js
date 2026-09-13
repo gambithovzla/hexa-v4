@@ -19,6 +19,7 @@ import { verifyToken, requireAdmin, requireSportAccess } from '../middleware/aut
 import { findNflGame, resolveNflSlate } from '../services/nflGameLookup.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { analyzeNflGame, analyzeNflChat } from '../services/oracleNfl.js';
+import { analyzeNflParlay } from '../services/nflParlayOracle.js';
 import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
 import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
@@ -658,6 +659,104 @@ async function fetchOraclePropPicks(userId, date) {
   }
   return out;
 }
+
+// ── POST /api/nfl/analyze/parlay ───────────────────────────────────────────────
+// One leg per selected game, Oracle-style. This is the NFL twin of the frozen
+// MLB /api/analyze/parlay and returns the same JSON shape, so the existing
+// ResultCard renders it unchanged. The Parlay Synergy Architect lives at
+// POST /api/nfl/parlay and is a different product: it composes from a scored
+// candidate pool instead of honouring a one-leg-per-game selection.
+router.post('/analyze/parlay', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  const {
+    gameIds,
+    season      = null,
+    seasonType  = null,
+    week        = null,
+    date        = null,
+    lang        = 'en',
+    riskProfile = 'balanced',
+    engine      = 'deep',
+  } = req.body ?? {};
+
+  if (!Array.isArray(gameIds) || gameIds.length < 2) {
+    return res.status(400).json({ success: false, error: 'gameIds array with at least 2 games is required' });
+  }
+  if (gameIds.length > 8) {
+    return res.status(400).json({ success: false, error: 'Maximum 8 games per NFL parlay' });
+  }
+  if (!['deep', 'premium'].includes(engine)) {
+    return res.status(400).json({ success: false, error: 'Invalid engine (deep|premium)' });
+  }
+
+  try {
+    const lookup = {
+      season: season != null ? Number(season) : null,
+      seasonType: seasonType != null ? Number(seasonType) : null,
+      week: week != null ? Number(week) : null,
+      date,
+    };
+
+    const games = await Promise.all(gameIds.map(id => findNflGame({ gameId: id, ...lookup })));
+    const missing = gameIds.filter((id, i) => !games[i]);
+    if (missing.length) {
+      return res.status(404).json({ success: false, error: `NFL game(s) not found: ${missing.join(', ')}` });
+    }
+
+    // Each leg carries its own context and its own market block. A game whose
+    // odds never resolve still becomes a leg — the prompt forbids inventing a
+    // line, so the model must say so in that leg's reasoning instead.
+    const legs = await Promise.all(games.map(async (game) => {
+      const matchup = `${game.away_team_abbr ?? game.away_team_name ?? 'AWAY'} @ ${game.home_team_abbr ?? game.home_team_name ?? 'HOME'}`;
+      const gameDate = game.game_date ?? date ?? new Date().toISOString().split('T')[0];
+
+      const { marketOdds, event } = await resolveMarketOdds({ clientMarketOdds: null, game });
+
+      const context = await buildNflGameContext({
+        homeTeamId: game.home_team_id,
+        awayTeamId: game.away_team_id,
+        homeTeamAbbr: game.home_team_abbr ?? null,
+        awayTeamAbbr: game.away_team_abbr ?? null,
+        gameDate,
+        gameTime: game.game_datetime ?? null,
+        season: game.season,
+        seasonType: game.season_type ?? seasonType ?? null,
+        marketOdds,
+        oddsEventId: event?.eventId ?? null,
+      });
+
+      return { context, marketOdds, gameDescription: `${matchup} — ${gameDate}`, legOdds: marketOdds ?? null };
+    }));
+
+    const result = await analyzeNflParlay({
+      legs: legs.map(({ context, marketOdds, gameDescription }) => ({ context, marketOdds, gameDescription })),
+      lang,
+      riskProfile,
+      engine,
+    });
+
+    const legOdds = legs.map(l => l.legOdds);
+    const data = result.data
+      ? { ...result.data, legOdds: legOdds.some(Boolean) ? legOdds : undefined }
+      : null;
+
+    return res.json({
+      success: true,
+      sport: 'nfl',
+      data,
+      parseError: result.parseError,
+      rawText: result.rawText,
+      engine,
+      meta: {
+        model: result.model,
+        legCount: legs.length,
+        oddsResolved: legOdds.filter(Boolean).length,
+      },
+    });
+  } catch (err) {
+    console.error(`[nfl-route] analyze/parlay error: ${err.message}`);
+    return res.status(500).json({ success: false, error: safeErr(err) });
+  }
+});
 
 router.get('/props/board', nflPropsEnabled, verifyToken, requireAdmin, async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? req.query.date : todayEt();

@@ -113,7 +113,9 @@ const CAPABILITY_MAP = {
         en: 'Parlay Synergy uses the MLB candidate pool. For NBA use Game Analysis or Oracle Chat.',
       },
     },
-    nfl: { enabled: false, requiresAdmin: true, message: NFL_PARLAY_MSG },
+    // One leg per selected game via POST /api/nfl/analyze/parlay — the NFL twin
+    // of the frozen MLB parlay endpoint, same JSON shape, same renderer.
+    nfl: { enabled: true, requiresAdmin: true },
     nhl: { enabled: false, requiresAdmin: true, message: NHL_PARLAY_MSG },
     soccer: { enabled: false, requiresAdmin: true, message: SOCCER_PARLAY_MSG },
     tennis: { enabled: false, requiresAdmin: true, message: TENNIS_PARLAY_MSG },

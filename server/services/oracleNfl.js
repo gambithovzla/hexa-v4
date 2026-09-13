@@ -587,3 +587,5 @@ export async function analyzeNflChat({
     usage: response.usage,
   };
 }
+
+export { parseResponse as parseNflOracleJson };
