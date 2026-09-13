@@ -13,6 +13,7 @@
  */
 
 import { enrichGameTeamIds, getNhlTeam } from './nhl-team-map.js';
+import { toEtDateString } from './utils/etDate.js';
 
 const ESPN_SITE = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl';
 const ESPN_STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/hockey/nhl/standings';
@@ -99,7 +100,8 @@ function normalizeScoreboardEvent(event, ctx = {}) {
     return Number.isFinite(n) ? n : null;
   };
   const nationalTv = comp.broadcasts?.[0]?.names?.[0] ?? comp.geoBroadcasts?.[0]?.media?.shortName ?? null;
-  const safeDate = event.date ? String(event.date).slice(0, 10) : (ctx.dateStr ?? null);
+  // ET, not UTC — a 10pm ET puck drop is tomorrow in UTC (see utils/etDate.js).
+  const safeDate = event.date ? toEtDateString(event.date) : (ctx.dateStr ?? null);
 
   return enrichGameTeamIds({
     game_id: String(event.id ?? comp.id),

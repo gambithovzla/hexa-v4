@@ -11,6 +11,7 @@
  */
 
 import { getNflGamesForDate } from './nfl-api.js';
+import { shiftDateString } from './utils/etDate.js';
 import { parseLivePick, calculatePickProgress } from './pick-tracker.js';
 import { tokenMatchesTeam } from './pick-resolver.js';
 
@@ -97,13 +98,22 @@ export async function buildNflPickLiveProgressEntry(pick, gamesByDate) {
   const lookupDate = pick.game_date ?? null;
   if (!lookupDate) return { ...base, progress: null, status: 'no_game_date' };
 
-  let games = gamesByDate.get(lookupDate);
-  if (!games) {
-    games = await getNflGamesForDate(lookupDate);
-    gamesByDate.set(lookupDate, games);
+  async function slateFor(date) {
+    let games = gamesByDate.get(date);
+    if (!games) {
+      games = await getNflGamesForDate(date).catch(() => []);
+      gamesByDate.set(date, games);
+    }
+    return games;
   }
 
-  const nflGame = findNflGameForPick(pick, games);
+  // Picks saved before game_date moved to ET carry the UTC date, a day ahead for
+  // night kickoffs — check either side before calling the game missing.
+  let nflGame = null;
+  for (const candidate of [lookupDate, shiftDateString(lookupDate, -1), shiftDateString(lookupDate, 1)]) {
+    if (!candidate || nflGame) continue;
+    nflGame = findNflGameForPick(pick, await slateFor(candidate));
+  }
   if (!nflGame) return { ...base, progress: null, status: 'no_game_found' };
 
   const liveData = nflGameToLiveData(nflGame);

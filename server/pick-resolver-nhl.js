@@ -21,6 +21,7 @@
 import pool from './db.js';
 import { getNhlGamesForDate } from './nhl-api.js';
 import { resolvePickFromFinalState, tokenMatchesTeam } from './pick-resolver.js';
+import { shiftDateString } from './utils/etDate.js';
 import { updateShadowModelRunsForGame } from './shadow-model.js';
 
 function nhlGameToResolverGame(game) {
@@ -115,7 +116,14 @@ export async function resolveNhlPendingPicks() {
 
     for (const pick of datePicks) {
       try {
-        const nhlGame = findNhlGameForPick(pick, games);
+        let nhlGame = findNhlGameForPick(pick, games);
+        // Pre-ET rows carry the UTC date, a day ahead for night puck drops.
+        for (const offset of [-1, 1]) {
+          if (nhlGame) break;
+          const neighbour = shiftDateString(date, offset);
+          if (!neighbour) continue;
+          nhlGame = findNhlGameForPick(pick, await getGamesCached(neighbour).catch(() => []));
+        }
         if (!nhlGame) {
           console.log(`[pick-resolver-nhl] Pick #${pick.id} "${pick.matchup}": no matching game for ${date}`);
           continue;

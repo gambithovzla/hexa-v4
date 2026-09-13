@@ -28,6 +28,7 @@
 import pool from './db.js';
 import { getNflGamesForDate, getNflGameById } from './nfl-api.js';
 import { resolvePickFromFinalState, tokenMatchesTeam } from './pick-resolver.js';
+import { shiftDateString } from './utils/etDate.js';
 import { updateShadowModelRunsForGame } from './shadow-model.js';
 import { parseNflProp, getNflGameBoxscore, resolveNflPlayerProp } from './nfl-props-resolver.js';
 
@@ -122,7 +123,14 @@ export async function resolveNflPendingPicks() {
     }
     const date = pick.game_date?.slice(0, 10) ?? null;
     if (!date) return null;
-    return findNflGameForPick(pick, await getGamesCached(date));
+    // Picks saved before game_date moved to ET carry the UTC date, which is the
+    // next day for a Sunday-night or Monday-night kickoff.
+    for (const candidate of [date, shiftDateString(date, -1), shiftDateString(date, 1)]) {
+      if (!candidate) continue;
+      const hit = findNflGameForPick(pick, await getGamesCached(candidate));
+      if (hit) return hit;
+    }
+    return null;
   }
 
   for (const pick of picks) {
