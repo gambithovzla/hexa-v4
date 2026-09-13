@@ -912,15 +912,25 @@ function AnalisisTab({ lang, sport = 'all' }) {
       const json = await res.json();
       if (json.success) {
         const d = json.data ?? {};
-        // A sweep that resolves nothing is the normal answer while games are in
-        // progress, so say so instead of leaving the button looking broken.
-        setResolveMsg(d.resolved
-          ? (lang === 'es'
+        // A sweep that resolves nothing is usually correct (games in progress),
+        // so report why each pick was skipped instead of staying silent and
+        // leaving the button looking broken.
+        if (d.resolved) {
+          setResolveMsg(lang === 'es'
             ? `${d.resolved} pick(s) resueltos · ${d.wins}W ${d.losses}L ${d.pushes}P`
-            : `${d.resolved} pick(s) resolved · ${d.wins}W ${d.losses}L ${d.pushes}P`)
-          : (lang === 'es'
-            ? 'Sin picks para resolver (juegos aun no finalizados).'
-            : 'Nothing to resolve yet (games not final).'));
+            : `${d.resolved} pick(s) resolved · ${d.wins}W ${d.losses}L ${d.pushes}P`);
+        } else {
+          const pending = Object.entries(d.stillPending ?? {})
+            .map(([sp, n]) => `${sp.toUpperCase()} ${n}`).join(' · ');
+          const why = (d.skipped ?? [])[0]?.reason;
+          const head = lang === 'es'
+            ? 'Nada resuelto' : 'Nothing resolved';
+          setResolveMsg([
+            head,
+            pending ? (lang === 'es' ? `pendientes: ${pending}` : `pending: ${pending}`) : null,
+            why ? `— ${why}` : null,
+          ].filter(Boolean).join(' · '));
+        }
         loadHistory();
       } else {
         setResolveMsg(json.error ?? 'Error');

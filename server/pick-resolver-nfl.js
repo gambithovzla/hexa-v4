@@ -14,14 +14,19 @@
  *   "Over 47.5 (-110)" → Total Over (odds stripped)
  *
  * Exported:
- *   resolveNflPendingPicks() → { resolved, wins, losses, pushes, errors[] }
+ *   resolveNflPendingPicks() → { resolved, wins, losses, pushes, skipped[], errors[] }
+ *
+ * Lookup is by the pick's own game id first (ESPN's per-event summary), because
+ * a stored game_date that is not kickoff day — a chat pick saved on the day it
+ * was asked, say — leaves the date slate empty and the pick pending forever.
+ * The date slate is the fallback for picks with no usable game id.
  *
  * Shadow-run back-fill is intentionally omitted here (NFL shadow runs land in
  * Sprint 9.1); add it alongside nflShadowPersistence.
  */
 
 import pool from './db.js';
-import { getNflGamesForDate } from './nfl-api.js';
+import { getNflGamesForDate, getNflGameById } from './nfl-api.js';
 import { resolvePickFromFinalState, tokenMatchesTeam } from './pick-resolver.js';
 import { updateShadowModelRunsForGame } from './shadow-model.js';
 import { parseNflProp, getNflGameBoxscore, resolveNflPlayerProp } from './nfl-props-resolver.js';
@@ -69,15 +74,20 @@ async function writePickResult(pickId, result) {
  * win/loss/push outcomes. Safe to call repeatedly — only processes
  * result='pending' AND sport='nfl'. Skips games not yet final.
  *
- * @returns {Promise<{ resolved, wins, losses, pushes, errors }>}
+ * @returns {Promise<{ resolved, wins, losses, pushes, skipped, errors }>}
  */
 export async function resolveNflPendingPicks() {
-  const summary = { resolved: 0, wins: 0, losses: 0, pushes: 0, errors: [] };
+  const summary = { resolved: 0, wins: 0, losses: 0, pushes: 0, skipped: [], errors: [] };
 
   const { rows: picks } = await pool.query(
-    `SELECT id, matchup, pick, game_pk, game_date::text AS game_date
-     FROM picks
-     WHERE result = 'pending' AND sport = 'nfl' AND deleted_at IS NULL`
+    `SELECT p.id, p.matchup, p.pick,
+            COALESCE(p.game_pk, pf.game_pk) AS game_pk,
+            COALESCE(p.game_date::text, pf.game_date::text) AS game_date
+     FROM picks p
+     LEFT JOIN LATERAL (
+       SELECT game_pk, game_date FROM pick_features WHERE pick_id = p.id LIMIT 1
+     ) pf ON TRUE
+     WHERE p.result = 'pending' AND p.sport = 'nfl' AND p.deleted_at IS NULL`
   );
 
   if (picks.length === 0) {
@@ -87,122 +97,117 @@ export async function resolveNflPendingPicks() {
 
   console.log(`[pick-resolver-nfl] Found ${picks.length} pending NFL pick(s).`);
 
-  const byDate = {};
-  for (const pick of picks) {
-    const date = pick.game_date?.slice(0, 10) ?? null;
-    if (!date) {
-      summary.errors.push(`Pick #${pick.id}: missing game_date`);
-      continue;
-    }
-    (byDate[date] ??= []).push(pick);
-  }
-
   const gamesCache = new Map();
   async function getGamesCached(date) {
     if (gamesCache.has(date)) return gamesCache.get(date);
-    const games = await getNflGamesForDate(date);
+    const games = await getNflGamesForDate(date).catch((err) => {
+      console.warn(`[pick-resolver-nfl] games for ${date} failed: ${err.message}`);
+      return [];
+    });
     gamesCache.set(date, games);
     return games;
   }
 
-  for (const [date, datePicks] of Object.entries(byDate)) {
-    let games;
+  const skip = (pick, reason) => {
+    summary.skipped.push({ pickId: pick.id, matchup: pick.matchup ?? null, reason });
+    console.log(`[pick-resolver-nfl] Pick #${pick.id} "${pick.matchup}" skipped: ${reason}`);
+  };
+
+  /** Event id first (date-independent), then that date's slate. */
+  async function locateGame(pick) {
+    const gamePkInt = pick.game_pk != null ? Number(pick.game_pk) : null;
+    if (Number.isFinite(gamePkInt) && gamePkInt > 0) {
+      const byId = await getNflGameById(gamePkInt);
+      if (byId) return byId;
+    }
+    const date = pick.game_date?.slice(0, 10) ?? null;
+    if (!date) return null;
+    return findNflGameForPick(pick, await getGamesCached(date));
+  }
+
+  for (const pick of picks) {
+    const date = pick.game_date?.slice(0, 10) ?? null;
     try {
-      games = await getGamesCached(date);
+      const nflGame = await locateGame(pick);
+      if (!nflGame) {
+        skip(pick, date ? `no matching game (game_pk=${pick.game_pk ?? 'null'}, date=${date})` : 'no game_pk and no game_date');
+        continue;
+      }
+      if (!isGameFinal(nflGame)) {
+        skip(pick, `game not final (${nflGame.status ?? 'unknown status'})`);
+        continue;
+      }
+
+      // Player props resolve against the ESPN boxscore, not the final score.
+      if (parseNflProp(pick.pick)) {
+        let players;
+        try {
+          players = await getNflGameBoxscore(parseInt(String(nflGame.game_id), 10));
+        } catch (err) {
+          summary.errors.push(`Pick #${pick.id}: boxscore fetch failed — ${err.message}`);
+          continue;
+        }
+        const propRes = resolveNflPlayerProp(pick.pick, players);
+        if (!propRes?.result) {
+          skip(pick, `prop unresolved (${propRes?.error ?? 'no match'})`);
+          continue;
+        }
+        await writePickResult(pick.id, propRes.result);
+        summary.resolved++;
+        if (propRes.result === 'win')  summary.wins++;
+        if (propRes.result === 'loss') summary.losses++;
+        if (propRes.result === 'push') summary.pushes++;
+        console.log(
+          `[pick-resolver-nfl] Pick #${pick.id} prop "${pick.pick}" → ${propRes.result.toUpperCase()} ` +
+          `(${propRes.playerName} ${propRes.propType}=${propRes.actual} vs ${propRes.line})`
+        );
+        continue;
+      }
+
+      const { result } = resolvePickFromFinalState(pick.pick, nflGameToResolverGame(nflGame));
+      if (!result) {
+        skip(pick, `pick text not understood: "${pick.pick}" ` +
+          `(${nflGame.away_team_abbr} ${nflGame.away_score} @ ${nflGame.home_team_abbr} ${nflGame.home_score})`);
+        continue;
+      }
+
+      await writePickResult(pick.id, result);
+      summary.resolved++;
+      if (result === 'win')  summary.wins++;
+      if (result === 'loss') summary.losses++;
+      if (result === 'push') summary.pushes++;
+
+      // Back-fill any pending NFL shadow_model_runs row for this game so the
+      // admin shadow dashboard shows oracle vs shadow vs actual.
+      try {
+        await updateShadowModelRunsForGame({
+          gamePk:     parseInt(String(nflGame.game_id), 10),
+          homeTeamId: nflGame.home_team_id ?? null,
+          awayTeamId: nflGame.away_team_id ?? null,
+          homeAbbr:   nflGame.home_team_abbr ?? null,
+          awayAbbr:   nflGame.away_team_abbr ?? null,
+          homeScore:  nflGame.home_score,
+          awayScore:  nflGame.away_score,
+        });
+      } catch (err) {
+        console.warn(`[pick-resolver-nfl] shadow_model back-fill failed for game ${nflGame.game_id}: ${err.message}`);
+      }
+
+      console.log(
+        `[pick-resolver-nfl] Pick #${pick.id} "${pick.pick}" → ${result.toUpperCase()} ` +
+        `(${nflGame.away_team_abbr} ${nflGame.away_score} @ ${nflGame.home_team_abbr} ${nflGame.home_score})`
+      );
     } catch (err) {
-      const msg = `Failed to fetch NFL games for ${date}: ${err.message}`;
+      const msg = `Pick #${pick.id}: ${err.message}`;
       console.error(`[pick-resolver-nfl] ${msg}`);
       summary.errors.push(msg);
-      continue;
-    }
-
-    for (const pick of datePicks) {
-      try {
-        const nflGame = findNflGameForPick(pick, games);
-        if (!nflGame) {
-          console.log(`[pick-resolver-nfl] Pick #${pick.id} "${pick.matchup}": no matching game for ${date}`);
-          continue;
-        }
-        if (!isGameFinal(nflGame)) {
-          console.log(`[pick-resolver-nfl] Pick #${pick.id} "${pick.matchup}": game not final (status: ${nflGame.status})`);
-          continue;
-        }
-
-        // Player props resolve against the ESPN boxscore, not the final score.
-        if (parseNflProp(pick.pick)) {
-          let players;
-          try {
-            players = await getNflGameBoxscore(parseInt(String(nflGame.game_id), 10));
-          } catch (err) {
-            summary.errors.push(`Pick #${pick.id}: boxscore fetch failed — ${err.message}`);
-            continue;
-          }
-          const propRes = resolveNflPlayerProp(pick.pick, players);
-          if (!propRes?.result) {
-            console.log(
-              `[pick-resolver-nfl] Pick #${pick.id} "${pick.pick}" — prop unresolved ` +
-              `(${propRes?.error ?? 'no match'})`
-            );
-            continue;
-          }
-          await writePickResult(pick.id, propRes.result);
-          summary.resolved++;
-          if (propRes.result === 'win')  summary.wins++;
-          if (propRes.result === 'loss') summary.losses++;
-          if (propRes.result === 'push') summary.pushes++;
-          console.log(
-            `[pick-resolver-nfl] Pick #${pick.id} prop "${pick.pick}" → ${propRes.result.toUpperCase()} ` +
-            `(${propRes.playerName} ${propRes.propType}=${propRes.actual} vs ${propRes.line})`
-          );
-          continue;
-        }
-
-        const { result } = resolvePickFromFinalState(pick.pick, nflGameToResolverGame(nflGame));
-        if (!result) {
-          console.log(
-            `[pick-resolver-nfl] Pick #${pick.id} "${pick.pick}" — could not resolve ` +
-            `(${nflGame.away_team_abbr} ${nflGame.away_score} @ ${nflGame.home_team_abbr} ${nflGame.home_score})`
-          );
-          continue;
-        }
-
-        await writePickResult(pick.id, result);
-        summary.resolved++;
-        if (result === 'win')  summary.wins++;
-        if (result === 'loss') summary.losses++;
-        if (result === 'push') summary.pushes++;
-
-        // Back-fill any pending NFL shadow_model_runs row for this game so the
-        // admin shadow dashboard shows oracle vs shadow vs actual.
-        try {
-          await updateShadowModelRunsForGame({
-            gamePk:     parseInt(String(nflGame.game_id), 10),
-            homeTeamId: nflGame.home_team_id ?? null,
-            awayTeamId: nflGame.away_team_id ?? null,
-            homeAbbr:   nflGame.home_team_abbr ?? null,
-            awayAbbr:   nflGame.away_team_abbr ?? null,
-            homeScore:  nflGame.home_score,
-            awayScore:  nflGame.away_score,
-          });
-        } catch (err) {
-          console.warn(`[pick-resolver-nfl] shadow_model back-fill failed for game ${nflGame.game_id}: ${err.message}`);
-        }
-
-        console.log(
-          `[pick-resolver-nfl] Pick #${pick.id} "${pick.pick}" → ${result.toUpperCase()} ` +
-          `(${nflGame.away_team_abbr} ${nflGame.away_score} @ ${nflGame.home_team_abbr} ${nflGame.home_score})`
-        );
-      } catch (err) {
-        const msg = `Pick #${pick.id}: ${err.message}`;
-        console.error(`[pick-resolver-nfl] ${msg}`);
-        summary.errors.push(msg);
-      }
     }
   }
 
   console.log(
     `[pick-resolver-nfl] Done. resolved=${summary.resolved} ` +
-    `wins=${summary.wins} losses=${summary.losses} pushes=${summary.pushes} errors=${summary.errors.length}`
+    `wins=${summary.wins} losses=${summary.losses} pushes=${summary.pushes} ` +
+    `skipped=${summary.skipped.length} errors=${summary.errors.length}`
   );
   return summary;
 }

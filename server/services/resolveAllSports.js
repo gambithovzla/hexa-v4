@@ -11,6 +11,7 @@
  * repeated calls are safe. One sport failing never stops the others.
  */
 
+import pool from '../db.js';
 import { resolvePendingPicks } from '../pick-resolver.js';
 import { resolveNbaPendingPicks } from '../pick-resolver-nba.js';
 import { resolveNflPendingPicks } from '../pick-resolver-nfl.js';
@@ -27,15 +28,40 @@ const DEFAULT_RESOLVERS = {
   tennis: resolveTennisPendingPicks,
 };
 
-const EMPTY = { resolved: 0, wins: 0, losses: 0, pushes: 0, voids: 0, errors: [] };
+const EMPTY = { resolved: 0, wins: 0, losses: 0, pushes: 0, voids: 0, skipped: [], errors: [] };
+
+/**
+ * What is still pending after the sweep, per sport. A sweep that resolves
+ * nothing is usually correct (games in progress), so this is how a caller tells
+ * "nothing to do" apart from "picks are stuck".
+ */
+async function countPendingBySport() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(sport, 'mlb') AS sport, COUNT(*)::int AS pending
+         FROM picks
+        WHERE result = 'pending' AND deleted_at IS NULL
+        GROUP BY 1`
+    );
+    return Object.fromEntries(rows.map(r => [r.sport, r.pending]));
+  } catch (err) {
+    console.warn(`[resolve-all] pending count failed: ${err.message}`);
+    return {};
+  }
+}
 
 /**
  * @param {object} [opts]
  * @param {object} [opts.resolvers]  sport → resolver fn (injectable for tests)
  * @param {string} [opts.sport]      resolve a single sport instead of all
- * @returns {Promise<{resolved,wins,losses,pushes,voids,errors,bySport}>}
+ * @param {function} [opts.countPending]  pending-by-sport counter (injectable)
+ * @returns {Promise<{resolved,wins,losses,pushes,voids,skipped,errors,bySport,stillPending}>}
  */
-export async function resolveAllSportsPicks({ resolvers = DEFAULT_RESOLVERS, sport = null } = {}) {
+export async function resolveAllSportsPicks({
+  resolvers = DEFAULT_RESOLVERS,
+  sport = null,
+  countPending = countPendingBySport,
+} = {}) {
   const entries = sport
     ? Object.entries(resolvers).filter(([key]) => key === String(sport).toLowerCase())
     : Object.entries(resolvers);
@@ -50,7 +76,7 @@ export async function resolveAllSportsPicks({ resolvers = DEFAULT_RESOLVERS, spo
   }));
 
   const bySport = Object.fromEntries(settled);
-  const total = { resolved: 0, wins: 0, losses: 0, pushes: 0, voids: 0, errors: [] };
+  const total = { resolved: 0, wins: 0, losses: 0, pushes: 0, voids: 0, skipped: [], errors: [] };
   for (const [key, s] of settled) {
     total.resolved += s.resolved ?? 0;
     total.wins += s.wins ?? 0;
@@ -58,7 +84,8 @@ export async function resolveAllSportsPicks({ resolvers = DEFAULT_RESOLVERS, spo
     total.pushes += s.pushes ?? 0;
     total.voids += s.voids ?? 0;
     for (const e of s.errors ?? []) total.errors.push(`[${key}] ${e}`);
+    for (const sk of s.skipped ?? []) total.skipped.push({ ...sk, sport: key });
   }
 
-  return { ...total, bySport };
+  return { ...total, bySport, stillPending: await countPending() };
 }
