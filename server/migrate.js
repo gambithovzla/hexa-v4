@@ -902,6 +902,11 @@ export async function runNflScaffoldingMigrations() {
         ON nfl_odds_snapshots(game_date)
     `);
 
+    // Closing NUMBER, not just closing price. MLB and soccer never needed it —
+    // their bet's number is fixed and only the price moves — but an NFL spread
+    // that opens -3.5 and closes -6.5 is unauditable without it.
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS closing_line DECIMAL(6,2)`);
+
     // ── NFL games cache (keyed by season/seasonType/week) ─────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS nfl_games (
