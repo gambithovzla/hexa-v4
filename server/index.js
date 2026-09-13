@@ -29,6 +29,7 @@ import nbaRouter from './routes/nba.js';
 import nflRouter from './routes/nfl.js';
 import { handleNflGames } from './routes/nfl-schedule.js';
 import { nflInjurySeverity } from './services/nflAvailability.js';
+import { resolveAllSportsPicks } from './services/resolveAllSports.js';
 import nhlRouter from './routes/nhl.js';
 import soccerRouter from './routes/soccer.js';
 import tennisRouter from './routes/tennis.js';
@@ -3302,9 +3303,13 @@ app.post('/api/savant/refresh', verifyToken, isAdmin, async (_req, res) => {
 });
 
 // GET /api/picks/resolve — manually trigger pick resolution (admin/testing)
-app.get('/api/picks/resolve', verifyToken, async (_req, res) => {
+// GET /api/picks/resolve[?sport=nfl] — manual sweep across every sport's
+// resolver (the background jobs each run inside their own time window; this
+// button should not have to wait for one).
+app.get('/api/picks/resolve', verifyToken, async (req, res) => {
   try {
-    const summary = await resolvePendingPicks();
+    const sport = req.query.sport ? String(req.query.sport).toLowerCase() : null;
+    const summary = await resolveAllSportsPicks({ sport });
     res.json({ success: true, data: summary });
   } catch (err) {
     res.status(500).json({ success: false, error: safeError(err) });
