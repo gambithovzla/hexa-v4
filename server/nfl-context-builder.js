@@ -20,6 +20,7 @@ import {
   findTeamInjuries,
 } from './nfl-api.js';
 import { getNflAdvancedTeamStats, findAdvancedStats } from './nfl-advanced-fetcher.js';
+import { getNflLineMovement } from './nfl-line-movement.js';
 import { resolveNflTeamId, getNflTeam, getNflStadium } from './nfl-team-map.js';
 import { buildSeasonPhase } from './services/nflSeasonPhase.js';
 
@@ -273,6 +274,7 @@ export async function buildNflGameContext({
   season = null,
   seasonType = null,
   marketOdds = null,
+  oddsEventId = null,
 }) {
   const startedAt = Date.now();
 
@@ -410,5 +412,16 @@ export async function buildNflGameContext({
     staleFlags.push('preseason_metrics_out_of_distribution');
   }
 
-  return { season, seasonPhase, gameDate, home, away, weather: weatherBlock, context_meta };
+  // Line movement, when there is any history yet. Snapshots only started being
+  // captured recently, so a null here is the normal early state and every
+  // consumer reads it as "no signal" rather than an error.
+  let lineMovement = null;
+  if (oddsEventId) {
+    lineMovement = await getNflLineMovement({ eventId: oddsEventId }).catch(() => null);
+  }
+
+  return {
+    season, seasonPhase, gameDate, home, away,
+    weather: weatherBlock, lineMovement, context_meta,
+  };
 }

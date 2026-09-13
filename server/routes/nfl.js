@@ -267,6 +267,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       season: game.season,
       seasonType: game.season_type ?? seasonType ?? null,
       marketOdds: resolvedOdds,
+      oddsEventId: oddsEvent?.eventId ?? null,
     });
 
     // Player props (flag NFL_PROPS_ENABLED). The Oracle only gets the prop menu
@@ -860,6 +861,7 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
           seasonType: g.season_type ?? null,
           season: g.season ?? null,
           marketOdds: odds,
+          oddsEventId: ev?.eventId ?? null,
         });
         const gameMeta = {
           homeTeamId: g.home_team_id, awayTeamId: g.away_team_id,

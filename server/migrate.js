@@ -870,6 +870,38 @@ export async function runNflScaffoldingMigrations() {
   try {
     await client.query('BEGIN');
 
+    // ── NFL odds snapshots (line movement / CLV / sharp money) ────────────────
+    // Separate from the MLB odds_snapshots table because the primary market is
+    // a variable spread rather than a fixed ±1.5 run line.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nfl_odds_snapshots (
+        id                BIGSERIAL    PRIMARY KEY,
+        game_id           VARCHAR(128) NOT NULL,
+        game_date         DATE,
+        home_team         VARCHAR(64),
+        away_team         VARCHAR(64),
+        moneyline_home    INTEGER,
+        moneyline_away    INTEGER,
+        spread_home       NUMERIC(5,1),
+        spread_home_price INTEGER,
+        spread_away       NUMERIC(5,1),
+        spread_away_price INTEGER,
+        total             NUMERIC(5,1),
+        over_price        INTEGER,
+        under_price       INTEGER,
+        bookmaker_count   INTEGER,
+        captured_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_nfl_odds_snapshots_game
+        ON nfl_odds_snapshots(game_id, captured_at)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_nfl_odds_snapshots_date
+        ON nfl_odds_snapshots(game_date)
+    `);
+
     // ── NFL games cache (keyed by season/seasonType/week) ─────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS nfl_games (
