@@ -121,7 +121,11 @@ const CAPABILITY_MAP = {
   parlayArchitect: {
     mlb: { enabled: true, requiresAdmin: true },
     nba: { enabled: true, requiresAdmin: true },
-    nfl: { enabled: false, requiresAdmin: true, message: NFL_PARLAY_MSG },
+    // NFL parlay runs the same frozen engine and the same LLM architect as MLB,
+    // via POST /api/nfl/parlay. Server-side it is still behind
+    // PARLAY_SYNERGY_NFL_ENABLED, so the tab appearing does not mean the
+    // endpoint answers — the flag is the real switch.
+    nfl: { enabled: true, requiresAdmin: true },
     nhl: { enabled: false, requiresAdmin: true, message: NHL_PARLAY_MSG },
     soccer: { enabled: false, requiresAdmin: true, message: SOCCER_PARLAY_MSG },
     tennis: { enabled: false, requiresAdmin: true, message: TENNIS_PARLAY_MSG },

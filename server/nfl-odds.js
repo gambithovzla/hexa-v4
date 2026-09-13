@@ -282,6 +282,9 @@ function normalizeEvent(event, sportKey = NFL_SPORT_KEYS.REGULAR) {
     // Event ids are scoped to their sport key — the per-event props endpoint
     // 404s if queried under the wrong one.
     sportKey,
+    // How many books backed this consensus — a two-book line moving is noise,
+    // eight books moving together is not.
+    bookmakerCount: Array.isArray(event.bookmakers) ? event.bookmakers.length : null,
     commenceTime: event.commence_time ?? null,
     homeTeam:     event.home_team,
     awayTeam:     event.away_team,

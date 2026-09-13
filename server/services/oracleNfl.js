@@ -306,11 +306,64 @@ function describePropMarket(propMarket) {
   return lines.join('\n');
 }
 
+/**
+ * What the market did between opening and now.
+ *
+ * The verdicts matter more than the numbers. A spread crossing 3 or 7 is the
+ * single most consequential move in football — those are the margins games
+ * actually land on. Sustained movement across many books is money; one jump
+ * that drifts back is a book correcting itself. And a favourite whose price
+ * gets LONGER is the books moving against the public, which is the closest
+ * thing to seeing where the sharp money went.
+ */
+function describeLineMovement(lm) {
+  if (!lm) return null;
+
+  const lines = ['LINE MOVEMENT'];
+  const o = lm.opening ?? {};
+  const c = lm.current ?? {};
+
+  if (o.spread_home != null && c.spread_home != null) {
+    lines.push(`Spread (home): opened ${o.spread_home} → now ${c.spread_home}` +
+      (lm.movement_spread_home ? ` (${lm.movement_spread_home > 0 ? '+' : ''}${lm.movement_spread_home})` : ''));
+  }
+  if (o.total != null && c.total != null) {
+    lines.push(`Total: opened ${o.total} → now ${c.total}` +
+      (lm.movement_total ? ` (${lm.movement_total > 0 ? '+' : ''}${lm.movement_total})` : ''));
+  }
+  if (o.moneyline_home != null && c.moneyline_home != null) {
+    lines.push(`Moneyline home: ${o.moneyline_home} → ${c.moneyline_home}` +
+      (lm.movement_ml_home != null ? ` (${lm.movement_ml_home > 0 ? '+' : ''}${lm.movement_ml_home} cents)` : ''));
+  }
+
+  if (lm.key_numbers_crossed?.length) {
+    lines.push(`⚠ KEY NUMBER CROSSED: ${lm.key_numbers_crossed.join(', ')} — ` +
+      'the number available at open is no longer on the board. Weigh this heavily: ' +
+      '3 and 7 are the most common NFL margins.');
+  }
+
+  if (lm.sustained_move_pct != null) {
+    lines.push(lm.sustained_move_pct >= 70
+      ? `SUSTAINED MOVE: ${lm.sustained_move_pct}% of steps moved the same way — money, not noise.`
+      : `Choppy movement (${lm.sustained_move_pct}% aligned) — book-to-book noise rather than a clear move.`);
+  }
+
+  if (lm.reverse_line_movement) {
+    lines.push(`REVERSE LINE MOVEMENT (${lm.reverse_line_movement}): the favourite's price is ` +
+      'drifting longer. Books are moving against the popular side.');
+  }
+
+  lines.push(`Tracked over ${lm.hours_tracked ?? '?'}h across ${lm.snapshots_count} snapshots` +
+    (lm.book_count ? ` · ${lm.book_count} books` : ''));
+  return lines.join('\n');
+}
+
 export function serializeNflContext({ context, marketOdds }) {
   if (!context) return 'No NFL context provided.';
-  const { season, seasonPhase, gameDate, home, away, weather, context_meta, propMarket } = context;
+  const { season, seasonPhase, gameDate, home, away, weather, context_meta, propMarket, lineMovement } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   const propBlock = describePropMarket(propMarket);
+  const movementBlock = describeLineMovement(lineMovement);
   const effDeltas = describeEfficiencyDeltas(home, away);
   const preseasonBlock = describePreseason(seasonPhase);
   return [
@@ -328,6 +381,7 @@ export function serializeNflContext({ context, marketOdds }) {
     describeWeather(weather),
     '',
     describeMarketOdds(marketOdds),
+    ...(movementBlock ? ['', movementBlock] : []),
     ...(propBlock ? ['', propBlock] : []),
     ...(dataQualityLine ? ['', dataQualityLine] : []),
   ].join('\n');

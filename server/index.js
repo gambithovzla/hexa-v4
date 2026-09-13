@@ -52,6 +52,7 @@ import { buildNbaPickLiveProgressEntry } from './pick-tracker-nba.js';
 import { buildNflPickLiveProgressEntry } from './pick-tracker-nfl.js';
 import { buildSoccerPickLiveProgressEntry } from './pick-tracker-soccer.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
+import { captureNflOddsSnapshot } from './nfl-line-movement.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
 import { buildPostmortemGameSummary, buildPostmortemFeatureSnapshot } from './services/postmortemContext.js';
@@ -5340,6 +5341,19 @@ runMigrations()
           });
         }
       }, SIX_HOURS_LM).unref();
+
+      // ── NFL line snapshots: every 3 hours, every day ─────────────────────
+      // Deliberately NOT game-time-aware, unlike the NFL resolver. A Sunday
+      // line opens the previous Sunday or Monday and does most of its moving
+      // midweek, so a game-day-only window would miss the move entirely — and
+      // the move is the whole signal. One bulk odds call covers the slate.
+      const THREE_HOURS_NFL_LM = 3 * 60 * 60 * 1000;
+      setInterval(() => {
+        if (process.env.NFL_ANALYSIS_ENABLED !== 'true') return;
+        captureNflOddsSnapshot().catch(err => {
+          console.error('[nfl-line-movement] Scheduled snapshot failed:', err.message);
+        });
+      }, THREE_HOURS_NFL_LM).unref();
 
       // ── Pick resolver: every 30 min between 7pm–6am ET ───────────────────
       const THIRTY_MIN = 30 * 60 * 1000;
