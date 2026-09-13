@@ -115,5 +115,14 @@ export function findNflPlayerPropStat(payload, playerName, propKind) {
   const seasonAvg = p.season_avg?.[propKind] ?? null;
   const recentAvg = p.recent_avg?.[propKind] ?? null;
   if (seasonAvg == null && recentAvg == null) return null;
-  return { seasonAvg, recentAvg, games: p.games ?? null };
+  return {
+    seasonAvg,
+    recentAvg,
+    games: p.games ?? null,
+    // Sprint 9.8: dispersion and team ride along for the projection engine.
+    // Older sidecar builds omit them; callers must treat both as optional.
+    playerStd: p.season_std?.[propKind] ?? null,
+    team: p.team ?? null,
+    position: p.position ?? null,
+  };
 }

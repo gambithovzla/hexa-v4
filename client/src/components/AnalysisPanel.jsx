@@ -38,6 +38,13 @@ const L = {
       props:        'Player Props',
       pitcherprops: '🔥 Pitcher Props (Strikeouts)',
       batterprops:  '🦇 Batter Props (HR, Hits)',
+      nflSpread:    'Spread (Handicap)',
+      nflTotal:     'Over/Under',
+      nflProps:     '🏈 Player Props (All)',
+      nflTdScorer:  '🏈 Anytime Touchdown',
+      nflQbProps:   '🎯 QB Props (Yards, TDs)',
+      nflRushProps: '🏃 Rushing Props (Yards, Carries)',
+      nflRecProps:  '🙌 Receiving Props (Yards, Catches)',
       fadehits:     '🚫 FADE HITS',
     },
     modelSelect: {
@@ -97,6 +104,13 @@ const L = {
       f5moneyline:  '⚾ F5 Moneyline',
       f5totals:     '⚾ F5 Totales',
       props:        'Props de Jugador',
+      nflSpread:    'Hándicap (Spread)',
+      nflTotal:     'Totales (O/U)',
+      nflProps:     '🏈 Props de Jugador (Todos)',
+      nflTdScorer:  '🏈 Touchdown en Cualquier Momento',
+      nflQbProps:   '🎯 Props de QB (Yardas, TDs)',
+      nflRushProps: '🏃 Props Terrestres (Yardas, Acarreos)',
+      nflRecProps:  '🙌 Props de Recepción (Yardas, Atrapadas)',
       pitcherprops: '🔥 Pitcher Props (Ponches)',
       batterprops:  '🦇 Batter Props (HR, Hits)',
       fadehits:     '🚫 FADE HITS',
@@ -318,19 +332,35 @@ function MatchupHeader({ games, mode }) {
 
 // ── Controls sub-components ───────────────────────────────────────────────────
 
-function BetTypeSelect({ value, onChange, t }) {
-  const options = [
-    { value: 'all',           label: t.betType.all           },
-    { value: 'moneyline',     label: t.betType.moneyline     },
-    { value: 'runline',       label: t.betType.runline       },
-    { value: 'totals',        label: t.betType.totals        },
-    { value: 'f5_moneyline',  label: t.betType.f5moneyline   },
-    { value: 'f5_totals',     label: t.betType.f5totals      },
-    { value: 'props',         label: t.betType.props         },
-    { value: 'Pitcher Props', label: t.betType.pitcherprops  },
-    { value: 'Batter Props',  label: t.betType.batterprops   },
-    { value: 'fade_hits',     label: t.betType.fadehits      },
-  ];
+// NFL values must match NFL_BET_TYPES in server/services/nflBetTypeDirective.js —
+// the server falls back to 'all' for anything it does not recognise.
+const NFL_BET_TYPE_OPTIONS = (t) => [
+  { value: 'all',        label: t.betType.all          },
+  { value: 'spread',     label: t.betType.nflSpread    },
+  { value: 'total',      label: t.betType.nflTotal     },
+  { value: 'moneyline',  label: t.betType.moneyline    },
+  { value: 'props',      label: t.betType.nflProps     },
+  { value: 'td_scorer',  label: t.betType.nflTdScorer  },
+  { value: 'qb_props',   label: t.betType.nflQbProps   },
+  { value: 'rush_props', label: t.betType.nflRushProps },
+  { value: 'rec_props',  label: t.betType.nflRecProps  },
+];
+
+const MLB_BET_TYPE_OPTIONS = (t) => [
+  { value: 'all',           label: t.betType.all           },
+  { value: 'moneyline',     label: t.betType.moneyline     },
+  { value: 'runline',       label: t.betType.runline       },
+  { value: 'totals',        label: t.betType.totals        },
+  { value: 'f5_moneyline',  label: t.betType.f5moneyline   },
+  { value: 'f5_totals',     label: t.betType.f5totals      },
+  { value: 'props',         label: t.betType.props         },
+  { value: 'Pitcher Props', label: t.betType.pitcherprops  },
+  { value: 'Batter Props',  label: t.betType.batterprops   },
+  { value: 'fade_hits',     label: t.betType.fadehits      },
+];
+
+function BetTypeSelect({ value, onChange, t, sport = 'mlb' }) {
+  const options = sport === 'nfl' ? NFL_BET_TYPE_OPTIONS(t) : MLB_BET_TYPE_OPTIONS(t);
 
   return (
     <Box>
@@ -1108,6 +1138,11 @@ export default function AnalysisPanel({
   const [authModalOpen,    setAuthModalOpen]    = useState(false);
   const [lineupDialogOpen, setLineupDialogOpen] = useState(false);
 
+  // Bet-focus values are sport-specific (NFL has no run line, MLB no TD scorer),
+  // so carrying a selection across a sport switch would silently fall back to
+  // 'all' on the server while the dropdown still showed the old choice.
+  useEffect(() => { setBetType('all'); }, [sport]);
+
   // Sync parlay legs with actual selection count
   useEffect(() => {
     if (mode === 'parlay' && selectedGames.length >= 2) {
@@ -1235,6 +1270,7 @@ export default function AnalysisPanel({
           lang,
           riskProfile: 'balanced',
           engine:      modelMode === 'premium' ? 'premium' : 'deep',
+          betType,
         };
       } else if (mode === 'single' && sport === 'nba') {
         const g = selectedGames[0];
@@ -1504,8 +1540,8 @@ export default function AnalysisPanel({
         )}
 
         {/* Bet type — MLB only (NBA/NFL Oracle selects best bet type internally) */}
-        {sport === 'mlb' && (
-          <BetTypeSelect value={betType} onChange={setBetType} t={t} />
+        {(sport === 'mlb' || sport === 'nfl') && (
+          <BetTypeSelect value={betType} onChange={setBetType} t={t} sport={sport} />
         )}
 
         {/* Model picker */}

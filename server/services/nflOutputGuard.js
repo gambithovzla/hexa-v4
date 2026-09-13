@@ -2,17 +2,22 @@
  * nflOutputGuard.js — validates Oracle NFL output before persistence.
  *
  * Mirrors nbaOutputGuard.js. Rejects parse failures, empty output, parlay
- * shape, missing/ABSTAIN pick, player props, and out-of-range confidence
+ * shape, missing/ABSTAIN pick, and out-of-range confidence
  * (NFL cap is 72, vs NBA 78 / MLB 70). Degrades (non-fatal) on a too-short
  * report, surfacing the issue in alert_flags. Never throws.
+ *
+ * Player props: blocked outright unless `propsEnabled` is set (NFL_PROPS_ENABLED).
+ * When enabled they are held to the menu — a prop pick must match one of the
+ * `propOffers` the model was actually shown, or it is rejected as fabricated.
  */
 
 import { NFL_OUTPUT_SCHEMA_VERSION } from '../prompts/oracle-nfl-prompts.js';
 import { PRESEASON_ALERT_FLAG, PRESEASON_CONFIDENCE_CEIL } from './nflSeasonPhase.js';
 import { evaluateNflLineProvenance } from './nflLineProvenance.js';
+import { verifyNflPropPick } from './nflPropVerification.js';
 
 const ALLOWED_BET_TYPES = new Set(['moneyline', 'ml', 'spread', 'pointspread', 'total', 'overunder', 'ou']);
-const BLOCKED_BET_TYPES = new Set(['playerprop', 'playerprops', 'prop', 'props']);
+const PROP_BET_TYPES = new Set(['playerprop', 'playerprops', 'prop', 'props']);
 
 const NFL_CONFIDENCE_FLOOR = 50;
 const NFL_CONFIDENCE_CEIL = 72;
@@ -30,7 +35,13 @@ function normalizeConfidence(raw) {
   return Math.round(n);
 }
 
-export function validateNflAnalysisOutput(data, { parseError = false, isPreseason = false, marketOdds = null } = {}) {
+export function validateNflAnalysisOutput(data, {
+  parseError = false,
+  isPreseason = false,
+  marketOdds = null,
+  propsEnabled = false,
+  propOffers = null,
+} = {}) {
   if (parseError) {
     return { ok: false, quality: 'reject', errors: ['json_parse_failed'], schema_version: NFL_OUTPUT_SCHEMA_VERSION, data: null };
   }
@@ -65,8 +76,22 @@ export function validateNflAnalysisOutput(data, { parseError = false, isPreseaso
   }
 
   const bpType = normalizeBetType(data.best_pick?.type);
-  if (bpType && BLOCKED_BET_TYPES.has(bpType)) errors.push('player_prop_blocked');
-  else if (bpType && !ALLOWED_BET_TYPES.has(bpType)) errors.push('unsupported_bet_type');
+  const isPropPick = Boolean(bpType) && PROP_BET_TYPES.has(bpType);
+  if (isPropPick && !propsEnabled) errors.push('player_prop_blocked');
+  else if (!isPropPick && bpType && !ALLOWED_BET_TYPES.has(bpType)) errors.push('unsupported_bet_type');
+
+  // The prop space is unbounded, so a prop pick is only real if it matches a
+  // line a book actually posted. An unmatched one is unbettable and, worse,
+  // unresolvable — the resolver would have nothing to grade it against.
+  let propVerification = null;
+  if (isPropPick && propsEnabled) {
+    propVerification = verifyNflPropPick({
+      pickText: pick,
+      detail: data.best_pick?.detail ?? null,
+      propOffers,
+    });
+    if (!propVerification.ok) errors.push(`prop_not_in_market:${propVerification.reason}`);
+  }
 
   const report = String(data.oracle_report ?? '').trim();
   if (report.length < 80) errors.push('oracle_report_too_short');
@@ -80,7 +105,7 @@ export function validateNflAnalysisOutput(data, { parseError = false, isPreseaso
     'player_prop_blocked',
   ]);
 
-  if (errors.some((e) => fatal.has(e))) {
+  if (errors.some((e) => fatal.has(e) || e.startsWith('prop_not_in_market'))) {
     return { ok: false, quality: 'reject', errors, schema_version: NFL_OUTPUT_SCHEMA_VERSION, data: null };
   }
 
@@ -88,7 +113,7 @@ export function validateNflAnalysisOutput(data, { parseError = false, isPreseaso
   // with no MARKET ODDS block to read it from. Label that rather than let a
   // model-authored line reach the user looking like a quoted one.
   const lineProvenance = evaluateNflLineProvenance({
-    betType: data.best_pick?.type,
+    betType: isPropPick ? 'prop' : data.best_pick?.type,
     pickText: pick,
     detail: data.best_pick?.detail,
     marketOdds,
@@ -99,6 +124,9 @@ export function validateNflAnalysisOutput(data, { parseError = false, isPreseaso
     master_prediction: mp,
     alert_flags: Array.isArray(data.alert_flags) ? data.alert_flags : [],
     line_provenance: lineProvenance,
+    ...(propVerification?.ok
+      ? { prop_selection: { ...propVerification.parsed, offer: propVerification.matched } }
+      : {}),
   };
 
   if (lineProvenance.flag) {

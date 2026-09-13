@@ -223,3 +223,95 @@ def test_build_player_stats_season_recent_and_anytime_td(monkeypatch):
     assert cmc["season_avg"]["anytime_td"] == round((1 + 3 + 1) / 3, 3)
     # recent_avg over the last <=4 games equals season here (3 games)
     assert cmc["recent_avg"]["receptions"] == round((5 + 4 + 6) / 3, 3)
+
+
+# ── Defense-allowed rates (NFL props — Sprint 9.8) ────────────────────────────
+
+
+def _synthetic_defense_pbp() -> pd.DataFrame:
+    """One season, one game, two teams, with the yardage/TD columns present.
+
+    AAA's defense faces 4 plays: 100 + 50 passing yards, 30 + 20 rushing yards,
+    2 completions, 1 passing TD, 1 rushing TD, 1 sack, 1 interception.
+    """
+    rows = []
+    for posteam, defteam, py, ry, comp, patt, ratt, ptd, rtd, inter, sack in [
+        ("BBB", "AAA", 100, 0, 1, 1, 0, 1, 0, 0, 0),
+        ("BBB", "AAA", 50, 0, 1, 1, 0, 0, 0, 1, 0),
+        ("BBB", "AAA", 0, 30, 0, 0, 1, 0, 1, 0, 0),
+        ("BBB", "AAA", 0, 20, 0, 1, 0, 0, 0, 0, 1),
+        ("AAA", "BBB", 200, 0, 2, 3, 0, 2, 0, 0, 0),
+        ("AAA", "BBB", 0, 60, 0, 0, 2, 0, 0, 0, 0),
+    ]:
+        rows.append({
+            "game_id": "2024_01_AAA_BBB", "season": 2024, "week": 1, "season_type": "REG",
+            "game_date": "2024-09-08", "roof": "outdoors", "div_game": 0,
+            "home_team": "AAA", "away_team": "BBB", "home_score": 24, "away_score": 17,
+            "spread_line": 3.0, "total_line": 44.0,
+            "posteam": posteam, "defteam": defteam,
+            "play_type": "pass", "epa": 0.1, "success": 1, "pass_oe": 1.0,
+            "passing_yards": py, "rushing_yards": ry, "complete_pass": comp,
+            "pass_attempt": patt, "rush_attempt": ratt,
+            "pass_touchdown": ptd, "rush_touchdown": rtd,
+            "interception": inter, "sack": sack,
+        })
+    return pd.DataFrame(rows)
+
+
+def test_build_defense_allowed_per_game_rates(monkeypatch):
+    monkeypatch.setattr(nv, "_NFLVERSE_AVAILABLE", True)
+    monkeypatch.setattr(nv, "_fetch_pbp_year", lambda year: _synthetic_defense_pbp())
+    nv.refresh_team_stats()
+
+    payload = nv.build_defense_allowed(2024)
+    aaa = payload["teams"]["AAA"]
+
+    assert aaa["games"] == 1
+    assert aaa["pass_yds"] == 150.0        # 100 + 50, over one game
+    assert aaa["rush_yds"] == 50.0         # 30 + 20
+    assert aaa["scrimmage_yds"] == 200.0   # derived
+    assert aaa["total_tds"] == 2.0         # 1 passing + 1 rushing
+    assert aaa["interceptions"] == 1.0
+    assert aaa["sacks"] == 1.0
+
+    # League means average across both defenses, not across plays.
+    bbb = payload["teams"]["BBB"]
+    assert payload["league"]["pass_yds"] == round((aaa["pass_yds"] + bbb["pass_yds"]) / 2, 3)
+
+    nv.refresh_team_stats()
+
+
+def test_build_defense_allowed_tolerates_missing_columns(monkeypatch):
+    """An older pbp release without the yardage columns must not crash the build."""
+    bare = _synthetic_defense_pbp().drop(
+        columns=["passing_yards", "rushing_yards", "complete_pass", "sack"]
+    )
+    monkeypatch.setattr(nv, "_NFLVERSE_AVAILABLE", True)
+    monkeypatch.setattr(nv, "_fetch_pbp_year", lambda year: bare)
+    nv.refresh_team_stats()
+
+    payload = nv.build_defense_allowed(2024)
+    assert payload["teams"]["AAA"]["pass_yds"] == 0.0
+    assert payload["teams"]["AAA"]["total_tds"] == 2.0  # TD columns survived
+
+    nv.refresh_team_stats()
+
+
+def test_build_player_stats_exposes_team_and_dispersion(monkeypatch):
+    weeks = _synthetic_player_weeks()
+    weeks["recent_team"] = ["KC"] * 3 + ["SF", "SF", "CAR"]  # a mid-season trade
+    monkeypatch.setattr(nv, "_NFLVERSE_AVAILABLE", True)
+    monkeypatch.setattr(nv, "_load_player_weeks", lambda season: weeks)
+    nv.refresh_team_stats()
+
+    players = nv.build_player_stats(2024)["players"]
+
+    assert players["patrick mahomes"]["team"] == "KC"
+    # Most recent team, not the first — a traded player belongs to his new roster.
+    assert players["christian mccaffrey"]["team"] == "CAR"
+
+    # Dispersion is what lets the projection engine price an over/under.
+    std = players["patrick mahomes"]["season_std"]["pass_yds"]
+    assert std == pytest.approx(pd.Series([300, 280, 260]).std(ddof=1), abs=1e-3)
+
+    nv.refresh_team_stats()
