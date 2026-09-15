@@ -29,6 +29,7 @@
 import pool from './db.js';
 import { getSoccerGamesForDate } from './soccer-api.js';
 import { tokenMatchesTeam } from './pick-resolver.js';
+import { shiftDateString } from './utils/etDate.js';
 import { parseSoccerProp, getSoccerGameBoxscore, resolveSoccerPlayerProp } from './soccer-props-resolver.js';
 
 function isGameFinal(game) {
@@ -252,7 +253,14 @@ export async function resolveSoccerPendingPicks() {
 
     for (const pick of datePicks) {
       try {
-        const soccerGame = findSoccerGameForPick(pick, games);
+        let soccerGame = findSoccerGameForPick(pick, games);
+        // Pre-ET rows carry the UTC date, which for a late kickoff is the next day.
+        for (const offset of [-1, 1]) {
+          if (soccerGame) break;
+          const neighbour = shiftDateString(date, offset);
+          if (!neighbour) continue;
+          soccerGame = findSoccerGameForPick(pick, await getGamesCached(neighbour, league).catch(() => []));
+        }
         if (!soccerGame) {
           console.log(`[pick-resolver-soccer] Pick #${pick.id} "${pick.matchup}": no matching game for ${date}/${league}`);
           continue;
