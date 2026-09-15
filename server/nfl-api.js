@@ -16,6 +16,7 @@
 
 import { enrichGameTeamIds, getNflTeam } from './nfl-team-map.js';
 import { espnRequest } from './espn-http.js';
+import { toEtDateString } from './utils/etDate.js';
 
 const ESPN_SITE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/football/nfl/standings';
@@ -114,7 +115,9 @@ function normalizeScoreboardEvent(event, ctx = {}) {
     return Number.isFinite(n) ? n : null;
   };
   const nationalTv = comp.broadcasts?.[0]?.names?.[0] ?? comp.geoBroadcasts?.[0]?.media?.shortName ?? null;
-  const safeDate = event.date ? String(event.date).slice(0, 10) : (ctx.dateStr ?? null);
+  // ET, not UTC: a Sunday-night kickoff is 00:20Z on Monday, and both ESPN's
+  // scoreboard and the resolver bucket that game under Sunday.
+  const safeDate = event.date ? toEtDateString(event.date) : (ctx.dateStr ?? null);
 
   return enrichGameTeamIds({
     game_id: String(event.id ?? comp.id),

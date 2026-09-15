@@ -21,6 +21,7 @@ const NBA_HEADERS = {
 };
 
 import { enrichGameTeamIds } from './nba-team-map.js';
+import { toEtDateString } from './utils/etDate.js';
 
 const CURRENT_SEASON = '2025-26';
 
@@ -154,7 +155,8 @@ function normalizeEspnScoreboardEvent(event, dateStr) {
   const homeScore = parseScore(home.score);
   const awayScore = parseScore(away.score);
   const nationalTv = comp.broadcasts?.[0]?.names?.[0] ?? comp.geoBroadcasts?.[0]?.media?.shortName ?? null;
-  const safeDate = event.date ? String(event.date).slice(0, 10) : dateStr;
+  // ET, not UTC — a 10pm ET tip-off is tomorrow in UTC (see utils/etDate.js).
+  const safeDate = event.date ? toEtDateString(event.date) : dateStr;
   return enrichGameTeamIds({
     game_id: event.id ?? comp.id,
     game_date: safeDate,

@@ -20,6 +20,7 @@
 import pool from './db.js';
 import { getNbaGamesForDate } from './nba-api.js';
 import { resolvePickFromFinalState, tokenMatchesTeam } from './pick-resolver.js';
+import { shiftDateString } from './utils/etDate.js';
 import { updateShadowModelRunsForGame } from './shadow-model.js';
 
 // ── NBA game → resolver-compatible game object ────────────────────────────────
@@ -147,7 +148,15 @@ export async function resolveNbaPendingPicks() {
 
     for (const pick of datePicks) {
       try {
-        const nbaGame = findNbaGameForPick(pick, games);
+        let nbaGame = findNbaGameForPick(pick, games);
+        // Picks saved before game_date moved to ET carry the UTC date, which is
+        // the next day for any night tip-off — look either side before giving up.
+        for (const offset of [-1, 1]) {
+          if (nbaGame) break;
+          const neighbour = shiftDateString(date, offset);
+          if (!neighbour) continue;
+          nbaGame = findNbaGameForPick(pick, await getNbaGamesCached(neighbour).catch(() => []));
+        }
 
         if (!nbaGame) {
           console.log(`[pick-resolver-nba] Pick #${pick.id} "${pick.matchup}": no matching game found for ${date}`);
