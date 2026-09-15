@@ -31,22 +31,37 @@ const DEFAULT_RESOLVERS = {
 const EMPTY = { resolved: 0, wins: 0, losses: 0, pushes: 0, voids: 0, skipped: [], errors: [] };
 
 /**
- * What is still pending after the sweep, per sport. A sweep that resolves
- * nothing is usually correct (games in progress), so this is how a caller tells
- * "nothing to do" apart from "picks are stuck".
+ * What is still pending after the sweep, split by when the game is.
+ *
+ * A sweep that resolves nothing is usually correct — picks on games that are
+ * still to be played or in progress cannot resolve — but that is invisible from
+ * a bare count, which is how "nothing resolved" reads as a bug. Only `past`
+ * picks are genuinely stuck and worth chasing.
  */
 async function countPendingBySport() {
+  const today = `(NOW() AT TIME ZONE 'America/New_York')::date`;
   try {
     const { rows } = await pool.query(
-      `SELECT COALESCE(sport, 'mlb') AS sport, COUNT(*)::int AS pending
+      `SELECT COALESCE(sport, 'mlb') AS sport,
+              COUNT(*)::int AS pending,
+              COUNT(*) FILTER (WHERE game_date > ${today})::int AS future,
+              COUNT(*) FILTER (WHERE game_date = ${today})::int AS today,
+              COUNT(*) FILTER (WHERE game_date < ${today})::int AS past,
+              COUNT(*) FILTER (WHERE game_date IS NULL)::int AS undated
          FROM picks
         WHERE result = 'pending' AND deleted_at IS NULL
         GROUP BY 1`
     );
-    return Object.fromEntries(rows.map(r => [r.sport, r.pending]));
+    const bySport = {};
+    const totals = { pending: 0, future: 0, today: 0, past: 0, undated: 0 };
+    for (const r of rows) {
+      bySport[r.sport] = { pending: r.pending, future: r.future, today: r.today, past: r.past, undated: r.undated };
+      for (const key of Object.keys(totals)) totals[key] += r[key] ?? 0;
+    }
+    return { ...totals, bySport };
   } catch (err) {
     console.warn(`[resolve-all] pending count failed: ${err.message}`);
-    return {};
+    return { pending: 0, future: 0, today: 0, past: 0, undated: 0, bySport: {} };
   }
 }
 
