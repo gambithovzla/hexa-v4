@@ -57,7 +57,7 @@ function findMatchForPick(pick, matches) {
 }
 
 async function writePickResult(pickId, result) {
-  await pool.query(`UPDATE picks SET result = $1, updated_at = NOW() WHERE id = $2`, [result, pickId]);
+  await pool.query(`UPDATE picks SET result = $1 WHERE id = $2`, [result, pickId]);
 }
 
 /**
