@@ -54,6 +54,7 @@ import { buildNflPickLiveProgressEntry } from './pick-tracker-nfl.js';
 import { buildSoccerPickLiveProgressEntry } from './pick-tracker-soccer.js';
 import { captureOddsSnapshot, getLineMovement } from './line-movement.js';
 import { captureNflOddsSnapshot } from './nfl-line-movement.js';
+import { captureNflClosingLines } from './closing-line-capture-nfl.js';
 import { savePickFeatures, updatePickFeatureResult } from './feature-store.js';
 import { generatePickPostmortem, POSTMORTEM_SCHEMA_VERSION } from './pick-postmortem.js';
 import { buildPostmortemGameSummary, buildPostmortemFeatureSnapshot } from './services/postmortemContext.js';
@@ -5367,6 +5368,18 @@ runMigrations()
       // finish first.
       setTimeout(captureNflLines, 60_000).unref();
       setInterval(captureNflLines, THREE_HOURS_NFL_LM).unref();
+
+      // ── NFL closing lines / CLV: every 2 hours ───────────────────────────
+      // Runs often enough that a pick is seen inside the 30-minute pre-kickoff
+      // window it captures in. Every day, not just game days: a Thursday pick
+      // and a Monday pick both need their own kickoff caught.
+      const TWO_HOURS_NFL_CLV = 2 * 60 * 60 * 1000;
+      setInterval(() => {
+        if (process.env.NFL_ANALYSIS_ENABLED !== 'true') return;
+        captureNflClosingLines().catch(err => {
+          console.error('[closing-line-nfl] Scheduled capture failed:', err.message);
+        });
+      }, TWO_HOURS_NFL_CLV).unref();
 
       // ── Pick resolver: every 30 min between 7pm–6am ET ───────────────────
       const THIRTY_MIN = 30 * 60 * 1000;

@@ -21,6 +21,7 @@ import { useAuth } from '../store/authStore';
 import { BARLOW, MONO, SANS } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
 import { formatGameTimeLima } from '../utils/dateKeys.js';
+import { getNflLogoUrl } from '../utils/nflLogoUrl.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -209,8 +210,15 @@ function SectionLabel({ children }) {
 
 // ── MatchupHeader — Sci-Fi team duel display ──────────────────────────────────
 
-function MatchupHeader({ games, mode }) {
+function MatchupHeader({ games, mode, sport = 'mlb' }) {
   if (!games || games.length === 0) return null;
+
+  // MLB serves logos by numeric team id; NFL by abbreviation on the ESPN CDN.
+  const logoSrc = (teamId, abbr) => (
+    sport === 'nfl'
+      ? getNflLogoUrl(teamId, abbr)
+      : (teamId ? `https://www.mlb.com/team-logos/${teamId}.svg` : null)
+  );
 
   if (mode === 'parlay') {
     return (
@@ -228,10 +236,10 @@ function MatchupHeader({ games, mode }) {
               <Box key={i} sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ color: C.cyan, opacity: 0.5, fontFamily: MONO, fontSize: '12px' }}>[</span>
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                  {awayId && (
+                  {logoSrc(awayId, a) && (
                     <Box
                       component="img"
-                      src={`https://www.mlb.com/team-logos/${awayId}.svg`}
+                      src={logoSrc(awayId, a)}
                       width={20}
                       height={20}
                       sx={{ objectFit: 'contain' }}
@@ -242,10 +250,10 @@ function MatchupHeader({ games, mode }) {
                 </Box>
                 <Typography component="span" sx={{ fontFamily: MONO, fontSize: '9px', color: C.textMuted }}>@</Typography>
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                  {homeId && (
+                  {logoSrc(homeId, h) && (
                     <Box
                       component="img"
-                      src={`https://www.mlb.com/team-logos/${homeId}.svg`}
+                      src={logoSrc(homeId, h)}
                       width={20}
                       height={20}
                       sx={{ objectFit: 'contain' }}
@@ -286,10 +294,10 @@ function MatchupHeader({ games, mode }) {
         <Typography component="span" sx={{ fontFamily: MONO, fontSize: '14px', color: C.cyan, opacity: 0.5 }}>[</Typography>
         <Box sx={{ textAlign: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-            {awayId && (
+            {logoSrc(awayId, away) && (
               <Box
                 component="img"
-                src={`https://www.mlb.com/team-logos/${awayId}.svg`}
+                src={logoSrc(awayId, away)}
                 width={36}
                 height={36}
                 sx={{ objectFit: 'contain' }}
@@ -318,10 +326,10 @@ function MatchupHeader({ games, mode }) {
 
         <Box sx={{ textAlign: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-            {homeId && (
+            {logoSrc(homeId, home) && (
               <Box
                 component="img"
-                src={`https://www.mlb.com/team-logos/${homeId}.svg`}
+                src={logoSrc(homeId, home)}
                 width={36}
                 height={36}
                 sx={{ objectFit: 'contain' }}
@@ -1397,6 +1405,18 @@ export default function AnalysisPanel({
           model:       modelMode,
           engine:      engineMode,
         };
+      } else if (mode === 'parlay' && sport === 'nfl') {
+        // NFL has its own parlay Oracle: one leg per selected game, same JSON
+        // shape as MLB. It takes no betType/webSearch/legs slider — the leg count
+        // IS the selection.
+        endpoint = `${API_URL}/api/nfl/analyze/parlay`;
+        body = {
+          gameIds:     selectedGames.map(g => g.gamePk),
+          date:        selectedDate,
+          lang,
+          riskProfile: 'balanced',
+          engine:      modelMode === 'premium' ? 'premium' : 'deep',
+        };
       } else if (mode === 'parlay') {
         endpoint = `${API_URL}/api/analyze/parlay`;
         body = {
@@ -1606,7 +1626,7 @@ export default function AnalysisPanel({
       >
         {/* Matchup header — shows selected game(s) in sci-fi duel format */}
         {selectedGames.length > 0 && (
-          <MatchupHeader games={selectedGames} mode={mode} />
+          <MatchupHeader games={selectedGames} mode={mode} sport={sport} />
         )}
 
         {/* Bet type — MLB only (NBA/NFL Oracle selects best bet type internally) */}
@@ -1635,7 +1655,7 @@ export default function AnalysisPanel({
         )}
 
         {/* Parlay legs slider (only in parlay mode) */}
-        {mode === 'parlay' && selectedGames.length >= 2 && (
+        {mode === 'parlay' && sport !== 'nfl' && selectedGames.length >= 2 && (
           <ParlayLegsSlider
             value={parlayLegs}
             min={2}
