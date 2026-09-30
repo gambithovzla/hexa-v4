@@ -93,6 +93,7 @@ test('the imperdible gate refuses to lock a preseason game', () => {
 test('the same candidate outside preseason passes the gate', () => {
   const scored = {
     isPreseason: false,
+    bookmaker: 'bet365', decimalOdds: 1.5, marketType: 'moneyline', line: null,
     qbConfirmed: true,
     modelCertified: true,
     conviction: 95,
@@ -105,6 +106,7 @@ test('the same candidate outside preseason passes the gate', () => {
 test('blockPreseason can be overridden explicitly', () => {
   const scored = {
     isPreseason: true,
+    bookmaker: 'bet365', decimalOdds: 1.5, marketType: 'moneyline', line: null,
     qbConfirmed: true,
     modelCertified: true,
     conviction: 95,
@@ -112,6 +114,17 @@ test('blockPreseason can be overridden explicitly', () => {
     components: { modelProb: 90, impliedProb: 85, mlProb: 80, dataQuality: 95 },
   };
   assert.equal(evaluateNflGate(scored, { blockPreseason: false }).pass, true);
+});
+
+test('regular-season conviction cannot pass without an executable price', () => {
+  const scored = {
+    isPreseason: false, qbConfirmed: true, modelCertified: true,
+    conviction: 95, consensusProb: 90,
+    components: { modelProb: 90, impliedProb: 85, mlProb: 80, dataQuality: 95 },
+  };
+  const gate = evaluateNflGate(scored);
+  assert.equal(gate.pass, false);
+  assert.ok(gate.failedReasons.includes('executable_price_missing'));
 });
 
 test('the serialized context warns before the numbers in preseason', () => {
