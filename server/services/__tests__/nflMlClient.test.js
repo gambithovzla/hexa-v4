@@ -1,7 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildNflFeaturePayload, predictNflGameModel } from '../nflMlClient.js';
+import { buildNflFeaturePayload, predictNflGameModel, certifyNflPrediction } from '../nflMlClient.js';
+
+test('NFL model certification requires matching v2 labels and honest held-out evidence', () => {
+  const prediction = { model_version: '2026-09-29' };
+  const entry = {
+    nfl_label_version: 2, trained_at: '2026-09-29', n_test: 110,
+    calibrated_on_test: false, roi_trustworthy: true,
+    bet365_prospective_verified: true,
+    market_reference_coverage: 0.95,
+    vs_market: { beats_reference: true },
+  };
+  const health = { models_loaded: ['nfl_spread'], manifest: { markets: { nfl_spread: entry } } };
+  assert.equal(certifyNflPrediction('spread', prediction, health), true);
+  assert.equal(certifyNflPrediction('total', prediction, health), false);
+  assert.equal(certifyNflPrediction('spread', prediction, { ...health, manifest: { markets: { nfl_spread: { ...entry, nfl_label_version: 1 } } } }), false);
+  assert.equal(certifyNflPrediction('spread', prediction, { ...health, manifest: { markets: { nfl_spread: { ...entry, calibrated_on_test: true } } } }), false);
+  assert.equal(certifyNflPrediction('spread', prediction, { ...health, manifest: { markets: { nfl_spread: { ...entry, bet365_prospective_verified: false } } } }), false);
+});
 
 test('buildNflFeaturePayload: reads qbStatus.statusKey (out QB → inactive)', () => {
   const ctx = {

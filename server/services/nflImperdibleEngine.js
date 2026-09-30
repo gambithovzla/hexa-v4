@@ -28,7 +28,7 @@ import { resolveNflSlate } from './nflGameLookup.js';
 import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { buildNflGameCandidates } from './parlayEngine/nflParlayCandidates.js';
-import { predictNflGameModel } from './nflMlClient.js';
+import { predictNflGameModel, getNflModelHealth, certifyNflPrediction } from './nflMlClient.js';
 import { calculateNflShadowScore } from './nflShadowValidator.js';
 import { serializeNflContext } from './oracleNfl.js';
 import {
@@ -40,10 +40,6 @@ import { arbitrateNflImperdible } from './nflImperdibleArbiter.js';
 
 const TOP_K = Number(process.env.IMPERDIBLE_TOP_K) || 5;
 const SOURCE = 'imperdible';
-
-// A QB ruled fully OUT is *known* information (the backup is the starter); only
-// these statuses are the genuine uncertainty that voids a lock.
-const UNCERTAIN_QB = new Set(['questionable', 'doubtful', 'game_time_decision']);
 
 function americanToDecimal(odds) {
   const n = Number(odds);
@@ -74,18 +70,24 @@ function recommendedStakeFraction(consensusProb, odds) {
 }
 
 /** Assess the starting-QB picture for both teams. */
-function assessQbConfirmation(context) {
-  const homeQb = context?.home?.qbStatus ?? null;
-  const awayQb = context?.away?.qbStatus ?? null;
-  const homeUncertain = homeQb && UNCERTAIN_QB.has(homeQb.statusKey);
-  const awayUncertain = awayQb && UNCERTAIN_QB.has(awayQb.statusKey);
-  const parts = [];
-  if (homeQb) parts.push(`home QB ${homeQb.playerName ?? '?'} ${homeQb.status ?? homeQb.statusKey}`);
-  if (awayQb) parts.push(`away QB ${awayQb.playerName ?? '?'} ${awayQb.status ?? awayQb.statusKey}`);
+export function assessQbConfirmation(context) {
+  // The injury feed says which QBs were reported injured; silence is not a
+  // confirmed starter. Require explicit starter identity and provenance.
+  const valid = side => side?.startingQb?.confirmed === true
+    && (side.startingQb.playerId != null
+      || (side.startingQb.source === 'manual' && String(side.startingQb.playerName ?? '').trim().length >= 3))
+    && Number.isFinite(Date.parse(side.startingQb.observedAt ?? ''))
+    && Date.now() - Date.parse(side.startingQb.observedAt) <= 2 * 60 * 60_000
+    && !(side.qbStatus?.playerName === side.startingQb.playerName
+      && ['out', 'out_for_season', 'doubtful'].includes(side.qbStatus.statusKey));
+  const homeConfirmed = valid(context?.home);
+  const awayConfirmed = valid(context?.away);
   return {
-    confirmed: !homeUncertain && !awayUncertain,
-    detail: parts.length ? parts.join('; ') : 'both starters healthy',
-    reason: homeUncertain ? 'home_qb_uncertain' : awayUncertain ? 'away_qb_uncertain' : null,
+    confirmed: homeConfirmed && awayConfirmed,
+    detail: homeConfirmed && awayConfirmed
+      ? `home QB ${context.home.startingQb.playerName}; away QB ${context.away.startingQb.playerName}`
+      : 'Starting quarterbacks have not both been verified from a timestamped roster source',
+    reason: !homeConfirmed ? 'home_qb_unverified' : !awayConfirmed ? 'away_qb_unverified' : null,
   };
 }
 
@@ -126,7 +128,10 @@ async function buildGameBundle({ game, oddsEvents, lang }) {
     isDome: context.weather?.dome ?? null,
   };
 
-  const model = await predictNflGameModel(context, gameMeta, odds);
+  const [model, modelHealth] = await Promise.all([
+    predictNflGameModel(context, gameMeta, odds),
+    getNflModelHealth(),
+  ]);
   const modelCertified = model != null;
   const shadow = calculateNflShadowScore(context, gameMeta);
   const qb = assessQbConfirmation(context);
@@ -149,7 +154,12 @@ async function buildGameBundle({ game, oddsEvents, lang }) {
     ...c,
     qbConfirmed: qb.confirmed,
     qbDetail: qb.detail,
-    modelCertified,
+    modelCertified: (() => {
+      const market = c.marketType === 'overunder' ? 'total' : c.marketType;
+      return model?.[market] != null && certifyNflPrediction(market, {
+        model_version: model.versions?.[market],
+      }, modelHealth);
+    })(),
     isPreseason,
     mlProb: shadowProbForCandidate(c, shadow),
   }));

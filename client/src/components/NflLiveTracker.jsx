@@ -192,6 +192,7 @@ export default function NflLiveTracker({ lang = 'es' }) {
   const t = T[lang] || T.en;
   const { token } = useAuth();
   const [games, setGames] = useState([]);
+  const [weekGames, setWeekGames] = useState([]);
   const [pickProgress, setPickProgress] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -207,6 +208,7 @@ export default function NflLiveTracker({ lang = 'es' }) {
       if (!json?.success) throw new Error(json?.error || 'fetch failed');
       const live = (json.data ?? []).filter(g => g.game_status_id === 2);
       setGames(live);
+      setWeekGames(json.data ?? []);
       setLastUpdate(new Date());
       setError('');
 
@@ -280,6 +282,38 @@ export default function NflLiveTracker({ lang = 'es' }) {
       )}
 
       {games.map(g => <GameCard key={g.game_id} game={g} lang={lang} />)}
+
+      {weekGames.length > 0 && <Box sx={{ p: { xs: 1.5, sm: 2 }, border: `1px solid ${C.border}`, background: isLeague ? C.surface : 'rgba(0,0,0,0.4)' }}>
+        <Typography sx={{ fontFamily: BARLOW, fontSize: '1rem', fontWeight: 800, color: C.textPrimary, letterSpacing: '0.1em', mb: 1 }}>
+          {lang === 'es' ? 'SEMANA NFL · TODOS LOS PARTIDOS' : 'NFL WEEK · ALL GAMES'}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1.5, fontFamily: MONO, fontSize: 10, color: C.textMuted }}>
+          <span>{weekGames.filter(g => g.game_status_id === 1).length} {lang === 'es' ? 'próximos' : 'upcoming'}</span>
+          <span>· {weekGames.filter(g => g.game_status_id === 2).length} {lang === 'es' ? 'en vivo' : 'live'}</span>
+          <span>· {weekGames.filter(g => g.game_status_id === 3).length} {lang === 'es' ? 'finales' : 'final'}</span>
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,minmax(0,1fr))', lg: 'repeat(3,minmax(0,1fr))' }, gap: 1 }}>
+          {[...weekGames].sort((a, b) => Date.parse(a.game_datetime) - Date.parse(b.game_datetime)).map(g => {
+            const state = g.game_status_id === 3 ? (lang === 'es' ? 'FINAL' : 'FINAL')
+              : g.game_status_id === 2 ? (lang === 'es' ? 'EN VIVO' : 'LIVE')
+                : g.game_datetime ? new Date(g.game_datetime).toLocaleString(lang === 'es' ? 'es-PE' : 'en-US', { timeZone: 'America/Lima', weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+            return <Box key={g.game_id} sx={{ p: 1.25, bgcolor: 'rgba(13,26,40,0.8)', border: `1px solid ${g.game_status_id === 2 ? C.amber : C.border}`, display: 'grid', gap: .6 }}>
+              <Typography sx={{ fontFamily: MONO, fontSize: 10, color: g.game_status_id === 2 ? C.amber : C.textMuted }}>{state}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                <Typography sx={{ fontFamily: BARLOW, fontWeight: 800, color: C.textPrimary }}>
+                  {g.away_team_abbr || 'AWAY'} @ {g.home_team_abbr || 'HOME'}
+                </Typography>
+                <Typography sx={{ fontFamily: MONO, fontWeight: 700, color: C.textPrimary }}>
+                  {g.game_status_id === 1 ? '—' : `${g.away_score ?? '—'}–${g.home_score ?? '—'}`}
+                </Typography>
+              </Box>
+            </Box>;
+          })}
+        </Box>
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, mt: 1 }}>
+          {lang === 'es' ? 'Horarios en Lima · marcador ESPN · actualiza cada 60 s' : 'Lima time · ESPN scores · refreshes every 60s'}
+        </Typography>
+      </Box>}
     </Box>
   );
 }

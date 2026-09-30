@@ -19,11 +19,11 @@ const GAME = {
   },
 };
 
-test('buildNflGameCandidates: emits ML + spread + total in engine shape', () => {
+test('buildNflGameCandidates: prices both sides of each market', () => {
   const cands = buildNflGameCandidates(GAME);
-  assert.equal(cands.length, 3);
+  assert.equal(cands.length, 6);
   const markets = cands.map(c => c.marketType).sort();
-  assert.deepEqual(markets, ['moneyline', 'overunder', 'spread']);
+  assert.deepEqual(markets, ['moneyline', 'moneyline', 'overunder', 'overunder', 'spread', 'spread']);
   for (const c of cands) {
     assert.ok(c.candidateId.startsWith('nfl_401547417::'));
     assert.equal(c.gamePk, '401547417');
@@ -32,8 +32,8 @@ test('buildNflGameCandidates: emits ML + spread + total in engine shape', () => 
   }
 });
 
-test('buildNflGameCandidates: implied-only fallback picks the favorite (home -150)', () => {
-  const ml = buildNflGameCandidates(GAME).find(c => c.marketType === 'moneyline');
+test('buildNflGameCandidates: implied-only fallback includes the home favorite', () => {
+  const ml = buildNflGameCandidates(GAME).find(c => c.marketType === 'moneyline' && c.side === 'home');
   assert.equal(ml.side, 'home'); // -150 favorite
   assert.equal(ml.pick, 'BUF ML');
   // edge ~0 when model falls back to implied
@@ -43,16 +43,25 @@ test('buildNflGameCandidates: implied-only fallback picks the favorite (home -15
 test('buildNflGameCandidates: model probability overrides side + drives edge', () => {
   const withModel = { ...GAME, model: { moneyline: 0.30, spread: 0.40, total: 0.70 } };
   const cands = buildNflGameCandidates(withModel);
-  const ml = cands.find(c => c.marketType === 'moneyline');
+  const ml = cands.find(c => c.marketType === 'moneyline' && c.side === 'away');
   // P(home)=0.30 → away is favored by the model
   assert.equal(ml.side, 'away');
-  const tot = cands.find(c => c.marketType === 'overunder');
+  const tot = cands.find(c => c.marketType === 'overunder' && c.side === 'over');
   assert.equal(tot.side, 'over'); // pOver=0.70
   assert.ok(tot.modelProbability >= 69 && tot.modelProbability <= 71);
 });
 
 test('buildNflGameCandidates: no candidates without odds', () => {
   assert.deepEqual(buildNflGameCandidates({ gameId: 'x', odds: {} }), []);
+});
+
+test('unpriced sides never become candidates', () => {
+  const cands = buildNflGameCandidates({ ...GAME, odds: {
+    moneyline: { home: -150, away: null },
+    spread: { home: -3.5, homePrice: -110, away: 3.5, awayPrice: null },
+    total: { line: 47.5, overPrice: null, underPrice: -110 },
+  } });
+  assert.deepEqual(cands.map(c => c.side), ['home', 'home', 'under']);
 });
 
 test('integration: candidates feed the frozen engine end-to-end', () => {
@@ -62,10 +71,10 @@ test('integration: candidates feed the frozen engine end-to-end', () => {
   };
   const g1 = { ...GAME, model: { moneyline: 0.64, spread: 0.55, total: 0.62 } };
   const candidates = buildNflParlayCandidates([g1, g2]);
-  assert.equal(candidates.length, 6);
+  assert.equal(candidates.length, 12);
 
   const correlationMatrix = buildCorrelationMatrix(candidates);
-  const { parlays } = composeParlays({ candidates, correlationMatrix, N: 2, mode: 'safe' });
+  const { parlays } = composeParlays({ candidates, correlationMatrix, N: 2, mode: 'safe', filters: { allowSGP: false } });
   assert.ok(Array.isArray(parlays));
   if (parlays.length) {
     const hd = computeHitDistribution(parlays[0].legs.map(l => l.modelProbability / 100));

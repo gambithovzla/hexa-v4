@@ -50,6 +50,7 @@ _PBP_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/pbp/"
     "play_by_play_{year}.parquet"
 )
+_SCHEDULE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
 
 # Columns we actually consume — keeps each season's frame small (~full pbp is
 # ~400 cols / 20MB; this subset is a fraction of that).
@@ -109,7 +110,30 @@ _RELEVANT_PLAY_TYPES = ("pass", "run")
 _TEAM_STATS_TTL_S = 6 * 60 * 60  # 6h — same cadence as the Node savant fetcher
 _team_stats_cache: dict[int, dict] = {}
 _pbp_cache: dict[int, pd.DataFrame] = {}
+_schedule_prices_cache: pd.DataFrame | None = None
 _lock = Lock()
+
+
+def _load_schedule_prices(years: list[int]) -> pd.DataFrame:
+    """Observed closing prices; never claim these are bet365 accepted odds."""
+    global _schedule_prices_cache
+    with _lock:
+        cached = _schedule_prices_cache
+    if cached is None:
+        req = urllib.request.Request(_SCHEDULE_URL, headers={"User-Agent": "hexa-ml/nflverse"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read()
+        cached = pd.read_csv(io.BytesIO(raw), low_memory=False)
+        with _lock:
+            _schedule_prices_cache = cached
+    columns = ["game_id", "season", "game_type", "home_moneyline", "away_moneyline",
+               "home_spread_odds", "away_spread_odds", "over_odds", "under_odds"]
+    out = cached.loc[cached["season"].isin(years) & cached["game_type"].eq("REG"), columns].copy()
+    return out.rename(columns={
+        "home_moneyline": "odds_ml_home", "away_moneyline": "odds_ml_away",
+        "home_spread_odds": "odds_spread_home", "away_spread_odds": "odds_spread_away",
+        "over_odds": "odds_total_over", "under_odds": "odds_total_under",
+    }).drop(columns=["season", "game_type"]).drop_duplicates(subset=["game_id"])
 
 
 def _fetch_pbp_year(year: int) -> pd.DataFrame:
@@ -362,7 +386,9 @@ def build_team_stats(season: int) -> dict:
 
 def refresh_team_stats(season: int | None = None) -> dict:
     """Drop cached stats (and pbp) so the next call re-fetches from nflverse."""
+    global _schedule_prices_cache
     with _lock:
+        _schedule_prices_cache = None
         if season is None:
             _team_stats_cache.clear()
             _pbp_cache.clear()
@@ -880,7 +906,7 @@ _NFL_MARKET_TYPE = {
 }
 
 
-def build_nfl_training_frame(market: str, years: list[int]) -> pd.DataFrame:
+def build_nfl_training_frame(market: str, years: list[int], *, include_schedule_prices: bool = False) -> pd.DataFrame:
     """Build a leakage-free historical training frame for one NFL market.
 
     Columns match what features.build_X("nfl_*") + data.filter_for_market +
@@ -908,6 +934,12 @@ def build_nfl_training_frame(market: str, years: list[int]) -> pd.DataFrame:
     games = _game_labels(pbp)
     games = games[games["season_type"] == "REG"].copy()
     games = games.dropna(subset=["home_score", "away_score"])
+    if include_schedule_prices:
+        try:
+            prices = _load_schedule_prices(years)
+            games = games.merge(prices, on="game_id", how="left", validate="one_to_one")
+        except Exception as exc:
+            logger.warning("nflverse schedule prices unavailable (%s); market-price metrics will be unavailable", exc)
     form = _as_of_week_form(games)
 
     def _prefix_merge(g: pd.DataFrame, df: pd.DataFrame, team_col: str, prefix: str) -> pd.DataFrame:

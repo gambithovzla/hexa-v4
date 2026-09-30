@@ -23,6 +23,12 @@ class TrainMetrics:
     market: str
     n_train: int
     n_test: int
+    # NFL v2 excludes pushes/ties from binary labels. Earlier artifacts must
+    # not be treated as compatible after that contract changed.
+    nfl_label_version: int | None = None
+    # Must be established from prospective accepted bet365 tickets, never from
+    # nflverse closing prices or a historical closing-line backtest.
+    bet365_prospective_verified: bool = False
     brier_train: float = 0.0
     brier_test: float = 0.0
     logloss_test: float = 0.0

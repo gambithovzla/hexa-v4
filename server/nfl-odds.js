@@ -236,34 +236,41 @@ function consensusAmerican(prices) {
   return impliedToAmerican(avg(implied));
 }
 
-function normalizeEvent(event, sportKey = NFL_SPORT_KEYS.REGULAR) {
+export function normalizeEvent(event, sportKey = NFL_SPORT_KEYS.REGULAR) {
   if (!event?.bookmakers?.length) return null;
-  const books = event.bookmakers.slice(0, 3);
+  const books = event.bookmakers;
 
   const mlHome = [], mlAway = [];
-  const spHome = [], spHomePrice = [], spAway = [], spAwayPrice = [];
-  const totals = [], overs = [], unders = [];
+  const spHome = [], totals = [];
+  const quotes = [];
 
   for (const book of books) {
     for (const market of book.markets ?? []) {
       switch (market.key) {
         case 'h2h':
           for (const o of market.outcomes ?? []) {
-            if (o.name === event.home_team) mlHome.push(o.price);
-            else mlAway.push(o.price);
+            const side = o.name === event.home_team ? 'home' : o.name === event.away_team ? 'away' : null;
+            if (!side || americanToImplied(o.price) == null) continue;
+            (side === 'home' ? mlHome : mlAway).push(o.price);
+            quotes.push({ bookmaker: book.key, lastUpdate: market.last_update ?? book.last_update ?? null, market: 'moneyline', side, line: null, price: o.price });
           }
           break;
         case 'spreads':
           for (const o of market.outcomes ?? []) {
-            if (o.name === event.home_team) { spHome.push(o.point); spHomePrice.push(o.price); }
-            else { spAway.push(o.point); spAwayPrice.push(o.price); }
+            const side = o.name === event.home_team ? 'home' : o.name === event.away_team ? 'away' : null;
+            if (!side || o.point == null || !Number.isFinite(Number(o.point)) || americanToImplied(o.price) == null) continue;
+            const line = Number(o.point);
+            if (side === 'home') spHome.push(line);
+            quotes.push({ bookmaker: book.key, lastUpdate: market.last_update ?? book.last_update ?? null, market: 'spread', side, line, price: o.price });
           }
           break;
         case 'totals':
           for (const o of market.outcomes ?? []) {
-            totals.push(o.point);
-            if (o.name === 'Over') overs.push(o.price);
-            else                   unders.push(o.price);
+            const side = o.name === 'Over' ? 'over' : o.name === 'Under' ? 'under' : null;
+            if (!side || o.point == null || !Number.isFinite(Number(o.point)) || americanToImplied(o.price) == null) continue;
+            const line = Number(o.point);
+            totals.push(line);
+            quotes.push({ bookmaker: book.key, lastUpdate: market.last_update ?? book.last_update ?? null, market: 'total', side, line, price: o.price });
           }
           break;
       }
@@ -273,8 +280,11 @@ function normalizeEvent(event, sportKey = NFL_SPORT_KEYS.REGULAR) {
   const mlH = consensusAmerican(mlHome);
   const mlA = consensusAmerican(mlAway);
   const spH = spHome.length ? mode(spHome) : null;
-  const spA = spAway.length ? mode(spAway) : null;
+  const spA = spH != null ? -spH : null;
   const totLine = totals.length ? mode(totals) : null;
+  const priceAt = (market, side, line) => consensusAmerican(
+    quotes.filter(q => q.market === market && q.side === side && q.line === line).map(q => q.price)
+  );
   if (mlH == null && mlA == null && spH == null && totLine == null) return null;
 
   return {
@@ -291,15 +301,16 @@ function normalizeEvent(event, sportKey = NFL_SPORT_KEYS.REGULAR) {
     moneyline: { home: mlH, away: mlA },
     spread: {
       home: spH,
-      homePrice: consensusAmerican(spHomePrice),
+      homePrice: spH == null ? null : priceAt('spread', 'home', spH),
       away: spA,
-      awayPrice: consensusAmerican(spAwayPrice),
+      awayPrice: spA == null ? null : priceAt('spread', 'away', spA),
     },
     total: {
       line:       totLine,
-      overPrice:  consensusAmerican(overs),
-      underPrice: consensusAmerican(unders),
+      overPrice:  totLine == null ? null : priceAt('total', 'over', totLine),
+      underPrice: totLine == null ? null : priceAt('total', 'under', totLine),
     },
+    quotes,
   };
 }
 
@@ -370,5 +381,6 @@ export function buildMarketOddsForGame(event) {
     },
     source: 'oddsapi',
     eventId: event.eventId,
+    quotes: event.quotes ?? [],
   };
 }

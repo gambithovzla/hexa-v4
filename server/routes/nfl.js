@@ -20,11 +20,15 @@ import { findNflGame, resolveNflSlate } from '../services/nflGameLookup.js';
 import { buildNflGameContext } from '../nfl-context-builder.js';
 import { analyzeNflGame, analyzeNflChat } from '../services/oracleNfl.js';
 import { analyzeNflParlay } from '../services/nflParlayOracle.js';
-import { getNflGameOdds, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
+import { getNflGameOdds, getNflOddsStatus, matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
 import { getNflPlayerPropOdds } from '../nfl-props-odds.js';
 import { enrichNflPropOffers } from '../services/nflPropFeatureEnricher.js';
 import { parseNflProp } from '../nfl-props-resolver.js';
-import { buildNflPropFeaturePayload, predictNflProp, predictNflGameModel } from '../services/nflMlClient.js';
+import {
+  buildNflFeaturePayload, buildNflPropFeaturePayload, predictNflProp, predictNflGameModel,
+  predictNflMoneyline, predictNflSpread, predictNflTotal,
+  getNflModelHealth, certifyNflPrediction,
+} from '../services/nflMlClient.js';
 import { buildNflPropCandidates, propOffersFromRanked, appendPropPrice } from '../services/nflPropCandidates.js';
 import { buildNflPropLegCandidates } from '../services/nflParlayPropLegs.js';
 import { resolveNflBetTypeDirective } from '../services/nflBetTypeDirective.js';
@@ -40,6 +44,12 @@ import { buildCorrelationMatrix } from '../services/parlayEngine/correl.js';
 import { computeHitDistribution } from '../services/parlayEngine/hitMath.js';
 import { askArchitect, resolveLegs } from '../services/parlayEngine/architect.js';
 import { validateNflAnalysisOutput } from '../services/nflOutputGuard.js';
+import { evaluateNflDecision } from '../services/nflDecisionEngine.js';
+import { settleNflBetFromGame } from '../services/nflBetSettlement.js';
+import { summarizeNflQuoteDecisions } from '../services/nflProspectiveReport.js';
+import { nflMarketPriceReference } from '../services/nflMarketPriceReference.js';
+import { getOddsApiIoNflBoard } from '../services/nflBet365OddsApiIo.js';
+import { assessQbConfirmation } from '../services/nflImperdibleEngine.js';
 import { saveNflPickFeatures, recordNflShadowRun } from '../services/nflShadowPersistence.js';
 import { augmentChatQuestion, processChatAnswer } from '../services/chatPickExtractor.js';
 import { upsertOracleSession } from './oracle-history.js';
@@ -71,6 +81,366 @@ function safeErr(err) {
   return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
 }
 
+router.get('/bet365-odds', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  const gameId = req.query?.gameId;
+  if (!gameId) return res.status(400).json({ success: false, error: 'gameId is required' });
+  try {
+    const game = await findNflGame({ gameId });
+    if (!game) return res.status(404).json({ success: false, error: 'NFL game not found' });
+    const board = await getOddsApiIoNflBoard(game);
+    if (board.status === 'missing_key') return res.status(503).json({ success: false,
+      error: 'ODDS_API_IO_KEY is not configured', provider: 'odds_api_io' });
+    return res.json({ success: true, provider: 'odds_api_io', ...board });
+  } catch (err) {
+    return res.status(503).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// Compare a price seen in the user's Bet365 account with independent books.
+// This is diagnostic only: it does not create a decision or authorize a bet.
+router.get('/market-reference', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  const gameId = req.query?.gameId;
+  const market = String(req.query?.market ?? '').toLowerCase();
+  const side = String(req.query?.side ?? '').toLowerCase();
+  const line = market === 'moneyline' ? null : Number(req.query?.line);
+  const decimalOdds = Number(req.query?.decimalOdds);
+  if (!gameId || !['moneyline', 'spread', 'total'].includes(market)
+      || (market === 'total' ? !['over', 'under'].includes(side) : !['home', 'away'].includes(side))
+      || (market !== 'moneyline' && (req.query?.line == null || req.query.line === '' || !Number.isFinite(line)))
+      || !Number.isFinite(decimalOdds) || decimalOdds <= 1 || decimalOdds > 1000) {
+    return res.status(400).json({ success: false, error: 'Valid gameId, market, side, line and decimalOdds are required' });
+  }
+  try {
+    const game = await findNflGame({ gameId });
+    if (!game) return res.status(404).json({ success: false, error: 'NFL game not found' });
+    const { marketOdds } = await resolveMarketOdds({ clientMarketOdds: null, game });
+    const checkedAt = new Date().toISOString();
+    const reference = nflMarketPriceReference(marketOdds?.quotes, {
+      market, side, line, decimalOdds,
+    }, checkedAt);
+    const oddsStatus = getNflOddsStatus();
+    const status = reference ? 'comparable' : !marketOdds
+      ? oddsStatus.ok === false ? 'odds_unavailable' : 'game_unmatched'
+      : 'insufficient_same_line_books';
+    return res.json({ success: true, status,
+      checkedAt, reference });
+  } catch (err) {
+    return res.status(503).json({ success: false, error: safeErr(err) });
+  }
+});
+
+// A manual quote is stamped at receipt; an API quote is fetched again on the
+// server before evaluation. Neither guarantees the account will accept it.
+router.post('/decision', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  const { gameId, quote: incoming, bankroll, qbConfirmation } = req.body ?? {};
+  const market = String(incoming?.market ?? '').toLowerCase();
+  const side = String(incoming?.side ?? '').toLowerCase();
+  const line = incoming?.line == null ? null : Number(incoming.line);
+  const online = incoming?.source === 'odds_api_io';
+  let decimalOdds = Number(incoming?.decimalOdds);
+  if (!gameId || !['moneyline', 'spread', 'total'].includes(market)
+      || !['home', 'away', 'over', 'under'].includes(side)
+      || (!online && (!Number.isFinite(decimalOdds) || decimalOdds <= 1))
+      || (market !== 'moneyline' && !Number.isFinite(line))) {
+    return res.status(400).json({ success: false, error: 'Valid gameId, market, side, line and decimalOdds are required' });
+  }
+  if ((market === 'total' && !['over', 'under'].includes(side))
+      || (market !== 'total' && !['home', 'away'].includes(side))) {
+    return res.status(400).json({ success: false, error: 'Side does not match market' });
+  }
+  try {
+    const game = await findNflGame({ gameId });
+    if (!game) return res.status(404).json({ success: false, error: 'NFL game not found' });
+    let providerQuote = null;
+    if (online) {
+      const board = await getOddsApiIoNflBoard(game);
+      if (board.status !== 'ok') return res.status(503).json({ success: false,
+        error: `Bet365 API quote unavailable: ${board.status}` });
+      providerQuote = board.quotes.find(item => item.market === market && item.side === side
+        && item.line === line) ?? null;
+      if (!providerQuote) return res.status(409).json({ success: false,
+        error: 'Requested Bet365 line is no longer available' });
+      decimalOdds = providerQuote.decimalOdds;
+    }
+    const observedAt = providerQuote?.fetchedAt ?? new Date().toISOString();
+    const quote = { bookmaker: 'bet365', market, side, line, decimalOdds, observedAt,
+      source: online ? 'odds_api_io' : 'manual',
+      providerEventId: providerQuote?.providerEventId ?? null,
+      providerMarketUpdatedAt: providerQuote?.providerMarketUpdatedAt ?? null };
+    const independentOddsPromise = resolveMarketOdds({ clientMarketOdds: null, game });
+    const marketOdds = market === 'spread'
+      ? { spread: { home: side === 'home' ? line : -line, away: side === 'away' ? line : -line } }
+      : market === 'total' ? { total: { line } } : {};
+    const context = await buildNflGameContext({
+      homeTeamId: game.home_team_id, awayTeamId: game.away_team_id,
+      homeTeamAbbr: game.home_team_abbr, awayTeamAbbr: game.away_team_abbr,
+      gameDate: game.game_date, gameTime: game.game_datetime,
+      season: game.season, seasonType: game.season_type,
+      marketOdds,
+    });
+    if (qbConfirmation?.confirmed === true) {
+      for (const sideKey of ['home', 'away']) {
+        const playerName = String(qbConfirmation[sideKey] ?? '').trim().slice(0, 100);
+        if (playerName.length >= 3) {
+          context[sideKey].startingQb = { playerName, source: 'manual', observedAt, confirmed: true };
+        }
+      }
+    }
+    const features = buildNflFeaturePayload(context, {
+      homeRestDays: context.home?.restDays, awayRestDays: context.away?.restDays,
+      isDome: context.weather?.dome,
+    }, marketOdds);
+    const [prediction, health] = await Promise.all([
+      market === 'spread' ? predictNflSpread(features)
+        : market === 'total' ? predictNflTotal(features)
+          : predictNflMoneyline(features),
+      getNflModelHealth(),
+    ]);
+    const model = {
+      probability: prediction?.probability,
+      line,
+      version: prediction?.model_version ?? null,
+      certified: certifyNflPrediction(market, prediction, health),
+    };
+    let exposure = { game: NaN, slate: NaN };
+    if (process.env.DATABASE_URL && game.season != null && game.season_type != null && game.week != null) {
+      const { rows } = await pool.query(`
+        SELECT COALESCE(SUM(stake) FILTER (WHERE game_pk = $2), 0) AS game,
+               COALESCE(SUM(stake), 0) AS slate
+        FROM nfl_bet_ledger
+        WHERE user_id = $1 AND season = $3 AND season_type = $4 AND week = $5
+      `, [req.user.id, Number(gameId), game.season, game.season_type, game.week]);
+      exposure = { game: Number(rows[0]?.game ?? 0), slate: Number(rows[0]?.slate ?? 0) };
+    }
+    const decision = evaluateNflDecision({
+      quote, model, kickoffAt: game.game_datetime, now: new Date().toISOString(),
+      qbConfirmed: assessQbConfirmation(context).confirmed,
+      dataQuality: context.context_meta?.overallCompleteness,
+      isPreseason: context.seasonPhase?.isPreseason === true || String(game.season_type).toLowerCase().includes('pre'),
+      bankroll, gameExposure: exposure.game, slateExposure: exposure.slate,
+    });
+    const { marketOdds: independentOdds } = await independentOddsPromise;
+    const referenceCheckedAt = new Date().toISOString();
+    const marketReference = Date.parse(referenceCheckedAt) - Date.parse(observedAt) <= 60_000
+      ? nflMarketPriceReference(independentOdds?.quotes, quote, referenceCheckedAt)
+      : null;
+    if (marketReference) {
+      marketReference.bet365ObservedAt = observedAt;
+      marketReference.referenceCheckedAt = referenceCheckedAt;
+    }
+    let decisionId = null;
+    if (process.env.DATABASE_URL) {
+      const { rows } = await pool.query(`
+        INSERT INTO nfl_quote_decisions
+          (user_id, game_pk, season, season_type, week, bookmaker, market, side,
+           line, decimal_odds, observed_at, kickoff_at, model_version,
+           model_probability, expected_value, decision, reasons, snapshot)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        RETURNING id
+      `, [
+        req.user.id, Number(gameId), game.season, game.season_type, game.week,
+        quote.bookmaker, market, side, line, decimalOdds, observedAt,
+        game.game_datetime, model.version, decision.model.probability,
+        decision.expectedValue, decision.decision, JSON.stringify(decision.reasons),
+        JSON.stringify({ quote, decision, marketReference, exposure, bankroll: Number(bankroll),
+          qbConfirmation: { home: context.home?.startingQb ?? null, away: context.away?.startingQb ?? null },
+          context_meta: context.context_meta }),
+      ]);
+      decisionId = rows[0]?.id ?? null;
+    }
+    return res.json({ success: true, gameId: String(gameId), decisionId, decision,
+      quote, marketReference });
+  } catch (err) {
+    return res.status(503).json({ success: false, error: safeErr(err) });
+  }
+});
+
+router.post('/bets', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  const decisionId = Number(req.body?.decisionId);
+  const acceptedDecimal = Number(req.body?.acceptedDecimal);
+  const stake = Number(req.body?.stake);
+  const overrideReason = String(req.body?.overrideReason ?? '').trim();
+  if (!Number.isSafeInteger(decisionId) || decisionId <= 0
+      || !Number.isFinite(acceptedDecimal) || acceptedDecimal <= 1 || acceptedDecimal > 1000
+      || !Number.isFinite(stake) || stake <= 0 || stake > 1_000_000) {
+    return res.status(400).json({ success: false, error: 'Valid decisionId, acceptedDecimal and stake are required' });
+  }
+  if (!process.env.DATABASE_URL) return res.status(503).json({ success: false, error: 'Bet ledger unavailable' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
+    const { rows } = await client.query(`
+      SELECT * FROM nfl_quote_decisions WHERE id = $1 AND user_id = $2 FOR UPDATE
+    `, [decisionId, req.user.id]);
+    const d = rows[0];
+    if (!d) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Decision not found' });
+    }
+    const { rows: exposures } = await client.query(`
+      SELECT COALESCE(SUM(stake) FILTER (WHERE game_pk = $2), 0) AS game,
+             COALESCE(SUM(stake), 0) AS slate
+      FROM nfl_bet_ledger
+      WHERE user_id = $1 AND season = $3 AND season_type = $4 AND week = $5
+    `, [req.user.id, d.game_pk, d.season, d.season_type, d.week]);
+    const prior = exposures[0] ?? {};
+    const snapshot = d.snapshot ?? {};
+    const p = snapshot.decision?.probability;
+    const acceptedEv = p?.win != null && p?.loss != null
+      ? Number(p.win) * (acceptedDecimal - 1) - Number(p.loss) : null;
+    const policyIssues = [];
+    if (d.decision !== 'BET') policyIssues.push('decision_not_bet');
+    if (Date.now() - Date.parse(d.observed_at) > 5 * 60_000) policyIssues.push('quote_stale');
+    if (Date.now() >= Date.parse(d.kickoff_at)) policyIssues.push('game_started');
+    if (acceptedEv == null || acceptedEv < 0.03) policyIssues.push('accepted_price_below_edge');
+    if (stake > Number(snapshot.decision?.stake ?? 0)) policyIssues.push('stake_above_decision');
+    const bankroll = Number(snapshot.bankroll);
+    if (bankroll && (Number(prior.game) + stake > bankroll * 0.005
+        || Number(prior.slate) + stake > bankroll * 0.02)) policyIssues.push('exposure_limit');
+    if (policyIssues.length && overrideReason.length < 10) {
+      await client.query('ROLLBACK');
+      return res.status(422).json({ success: false, error: 'Policy override reason required to record this bet', policyIssues });
+    }
+    const saved = await client.query(`
+      INSERT INTO nfl_bet_ledger
+        (decision_id, user_id, game_pk, season, season_type, week, bookmaker,
+         market, side, line, accepted_decimal, stake, policy_override)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      RETURNING id, placed_at
+    `, [decisionId, req.user.id, d.game_pk, d.season, d.season_type, d.week,
+      d.bookmaker, d.market, d.side, d.line, acceptedDecimal, stake,
+      policyIssues.length ? JSON.stringify({ reasons: policyIssues, note: overrideReason }) : null]);
+    await client.query('COMMIT');
+    return res.status(201).json({ success: true, betId: saved.rows[0].id, placedAt: saved.rows[0].placed_at, policyIssues });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    return res.status(err.code === '23505' ? 409 : 503).json({ success: false, error: safeErr(err) });
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/bets', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  if (!process.env.DATABASE_URL) return res.status(503).json({ success: false, error: 'Bet ledger unavailable' });
+  try {
+    const { rows } = await pool.query(`
+      SELECT b.*, d.kickoff_at, s.result, s.pnl, s.source AS settlement_source, s.created_at AS settled_at,
+             q.line AS closing_line, q.decimal_odds AS closing_decimal, q.observed_at AS closing_observed_at
+      FROM nfl_bet_ledger b
+      JOIN nfl_quote_decisions d ON d.id = b.decision_id
+      LEFT JOIN LATERAL (
+        SELECT result, pnl, source, created_at FROM nfl_bet_settlements
+        WHERE bet_id = b.id ORDER BY created_at DESC, id DESC LIMIT 1
+      ) s ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT line, decimal_odds, observed_at FROM nfl_closing_quotes
+        WHERE bet_id = b.id ORDER BY observed_at DESC, id DESC LIMIT 1
+      ) q ON TRUE
+      WHERE b.user_id = $1 ORDER BY b.placed_at DESC
+    `, [req.user.id]);
+    const settled = rows.filter(r => r.result != null);
+    const stake = settled.reduce((sum, r) => sum + Number(r.stake), 0);
+    const pnl = settled.reduce((sum, r) => sum + Number(r.pnl), 0);
+    const bets = rows.map(r => ({ ...r,
+      clv: r.closing_decimal != null && (
+        r.market === 'moneyline' || Number(r.line) === Number(r.closing_line)
+      ) ? Math.round((1 / Number(r.closing_decimal) - 1 / Number(r.accepted_decimal)) * 10_000) / 10_000 : null,
+      lineMovement: r.closing_line != null && r.line != null
+        ? Number(r.closing_line) - Number(r.line) : null,
+    }));
+    return res.json({ success: true, bets: bets.slice(0, 200), truncated: bets.length > 200, summary: {
+      settled: settled.length, pending: rows.length - settled.length,
+      pnl: Math.round(pnl * 100) / 100,
+      roi: stake > 0 ? Math.round(pnl / stake * 10_000) / 10_000 : null,
+    } });
+  } catch (err) {
+    return res.status(503).json({ success: false, error: safeErr(err) });
+  }
+});
+
+router.get('/performance', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  if (!process.env.DATABASE_URL) return res.status(503).json({ success: false, error: 'Quote history unavailable' });
+  try {
+    const { rows } = await pool.query(`
+      SELECT d.id, d.game_pk, d.market, d.side, d.line, d.decimal_odds,
+             d.observed_at, d.decision, d.reasons, d.model_probability,
+             d.expected_value, d.snapshot, o.result, o.created_at AS graded_at,
+             b.id AS bet_id
+      FROM nfl_quote_decisions d
+      LEFT JOIN LATERAL (
+        SELECT result, created_at FROM nfl_quote_outcomes
+        WHERE decision_id = d.id ORDER BY created_at DESC, id DESC LIMIT 1
+      ) o ON TRUE
+      LEFT JOIN nfl_bet_ledger b ON b.decision_id = d.id
+      WHERE d.user_id = $1 ORDER BY d.observed_at DESC, d.id DESC LIMIT 2001
+    `, [req.user.id]);
+    const truncated = rows.length > 2000;
+    const decisions = rows.slice(0, 2000);
+    return res.json({ success: true, summary: summarizeNflQuoteDecisions(decisions),
+      truncated, recent: decisions.slice(0, 100).map(({ snapshot, ...row }) => row) });
+  } catch (err) {
+    return res.status(503).json({ success: false, error: safeErr(err) });
+  }
+});
+
+router.post('/bets/:id/closing-quote', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  const betId = Number(req.params.id);
+  const decimalOdds = Number(req.body?.decimalOdds);
+  const line = req.body?.line == null ? null : Number(req.body.line);
+  if (!Number.isSafeInteger(betId) || betId <= 0
+      || !Number.isFinite(decimalOdds) || decimalOdds <= 1 || decimalOdds > 1000
+      || (req.body?.line != null && !Number.isFinite(line))) {
+    return res.status(400).json({ success: false, error: 'Valid bet id and decimalOdds are required' });
+  }
+  if (!process.env.DATABASE_URL) return res.status(503).json({ success: false, error: 'Bet ledger unavailable' });
+  try {
+    const { rows } = await pool.query(`SELECT b.*, d.kickoff_at FROM nfl_bet_ledger b
+      JOIN nfl_quote_decisions d ON d.id = b.decision_id
+      WHERE b.id = $1 AND b.user_id = $2`, [betId, req.user.id]);
+    const bet = rows[0];
+    if (!bet) return res.status(404).json({ success: false, error: 'Bet not found' });
+    const minutesToKickoff = (Date.parse(bet.kickoff_at) - Date.now()) / 60_000;
+    if (!(minutesToKickoff > 0 && minutesToKickoff <= 30)) {
+      return res.status(409).json({ success: false, error: 'Closing snapshot requires the final 30 minutes before kickoff' });
+    }
+    if (bet.market !== 'moneyline' && line == null) {
+      return res.status(400).json({ success: false, error: 'Line is required for spread or total' });
+    }
+    const { rows: saved } = await pool.query(`INSERT INTO nfl_closing_quotes
+      (bet_id, bookmaker, side, line, decimal_odds, observed_at)
+      VALUES ($1,'bet365',$2,$3,$4,NOW()) RETURNING id, observed_at`,
+    [betId, bet.side, line, decimalOdds]);
+    return res.status(201).json({ success: true, quoteId: saved[0].id, observedAt: saved[0].observed_at });
+  } catch (err) {
+    return res.status(503).json({ success: false, error: safeErr(err) });
+  }
+});
+
+router.post('/bets/:id/settle', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
+  const betId = Number(req.params.id);
+  if (!Number.isSafeInteger(betId) || betId <= 0) return res.status(400).json({ success: false, error: 'Invalid bet id' });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ success: false, error: 'Bet ledger unavailable' });
+  try {
+    const { rows } = await pool.query(`SELECT * FROM nfl_bet_ledger WHERE id = $1 AND user_id = $2`, [betId, req.user.id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Bet not found' });
+    const bet = rows[0];
+    const game = await findNflGame({ gameId: bet.game_pk, season: bet.season, seasonType: bet.season_type, week: bet.week });
+    const settlement = settleNflBetFromGame(bet, game);
+    if (!settlement.result) return res.status(409).json({ success: false, reason: settlement.reason });
+    const latest = await pool.query(`SELECT result, pnl FROM nfl_bet_settlements
+      WHERE bet_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`, [betId]);
+    if (latest.rows[0]?.result === settlement.result && Number(latest.rows[0]?.pnl) === settlement.pnl) {
+      return res.json({ success: true, changed: false, settlement });
+    }
+    await pool.query(`INSERT INTO nfl_bet_settlements (bet_id, result, pnl, source, evidence)
+      VALUES ($1,$2,$3,'espn_final',$4)`, [betId, settlement.result, settlement.pnl, JSON.stringify(settlement.evidence)]);
+    return res.json({ success: true, changed: true, settlement });
+  } catch (err) {
+    return res.status(503).json({ success: false, error: safeErr(err) });
+  }
+});
+
 /**
  * Resolve marketOdds: client-provided wins; else server-side via The Odds API
  * keyed on the game's own date. Never throws.
@@ -84,6 +454,16 @@ async function resolveMarketOdds({ clientMarketOdds, game }) {
     if (!events.length) return { marketOdds: null, source: null, event: null };
     const match = matchNflOddsToGame(events, game.home_team_name, game.away_team_name);
     if (!match) return { marketOdds: null, source: null, event: null };
+    const nickname = name => String(name ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().split(/\s+/).at(-1);
+    const kickoff = Date.parse(game.game_datetime ?? '');
+    const commence = Date.parse(match.commenceTime ?? '');
+    if (!nickname(game.home_team_name) || !nickname(game.away_team_name)
+        || nickname(game.home_team_name) !== nickname(match.homeTeam)
+        || nickname(game.away_team_name) !== nickname(match.awayTeam)
+        || !Number.isFinite(kickoff) || !Number.isFinite(commence)
+        || Math.abs(kickoff - commence) > 12 * 60 * 60_000) {
+      return { marketOdds: null, source: null, event: null };
+    }
     const odds = buildMarketOddsForGame(match);
     if (!odds) return { marketOdds: null, source: null, event: match };
     return { marketOdds: { ...odds, provided: 'server' }, source: 'server', event: match };
@@ -176,14 +556,14 @@ async function persistNflPick({ userId, userEmail, matchup, analysisData, model,
 
   const { rows } = await pool.query(
     `INSERT INTO picks (
-       user_id, type, matchup, pick, oracle_confidence, bet_value, model_risk,
+       user_id, type, source, matchup, pick, oracle_confidence, bet_value, model_risk,
        oracle_report, hexa_hunch, alert_flags, probability_model, best_pick,
        model, language, odds_at_pick, implied_prob_at_pick, odds_details,
        kelly_recommendation, game_pk, game_date, user_email, sport,
        pick_time_lima
      )
      VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+       $1,$2,'nfl_analysis',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
        $13,$14,$15,$16,$17,$18,$19,$20,$21,$22,
        (NOW() AT TIME ZONE 'America/Lima')::TIMESTAMP
      )
@@ -294,7 +674,8 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       gameDescription: `${matchup} — ${gameDate}`,
       lang,
       riskProfile,
-      userBankroll: bankroll != null ? Number(bankroll) : undefined,
+      // Stake is a deterministic decision-engine output, never an LLM output.
+      userBankroll: undefined,
       marketOdds: resolvedOdds,
       engine,
       propsEnabled: propsActive,
@@ -345,7 +726,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
       });
     }
 
-    const savedPick = await persistNflPick({
+    const savedPick = analysisData.decision === 'NO_BET' ? null : await persistNflPick({
       userId: req.user.id,
       userEmail: req.user.email ?? null,
       matchup,
@@ -365,6 +746,7 @@ router.post('/analyze/game', nflEnabled, verifyToken, requireSportAccess('nfl'),
         awayTeamId: game.away_team_id ?? null,
         homeAbbr:   game.home_team_abbr ?? null,
         awayAbbr:   game.away_team_abbr ?? null,
+        kickoffAt: game.game_datetime ?? null,
       };
       const gamePkInt = gameId ? parseInt(gameId, 10) : null;
 
@@ -1021,6 +1403,7 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
     const composerStart = Date.now();
     const { parlays, meta: composerMeta } = composeParlays({
       candidates, correlationMatrix, N: Number(requestedLegs) || 3, mode,
+      filters: { allowSGP: false },
     });
     const composerMs = Date.now() - composerStart;
 
@@ -1067,6 +1450,9 @@ router.post('/parlay', nflParlayEnabled, verifyToken, requireAdmin, async (req, 
     return res.json({
       success: true,
       sport: 'nfl',
+      actionable: false,
+      priceSource: 'consensus',
+      note: 'Research only: no bet365 parlay quote or validated NFL joint model',
       data: {
         run_id: null,
         chosen_parlay: {

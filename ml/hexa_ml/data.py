@@ -44,6 +44,7 @@ OPTIONAL_FEATURE_COLUMNS = [
     "is_day_game", "is_dome",
     "game_number_in_series", "umpire_id",
     "odds_ml_home", "odds_ml_away", "odds_ou_total",
+    "odds_spread_home", "odds_spread_away", "odds_total_over", "odds_total_under",
     # Team-strength features (live: standings; history: schedule scores)
     "home_runs_for_avg", "away_runs_for_avg",
     "home_runs_against_avg", "away_runs_against_avg",
@@ -64,6 +65,7 @@ OPTIONAL_FEATURE_COLUMNS = [
     "prop_opponent_pitcher_hand", "prop_opponent_pitcher_xwoba_against", "prop_opponent_pitcher_k_pct",
     "prop_odds_american", "prop_implied_prob",
     "source",
+    "feature_observed_at", "feature_available_at", "kickoff_at",
     # NFL-specific columns (Sprint 9 — nfl_* markets)
     "home_epa_off", "away_epa_off", "home_epa_def", "away_epa_def",
     "home_success_rate", "away_success_rate",
@@ -252,6 +254,31 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         out = df[df["market_type"] == market].copy()
     out = out[out["result"].notna()]
 
+    if market in {"nfl_moneyline", "nfl_spread", "nfl_total"} and "source" in out.columns:
+        live = out["source"].eq("live")
+        if live.any():
+            def timestamps(column: str) -> pd.Series:
+                values = out[column] if column in out else pd.Series(pd.NaT, index=out.index)
+                return pd.to_datetime(values, errors="coerce", utc=True)
+
+            available = timestamps("feature_available_at")
+            kickoff = timestamps("kickoff_at")
+            observed = timestamps("feature_observed_at")
+            valid_live = (available.notna() & kickoff.notna() & observed.notna()
+                          & (observed <= available) & (available < kickoff))
+            if "game_pk" not in out.columns:
+                valid_live &= False
+            else:
+                valid_live &= out["game_pk"].notna()
+            out = out[~live | valid_live].copy()
+            live = out["source"].eq("live")
+            # Repeated users/analyses of one game are correlated observations.
+            # Keep the first pregame snapshot per game and market.
+            if live.any() and "game_pk" in out.columns:
+                live_rows = out[live].sort_values("feature_available_at", kind="stable")
+                live_rows = live_rows.drop_duplicates(subset=["game_pk"], keep="first")
+                out = pd.concat([out[~live], live_rows], ignore_index=True)
+
     if market in {"moneyline", "runline"}:
         out = out[out["home_score"].notna() & out["away_score"].notna()]
     elif market == "overunder":
@@ -263,10 +290,18 @@ def filter_for_market(df: pd.DataFrame, market: str) -> pd.DataFrame:
         ]
     elif market == "nfl_moneyline":
         out = out[out["home_score"].notna() & out["away_score"].notna()]
+        # A tied regulation result has book-specific settlement rules. Do not
+        # teach the binary home/away model that it is an away win.
+        out = out[out["home_score"].astype(float) != out["away_score"].astype(float)]
     elif market == "nfl_spread":
         out = out[out["home_score"].notna() & out["away_score"].notna() & out["spread_close"].notna()]
+        margin = out["home_score"].astype(float) - out["away_score"].astype(float)
+        # A push is a refund, not a win for the opposite side. The current
+        # binary model estimates P(home covers | no push).
+        out = out[margin != -out["spread_close"].astype(float)]
     elif market == "nfl_total":
         out = out[out["total_runs"].notna() & out["total_close"].notna()]
+        out = out[out["total_runs"].astype(float) != out["total_close"].astype(float)]
     elif market == "nfl_prop":
         out = out[out["line"].notna()]
         out = out[out["result"].astype(str).str.lower().isin(["win", "won", "loss", "lost"])]

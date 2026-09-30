@@ -1,0 +1,159 @@
+{
+  "market": "nfl_spread",
+  "method": "market_residual_expanding_season",
+  "features": [
+    "epa_composite_diff",
+    "epa_composite_adj_diff",
+    "form_diff",
+    "rest_diff"
+  ],
+  "alpha_grid": [
+    10.0,
+    100.0,
+    1000.0
+  ],
+  "shrinkage_grid": [
+    0.0,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "bootstrap_unit": "game_week",
+  "seasons": [
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "n_filtered": 1326,
+  "folds": [
+    {
+      "test_season": 2022,
+      "n_fit": 149,
+      "n_embargoed_calibration": 57,
+      "n_selection": 62,
+      "n_test": 261,
+      "status": "evaluated",
+      "fit_last_date": "2021-11-15T00:00:00+00:00",
+      "selection_first_date": "2021-12-16T00:00:00+00:00",
+      "test_first_date": "2022-09-08T00:00:00+00:00",
+      "selected_alpha": 1000.0,
+      "selected_shrinkage": 0.0,
+      "market": {
+        "n": 261,
+        "brier": 0.24853,
+        "log_loss": 0.69021
+      },
+      "residual": {
+        "n": 261,
+        "brier": 0.24853,
+        "log_loss": 0.69021
+      },
+      "vs_market": {
+        "n": 261,
+        "weeks": 18,
+        "delta": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "beats_reference": false
+      }
+    },
+    {
+      "test_season": 2023,
+      "n_fit": 299,
+      "n_embargoed_calibration": 113,
+      "n_selection": 117,
+      "n_test": 258,
+      "status": "evaluated",
+      "fit_last_date": "2022-09-19T00:00:00+00:00",
+      "selection_first_date": "2022-11-17T00:00:00+00:00",
+      "test_first_date": "2023-09-07T00:00:00+00:00",
+      "selected_alpha": 10.0,
+      "selected_shrinkage": 0.5,
+      "market": {
+        "n": 258,
+        "brier": 0.25,
+        "log_loss": 0.69315
+      },
+      "residual": {
+        "n": 258,
+        "brier": 0.24991,
+        "log_loss": 0.69297
+      },
+      "vs_market": {
+        "n": 258,
+        "weeks": 18,
+        "delta": -9e-05,
+        "ci_low": -0.00142,
+        "ci_high": 0.00135,
+        "beats_reference": false
+      }
+    },
+    {
+      "test_season": 2024,
+      "n_fit": 469,
+      "n_embargoed_calibration": 161,
+      "n_selection": 157,
+      "n_test": 268,
+      "status": "evaluated",
+      "fit_last_date": "2022-12-12T00:00:00+00:00",
+      "selection_first_date": "2023-10-26T00:00:00+00:00",
+      "test_first_date": "2024-09-05T00:00:00+00:00",
+      "selected_alpha": 10.0,
+      "selected_shrinkage": 0.5,
+      "market": {
+        "n": 268,
+        "brier": 0.25107,
+        "log_loss": 0.69529
+      },
+      "residual": {
+        "n": 268,
+        "brier": 0.25239,
+        "log_loss": 0.69794
+      },
+      "vs_market": {
+        "n": 268,
+        "weeks": 18,
+        "delta": 0.00132,
+        "ci_low": -0.00169,
+        "ci_high": 0.00392,
+        "beats_reference": false
+      }
+    },
+    {
+      "test_season": 2025,
+      "n_fit": 617,
+      "n_embargoed_calibration": 217,
+      "n_selection": 221,
+      "n_test": 271,
+      "status": "evaluated",
+      "fit_last_date": "2023-10-16T00:00:00+00:00",
+      "selection_first_date": "2024-09-26T00:00:00+00:00",
+      "test_first_date": "2025-09-04T00:00:00+00:00",
+      "selected_alpha": 1000.0,
+      "selected_shrinkage": 0.0,
+      "market": {
+        "n": 271,
+        "brier": 0.24959,
+        "log_loss": 0.69232
+      },
+      "residual": {
+        "n": 271,
+        "brier": 0.24959,
+        "log_loss": 0.69232
+      },
+      "vs_market": {
+        "n": 271,
+        "weeks": 18,
+        "delta": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0,
+        "beats_reference": false
+      }
+    }
+  ],
+  "promotion_ready": false,
+  "price_roi": null,
+  "note": "Uses public closing prices, not bet365 entry prices; predictive audit only."
+}

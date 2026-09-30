@@ -101,6 +101,45 @@ def test_nfl_prop_filter_and_target():
     assert y.tolist() == [1, 0]
 
 
+def test_nfl_binary_markets_exclude_refunds_and_ties():
+    df = pd.DataFrame({
+        "market_type": ["spread", "spread", "overunder", "overunder", "moneyline", "moneyline"],
+        "result": ["resolved"] * 6,
+        "home_score": [24, 27, 24, 27, 20, 21],
+        "away_score": [21, 20, 20, 20, 20, 20],
+        "spread_close": [-3, -3, None, None, None, None],
+        "total_close": [None, None, 44, 44, None, None],
+        "total_runs": [45, 47, 44, 47, 40, 41],
+    })
+    spread = filter_for_market(df, "nfl_spread")
+    total = filter_for_market(df, "nfl_total")
+    ml = filter_for_market(df, "nfl_moneyline")
+    assert len(spread) == len(total) == len(ml) == 1
+    assert make_target(spread, "nfl_spread").tolist() == [1]
+    assert make_target(total, "nfl_total").tolist() == [1]
+    assert make_target(ml, "nfl_moneyline").tolist() == [1]
+
+
+def test_nfl_live_training_uses_only_first_valid_pregame_snapshot_per_game():
+    df = pd.DataFrame({
+        "market_type": ["moneyline"] * 5,
+        "source": ["live", "live", "live", "live", "nflverse_history"],
+        "game_pk": [11, 11, 12, 13, None],
+        "result": ["win"] * 5,
+        "home_score": [24] * 5,
+        "away_score": [20] * 5,
+        "feature_observed_at": ["2026-09-01T12:00:00Z", "2026-09-01T13:00:00Z",
+                                "2026-09-01T16:01:00Z", None, None],
+        "feature_available_at": ["2026-09-01T12:01:00Z", "2026-09-01T13:01:00Z",
+                                 "2026-09-01T16:02:00Z", None, None],
+        "kickoff_at": ["2026-09-01T16:00:00Z"] * 4 + [None],
+    })
+    sub = filter_for_market(df, "nfl_moneyline")
+    assert len(sub) == 2
+    assert sub[sub["source"] == "live"]["feature_available_at"].iloc[0] == "2026-09-01T12:01:00Z"
+    assert sub[sub["source"] == "nflverse_history"].shape[0] == 1
+
+
 def test_optional_feature_columns_no_duplicates():
     """Duplicate entries in OPTIONAL_FEATURE_COLUMNS cause the Postgres SELECT to
     return duplicate columns which makes pd.concat raise InvalidIndexError at training

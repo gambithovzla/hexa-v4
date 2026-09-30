@@ -17,6 +17,7 @@ import NbaContextMetaBadge from './NbaContextMetaBadge';
 import AdminMlOpinionCard from './AdminMlOpinionCard';
 import F5SuggestionCard from './F5SuggestionCard';
 import NflInjuryReport from './NflInjuryReport';
+import NflBet365Decision from './NflBet365Decision';
 import { useAuth } from '../store/authStore';
 import { BARLOW, MONO, SANS } from '../theme';
 import { PV as C } from '../styles/pageCssVars';
@@ -1688,6 +1689,17 @@ export default function AnalysisPanel({
               selectedGames[0]?.teams?.away?.abbreviation,
               selectedGames[0]?.teams?.home?.abbreviation,
             ]}
+          />
+        )}
+
+        {sport === 'nfl' && mode === 'single' && selectedGames.length === 1 && (
+          <NflBet365Decision
+            key={selectedGames[0].gamePk}
+            gameId={selectedGames[0].gamePk}
+            home={selectedGames[0]?.teams?.home?.abbreviation}
+            away={selectedGames[0]?.teams?.away?.abbreviation}
+            token={token}
+            lang={lang}
           />
         )}
 

@@ -54,6 +54,7 @@ import SportAccessAdminPage   from './pages/SportAccessAdminPage';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
 import NflLiveTracker      from './components/NflLiveTracker';
+import NflPerformanceTracker from './components/NflPerformanceTracker';
 import SoccerLiveTracker   from './components/SoccerLiveTracker';
 import GameDayDetail       from './components/GameDayDetail';
 import HexaBoard           from './components/HexaBoard';
@@ -776,7 +777,10 @@ export default function App() {
 
           {/* History — remounts on each visit so it re-reads localStorage */}
           {activeTab === 'history' && (
-            <HistoryPanel lang={lang} sport={sport} />
+            <Box sx={{ display: 'grid', gap: 2 }}>
+              {sport === 'nfl' && <NflPerformanceTracker lang={lang} />}
+              <HistoryPanel lang={lang} sport={sport} />
+            </Box>
           )}
 
           {activeTab === 'bankroll' && (

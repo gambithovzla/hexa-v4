@@ -201,6 +201,7 @@ async function loadCandidates({ date, sport }) {
        AND p.deleted_at IS NULL
        AND (p.result IS NULL OR LOWER(p.result) IN ('pending', ''))
        AND p.type IS DISTINCT FROM 'imperdible'
+       AND p.source IS DISTINCT FROM 'nfl_analysis'
        ${sportFilter}
      ORDER BY p.created_at ASC`,
     params

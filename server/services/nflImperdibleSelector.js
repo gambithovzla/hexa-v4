@@ -50,6 +50,8 @@ export const NFL_DEFAULT_THRESHOLDS = {
   blockPreseason: true,        // backups decide preseason games — a lock is indefensible
   minPayoutDecimal: null,
   requireImpliedProb: false,
+  requireExecutableQuote: true,
+  minExpectedValue: 0.03,
 };
 
 function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
@@ -141,6 +143,16 @@ export function evaluateNflGate(scored, thresholds = null) {
 
   const ml = scored.components?.mlProb;
   if (ml != null && ml < t.minMlProb) failed.push('ml_against_pick');
+
+  if (t.requireExecutableQuote && scored.bookmaker !== 'bet365') failed.push('executable_price_missing');
+  const probability = toNum(scored.components?.modelProb);
+  const price = toNum(scored.decimalOdds);
+  if (probability == null || price == null || price <= 1
+      || (scored.marketType !== 'moneyline' && Number.isInteger(toNum(scored.line)))) {
+    failed.push('expected_value_unverified');
+  } else if (probability / 100 * price - 1 < t.minExpectedValue) {
+    failed.push('expected_value_below_min');
+  }
 
   if (t.minPayoutDecimal != null) {
     const dec = scored.decimalOdds ?? null;

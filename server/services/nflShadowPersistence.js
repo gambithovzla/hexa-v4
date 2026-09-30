@@ -97,7 +97,9 @@ export async function saveNflPickFeatures({
          context_completeness,
          odds_ml_home, odds_ml_away, odds_ou_total,
          oracle_confidence, market_type,
-         pick, source, sport, user_email
+         pick, source, sport, user_email,
+         feature_observed_at, feature_available_at, kickoff_at,
+         odds_spread_home, odds_spread_away, odds_total_over, odds_total_under
        )
        VALUES (
          $1,$2,$3,
@@ -114,7 +116,9 @@ export async function saveNflPickFeatures({
          $32,
          $33,$34,$35,
          $36,$37,
-         $38,'live','nfl',$39
+         $38,'live','nfl',$39,
+         $40,$41,$42,
+         $43,$44,$45,$46
        )
        RETURNING id`,
       [
@@ -142,6 +146,13 @@ export async function saveNflPickFeatures({
         marketType,
         pickText ?? null,
         userEmail ?? null,
+        context?.context_meta?.generatedAt ?? null,
+        context?.context_meta?.generatedAt ?? null,
+        gameMeta?.kickoffAt ?? null,
+        toNumber(marketOdds?.spread?.homePrice),
+        toNumber(marketOdds?.spread?.awayPrice),
+        toNumber(marketOdds?.total?.overPrice),
+        toNumber(marketOdds?.total?.underPrice),
       ]
     );
     return rows[0]?.id ?? null;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchNflOddsToGame, buildMarketOddsForGame } from '../nfl-odds.js';
+import { matchNflOddsToGame, buildMarketOddsForGame, normalizeEvent } from '../nfl-odds.js';
 
 const events = [
   {
@@ -39,12 +39,38 @@ test('matchNflOddsToGame handles empty input', () => {
 
 test('buildMarketOddsForGame returns spread-first shape with implied prob', () => {
   const odds = buildMarketOddsForGame(events[0]);
-  assert.deepEqual(Object.keys(odds), ['spread', 'total', 'moneyline', 'source', 'eventId']);
+  assert.deepEqual(Object.keys(odds), ['spread', 'total', 'moneyline', 'source', 'eventId', 'quotes']);
   assert.equal(odds.spread.home, -2.5);
   assert.equal(odds.total.line, 47.5);
   assert.equal(odds.source, 'oddsapi');
   // -135 → implied ~57.4%
   assert.ok(odds.moneyline.homeImplied > 56 && odds.moneyline.homeImplied < 59);
+});
+
+test('NFL consensus never pairs a price with another spread or total line', () => {
+  const raw = {
+    id: 'x', home_team: 'Home', away_team: 'Away', bookmakers: [
+      { key: 'a', markets: [
+        { key: 'spreads', outcomes: [{ name: 'Home', point: -3, price: -120 }, { name: 'Away', point: 3, price: 100 }] },
+        { key: 'totals', outcomes: [{ name: 'Over', point: 44, price: -110 }, { name: 'Under', point: 44, price: -110 }] },
+      ] },
+      { key: 'b', markets: [
+        { key: 'spreads', outcomes: [{ name: 'Home', point: -3, price: -115 }, { name: 'Away', point: 3, price: -105 }] },
+        { key: 'totals', outcomes: [{ name: 'Over', point: 44, price: -115 }, { name: 'Under', point: 44, price: -105 }] },
+      ] },
+      { key: 'c', markets: [
+        { key: 'spreads', outcomes: [{ name: 'Home', point: -3.5, price: +100 }, { name: 'Away', point: 3.5, price: -120 }] },
+        { key: 'totals', outcomes: [{ name: 'Over', point: 44.5, price: +100 }, { name: 'Under', point: 44.5, price: -120 }] },
+      ] },
+    ],
+  };
+  const event = normalizeEvent(raw);
+  assert.equal(event.spread.home, -3);
+  assert.equal(event.spread.away, 3);
+  assert.ok(event.spread.homePrice < -110);
+  assert.ok(event.total.overPrice < -110);
+  assert.equal(event.quotes.length, 12);
+  assert.ok(event.quotes.some(q => q.bookmaker === 'c' && q.market === 'spread' && q.line === -3.5));
 });
 
 test('buildMarketOddsForGame returns null for missing event', () => {

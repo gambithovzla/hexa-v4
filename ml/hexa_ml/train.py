@@ -83,14 +83,14 @@ def min_train_size_for_market(market: str, override: int | None = None) -> int:
     return int(settings.min_train_size)
 
 
-# American-price columns, keyed by market, oriented to the side the training
-# target is oriented to. There is deliberately no entry for the line-priced
-# markets: `odds_ou_total` (8.5 runs) and `spread_close` (-3.5 points) are
-# closing NUMBERS, not prices. Passing one into an odds argument silently
-# reads 8.5 as "+8.5", an implied probability of 92%.
+# American-price columns, keyed by market and oriented to the training target.
+# The NFL line markets use separate observed price columns; spread_close and
+# total_close are numbers of points and must never be read as prices.
 _ROI_PRICE_COLUMNS = {
     "moneyline": "odds_ml_home",
     "nfl_moneyline": "odds_ml_home",
+    "nfl_spread": "odds_spread_home",
+    "nfl_total": "odds_total_over",
     "soccer_moneyline": "odds_ml_home",
 }
 
@@ -219,29 +219,24 @@ def train_one_market(
     # slice tunes the probabilities to the answers and biases the score
     # optimistically. Carve the calibration slice off the tail of the training
     # window instead, keeping the split chronological. Only fall back to the
-    # old in-test calibration when training data is too thin to spare a slice,
-    # and flag it on the model card when that happens.
+    # Never calibrate on the final test slice. If the training window cannot
+    # spare a calibration slice, keep the existing artifact instead.
     order = np.argsort(train_df["game_date"].to_numpy(), kind="stable")
     n_calib = int(len(order) * 0.2)
     if n_calib >= 25 and (len(order) - n_calib) >= min_split_train:
         fit_idx, calib_idx = order[:-n_calib], order[-n_calib:]
         calibrated_on_test = False
     else:
-        fit_idx, calib_idx = order, None
-        calibrated_on_test = True
         logger.warning(
-            "[%s] train slice too thin (%d rows) to hold out a calibration set — "
-            "falling back to calibrating on test; brier_test is optimistic.",
+            "[%s] train slice too thin (%d rows) to hold out a calibration set; skipping.",
             market, len(order),
         )
+        return None
 
     X_fit, y_fit = X_train.iloc[fit_idx], y_train[fit_idx]
     fit_weight = sample_weight[fit_idx] if sample_weight is not None else None
 
-    if calib_idx is not None:
-        X_calib, y_calib = X_train.iloc[calib_idx], y_train[calib_idx]
-    else:
-        X_calib, y_calib = X_test, y_test
+    X_calib, y_calib = X_train.iloc[calib_idx], y_train[calib_idx]
 
     model_cls = MARKET_MODELS[market]
     model = model_cls()
@@ -286,6 +281,8 @@ def train_one_market(
         market=market,
         n_train=len(X_train),
         n_test=len(X_test),
+        nfl_label_version=2 if market in NFL_MARKETS else None,
+        bet365_prospective_verified=False,
         brier_train=brier_train,
         brier_test=brier_test,
         logloss_test=ll_test,
@@ -489,6 +486,7 @@ def train_all(
                 {
                     "n_train": metrics.n_train,
                     "n_test": metrics.n_test,
+                    "nfl_label_version": metrics.nfl_label_version,
                     "brier_test": metrics.brier_test,
                     "logloss_test": metrics.logloss_test,
                     "roi_kelly25_test": metrics.roi_kelly25_test,
@@ -546,7 +544,8 @@ def train_all(
                 parts.append(nfl_df)
             if nfl_pretrain_years:
                 try:
-                    hist = nflverse_loader.build_nfl_training_frame(market, nfl_pretrain_years)
+                    hist = nflverse_loader.build_nfl_training_frame(market, nfl_pretrain_years,
+                                                                     include_schedule_prices=True)
                     logger.info("NFL %s: +%d historical rows", market, len(hist))
                     parts.append(hist)
                 except Exception as exc:
