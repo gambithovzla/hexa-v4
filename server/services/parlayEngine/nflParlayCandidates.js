@@ -55,6 +55,7 @@ export function buildNflGameCandidates(entry) {
 
   const push = (marketType, side, americanOdds, modelProbFrac, line, label) => {
     const implied = americanToImplied(americanOdds);
+    if (implied == null || (marketType !== 'moneyline' && !Number.isFinite(Number(line)))) return;
     const modelProb = modelProbFrac != null ? modelProbFrac : implied; // fall back to market
     if (modelProb == null) return;
     const modelPct = Math.round(modelProb * 1000) / 10; // 0–100, 1 decimal
@@ -76,6 +77,7 @@ export function buildNflGameCandidates(entry) {
       edge,
       odds: americanOdds ?? null,
       decimalOdds: americanToDecimal(americanOdds),
+      bookmaker: 'consensus',
       xgbScore: null,
       xgbConfidence: null,
       xgbAgreement: false,
@@ -90,39 +92,27 @@ export function buildNflGameCandidates(entry) {
 
   // ── Moneyline ───────────────────────────────────────────────────────────────
   const ml = odds.moneyline ?? {};
-  if (ml.home != null || ml.away != null) {
-    const pHome = model?.moneyline ?? americanToImplied(ml.home);
-    const homeFav = (pHome ?? 0.5) >= 0.5;
-    const side = homeFav ? 'home' : 'away';
-    const sideOdds = homeFav ? ml.home : ml.away;
-    const sideModel = model?.moneyline != null ? (homeFav ? model.moneyline : 1 - model.moneyline) : null;
-    const team = homeFav ? homeAbbr : awayAbbr;
-    push('moneyline', side, sideOdds, sideModel, null, `${team} ML`);
-  }
+  push('moneyline', 'home', ml.home, model?.moneyline, null, `${homeAbbr} ML`);
+  push('moneyline', 'away', ml.away,
+    model?.moneyline == null ? null : 1 - model.moneyline, null, `${awayAbbr} ML`);
 
   // ── Spread (NFL primary market) ───────────────────────────────────────────────
   const sp = odds.spread ?? {};
-  if (sp.home != null || sp.away != null) {
-    const pCover = model?.spread ?? 0.5;
-    const homeSide = pCover >= 0.5;
-    const side = homeSide ? 'home' : 'away';
-    const line = homeSide ? sp.home : sp.away;
-    const price = homeSide ? sp.homePrice : sp.awayPrice;
-    const sideModel = model?.spread != null ? (homeSide ? model.spread : 1 - model.spread) : null;
-    const team = homeSide ? homeAbbr : awayAbbr;
+  for (const [side, team, line, price, probability] of [
+    ['home', homeAbbr, sp.home, sp.homePrice, model?.spread],
+    ['away', awayAbbr, sp.away, sp.awayPrice,
+      model?.spread == null ? null : 1 - model.spread],
+  ]) {
     const lineStr = line != null ? `${line > 0 ? '+' : ''}${line}` : '';
-    push('spread', side, price, sideModel, line, `${team} ${lineStr}`.trim());
+    push('spread', side, price, probability, line, `${team} ${lineStr}`.trim());
   }
 
   // ── Total ─────────────────────────────────────────────────────────────────────
   const tot = odds.total ?? {};
   if (tot.line != null) {
-    const pOver = model?.total ?? 0.5;
-    const over = pOver >= 0.5;
-    const side = over ? 'over' : 'under';
-    const price = over ? tot.overPrice : tot.underPrice;
-    const sideModel = model?.total != null ? (over ? model.total : 1 - model.total) : null;
-    push('overunder', side, price, sideModel, tot.line, `${over ? 'Over' : 'Under'} ${tot.line}`);
+    push('overunder', 'over', tot.overPrice, model?.total, tot.line, `Over ${tot.line}`);
+    push('overunder', 'under', tot.underPrice,
+      model?.total == null ? null : 1 - model.total, tot.line, `Under ${tot.line}`);
   }
 
   return out;

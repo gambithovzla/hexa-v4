@@ -95,6 +95,20 @@ def test_training_frame_has_adjusted_epa_columns_leakage_free():
     assert not pd.isna(wk3["home_epa_off_adj"])
 
 
+def test_training_frame_joins_observed_closing_prices_by_game_id(monkeypatch):
+    prices = pd.DataFrame({
+        "game_id": ["2023_01_BBB_AAA", "2023_02_AAA_BBB"],
+        "odds_ml_home": [-150, 120], "odds_ml_away": [130, -140],
+        "odds_spread_home": [-110, -105], "odds_spread_away": [-110, -115],
+        "odds_total_over": [-108, -112], "odds_total_under": [-112, -108],
+    })
+    monkeypatch.setattr(nv, "_load_schedule_prices", lambda years: prices)
+    frame = nv.build_nfl_training_frame("nfl_spread", [2023], include_schedule_prices=True)
+    assert len(frame) == 3
+    assert frame.loc[frame["week"] == 1, "odds_ml_home"].iloc[0] == -150
+    assert pd.isna(frame.loc[frame["week"] == 3, "odds_spread_home"].iloc[0])
+
+
 def test_training_frame_recent_form_leakage_free():
     df = nv.build_nfl_training_frame("nfl_moneyline", [2023])
     for col in ("home_form_ppg_for", "away_form_ppg_for", "home_form_point_diff"):

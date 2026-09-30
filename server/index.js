@@ -38,6 +38,8 @@ import { resolveMundialPredictions } from './services/mundialResolver.js';
 import { findGame, parsePick, resolvePendingPicks, resolvePickResult, resolvePlayerPropPickResult } from './pick-resolver.js';
 import { resolveNbaPendingPicks } from './pick-resolver-nba.js';
 import { resolveNflPendingPicks } from './pick-resolver-nfl.js';
+import { resolveNflPendingBets } from './services/nflBetResolver.js';
+import { resolveNflQuoteOutcomes } from './services/nflQuoteOutcomeResolver.js';
 import { resolveNhlPendingPicks } from './pick-resolver-nhl.js';
 import { resolveSoccerPendingPicks } from './pick-resolver-soccer.js';
 import { resolveTennisPendingPicks } from './pick-resolver-tennis.js';
@@ -5446,6 +5448,12 @@ runMigrations()
         // morning. Run only on those days, from 16:00 ET through 05:59 ET, so we
         // don't poll ESPN on the (idle) MLB/NBA-only days of the week.
         if (process.env.NFL_ANALYSIS_ENABLED === 'true') {
+          resolveNflPendingBets().catch(err => {
+            console.error('[nfl-bet-resolver] Scheduled run failed:', err.message);
+          });
+          resolveNflQuoteOutcomes().catch(err => {
+            console.error('[nfl-quote-outcomes] Scheduled run failed:', err.message);
+          });
           const etWeekday = new Intl.DateTimeFormat('en-US', {
             weekday: 'short', timeZone: 'America/New_York',
           }).format(new Date());

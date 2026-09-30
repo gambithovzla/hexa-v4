@@ -77,9 +77,16 @@ test('gate: a clean heavy-favorite moneyline lock passes', () => {
     }),
     qbConfirmed: true,
     modelCertified: true,
+    bookmaker: 'bet365',
+    marketType: 'moneyline',
+    decimalOdds: 1.5,
   };
   const gate = evaluateNflGate(scored);
   assert.equal(gate.pass, true, JSON.stringify(gate.failedReasons));
+  const noPrice = evaluateNflGate({ ...scored, bookmaker: 'consensus' });
+  assert.ok(noPrice.failedReasons.includes('executable_price_missing'));
+  const badPrice = evaluateNflGate({ ...scored, decimalOdds: 1.3 });
+  assert.ok(badPrice.failedReasons.includes('expected_value_below_min'));
 });
 
 test('gate: missing sidecar model (uncertified) fails with model_unavailable', () => {

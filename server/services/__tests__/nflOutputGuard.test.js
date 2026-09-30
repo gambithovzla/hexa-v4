@@ -42,10 +42,17 @@ test('rejects parlay shape on a single game', () => {
   assert.ok(r.errors.includes('parlay_shape_on_single_game'));
 });
 
-test('rejects ABSTAIN / PASS picks', () => {
-  const r = validateNflAnalysisOutput(validData({ master_prediction: { pick: 'PASS', oracle_confidence: 55 } }));
-  assert.equal(r.ok, false);
-  assert.ok(r.errors.includes('abstain_pick'));
+test('accepts NO_BET as a no-bet analysis without a stake', () => {
+  const r = validateNflAnalysisOutput(validData({ master_prediction: { pick: 'NO_BET', oracle_confidence: 55 } }));
+  assert.equal(r.ok, true);
+  assert.equal(r.data.decision, 'NO_BET');
+  assert.equal(r.data.kelly_recommendation, null);
+});
+
+test('allows PASS only for a conviction objective', () => {
+  const data = validData({ master_prediction: { pick: 'PASS', oracle_confidence: 55 } });
+  assert.equal(validateNflAnalysisOutput(data).ok, false);
+  assert.equal(validateNflAnalysisOutput(data, { allowPass: true }).is_pass, true);
 });
 
 test('rejects player props (disabled this phase)', () => {

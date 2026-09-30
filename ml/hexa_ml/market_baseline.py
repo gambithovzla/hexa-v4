@@ -31,7 +31,11 @@ _TWO_WAY_MONEYLINE = {"moneyline", "nfl_moneyline", "soccer_moneyline"}
 # Markets priced around a line the book moves until both sides are ~even. The
 # closing number itself is the forecast, and its fair probability is ~0.5 by
 # construction. Beating this is beating the line, not the price.
-_SYMMETRIC_LINE = {"nfl_spread", "overunder", "nfl_total", "soccer_total"}
+_SYMMETRIC_LINE = {"overunder", "soccer_total"}
+_NFL_TWO_WAY_LINE = {
+    "nfl_spread": ("odds_spread_home", "odds_spread_away"),
+    "nfl_total": ("odds_total_over", "odds_total_under"),
+}
 
 # Historical frames whose odds columns are modelled, not observed. MLB
 # pre-training fills odds_ml_home from a Pythagorean expectation derived from
@@ -115,6 +119,20 @@ def resolve_market_reference(df: pd.DataFrame, market: str) -> MarketReference:
             coverage=covered / n,
             note=note,
             excluded_synthetic=int(synthetic.sum()),
+        )
+
+    if market in _NFL_TWO_WAY_LINE:
+        first_col, second_col = _NFL_TWO_WAY_LINE[market]
+        if first_col not in df.columns or second_col not in df.columns:
+            return _empty(n, "no same-line two-way closing prices stored")
+        first = pd.to_numeric(df[first_col], errors="coerce").to_numpy()
+        second = pd.to_numeric(df[second_col], errors="coerce").to_numpy()
+        fair = devig_two_way(american_to_implied(first), american_to_implied(second))
+        covered = int(np.isfinite(fair).sum())
+        return MarketReference(
+            probs=fair, source="devig_two_way_line" if covered else "unavailable",
+            n_covered=covered, coverage=covered / n,
+            note="same-line two-way closing prices; not bet365 accepted odds",
         )
 
     if market in _SYMMETRIC_LINE:

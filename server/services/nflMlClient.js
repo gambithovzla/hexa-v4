@@ -232,6 +232,44 @@ export async function predictNflTotal(features) {
   return _post('/predict/nfl_total', features ?? {});
 }
 
+let healthCache = null;
+export async function getNflModelHealth() {
+  if (!_guard()) return null;
+  if (healthCache && Date.now() - healthCache.at < 60_000) return healthCache.value;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(`${ML_API_URL}/health`, {
+      headers: ML_TOKEN ? { Authorization: `Bearer ${ML_TOKEN}` } : {},
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const value = await response.json();
+    healthCache = { at: Date.now(), value };
+    return value;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Certification is tied to the artifact's labels, held-out test and version. */
+export function certifyNflPrediction(market, prediction, health) {
+  const key = `nfl_${market}`;
+  const entry = health?.manifest?.markets?.[key];
+  return prediction?.model_version != null
+    && health?.models_loaded?.includes(key)
+    && entry?.nfl_label_version === 2
+    && entry?.trained_at === prediction.model_version
+    && entry?.n_test >= 100
+    && entry?.calibrated_on_test === false
+    && entry?.roi_trustworthy === true
+    && entry?.bet365_prospective_verified === true
+    && entry?.market_reference_coverage >= 0.9
+    && entry?.vs_market?.beats_reference === true;
+}
+
 /**
  * Predict all three NFL game markets in parallel and return the model-probability
  * triplet the parlay candidate builder consumes:
@@ -253,5 +291,8 @@ export async function predictNflGameModel(context = {}, gameMeta = {}, marketOdd
   const spread = prob(sp);
   const total = prob(tot);
   if (moneyline == null && spread == null && total == null) return null;
-  return { moneyline, spread, total };
+  return {
+    moneyline, spread, total,
+    versions: { moneyline: ml?.model_version ?? null, spread: sp?.model_version ?? null, total: tot?.model_version ?? null },
+  };
 }

@@ -162,6 +162,31 @@ function HistoryStatsGrid({ stats, t }) {
   );
 }
 
+function MlbRecentForm({ history, lang }) {
+  const recent = [...history]
+    .filter(entry => ['win', 'loss', 'push', 'pending'].includes(entry.result))
+    .sort((a, b) => Date.parse(b.createdAt ?? b.date ?? 0) - Date.parse(a.createdAt ?? a.date ?? 0))
+    .slice(0, 20).reverse();
+  if (!recent.length) return null;
+  const tone = { win: C.green, loss: C.red, push: C.amber, pending: C.textMuted };
+  const counts = { win: 0, loss: 0, push: 0, pending: 0 };
+  for (const entry of recent) counts[entry.result] += 1;
+  return <Box sx={{ p: '14px 16px', border: `1px solid ${C.border}`, bgcolor: C.surface }}>
+    <Typography sx={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1.3, color: C.cyan, mb: 1 }}>
+      {lang === 'es' ? 'MLB · FORMA DE LOS ÚLTIMOS 20 PICKS' : 'MLB · LAST 20 PICKS'}
+    </Typography>
+    <Box sx={{ display: 'flex', gap: '4px', height: 29 }}>
+      {recent.map((entry, index) => <Box key={`${entry.id}-${index}`} title={`${entry.matchup ?? ''} · ${entry.result}`}
+        aria-label={`${entry.matchup ?? 'MLB'}: ${entry.result}`}
+        sx={{ flex: 1, minWidth: 4, maxWidth: 28, borderRadius: '3px', bgcolor: tone[entry.result], opacity: entry.result === 'pending' ? .45 : 1 }} />)}
+    </Box>
+    <Typography sx={{ fontFamily: MONO, fontSize: 10, color: C.textMuted, mt: 1 }}>
+      {counts.win} W · {counts.loss} L · {counts.push} P · {counts.pending} {lang === 'es' ? 'pendientes' : 'pending'}
+      {' · '}{lang === 'es' ? 'Resultados de picks; no representa ROI' : 'Pick results; not ROI'}
+    </Typography>
+  </Box>;
+}
+
 function HistoryStatsViewBar({ mode, onModeChange, t }) {
   return (
     <Box
@@ -979,6 +1004,7 @@ function AnalisisTab({ lang, sport = 'all' }) {
       ) : (
         <HistoryPeriodBreakdown periods={periodBreakdown} t={t} />
       )}
+      {sport === 'mlb' && <MlbRecentForm history={history} lang={lang} />}
 
       {stats.hasMore && (
         <Typography sx={{ fontFamily: SANS, fontSize: '0.75rem', color: C.textMuted }}>

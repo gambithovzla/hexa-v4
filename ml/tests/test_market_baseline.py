@@ -118,11 +118,16 @@ def test_moneyline_reference_excludes_synthetic_mlb_history_odds():
     assert np.isnan(ref.probs[1])
 
 
-def test_symmetric_line_markets_reference_at_half():
+def test_nfl_spread_reference_needs_same_line_two_way_prices():
     df = pd.DataFrame({"spread_close": [-3.5, 7.0]})
     ref = resolve_market_reference(df, "nfl_spread")
-    assert ref.source == "symmetric_line"
-    assert (ref.probs == 0.5).all()
+    assert ref.source == "unavailable"
+    prices = pd.DataFrame({"odds_spread_home": [-110, -120],
+                           "odds_spread_away": [-110, 100]})
+    priced = resolve_market_reference(prices, "nfl_spread")
+    assert priced.source == "devig_two_way_line"
+    assert priced.coverage == 1.0
+    assert priced.probs[0] == 0.5
 
 
 def test_prop_reference_is_flagged_as_vig_inclusive():

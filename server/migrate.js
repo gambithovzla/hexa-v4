@@ -48,7 +48,6 @@ export async function runMigrations() {
         result         TEXT          DEFAULT 'pending',
         source         TEXT          DEFAULT 'manual',
         notes          TEXT,
-        pick_id        INTEGER       REFERENCES picks(id) ON DELETE SET NULL,
         created_at     TIMESTAMP     DEFAULT NOW()
       )
     `);
@@ -75,6 +74,87 @@ export async function runMigrations() {
         created_at        TIMESTAMP     DEFAULT NOW()
       )
     `);
+
+    // Personal NFL quote evaluations and executed tickets are separate from
+    // Oracle analysis. Tickets are immutable; settlement corrections append.
+    await client.query(`CREATE TABLE IF NOT EXISTS nfl_quote_decisions (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      game_pk BIGINT NOT NULL,
+      season INTEGER,
+      season_type INTEGER,
+      week INTEGER,
+      bookmaker TEXT NOT NULL,
+      market TEXT NOT NULL,
+      side TEXT NOT NULL,
+      line NUMERIC(8,2),
+      decimal_odds NUMERIC(10,4) NOT NULL,
+      observed_at TIMESTAMPTZ NOT NULL,
+      kickoff_at TIMESTAMPTZ NOT NULL,
+      model_version TEXT,
+      model_probability NUMERIC(8,6),
+      expected_value NUMERIC(10,6),
+      decision TEXT NOT NULL,
+      reasons JSONB NOT NULL DEFAULT '[]',
+      snapshot JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nfl_quote_decisions_user_game
+      ON nfl_quote_decisions(user_id, game_pk, created_at DESC)`);
+    await client.query(`CREATE TABLE IF NOT EXISTS nfl_quote_outcomes (
+      id BIGSERIAL PRIMARY KEY,
+      decision_id BIGINT NOT NULL REFERENCES nfl_quote_decisions(id) ON DELETE CASCADE,
+      result TEXT NOT NULL CHECK (result IN ('win', 'loss', 'push')),
+      source TEXT NOT NULL,
+      evidence JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nfl_quote_outcomes_latest
+      ON nfl_quote_outcomes(decision_id, created_at DESC, id DESC)`);
+    await client.query(`CREATE TABLE IF NOT EXISTS nfl_bet_ledger (
+      id BIGSERIAL PRIMARY KEY,
+      decision_id BIGINT UNIQUE REFERENCES nfl_quote_decisions(id),
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      game_pk BIGINT NOT NULL,
+      season INTEGER NOT NULL,
+      season_type INTEGER NOT NULL,
+      week INTEGER NOT NULL,
+      bookmaker TEXT NOT NULL,
+      market TEXT NOT NULL,
+      side TEXT NOT NULL,
+      line NUMERIC(8,2),
+      accepted_decimal NUMERIC(10,4) NOT NULL,
+      stake NUMERIC(12,2) NOT NULL,
+      policy_override JSONB,
+      placed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nfl_bet_ledger_exposure
+      ON nfl_bet_ledger(user_id, season, season_type, week, game_pk)`);
+    await client.query(`ALTER TABLE nfl_bet_ledger ADD COLUMN IF NOT EXISTS policy_override JSONB`);
+    await client.query(`CREATE TABLE IF NOT EXISTS nfl_bet_settlements (
+      id BIGSERIAL PRIMARY KEY,
+      bet_id BIGINT NOT NULL REFERENCES nfl_bet_ledger(id) ON DELETE CASCADE,
+      result TEXT NOT NULL CHECK (result IN ('win', 'loss', 'push', 'void')),
+      pnl NUMERIC(12,2) NOT NULL,
+      source TEXT NOT NULL,
+      evidence JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nfl_bet_settlements_latest
+      ON nfl_bet_settlements(bet_id, created_at DESC, id DESC)`);
+    await client.query(`CREATE TABLE IF NOT EXISTS nfl_closing_quotes (
+      id BIGSERIAL PRIMARY KEY,
+      bet_id BIGINT NOT NULL REFERENCES nfl_bet_ledger(id) ON DELETE CASCADE,
+      bookmaker TEXT NOT NULL,
+      side TEXT NOT NULL,
+      line NUMERIC(8,2),
+      decimal_odds NUMERIC(10,4) NOT NULL,
+      observed_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nfl_closing_quotes_latest
+      ON nfl_closing_quotes(bet_id, observed_at DESC, id DESC)`);
 
     // ── link bets → picks (safe for existing DBs) ─────────────────────────────
     await client.query(`
@@ -408,10 +488,12 @@ export async function runMigrations() {
     // ── user_email + Lima timezone timestamp for auditing ─────────────────────
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT NULL`);
     await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS pick_time_lima TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE picks ADD COLUMN IF NOT EXISTS source VARCHAR(16) DEFAULT 'formal'`);
     await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT NULL`);
     await client.query(`ALTER TABLE shadow_model_runs ADD COLUMN IF NOT EXISTS pick_time_lima TIMESTAMP DEFAULT NULL`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT NULL`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS pick_time_lima TIMESTAMP DEFAULT NULL`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS source VARCHAR(16) DEFAULT 'live'`);
 
     await client.query('COMMIT');
 
@@ -1018,8 +1100,15 @@ export async function runNflDatasetMigrations() {
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS is_dome BOOLEAN`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS spread_close DECIMAL(5,1)`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS total_close DECIMAL(5,1)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS odds_spread_home DECIMAL(7,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS odds_spread_away DECIMAL(7,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS odds_total_over DECIMAL(7,2)`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS odds_total_under DECIMAL(7,2)`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS injuries_home_severe INTEGER`);
     await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS injuries_away_severe INTEGER`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS feature_observed_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS feature_available_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE pick_features ADD COLUMN IF NOT EXISTS kickoff_at TIMESTAMPTZ`);
 
     // ── pick_features: NFL player props (Fase 2 — pooled nfl_prop model) ─────
     // prop_kind / side / line / prop_odds_american / prop_implied_prob already

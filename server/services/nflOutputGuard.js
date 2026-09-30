@@ -87,6 +87,7 @@ export function validateNflAnalysisOutput(data, {
     };
   }
 
+  const noBet = /^no[_ -]?bet$/i.test(pick);
   if (/\b(abstain|pass)\b/i.test(pick)) errors.push('abstain_pick');
 
   const conf = normalizeConfidence(mp.oracle_confidence);
@@ -105,14 +106,14 @@ export function validateNflAnalysisOutput(data, {
 
   const bpType = normalizeBetType(data.best_pick?.type);
   const isPropPick = Boolean(bpType) && PROP_BET_TYPES.has(bpType);
-  if (isPropPick && !propsEnabled) errors.push('player_prop_blocked');
-  else if (!isPropPick && bpType && !ALLOWED_BET_TYPES.has(bpType)) errors.push('unsupported_bet_type');
+  if (!noBet && isPropPick && !propsEnabled) errors.push('player_prop_blocked');
+  else if (!noBet && !isPropPick && bpType && !ALLOWED_BET_TYPES.has(bpType)) errors.push('unsupported_bet_type');
 
   // The prop space is unbounded, so a prop pick is only real if it matches a
   // line a book actually posted. An unmatched one is unbettable and, worse,
   // unresolvable — the resolver would have nothing to grade it against.
   let propVerification = null;
-  if (isPropPick && propsEnabled) {
+  if (!noBet && isPropPick && propsEnabled) {
     propVerification = verifyNflPropPick({
       pickText: pick,
       detail: data.best_pick?.detail ?? null,
@@ -140,7 +141,7 @@ export function validateNflAnalysisOutput(data, {
   // A spread/total pick must carry a number, and the model will supply one even
   // with no MARKET ODDS block to read it from. Label that rather than let a
   // model-authored line reach the user looking like a quoted one.
-  const lineProvenance = evaluateNflLineProvenance({
+  const lineProvenance = noBet ? { market: null, status: 'not_applicable', pickLine: null, marketLine: null, flag: null } : evaluateNflLineProvenance({
     betType: isPropPick ? 'prop' : data.best_pick?.type,
     pickText: pick,
     detail: data.best_pick?.detail,
@@ -149,7 +150,9 @@ export function validateNflAnalysisOutput(data, {
 
   const sanitized = {
     ...data,
-    master_prediction: mp,
+    master_prediction: { ...mp, bet_value: noBet ? 'NO VALUE' : 'ANALYSIS ONLY' },
+    decision: noBet ? 'NO_BET' : 'ANALYSIS_ONLY',
+    kelly_recommendation: null,
     alert_flags: Array.isArray(data.alert_flags) ? data.alert_flags : [],
     line_provenance: lineProvenance,
     ...(propVerification?.ok
