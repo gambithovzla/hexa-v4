@@ -49,7 +49,6 @@ import ImperdiblePage         from './pages/ImperdiblePage';
 import PickOfTheDayPage       from './pages/PickOfTheDayPage';
 import ImperdibleSoccerPage  from './pages/ImperdibleSoccerPage';
 import PostmortemDashboard    from './pages/PostmortemDashboard';
-import MundialPage            from './pages/MundialPage';
 import SportAccessAdminPage   from './pages/SportAccessAdminPage';
 import LiveTracker         from './components/LiveTracker';
 import NBALiveTracker      from './components/NBALiveTracker';
@@ -555,10 +554,6 @@ export default function App() {
     const token = localStorage.getItem('hexa_token');
     return <SportAccessAdminPage token={token} onBack={() => { window.location.href = '/'; }} />;
   }
-  if (window.location.pathname === '/mundial') {
-    const token = localStorage.getItem('hexa_token');
-    return <MundialPage token={token} lang={lang} />;
-  }
   if (window.location.pathname === '/props') {
     const token = localStorage.getItem('hexa_token');
     const propsSportRaw = new URLSearchParams(window.location.search).get('sport');
@@ -635,36 +630,6 @@ export default function App() {
                 {lang === 'es' ? 'DEPORTE ACTIVO' : 'ACTIVE SPORT'} · {sportLabel}
               </Box>
               <SportSwitcher sport={sport} onChange={setSport} options={sportOptions} />
-            </Box>
-          )}
-
-          {/* Mundial 2026 promo banner — visible on pizarra tab */}
-          {activeTab === 'pizarra' && (
-            <Box
-              component="button"
-              onClick={() => { window.location.href = '/mundial'; }}
-              sx={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                width: '100%', mb: 2, p: '12px 16px',
-                background: 'linear-gradient(90deg, #1a3a1a 0%, #0d2b0d 100%)',
-                border: '1px solid #2d6a2d', borderRadius: '8px',
-                cursor: 'pointer', textAlign: 'left',
-                '&:hover': { borderColor: '#4caf50', background: 'linear-gradient(90deg, #1e421e 0%, #0f330f 100%)' },
-                transition: 'all 0.18s',
-              }}
-            >
-              <Box>
-                <Box sx={{ fontSize: '0.65rem', letterSpacing: '0.15em', color: '#4caf50', fontWeight: 700, textTransform: 'uppercase', mb: '2px' }}>
-                  {lang === 'es' ? '🏆 NUEVO — JUEGO GRATIS' : '🏆 NEW — FREE GAME'}
-                </Box>
-                <Box sx={{ fontSize: '1rem', fontWeight: 700, color: '#fff' }}>
-                  {lang === 'es' ? 'Adivina el Mundial 2026' : 'Predict the World Cup 2026'}
-                </Box>
-                <Box sx={{ fontSize: '0.75rem', color: '#9e9e9e', mt: '2px' }}>
-                  {lang === 'es' ? 'Predice todos los partidos y gana créditos Hexa' : 'Predict all matches and earn Hexa credits'}
-                </Box>
-              </Box>
-              <Box sx={{ fontSize: '1.4rem', ml: 2 }}>⚽ →</Box>
             </Box>
           )}
 
