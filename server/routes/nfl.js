@@ -35,6 +35,7 @@ import { resolveNflBetTypeDirective } from '../services/nflBetTypeDirective.js';
 import { resolveNflObjective } from '../services/nflObjectiveDirective.js';
 import { enrichAndPersistNflPropPick } from '../services/nflPropFeaturePersistence.js';
 import { getNflPlayerStats, findNflPlayerPropStat } from '../nfl-player-fetcher.js';
+import { buildNflPlayerForm } from '../services/nflPlayerForm.js';
 import { getNflLeagueInjuries } from '../nfl-api.js';
 import { buildNflAvailabilityIndex, findNflPlayerAvailability, summarizeNflUnavailable } from '../services/nflAvailability.js';
 import { buildHexaNflBoard } from '../services/hexaNflBoardService.js';
@@ -847,6 +848,8 @@ function nflGameToChatData(game, matchup) {
   };
 }
 
+const NFL_CHAT_PROP_INTENT = /\bprops?\b|yard|yarda|recep|touchdown|\btds?\b|anota|pases?\b|passing|rushing|receiving|jugador|player/i;
+
 router.post('/analyze/chat', nflEnabled, verifyToken, requireSportAccess('nfl'), async (req, res) => {
   const {
     gameId,
@@ -895,7 +898,20 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireSportAccess('nfl'),
       seasonType: game.season_type ?? null,
       season: game.season,
       marketOdds: resolvedOdds,
+      oddsEventId: oddsEvent?.eventId ?? null,
     });
+
+    // The chat used to see team aggregates only, so every player/prop question
+    // got "I don't have player data". Give it the same player-level nflverse
+    // averages and posted prop menu the game analysis already uses.
+    const propsRequested = NFL_CHAT_PROP_INTENT.test(question);
+    const [playerStats, propMarket] = await Promise.all([
+      getNflPlayerStats(game.season, { includePriorSeason: true }).catch(() => null),
+      buildPropMarket({ game, oddsEvent, resolvedOdds, propsRequested }),
+    ]);
+    const playerForm = buildNflPlayerForm(playerStats, { home: context.home, away: context.away });
+    if (playerForm) context.playerForm = playerForm;
+    if (propMarket) context.propMarket = propMarket;
 
     const skipExtract = String(req.headers['x-hexa-skip-pick-extract'] ?? '') === '1';
     const augmentedQuestion = skipExtract
@@ -981,6 +997,8 @@ router.post('/analyze/chat', nflEnabled, verifyToken, requireSportAccess('nfl'),
         gameDate,
         oddsSource,
         context_meta: context.context_meta ?? null,
+        playerForm:   Boolean(playerForm),
+        propOffers:   propMarket?.ranked?.length ?? 0,
         sport:        'nfl',
       },
     });

@@ -361,3 +361,33 @@ Respond in plain text. NO JSON. NO markdown. Natural, conversational analysis.
 - "Is the road dog worth it at +7.5?"
 - "¿Cuánto mueve la línea si el QB titular no juega?"
 - "Compare these two defenses for me."`;
+
+const CHAT_PLAYER_FORM_SECTION = `## PLAYER DATA — AVAILABLE
+The DATA block contains a PLAYER FORM section: per-game season averages and last-4 averages (L4) for each team's QBs, lead running backs and top pass catchers, from nflverse. You DO have player data — never tell the admin you lack individual stats for a player listed there.
+- Answer player and prop questions from those numbers: cite the season average AND the L4 trend, then adjust for the matchup (opponent defense, game script implied by spread/total, QB change, weather).
+- A player tagged OUT/DOUBTFUL/QUESTIONABLE does not get his averages this week; say who absorbs the volume.
+- A player not listed in PLAYER FORM has no data here — say so for that player only.
+- Averages are history, not a line. Without a book line you can say where you would set it and which side you would lean, but never present a number as a sportsbook line unless it appears in a PLAYER PROP MARKET block or the admin gave it to you.`;
+
+const CHAT_PROP_MARKET_SECTION = `## PLAYER PROPS — LIVE LINES
+The DATA block contains a PLAYER PROP MARKET table: props the books actually posted for this game, with the H.E.X.A. projection (PROJ), de-vigged market probability (MKT), model probability (MODEL), edge (EDGE) and data confidence (CONF).
+- When the admin asks for props, recommend from these rows. Copy player, side and line exactly as listed — never round or shift a line.
+- Cite PROJ vs line and MODEL vs MKT for every prop you recommend. Prefer rows where both EDGE and CONF are strong; touchdown props need a clearly larger edge.
+- Never recommend a prop for a player flagged OUT/DOUBTFUL/SUSPENDED.
+- A prop not in the table is not posted for this game — if the admin names one, analyze it from PLAYER FORM but say the line is not on the board.`;
+
+const CHAT_NO_PROP_MARKET_NOTE = `## PLAYER PROP LINES
+No PLAYER PROP MARKET block means the books' prop lines are not loaded for this game. If the admin asks for props, give your read from PLAYER FORM (projected range and lean) and ask for the line they see only when a precise over/under verdict needs it.`;
+
+/**
+ * The chat prompt is built per request: with player form and/or a posted prop
+ * market in the context, the model is told it has them (and how to use them).
+ * With neither it is byte-identical to NFL_CHAT_PROMPT.
+ */
+export function buildNflChatPrompt({ playerForm = false, propMarket = false } = {}) {
+  if (!playerForm && !propMarket) return NFL_CHAT_PROMPT;
+  const sections = [NFL_CHAT_PROMPT];
+  if (playerForm) sections.push(CHAT_PLAYER_FORM_SECTION);
+  sections.push(propMarket ? CHAT_PROP_MARKET_SECTION : CHAT_NO_PROP_MARKET_NOTE);
+  return sections.join('\n\n');
+}
