@@ -18,8 +18,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 
-import { NFL_CHAT_PROMPT, NFL_SYSTEM_PROMPT, buildNflSystemPrompt } from '../prompts/oracle-nfl-prompts.js';
+import { NFL_SYSTEM_PROMPT, buildNflSystemPrompt, buildNflChatPrompt } from '../prompts/oracle-nfl-prompts.js';
 import { PRESEASON_CONFIDENCE_CEIL } from './nflSeasonPhase.js';
+import { describeNflPlayerForm } from './nflPlayerForm.js';
 
 dotenv.config();
 
@@ -360,9 +361,10 @@ function describeLineMovement(lm) {
 
 export function serializeNflContext({ context, marketOdds }) {
   if (!context) return 'No NFL context provided.';
-  const { season, seasonPhase, gameDate, home, away, weather, context_meta, propMarket, lineMovement } = context;
+  const { season, seasonPhase, gameDate, home, away, weather, context_meta, propMarket, lineMovement, playerForm } = context;
   const dataQualityLine = describeDataQuality(context_meta);
   const propBlock = describePropMarket(propMarket);
+  const playerFormBlock = describeNflPlayerForm(playerForm);
   const movementBlock = describeLineMovement(lineMovement);
   const effDeltas = describeEfficiencyDeltas(home, away);
   const preseasonBlock = describePreseason(seasonPhase);
@@ -382,6 +384,7 @@ export function serializeNflContext({ context, marketOdds }) {
     '',
     describeMarketOdds(marketOdds),
     ...(movementBlock ? ['', movementBlock] : []),
+    ...(playerFormBlock ? ['', playerFormBlock] : []),
     ...(propBlock ? ['', propBlock] : []),
     ...(dataQualityLine ? ['', dataQualityLine] : []),
   ].join('\n');
@@ -554,6 +557,10 @@ export async function analyzeNflChat({
 }) {
   const contextText = serializeNflContext({ context, marketOdds });
   const modelId = model || NFL_MODELS.haiku.id;
+  const system = buildNflChatPrompt({
+    playerForm: Boolean(context?.playerForm),
+    propMarket: Boolean(context?.propMarket?.ranked?.length),
+  });
 
   const messages = [];
   for (const turn of conversationHistory) {
@@ -568,7 +575,7 @@ export async function analyzeNflChat({
     {
       model: modelId,
       max_tokens: 1200,
-      system: NFL_CHAT_PROMPT,
+      system,
       messages,
     },
     { timeout: timeoutMs },
