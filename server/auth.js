@@ -488,7 +488,11 @@ export async function seedAdminUser() {
   );
   if (rows.length > 0) return;
 
-  const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'hexa2025admin';
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD;
+  if (!adminPassword) {
+    console.warn('[auth] ADMIN_SEED_PASSWORD not set — skipping admin seed');
+    return;
+  }
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   await pool.query(
     `INSERT INTO users (id, email, password_hash, credits, is_admin)
