@@ -661,16 +661,16 @@ Estado del pipeline ML:
 - Backfill ejecutado: 583/635 filas de `pick_features` tienen `market_type` parseado
 - Reentrenamiento automático: `.github/workflows/retrain-weekly.yml` (domingos 06:00 UTC) — requiere secrets `HEXA_ML_API_URL` + `HEXA_ML_INTERNAL_TOKEN` en GitHub
 
-**Variables en Railway Hexa ML**: `DATABASE_URL` (public URL), `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `MIN_TRAIN_SIZE=60`, `RUNLINE_MIN_TRAIN_SIZE=25` (override), `TEST_DAYS=7`
+**Variables en Railway Hexa ML**: `DATABASE_URL` (public URL), `HEXA_ML_INTERNAL_TOKEN` (secreto, solo en Railway), `MIN_TRAIN_SIZE=60`, `RUNLINE_MIN_TRAIN_SIZE=25` (override), `TEST_DAYS=7`
 
-**Variables en Railway hexa-v4**: `NIXPACKS_NODE_VERSION=20` (pin Node 20 para Nixpacks — sin esto Railway usa Node 18 y `resend@6` / `node-pg-migrate@8` no arrancan), `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app`, `HEXA_ML_INTERNAL_TOKEN=hexa-ml-secret-2026`, `CHAT_EXTRACTOR_HAIKU_FALLBACK=1` (default), `CHAT_EXTRACTOR_HAIKU_MODEL=claude-haiku-4-5-20251001` (default)
+**Variables en Railway hexa-v4**: `NIXPACKS_NODE_VERSION=20` (pin Node 20 para Nixpacks — sin esto Railway usa Node 18 y `resend@6` / `node-pg-migrate@8` no arrancan), `ML_SIDECAR_ENABLED=true`, `HEXA_ML_API_URL=https://hexa-ml-production.up.railway.app`, `HEXA_ML_INTERNAL_TOKEN` (secreto, solo en Railway), `CHAT_EXTRACTOR_HAIKU_FALLBACK=1` (default), `CHAT_EXTRACTOR_HAIKU_MODEL=claude-haiku-4-5-20251001` (default)
 
 **Nota Railway — Node version**: el service root de hexa-v4 en Railway es `server/`, por eso el `.nvmrc` y `engines` en la raíz del repo son **invisibles** para Nixpacks. La variable `NIXPACKS_NODE_VERSION=20` es el override correcto. Adicionalmente existe `server/.nvmrc` con `20` como fallback para herramientas que leen el service root.
 
 **Para reentrenar manualmente (CLI)**:
 ```bash
 curl -X POST https://hexa-ml-production.up.railway.app/retrain \
-  -H "Authorization: Bearer hexa-ml-secret-2026" \
+  -H "Authorization: Bearer $HEXA_ML_INTERNAL_TOKEN" \
   -H "Content-Type: application/json" -d '{"market":"all"}'
 ```
 
